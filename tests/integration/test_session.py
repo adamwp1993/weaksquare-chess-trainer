@@ -186,4 +186,3 @@ def test_request_help_over_the_bridge(paths, clock, services) -> None:  # type: 
     hint = api.request_help(sid, "hint")["data"]
     assert hint["kind"] == "hint" and len(hint["hint_square"]) == 2 and hint["outcome"]["win"] is False
     assert api.request_help(sid, "explain")["error"]["code"] == "invalid_argument"
-
