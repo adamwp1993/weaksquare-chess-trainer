@@ -69,6 +69,16 @@ Shown when the app launches.
 - **FR-1.10** A small **LLM spend indicator** (this month's spend vs. budget) appears whenever an LLM is configured.
 - **FR-1.9** **Rated toggle** (session-level, default ON). When off, every solve this session syncs as `rated: false`.
 - **FR-1.12** **Appearance: dark mode.** A color-scheme setting with **Light** / **Dark** / **Match system** (default **Light**), reachable from the main menu (and from the gear settings once FR-1.8 exists). It applies immediately to every screen (filters, trainer, dialogs, importer, About, Stats) without a restart, and is saved in `user.db` through the bridge (never browser storage, ARCHITECTURE.md §3), so it survives a relaunch. The app starts in the saved scheme without flashing the other one first where WebView2 allows. *Match system* follows the operating system's light/dark setting (the Windows app theme today) and updates if it changes while the app is open. The name is OS-neutral so it carries over to v1.1. The board and pieces stay readable in both schemes, and text keeps at least WCAG AA contrast.
+- **FR-1.13** **Move sounds.** Short sound effects on the board, for your moves and the opponent's alike:
+  - **Events:** move, capture, check, checkmate (a checkmate plays only the mate sound), castling (uses the move sound unless the set has its own), puzzle solved and puzzle failed.
+  - **Setting:** a **Sounds** on/off toggle plus a volume slider, reachable from the main menu (and the gear settings once FR-1.8 exists). The default is **on**, at 70% volume. The setting applies immediately, without a restart, and is saved in `user.db` through the bridge (never browser storage).
+  - **Behavior:**
+    - Sounds play from local files bundled with the front end. No CDN, no network.
+    - A sound never delays the board or the next puzzle.
+    - Rapid moves cut the previous sound off rather than queueing.
+    - Off means fully silent; nothing is loaded or played.
+    - The opponent's first move plays a sound even before you've clicked anything; WebView2's autoplay policy has to allow this.
+  - **Assets must be licensed for an AGPL project** (§15): CC0 or another AGPL-compatible license, or sounds made for this project. **Never** copy sounds from chess.com or any other proprietary app. Lichess's sound sets are a candidate only after their license is checked in the plan. The source and license of every file are recorded in `web/public/sounds/CREDITS.md` and in ARCHITECTURE.md §7.
 
 ---
 
@@ -524,6 +534,7 @@ The project is open source under **AGPL-3.0-or-later** from the first commit (`L
 - **Lichess puzzle database:** public domain (CC0). It's downloaded at setup, never committed.
 - **The About screen** shows the license and a link to the source code (NFR-7).
 - Third-party npm and Python packages keep their own licenses. A dependency with a license incompatible with AGPL-3.0 isn't added.
+- The same applies to bundled assets (sounds, images, fonts): each has a recorded source and an AGPL-compatible license (FR-1.13).
 
 ---
 
