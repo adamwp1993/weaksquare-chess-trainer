@@ -61,7 +61,7 @@ def test_rename_and_delete(services) -> None:  # type: ignore[no-untyped-def]
         services.presets.rename("nope", "x")
 
 
-@pytest.mark.parametrize("name", ["", "   ", "x" * 61, "tab\there", 42])
+@pytest.mark.parametrize("name", ["", "   ", "x" * 61, "bell\x07here", 42])
 def test_bad_names_rejected(services, name: object) -> None:  # type: ignore[no-untyped-def]
     with pytest.raises(ValidationError):
         services.presets.save(name, FilterSpec())
