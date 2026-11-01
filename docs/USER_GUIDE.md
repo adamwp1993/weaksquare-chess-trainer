@@ -36,15 +36,15 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
 ## Getting started: the puzzle database
-*Added in v0.1.*
+*Added in v0.1. Changed in v0.2: the wording says what you download.*
 
-WeakSquare trains on the Lichess open puzzle database: about 6 million puzzles, public domain. It's stored on your PC, so after the first download everything works offline.
+WeakSquare trains on the Lichess open puzzle database, which is public domain. **Download from Lichess** fetches the **entire** database, every puzzle and not a sample: about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It's stored on your PC, so after the first download everything works offline. With no filters set, the match count equals the number of puzzles imported.
 
 If setup already imported it, the app opens straight to your puzzles. Otherwise the first screen is **Get the puzzle database**:
 
 ![The first-run screen](img/first-run.png)
 
-1. Click **Download from Lichess**. The app downloads about 300 MB, checks it against the checksum Lichess publishes, and imports it. Expect a few minutes; the progress bar shows each stage.
+1. Click **Download from Lichess**. The app downloads the whole database (about 300 MB), checks it against the checksum Lichess publishes, and imports it. Expect a few minutes; the progress bar shows each stage. Make sure you have about 2 GB free: the download and the imported database (about 1.5 GB) are both on disk until the import finishes.
 2. When it's finished, the app switches to your puzzles.
 
 ![The import in progress](img/first-run-importing.png)

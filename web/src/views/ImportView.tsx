@@ -48,13 +48,14 @@ export function ImportView({
     <Stack gap="md" maw={640} data-testid="import-view">
       {firstRun && <Title order={2}>Get the puzzle database</Title>}
       <Text>
-        WeakSquare uses the Lichess open puzzle database: about 6 million puzzles, free and public domain.
+        WeakSquare uses the Lichess open puzzle database, free and public domain.
         {firstRun ? " It's needed once, before your first puzzle." : " Updating replaces it with the newest export."}
       </Text>
-      <Text size="sm" c="dimmed">
-        <b>Download from Lichess</b> fetches about 300 MB from database.lichess.org, checks it against the checksum
-        Lichess publishes, and imports it. This takes a few minutes. Nothing about you is sent. Your attempts and
-        settings are never touched.
+      <Text size="sm" c="dimmed" data-testid="import-what">
+        <b>Download from Lichess</b> fetches the <b>entire</b> Lichess puzzle database, every puzzle, not a sample:
+        about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It comes from
+        database.lichess.org, is checked against the checksum Lichess publishes, and takes a few minutes to import.
+        Nothing about you is sent. Your attempts and settings are never touched.
       </Text>
 
       {error && (

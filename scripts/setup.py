@@ -9,7 +9,8 @@ Usage (from the repo root, in PowerShell, cmd or Git Bash):
 
 Steps: uv (installed with pip if missing) -> Python packages from uv.lock -> npm packages from
 package-lock.json -> front-end build -> Playwright's Chromium -> pre-commit hooks -> puzzle database
-(about 300 MB download, skipped if already imported) -> Start-menu shortcut. Standard library only, because it runs before anything is installed.
+(the entire Lichess puzzle database: about 300 MB to download, about 6 million puzzles, roughly
+1.5 GB once imported; skipped if already imported) -> Start-menu shortcut. Standard library only, because it runs before anything is installed.
 """
 
 from __future__ import annotations

@@ -204,3 +204,19 @@ def test_upgrade_screen_runs_and_returns_to_the_mixer(page) -> None:  # type: ig
     page.get_by_test_id("upgrade-view").wait_for()
     assert "nothing is downloaded" in page.get_by_test_id("upgrade-view").inner_text()
     page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=10_000)
+
+
+def test_importer_names_the_whole_database_and_its_size(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-2.1a, in the first-run screen and in the update dialog."""
+    page.goto(page.base_url + "/?scenario=empty")
+    text = page.get_by_test_id("import-what").inner_text()
+    for words in ("entire Lichess puzzle database", "not a sample", "about 300 MB", "6 million puzzles", "1.5 GB"):
+        assert words in text, words
+
+
+def test_user_guide_uses_the_same_wording() -> None:
+    from pathlib import Path
+
+    guide = (Path(__file__).resolve().parents[2] / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    for words in ("**entire** database", "not a sample", "about 300 MB", "about 6 million puzzles", "1.5 GB"):
+        assert words in guide, words

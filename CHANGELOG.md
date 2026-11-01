@@ -29,6 +29,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - After a puzzle-database update, the finish message gives the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." [FR-2.5]
 
 ### Changed
+- The puzzle-database screen says plainly that it downloads the **entire** Lichess puzzle database: about 300 MB, about 6 million puzzles, roughly 1.5 GB once imported. [FR-2.1a]
 - Phase, goal and origin themes are chosen in the theme list's own groups, alongside the other themes. [FR-3.6]
 - The filter panel scrolls on its own, so the board stays in view, and the match count updates as you play.
 - Dimmed text, the green messages and the teal buttons are darker (lighter in Dark), so all text meets WCAG AA contrast.
