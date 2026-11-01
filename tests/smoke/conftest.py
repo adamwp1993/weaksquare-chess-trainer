@@ -126,11 +126,9 @@ def real_app(prepare_data_dir: Path) -> Iterator[RunningApp]:
 
 
 @pytest.fixture
-def app_page(real_app: RunningApp):  # type: ignore[no-untyped-def]
+def app_page(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
     """A Playwright page attached to the real app's WebView2 over CDP."""
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as pw, attach(pw, real_app) as page:
+    with attach(pw, real_app) as page:
         yield page
 
 

@@ -66,15 +66,13 @@ def with_puzzles(prepare_data_dir, fixture_puzzles_db):  # type: ignore[no-untyp
     return prepare_data_dir
 
 
-def test_session_runs_and_attempts_persist_across_restart(with_puzzles, tmp_path) -> None:  # type: ignore[no-untyped-def]
-    from playwright.sync_api import sync_playwright
-
+def test_session_runs_and_attempts_persist_across_restart(pw, with_puzzles) -> None:  # type: ignore[no-untyped-def]
     from tests.smoke.conftest import attach
 
     def run(check_all_time: str | None) -> None:
         app = launch_app(with_puzzles, free_port())
         try:
-            with sync_playwright() as pw, attach(pw, app) as page:
+            with attach(pw, app) as page:
                 page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
                 if check_all_time is None:
                     page.get_by_role("button", name="Start").click()

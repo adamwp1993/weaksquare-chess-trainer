@@ -56,13 +56,10 @@ def mock_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
-def browser():  # type: ignore[no-untyped-def]
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as pw:
-        b = pw.chromium.launch()
-        yield b
-        b.close()
+def browser(pw):  # type: ignore[no-untyped-def]
+    b = pw.chromium.launch()
+    yield b
+    b.close()
 
 
 @pytest.fixture

@@ -77,3 +77,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="puzzles.db for -m fulldb (default: the dev data folder's, read-only)",
     )
+
+
+@pytest.fixture(scope="session")
+def pw():  # type: ignore[no-untyped-def]
+    """One sync Playwright for the whole run: e2e and smoke tests share it (two can't coexist)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as instance:
+        yield instance
