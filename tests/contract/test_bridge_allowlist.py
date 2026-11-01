@@ -15,6 +15,11 @@ ALLOWLIST = {
     "get_app_info",
     "open_folder",
     "log_frontend_error",
+    "get_puzzle_db_status",
+    "choose_puzzle_file",
+    "start_puzzle_import",
+    "get_job",
+    "cancel_job",
 }
 
 

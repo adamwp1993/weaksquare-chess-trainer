@@ -40,4 +40,15 @@ class Job:
     error_code: str | None
 
 
-EXPORTED: list[type] = [ApiError, AppInfo, Job]
+@dataclass(frozen=True)
+class PuzzleDbStatus:
+    installed: bool
+    puzzle_count: int | None
+    export_date: str | None
+    imported_at: str | None
+    rating_min: int | None
+    rating_max: int | None
+    import_job_id: str | None
+
+
+EXPORTED: list[type] = [ApiError, AppInfo, Job, PuzzleDbStatus]

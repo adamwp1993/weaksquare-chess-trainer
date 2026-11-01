@@ -185,6 +185,18 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.1: Theme bitmasks on `puzzles` instead of a `puzzle_themes` table
+- Context: the live match count must answer within 500 ms on ~6.2M puzzles, including ALL across several themes (FR-3.1). A `puzzle_themes` join table would hold ~25M rows (~1 GB more) and makes ALL a multi-way intersection.
+- Decision: `puzzles` gets three integer columns `t0`, `t1`, `t2` (62 theme bits each, up to 186 themes) plus `theme_bits(theme, bit, count)`, built at import, so a theme new to an export gets a bit automatically. A covering index `(rating, length, player_color, t0, t1, t2)` answers every v0.1 filter without touching the table. `puzzles.n` is a dense integer key used for random sampling. The plan named a separate narrow `puzzle_index` table; a covering index gives the same narrow scan without a second copy of the rows. Indexes are built after the bulk load (`puzzles_indexes.sql`). REQUIREMENTS §4.3 is updated to match.
+- Alternatives: `puzzle_themes(theme, puzzle_id)`, which the spec suggested first and allowed replacing "if multi-theme counts are too slow".
+- Consequences: measured on the 2026-10-02 export, a full import takes about 90 s and `puzzles.db` is 1.4 GB. Warm counts take 80–400 ms (the worst cases scan the whole rating range). A filter on a theme beyond bit 186 isn't possible; the importer logs it.
+
+### 2026-11-01, v0.1: The puzzle download is verified against Lichess's published SHA-256
+- Context: plan decision 8 had to be confirmed at build time. database.lichess.org publishes `sha256sums.txt` at its root, and it lists `lichess_db_puzzle.csv.zst`.
+- Decision: the importer fetches that list, downloads (resuming with `Range` / `If-Range`), and compares hashes. On a mismatch it deletes the file and stops. A complete earlier download that matches is reused. If the list ever stops naming the file, the import continues with a logged warning. The export date is the file's `Last-Modified`. `scripts/fetch_puzzle_db.py` takes the single-instance lock, so it can't replace `puzzles.db` under a running app.
+- Alternatives: a hard-coded hash, impossible because the export changes every month.
+- Consequences: a download caught mid-update by Lichess fails cleanly and can be retried.
+
 ### 2026-11-01, v0.1: Pin MIME types for the local web server
 - Context: on some Windows machines the registry maps `.js` to `text/plain`. Python's `mimetypes` reads that, pywebview's local server sends the bundle as `text/plain`, and WebView2 refuses to run module scripts, so the window is blank. It happened on the first real-app smoke run.
 - Decision: `app.fix_mime_types()` pins `.js`, `.mjs`, `.css` and `.svg` before the window starts. A regression test covers it.

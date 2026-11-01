@@ -90,8 +90,8 @@ Shown when the app launches.
 - `Themes` is space-separated. Display names and groups come from Lichess's theme list (`translation/source/puzzleTheme.xml` in the lila repo).
 
 ### 4.3 Schema (suggested)
-- `puzzles(id PK, fen, moves, rating, rating_dev, popularity, nb_plays, game_url, opening_tags, length, player_color)` with indexes on `rating`, `length`, `popularity`, `nb_plays`.
-- `puzzle_themes(puzzle_id, theme)` with index `(theme, puzzle_id)`. If multi-theme counts are too slow, add precomputed theme bitmask columns (there are more than 64 themes, so this needs two or more integer columns).
+- `puzzles(n PK, id UNIQUE, fen, moves, rating, rating_dev, popularity, nb_plays, themes, game_url, opening_tags, length, player_color, t0, t1, t2)`. `t0`–`t2` are theme bitmasks (62 bits each), with the bit for each theme in `theme_bits(theme, bit, count)`. A covering index on `(rating, length, player_color, t0, t1, t2)` serves the live count. Indexes for the v0.2 filters (`popularity`, `nb_plays`) are added when those filters are. *(Decided in v0.1 instead of a `puzzle_themes(puzzle_id, theme)` table, which was too large and slow for ALL counts; see ARCHITECTURE.md §7.)*
+- `meta(key, value)` in `puzzles.db`: row count, rating range, export date, SHA-256, import time.
 - `attempts(id, puzzle_id, mode, started_at, finished_at, win, help_used, first_move_correct, line_correct, time_ms, rated, angle, sync_status, synced_at, rating_diff)`
 - `lichess_history(puzzle_id PK, win, played_at)`, imported from Lichess (§8.4).
 - `srs(puzzle_id PK, box, due_at)`

@@ -22,6 +22,16 @@ class Desktop:
         else:  # pragma: no cover
             raise OSError("opening folders is only supported on Windows")
 
+    def choose_puzzle_file(self) -> str | None:
+        """Native Open dialog for a Lichess puzzle export. None if cancelled."""
+        if self._window is None:
+            return None
+        chosen = self._window.create_file_dialog(
+            10,  # webview.FileDialog.OPEN
+            file_types=("Lichess puzzle export (*.zst;*.csv)", "All files (*.*)"),
+        )
+        return str(chosen[0]) if chosen else None
+
 
 def show_fatal(title: str, message: str) -> None:
     """A blocking error box for failures before the window exists, plus stderr for console runs.

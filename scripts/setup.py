@@ -3,10 +3,13 @@
 Usage (from the repo root, in PowerShell, cmd or Git Bash):
     python scripts/setup.py                      # everything
     python scripts/setup.py --no-shortcut        # don't create the Start-menu shortcut
+    python scripts/setup.py --skip-puzzle-db     # don't download/import the puzzle database now
+    python scripts/setup.py --puzzle-file PATH   # import a lichess_db_puzzle.csv.zst you already have
+    python scripts/setup.py --dev                # import the puzzles into the dev data folder instead
 
 Steps: uv (installed with pip if missing) -> Python packages from uv.lock -> npm packages from
-package-lock.json -> front-end build -> Playwright's Chromium -> pre-commit hooks -> Start-menu
-shortcut. Standard library only, because it runs before anything is installed.
+package-lock.json -> front-end build -> Playwright's Chromium -> pre-commit hooks -> puzzle database
+(about 300 MB download, skipped if already imported) -> Start-menu shortcut. Standard library only, because it runs before anything is installed.
 """
 
 from __future__ import annotations
@@ -107,6 +110,19 @@ def install_pre_commit(uv: list[str]) -> None:
     run([*uv, "run", "pre-commit", "install"])
 
 
+def import_puzzles(uv: list[str], args: argparse.Namespace) -> None:
+    step("Puzzle database")
+    if args.skip_puzzle_db:
+        print("   skipped (--skip-puzzle-db). You can import it from inside the app instead.")
+        return
+    cmd = [*uv, "run", "python", "scripts/fetch_puzzle_db.py", "--skip-if-present"]
+    if args.puzzle_file:
+        cmd += ["--file", str(Path(args.puzzle_file).resolve())]
+    if args.dev:
+        cmd.append("--dev")
+    run(cmd)
+
+
 def create_shortcut(args: argparse.Namespace) -> None:
     step("Start-menu shortcut")
     if args.no_shortcut:
@@ -133,6 +149,9 @@ def create_shortcut(args: argparse.Namespace) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--no-shortcut", action="store_true")
+    ap.add_argument("--skip-puzzle-db", action="store_true")
+    ap.add_argument("--puzzle-file", metavar="PATH")
+    ap.add_argument("--dev", action="store_true", help="import the puzzles into the dev data folder")
     args = ap.parse_args()
 
     npm = check_prerequisites()
@@ -142,6 +161,7 @@ def main() -> int:
     build_front_end(npm)
     install_playwright(uv)
     install_pre_commit(uv)
+    import_puzzles(uv, args)
     create_shortcut(args)
     print("\nSetup complete. Start WeakSquare Chess Trainer from the Start menu.")
     return 0

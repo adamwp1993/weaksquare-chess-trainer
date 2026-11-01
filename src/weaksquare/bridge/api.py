@@ -12,10 +12,14 @@ import logging
 from typing import Literal
 
 from weaksquare.adapters.desktop import Desktop
-from weaksquare.bridge.dto import AppInfo
+from weaksquare.bridge.dto import AppInfo, Job, PuzzleDbStatus
 from weaksquare.bridge.errors import bridge_call
+from weaksquare.bridge.events import job_dto
 from weaksquare.config import APP_VERSION, LICENSE_NAME, REPO_URL, Paths
 from weaksquare.core.clock import Clock
+from weaksquare.core.errors import NotFoundError, ValidationError
+from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.puzzle_db import PuzzleDbService
 
 log = logging.getLogger("weaksquare.frontend")
 
@@ -23,8 +27,19 @@ FRONTEND_ERRORS_PER_MINUTE = 20
 
 
 class Api:
-    def __init__(self, *, paths: Paths, desktop: Desktop, clock: Clock, dev_mode: bool) -> None:
+    def __init__(
+        self,
+        *,
+        paths: Paths,
+        desktop: Desktop,
+        clock: Clock,
+        dev_mode: bool,
+        runner: JobRunner,
+        puzzle_db: PuzzleDbService,
+    ) -> None:
         self._paths = paths
+        self._runner = runner
+        self._puzzle_db = puzzle_db
         self._desktop = desktop
         self._clock = clock
         self._dev_mode = dev_mode
@@ -33,6 +48,7 @@ class Api:
 
     @bridge_call
     def get_app_info(self) -> AppInfo:
+        status = self._puzzle_db.status()
         return AppInfo(
             version=APP_VERSION,
             data_dir=str(self._paths.data_dir),
@@ -40,8 +56,8 @@ class Api:
             dev_mode=self._dev_mode,
             license=LICENSE_NAME,
             source_url=REPO_URL,
-            puzzle_db_export_date=None,
-            puzzle_count=None,
+            puzzle_db_export_date=status.export_date,
+            puzzle_count=status.puzzle_count,
         )
 
     @bridge_call
@@ -59,3 +75,34 @@ class Api:
             log.error("front end [%s]: %s", source[:200], message[:2000])
         elif self._fe_count == FRONTEND_ERRORS_PER_MINUTE + 1:
             log.error("front end: more errors this minute were dropped")
+
+    # ---- puzzle database (FR-2.1–2.3) -------------------------------------------------------
+    @bridge_call
+    def get_puzzle_db_status(self) -> PuzzleDbStatus:
+        s = self._puzzle_db.status()
+        return PuzzleDbStatus(
+            s.installed, s.puzzle_count, s.export_date, s.imported_at, s.rating_min, s.rating_max, s.import_job_id
+        )
+
+    @bridge_call
+    def choose_puzzle_file(self) -> str | None:
+        return self._desktop.choose_puzzle_file()
+
+    @bridge_call
+    def start_puzzle_import(self, local_path: str | None = None) -> str:
+        """Start the import job: download from Lichess, or import `local_path`. Returns the job ID."""
+        if local_path is not None and (len(local_path) > 1000 or chr(0) in local_path):
+            raise ValidationError("That isn't a valid file path.")
+        return self._puzzle_db.start_import(local_path)
+
+    # ---- jobs -----------------------------------------------------------------------------------
+    @bridge_call
+    def get_job(self, job_id: str) -> Job:
+        status = self._runner.status(job_id)
+        if status is None:
+            raise NotFoundError("No such job.")
+        return job_dto(status)
+
+    @bridge_call
+    def cancel_job(self, job_id: str) -> bool:
+        return self._runner.cancel(job_id)

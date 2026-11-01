@@ -26,3 +26,13 @@ export interface Job {
   message: string;
   error_code: string | null;
 }
+
+export interface PuzzleDbStatus {
+  installed: boolean;
+  puzzle_count: number | null;
+  export_date: string | null;
+  imported_at: string | null;
+  rating_min: number | null;
+  rating_max: number | null;
+  import_job_id: string | null;
+}

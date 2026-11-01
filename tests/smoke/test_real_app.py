@@ -13,11 +13,17 @@ pytestmark = pytest.mark.smoke
 
 
 def test_about_screen_shows_the_data_folder(app_page, real_app: RunningApp) -> None:  # type: ignore[no-untyped-def]
-    app_page.get_by_role("button", name="About").click()
+    app_page.get_by_role("button", name="Menu").click()
+    app_page.get_by_role("menuitem", name="About").click()
     dialog = app_page.get_by_role("dialog")
     dialog.get_by_text("Data folder").wait_for()
     assert str(real_app.data_dir) in dialog.inner_text()
     assert "AGPL-3.0-or-later" in dialog.inner_text()
+
+
+def test_first_run_shows_the_import_screen(app_page) -> None:  # type: ignore[no-untyped-def]
+    app_page.get_by_test_id("import-view").wait_for()
+    assert app_page.get_by_role("button", name="Download from Lichess").is_visible()
 
 
 def test_no_browser_storage_and_csp_active(app_page) -> None:  # type: ignore[no-untyped-def]

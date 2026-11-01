@@ -15,7 +15,7 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Task | Command |
 |---|---|
 | Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py` (add `--no-shortcut` to skip the Start-menu shortcut). Safe to re-run. |
-| Download and import the puzzle database | TODO(v0.1) |
+| Download and import the puzzle database | `uv run python scripts/fetch_puzzle_db.py --dev` (dev data folder; drop `--dev` for the real one). `--file PATH` imports a `lichess_db_puzzle.csv.zst` you already have. Close the app first. |
 | Install or repair Stockfish (`scripts/fetch_stockfish.py`) | TODO(v0.4) |
 | Run the app (dev data folder) | `npm.cmd --prefix web run build` once, then `uv run python -m weaksquare --dev`. The Start-menu shortcut runs the app without `--dev`. |
 | Dev mode (hot-reloading front end) | `npm.cmd --prefix web run dev`, then in a second window `uv run python -m weaksquare --dev-server`. For the UI alone in a browser with fixed data: `npm.cmd --prefix web run dev -- --mode mock`, then open http://127.0.0.1:5173 |

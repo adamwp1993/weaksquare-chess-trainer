@@ -8,17 +8,24 @@ import mimetypes
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 from weaksquare import config
 from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, migrate
+from weaksquare.adapters.db.repos.puzzle_import import PuzzleDbWriter
+from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.desktop import Desktop, show_fatal
+from weaksquare.adapters.files import PuzzleCsv, sha256_file
+from weaksquare.adapters.http import HttpClient
 from weaksquare.adapters.logging_setup import setup_logging
 from weaksquare.adapters.system_clock import SystemClock, make_rng
 from weaksquare.bridge.api import Api
 from weaksquare.bridge.events import EventSink
+from weaksquare.core.clock import Clock
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 
 log = logging.getLogger("weaksquare")
 
@@ -68,6 +75,42 @@ def fix_mime_types() -> None:
     mimetypes.add_type("image/svg+xml", ".svg")
 
 
+@dataclass
+class Services:
+    db: Database
+    http: HttpClient
+    puzzle_db: PuzzleDbService
+
+    def close(self) -> None:
+        self.http.close()
+        self.db.close_all()
+
+
+def build_services(paths: config.Paths, clock: Clock, runner: JobRunner, http: HttpClient | None = None) -> Services:
+    """Wire the concrete adapters into the services. Also used by the scripts/ CLIs."""
+    db = Database(paths.user_db, paths.puzzles_db)
+    http = http or HttpClient()
+    meta = PuzzleMetaRepo(db)
+    puzzle_db = PuzzleDbService(
+        ImportDeps(
+            puzzles_db=paths.puzzles_db,
+            new_db=paths.puzzles_new_db,
+            downloads_dir=paths.downloads_dir,
+            db_url=config.PUZZLE_DB_URL,
+            sums_url=config.PUZZLE_SUMS_URL,
+            http=http,
+            open_csv=PuzzleCsv,
+            make_writer=lambda path: PuzzleDbWriter(path, clock),
+            sha256=sha256_file,
+            swap=db.swap_puzzles_db,
+            read_meta=meta.read,
+        ),
+        runner,
+        clock,
+    )
+    return Services(db=db, http=http, puzzle_db=puzzle_db)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     title = window_title(args.dev)
@@ -110,11 +153,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         lock.release()
         return 1
 
-    db = Database(paths.user_db, paths.puzzles_db)
     events = EventSink()
     runner = JobRunner(events)
+    services = build_services(paths, clock, runner)
     desktop = Desktop()
-    api = Api(paths=paths, desktop=desktop, clock=clock, dev_mode=args.dev)
+    api = Api(paths=paths, desktop=desktop, clock=clock, dev_mode=args.dev, runner=runner, puzzle_db=services.puzzle_db)
     _ = rng  # handed to services as they arrive
 
     window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))
@@ -128,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         log.info("Shutting down")
         runner.cancel_all()
-        db.close_all()
+        services.close()
         lock.release()
         logging.getLogger().removeHandler(file_handler)
         file_handler.close()

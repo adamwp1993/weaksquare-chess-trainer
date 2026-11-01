@@ -18,6 +18,7 @@ REPO_URL = "https://github.com/adamwp1993/weaksquare-chess-trainer"
 LICENSE_NAME = "AGPL-3.0-or-later"
 DATA_DIR_ENV = "WEAKSQUARE_DATA_DIR"
 PUZZLE_DB_URL = "https://database.lichess.org/lichess_db_puzzle.csv.zst"
+PUZZLE_SUMS_URL = "https://database.lichess.org/sha256sums.txt"
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 MIGRATIONS_DIR = PACKAGE_DIR / "adapters" / "db" / "migrations"
