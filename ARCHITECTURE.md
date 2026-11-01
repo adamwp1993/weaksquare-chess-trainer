@@ -247,7 +247,7 @@ Entry format:
 - Decision:
   - Python runtime: `pywebview` (window and JS bridge; pulls in `pythonnet` on Windows), `chess` (python-chess), `platformdirs` (`%LOCALAPPDATA%`), `httpx` (the one HTTP client), `zstandard` (streaming `.csv.zst`; the stdlib `compression.zstd` needs Python 3.14).
   - Python dev: `pytest`, `ruff`, `mypy`, `pre-commit`, `playwright` (Python). One Playwright drives both the mock-client e2e tests and the real-app CDP smoke test.
-  - Build backend: `uv_build`, which is part of uv and is only used to install the package into the venv.
+  - Build backend: `uv_build` (`>=0.13,<0.14`), which is part of uv and is only used to install the package into the venv. It's not a runtime dependency, and users install nothing for it, because `uv sync` (run by `setup.py`) provides it. **Accepted by Adam, 2026-11-01** (QA v0.1-B11: it wasn't in the plan's dependency list). When uv moves past 0.13, widen the range in `pyproject.toml`; check this at each version's planning.
   - npm runtime: `react`, `react-dom`, `@mantine/core`, `@mantine/hooks`, `chessground` (GPL-3.0), `chess.js` (BSD-2-Clause).
   - npm dev: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`, `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`. npm resolved `typescript` to 6.x, the newest that `typescript-eslint` supports.
 - Alternatives: npm `@playwright/test` plus Python Playwright (two browsers to install); `pywin32` for the Start-menu shortcut, replaced by an inline PowerShell `-Command` that calls COM.
