@@ -161,3 +161,10 @@ def test_messages_ratios_and_dialogs_readable(page, name: str) -> None:  # type:
     play(page, "c3d1", "black")
     page.get_by_test_id("outcome").filter(has_text="Solved").wait_for()
     check(page, "solved")
+
+
+@pytest.mark.parametrize("name", ["light", "dark"])
+def test_update_banner_readable(page, name: str) -> None:  # type: ignore[no-untyped-def]
+    go(page, name, "update")
+    page.get_by_test_id("update-banner").wait_for()
+    check(page, "update banner")

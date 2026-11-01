@@ -137,3 +137,11 @@ def test_settings_and_dark_mode(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
     page.wait_for_timeout(700)
     shot(page, "trainer-dark")
+
+
+def test_update_banner(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-2.5: the banner offering a newer puzzle database (v0.2)."""
+    page.goto(page.base_url + "/?scenario=update")
+    page.get_by_test_id("update-banner").wait_for()
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    shot(page, "update-banner")

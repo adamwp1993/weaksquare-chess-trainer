@@ -191,6 +191,13 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.2: The puzzle-database update check
+- Context: FR-2.5.
+- Decision: `core/db_update.py` holds the rules (newer = a different published SHA-256, or a later Last-Modified when the import has no hash; skipped exports are remembered as `sha256:<hash>` or `date:<date>`; at most once a day by the injected clock; the page's count parsed best-effort). `services/db_update.py` runs it as a `puzzle_db_update_check` job that the front end starts once per launch when a database is installed; "Check for updates" forces it. It makes three requests through `adapters/http.py` (`get_text` for the sums and the page, `head_info` for the file), catches every network error, and records the check time only after a successful check. "Not now" is kept in memory (this launch), "Skip" in `settings`. The offer disappears once its export is imported. After an update import the dialog stays open to show the exact new/removed numbers. Tests replay recorded responses (`tests/fixtures/http/lichess_db`, from `tests/fixtures/tools/record_db_update.py`) through the real `HttpClient` with an `httpx.MockTransport`.
+- Scrubbing: the page section included Lichess's sample CSV with real game URLs. The recorder keeps only the introduction and blanks lichess.org links. `test_fixtures_clean.py` used to scan only five extensions and missed the `.html`; it now scans every text file under `tests/fixtures`.
+- Alternatives: starting the check from `app.py` at launch (the result would arrive before the UI could listen for it).
+- Consequences: if Lichess redesigns the page, only the approximate count disappears; re-run the recorder and update `parse_count`.
+
 ### 2026-11-01, v0.2: Dark mode without browser storage, AA contrast, move sounds from lila
 - Context: FR-1.12 and FR-1.13; decision 14 (no browser storage).
 - Decision:

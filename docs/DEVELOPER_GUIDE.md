@@ -21,7 +21,7 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Dev mode (hot-reloading front end) | `npm.cmd --prefix web run dev`, then in a second window `uv run python -m weaksquare --dev-server`. For the UI alone in a browser with fixed data: `npm.cmd --prefix web run dev -- --mode mock`, then open http://127.0.0.1:5173 |
 | Unit, integration and contract tests | `uv run pytest` |
 | End-to-end UI tests (mock client) | `uv run pytest -m e2e` (builds `web/dist-mock` first if it's out of date) |
-| Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times) |
+| Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times; stops with that build command if `web/dist` is older than `web/src`) |
 | Lint and format | `uv run ruff check .` and `uv run ruff format --check .` (drop `--check` to reformat) |
 | Type checks (`mypy`, `tsc --noEmit`, ESLint) | `uv run mypy src`, `npm.cmd --prefix web run typecheck` and `npm.cmd --prefix web run lint` |
 | Full-DB tests (needs the imported puzzle DB) | `uv run pytest -m fulldb`. Reads the dev data folder's `puzzles.db` read-only; add `--fulldb-path PATH` to use another one. Skips if there isn't one. |
@@ -29,6 +29,7 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
 | Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |
 | Regenerate the user-guide screenshots | `uv run pytest -m docs_screenshots` (writes `docs/img/*.png` from the mock client) |
+| Re-record the update-check responses (needs the internet) | `uv run python tests/fixtures/tools/record_db_update.py` (writes scrubbed copies to `tests/fixtures/http/lichess_db/`; review the diff before committing) |
 | Store the live-test Lichess token (run it yourself, outside Claude Code) | TODO(v0.3) |
 | Live tests (opt-in) | TODO(v0.3) |
 | Build the Windows installer | TODO(v1.0) |

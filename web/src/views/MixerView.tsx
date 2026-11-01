@@ -117,7 +117,7 @@ export function MixerView({
   };
 
   return (
-    <Paper withBorder radius="md">
+    <Paper withBorder radius="md" style={{ position: "sticky", top: "calc(56px + var(--mantine-spacing-md))" }}>
       <ScrollArea.Autosize mah={PANEL_MAX_HEIGHT} type="auto" offsetScrollbars data-testid="mixer-scroll">
       <Stack gap="md" p="md">
         <Title order={4}>Choose your puzzles</Title>

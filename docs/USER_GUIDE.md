@@ -33,6 +33,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
 - **Sign-ins and API keys** are never written to files. From v0.3, your Lichess sign-in, and from v0.7 any AI provider key, are stored in **Windows Credential Manager**. Signing out removes them.
 - **Nothing leaves your PC** unless you use a feature that needs the internet. Those features are listed in their own sections, along with what they send.
   - **Puzzle database download** (v0.1): requests the public puzzle file and its checksum list from database.lichess.org. Nothing else is sent.
+  - **Update check** (v0.2): at most once a day, and when you click **Check for updates**, the app makes three plain requests to database.lichess.org: the checksum list (`sha256sums.txt`), the puzzle file's date and size (a `HEAD` request, which doesn't download it) and the front page, for the approximate puzzle count. Nothing about you or your training is sent. Turn it off in **☰ → Settings…**.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
 ## Getting started: the puzzle database
@@ -51,7 +52,7 @@ If setup already imported it, the app opens straight to your puzzles. Otherwise 
 
 **Already have the file?** Click **Use a file I already have…** and choose a `lichess_db_puzzle.csv.zst` (or an unpacked `.csv`) from database.lichess.org.
 
-**Updating:** Lichess publishes a new export regularly. Choose **☰ → Update puzzle database…**. You can keep training while it runs; the new puzzles are switched in when it's finished. The finish message gives the exact numbers, for example *"6,201,004 puzzles: 44,112 new, 450 removed."* (*Added in v0.2.*)
+**Updating:** Lichess publishes a new export regularly, and the app tells you when there is one (see [Keeping the puzzle database up to date](#keeping-the-puzzle-database-up-to-date)). You can also choose **☰ → Update puzzle database…** at any time. You can keep training while it runs; the new puzzles are switched in when it's finished.
 
 **The one-time upgrade** (*Added in v0.2*): the first time v0.2 starts, it shows **Upgrading your puzzle database**. The opening and quality filters need extra information in the database, so the app rebuilds it once from the copy you already have. Nothing is downloaded, it takes about 2 minutes, and your attempts and settings aren't touched. If it stops (for example, you close the app), it starts again next time and your current database keeps working until it finishes.
 
@@ -60,6 +61,28 @@ If setup already imported it, the app opens straight to your puzzles. Otherwise 
 - If the download doesn't match Lichess's checksum, it's deleted and nothing changes. Try again later (Lichess may be updating the file).
 - Importing never touches your attempts or settings.
 - **What it sends:** the download is a plain file request to database.lichess.org. Nothing about you or your training is sent.
+
+## Keeping the puzzle database up to date
+*Added in v0.2.*
+
+Once a day, when you start the app, it checks quietly in the background whether Lichess has published a newer puzzle export. It never interrupts a puzzle. When there's one, a banner appears above your puzzles:
+
+![The update banner](img/update-banner.png)
+
+- **Update now** downloads and imports the new export, exactly like **☰ → Update puzzle database…**. You can keep training meanwhile. When it's finished, the dialog shows the exact numbers, for example *"6,193,530 puzzles: 44,112 new, 7,923 removed."* Your attempts on removed puzzles stay in your history and Stats.
+- **Not now** hides the banner until the next time you start the app.
+- **Skip this export** stays quiet until Lichess publishes a newer export than this one.
+
+The banner's puzzle count comes from the database.lichess.org page, which can lag behind the file, so it's labeled approximate. If the page can't be read, the line is left out and everything else still works.
+
+**Checking yourself:** **☰ → Update puzzle database… → Check for updates** checks right away, even if the app already checked today, and says what it found.
+
+**Turning it off:** **☰ → Settings… → Check for a newer puzzle database once a day.** Check for updates still works.
+
+**Gotchas**
+- Offline, the check stays silent and simply tries again at the next start.
+- A database imported from a file you chose has no checksum to compare, so the app compares the export dates instead.
+- See [Your data and privacy](#your-data-and-privacy) for exactly what the check sends.
 
 ## Choosing your puzzles
 *Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets.*

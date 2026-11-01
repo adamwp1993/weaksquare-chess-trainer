@@ -1,9 +1,11 @@
 import { ActionIcon, Alert, AppShell, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { FilterSpec, PuzzleDbStatus, SoundSettings } from "./api/types";
+import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
+import { useJob } from "./state/useJob";
 import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
 import { ImportView } from "./views/ImportView";
@@ -23,6 +25,11 @@ export function App() {
   const [coordinates, setCoordinates] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sounds, setSounds] = useState<SoundSettings>({ on: false, volume: 70, set: "sfx" });
+  const [autoCheck, setAutoCheck] = useState(true);
+  const [offer, setOffer] = useState<UpdateOffer | null>(null);
+  const [checkJob, setCheckJob] = useState<string | null>(null);
+  const checkStatus = useJob(checkJob);
+  const checkStarted = useRef(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<PuzzleDbStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +49,7 @@ export function App() {
         setSpec(s.last_filters ?? defaultFilters());
         setCoordinates(s.coordinates);
         setSounds(s.sounds);
+        setAutoCheck(s.auto_check);
       },
       () => setSpec(defaultFilters()),
     );
@@ -95,10 +103,40 @@ export function App() {
 
   useEffect(refresh, [refresh]);
 
-  const imported = useCallback(() => {
-    setUpdateOpen(false);
+  // FR-2.5: the automatic update check, once per launch (the backend limits it to once a day).
+  const refreshOffer = useCallback(() => {
+    api.getUpdateOffer().then(setOffer, () => setOffer(null));
+  }, []);
+  useEffect(() => {
+    if (checkStarted.current || !dbStatus?.installed || dbStatus.needs_upgrade) return;
+    checkStarted.current = true;
+    api.checkForDbUpdate(false).then(setCheckJob, () => undefined);
+  }, [dbStatus]);
+  useEffect(() => {
+    if (checkStatus && checkStatus.state !== "running") refreshOffer();
+  }, [checkStatus, refreshOffer]);
+
+  const dismiss = (kind: "not_now" | "skip") => {
+    setOffer(null);
+    api.dismissUpdate(kind).catch(() => undefined);
+  };
+  const updateNow = async () => {
+    setOffer(null);
+    try {
+      await api.startPuzzleImport(null);
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
     refresh();
-  }, [refresh]);
+    setUpdateOpen(true);
+  };
+
+  // After an import the update dialog stays open, showing the exact new/removed numbers (FR-2.5).
+  const imported = useCallback(() => {
+    refresh();
+    refreshOffer();
+  }, [refresh, refreshOffer]);
 
   let main;
   if (error) main = <Text c="red">{error}</Text>;
@@ -120,6 +158,11 @@ export function App() {
   else
     main = (
       <Grid gap="lg">
+        {offer && (
+          <Grid.Col span={12}>
+            <UpdateBanner offer={offer} onUpdate={updateNow} onNotNow={() => dismiss("not_now")} onSkip={() => dismiss("skip")} />
+          </Grid.Col>
+        )}
         <Grid.Col span={{ base: 12, md: 4 }}>
           <MixerView
             spec={spec}
@@ -198,9 +241,19 @@ export function App() {
         onCoordinates={toggleCoordinates}
         sounds={sounds}
         onSounds={changeSounds}
+        autoCheck={autoCheck}
+        onAutoCheck={(on) => {
+          setAutoCheck(on);
+          api.setSetting("puzzle_db.auto_check", on).catch(() => undefined);
+        }}
       />
       <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
-        <ImportView firstRun={false} runningJobId={dbStatus?.import_job_id ?? null} onDone={imported} />
+        <ImportView
+          firstRun={false}
+          runningJobId={dbStatus?.import_job_id ?? null}
+          onDone={imported}
+          onChecked={refreshOffer}
+        />
       </Modal>
     </AppShell>
   );

@@ -15,6 +15,7 @@ import type {
   SessionStats,
   SoundSettings,
   StatsReport,
+  UpdateOffer,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -39,6 +40,7 @@ export interface SettingValues {
   "ui.coordinates": boolean;
   "ui.color_scheme": "light" | "dark" | "auto";
   "ui.sounds": SoundSettings;
+  "puzzle_db.auto_check": boolean;
 }
 
 export interface ApiClient {
@@ -52,6 +54,10 @@ export interface ApiClient {
   startPuzzleImport(localPath: string | null): Promise<string>;
   /** Rebuilds an older-schema puzzle database from its own rows (no download). Returns the job ID. */
   startPuzzleDbUpgrade(): Promise<string>;
+  /** FR-2.5: start the update check (force: the "Check for updates" button). Returns the job ID. */
+  checkForDbUpdate(force: boolean): Promise<string>;
+  getUpdateOffer(): Promise<UpdateOffer | null>;
+  dismissUpdate(kind: "not_now" | "skip"): Promise<void>;
   getJob(jobId: string): Promise<Job>;
   cancelJob(jobId: string): Promise<boolean>;
   getSettings(): Promise<UiSettings>;

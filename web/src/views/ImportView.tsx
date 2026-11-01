@@ -1,5 +1,5 @@
 import { Alert, Button, Group, Progress, Stack, Text, Title } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useJob } from "../state/useJob";
 
@@ -9,14 +9,27 @@ export function ImportView({
   firstRun,
   runningJobId,
   onDone,
+  onChecked,
 }: {
   firstRun: boolean;
   runningJobId: string | null;
   onDone: () => void;
+  /** After "Check for updates": the app re-reads the offer for its banner (FR-2.5). */
+  onChecked?: () => void;
 }) {
   const [jobId, setJobId] = useState<string | null>(runningJobId);
   const [startError, setError] = useState<string | null>(null);
   const job = useJob(jobId);
+  const [checkId, setCheckId] = useState<string | null>(null);
+  const check = useJob(checkId);
+  const notified = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (check && check.state !== "running" && notified.current !== check.id) {
+      notified.current = check.id;
+      onChecked?.();
+    }
+  }, [check, onChecked]);
   const finished = job !== null && job.state !== "running";
   const error = startError ?? (job?.state === "failed" ? job.message : null);
 
@@ -87,12 +100,34 @@ export function ImportView({
           </Text>
         </Stack>
       ) : (
-        <Group>
-          <Button onClick={() => start(null)}>Download from Lichess</Button>
-          <Button variant="default" onClick={chooseFile}>
-            Use a file I already have…
-          </Button>
-        </Group>
+        <Stack gap="xs">
+          {job?.state === "done" && (
+            <Alert color="green" data-testid="import-done">
+              {job.message}
+            </Alert>
+          )}
+          <Group>
+            <Button onClick={() => start(null)}>Download from Lichess</Button>
+            <Button variant="default" onClick={chooseFile}>
+              Use a file I already have…
+            </Button>
+            {!firstRun && (
+              <Button
+                variant="subtle"
+                loading={check?.state === "running"}
+                onClick={() => api.checkForDbUpdate(true).then(setCheckId, (e: Error) => setError(e.message))}
+                data-testid="check-updates"
+              >
+                Check for updates
+              </Button>
+            )}
+          </Group>
+          {check && check.state !== "running" && (
+            <Text size="sm" data-testid="check-result">
+              {check.message}
+            </Text>
+          )}
+        </Stack>
       )}
     </Stack>
   );

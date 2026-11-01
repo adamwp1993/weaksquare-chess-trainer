@@ -2,7 +2,8 @@
 // and for Playwright. Deterministic: no clock-dependent data and no randomness, so screenshots are stable.
 //
 // Scenarios via the page URL: `?scenario=empty` starts with no puzzle database imported, and
-// `?scenario=upgrade` with a v0.1 database that needs the local upgrade.
+// `?scenario=upgrade` with a v0.1 database that needs the local upgrade, and `?scenario=update`
+// with a newer puzzle export to offer (FR-2.5).
 import { Chess } from "chess.js";
 import type { ApiClient, BackendEvent, SettingValues } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
@@ -21,6 +22,7 @@ import type {
   SessionStats,
   StatRow,
   StatsReport,
+  UpdateOffer,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -148,9 +150,11 @@ export class MockClient implements ApiClient {
     coordinates: true,
     color_scheme: "light",
     sounds: { on: true, volume: 70, set: "sfx" },
+    auto_check: true,
   };
   private allTime = { solved: 41, failed: 17 };
   private presets = new Map<string, Preset>();
+  private offer: UpdateOffer | null = null;
   private history = new Map<string, boolean[]>(); // puzzle id -> results here, oldest first
   readonly calls: string[] = [];
 
@@ -163,6 +167,15 @@ export class MockClient implements ApiClient {
     if (params.get("sounds") === "off") this.settings.sounds = { ...this.settings.sounds, on: false };
     this.status =
       scenario === "empty" ? { ...EMPTY } : scenario === "upgrade" ? { ...INSTALLED, needs_upgrade: true } : { ...INSTALLED };
+    if (scenario === "update") {
+      this.offer = {
+        export_date: "2026-11-01",
+        current_export_date: "2026-10-02",
+        size: 309_751_173,
+        approx_count: 6_193_530,
+        approx_new: 36_189,
+      };
+    }
     this.presets.set("Endgame drill", {
       name: "Endgame drill",
       spec: null,
@@ -238,7 +251,9 @@ export class MockClient implements ApiClient {
       () => {
         if (this.jobs.get(id)?.state !== "running") return;
         this.status = { ...INSTALLED };
-        this.emit({ id, kind: "puzzle_import", state: "done", progress: 1, message: "Done", error_code: null });
+        const message = this.offer ? "6,193,530 puzzles: 44,112 new, 7,923 removed." : "6,157,341 puzzles imported.";
+        this.offer = null;
+        this.emit({ id, kind: "puzzle_import", state: "done", progress: 1, message, error_code: null });
       },
       150 * (IMPORT_STEPS.length + 1),
     );
@@ -256,6 +271,23 @@ export class MockClient implements ApiClient {
       this.emit({ id, kind: "puzzle_import", state: "done", progress: 1, message: "Upgraded: 6,157,341 puzzles, ready for the new filters.", error_code: null });
     }, 600);
     return id;
+  }
+
+  async checkForDbUpdate(force: boolean) {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`check:${force}`);
+    const message = this.offer ? "A newer puzzle database is available (exported 2026-11-01)." : "Your puzzle database is up to date.";
+    this.emit({ id, kind: "puzzle_db_update_check", state: "done", progress: 1, message, error_code: null });
+    return id;
+  }
+
+  async getUpdateOffer() {
+    return this.offer;
+  }
+
+  async dismissUpdate(kind: "not_now" | "skip") {
+    this.calls.push(`dismiss:${kind}`);
+    this.offer = null;
   }
 
   async getJob(jobId: string) {
@@ -282,6 +314,7 @@ export class MockClient implements ApiClient {
     if (key === "ui.coordinates") this.settings = { ...this.settings, coordinates: value as boolean };
     if (key === "ui.color_scheme") this.settings = { ...this.settings, color_scheme: value as UiSettings["color_scheme"] };
     if (key === "ui.sounds") this.settings = { ...this.settings, sounds: value as UiSettings["sounds"] };
+    if (key === "puzzle_db.auto_check") this.settings = { ...this.settings, auto_check: value as boolean };
   }
 
   async getThemeCatalog(): Promise<ThemeGroup[]> {

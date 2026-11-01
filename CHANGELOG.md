@@ -26,6 +26,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - Show or hide the board coordinates (C, the ☰ menu, or Settings); your choice is saved.
 - **Dark mode:** Light, Dark or Match system in ☰ → Settings…, applied at once and remembered; the app opens in your saved scheme. [FR-1.12]
 - **Move sounds:** moves, captures, checks, mates, and solved or failed puzzles, with an on/off switch, volume and four sound sets (sfx, piano, 8-bit, futuristic). [FR-1.13]
+- **Update check:** once a day, a banner tells you when Lichess has a newer puzzle export (with its date, download size and an approximate count), with Update now, Not now and Skip this export. **Check for updates** in the update dialog checks at once, and Settings can turn the daily check off. It's silent offline and sends nothing about you. [FR-2.5]
 - After a puzzle-database update, the finish message gives the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." [FR-2.5]
 
 ### Changed

@@ -14,6 +14,7 @@ import type {
   SessionInfo,
   SessionStats,
   StatsReport,
+  UpdateOffer,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -80,6 +81,18 @@ export class PywebviewClient implements ApiClient {
 
   startPuzzleDbUpgrade() {
     return this.call<string>("start_puzzle_db_upgrade");
+  }
+
+  checkForDbUpdate(force: boolean) {
+    return this.call<string>("check_for_db_update", force);
+  }
+
+  getUpdateOffer() {
+    return this.call<UpdateOffer | null>("get_update_offer");
+  }
+
+  dismissUpdate(kind: "not_now" | "skip") {
+    return this.call<void>("dismiss_update", kind);
   }
 
   getJob(jobId: string) {

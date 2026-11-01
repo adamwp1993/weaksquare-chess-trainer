@@ -30,6 +30,8 @@ export function SettingsModal({
   onCoordinates,
   sounds,
   onSounds,
+  autoCheck,
+  onAutoCheck,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -37,6 +39,8 @@ export function SettingsModal({
   onCoordinates: () => void;
   sounds: SoundSettings;
   onSounds: (s: SoundSettings) => void;
+  autoCheck: boolean;
+  onAutoCheck: (on: boolean) => void;
 }) {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
@@ -103,6 +107,17 @@ export function SettingsModal({
           <Text size="xs" c="dimmed">
             The sound sets are by Enigmahack for Lichess (AGPL-3.0). See web/public/sounds/CREDITS.md.
           </Text>
+        </Stack>
+
+        <Stack gap="xs">
+          <Title order={5}>Puzzle database</Title>
+          <Switch
+            label="Check for a newer puzzle database once a day"
+            description="Asks database.lichess.org for its checksum list, the file's date and size, and the puzzle count. Nothing about you is sent."
+            checked={autoCheck}
+            onChange={(e) => onAutoCheck(e.currentTarget.checked)}
+            data-testid="auto-check-switch"
+          />
         </Stack>
       </Stack>
     </Modal>
