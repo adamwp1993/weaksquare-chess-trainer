@@ -281,3 +281,51 @@ def test_rng_used_for_queue_is_the_injected_one(services, paths, clock, fixture_
         return out
 
     assert ids(5) == ids(5)
+
+
+# ---- round 2 (2026-11-01): edges of the B2 fix ------------------------------------------------
+
+
+def test_puzzle_in_progress_survives_a_swap_that_drops_it(services, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """The puzzle on the board is dropped by the new export: it can still be finished, then the
+    session moves on to puzzles that exist and match."""
+    spec = FilterSpec(themes=("mateIn1",), queue_size=None)
+    sid = services.sessions.start(spec).session_id
+    current = services.sessions.next_puzzle(sid)
+    sol = _solution(services, current.puzzle_id)
+    services.db.swap_puzzles_db(_subset_db(tmp_path / "a.db", lambda r: r.id != current.puzzle_id))
+    r = services.sessions.submit_move(sid, sol[1])
+    assert r.outcome is not None and r.outcome.win
+    nxt = services.sessions.next_puzzle(sid)
+    assert nxt is not None and nxt.puzzle_id != current.puzzle_id
+    assert "mateIn1" in _themes(services, nxt.puzzle_id)
+    rows = _attempts(services)
+    assert [(x["puzzle_id"], x["win"]) for x in rows] == [(current.puzzle_id, 1)]
+
+
+def test_two_swaps_in_one_session_never_repeat(services, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    spec = FilterSpec(themes=("mateIn1",), queue_size=None)
+    sid = services.sessions.start(spec).session_id
+    served = [services.sessions.next_puzzle(sid).puzzle_id for _ in range(5)]
+    services.db.swap_puzzles_db(_subset_db(tmp_path / "a.db", lambda r: sum(map(ord, r.id)) % 5 != 0))
+    served += [services.sessions.next_puzzle(sid).puzzle_id for _ in range(5)]
+    services.db.swap_puzzles_db(_subset_db(tmp_path / "b.db", lambda r: True))  # the full set again
+    while (v := services.sessions.next_puzzle(sid)) is not None:
+        served.append(v.puzzle_id)
+        assert "mateIn1" in _themes(services, v.puzzle_id)
+    assert len(served) == len(set(served))
+    assert set(served) == {r[0] for r in _ids_with(services, "mateIn1")}
+
+
+def _ids_with(services, theme: str) -> list[tuple[str]]:  # type: ignore[no-untyped-def]
+    with services.db.session() as conn:
+        return conn.execute("SELECT id FROM pz.puzzles WHERE ' ' || themes || ' ' LIKE ?", (f"% {theme} %",)).fetchall()
+
+
+def test_swap_to_an_export_with_no_matches_ends_the_session(services, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    spec = FilterSpec(themes=("mateIn1",), queue_size=None)
+    sid = services.sessions.start(spec).session_id
+    assert services.sessions.next_puzzle(sid) is not None
+    services.db.swap_puzzles_db(_subset_db(tmp_path / "a.db", lambda r: "mateIn1" not in r.themes))
+    assert services.sessions.next_puzzle(sid) is None
+    assert services.sessions.stats(sid).finished

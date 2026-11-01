@@ -243,3 +243,66 @@ def test_underpromotion_is_wrong(page) -> None:  # type: ignore[no-untyped-def]
     start_promotion_puzzle(page)
     page.get_by_role("button", name="Knight").click()
     page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+
+
+# ---- round 2 (2026-11-01): edges of the B1 and B3 fixes ----------------------------------------
+
+
+def _type(page, label: str, text: str) -> None:  # type: ignore[no-untyped-def]
+    box = page.get_by_label(label)
+    box.click()
+    box.press("Control+a")
+    box.press_sequentially(text, delay=40)
+
+
+def test_typed_maximum_updates_the_count_on_tab(page) -> None:  # type: ignore[no-untyped-def]
+    ready(page)
+    everything = count_text(page)
+    _type(page, "Maximum rating", "1600")
+    page.keyboard.press("Tab")
+    assert count_text(page) != everything
+
+
+def test_typed_maximum_applies_when_start_is_clicked_straight_away(page) -> None:  # type: ignore[no-untyped-def]
+    """Type a maximum and click Start without pressing Enter: the session must use it.
+    Only 04TL9 (rated 485) is at or below 500 in the mock."""
+    ready(page)
+    _type(page, "Maximum rating", "500")
+    page.get_by_role("button", name="Start").click()
+    your_turn(page)
+    header = page.get_by_test_id("puzzle-header").inner_text()
+    assert "rated 485" in header, header
+
+
+def test_maximum_below_minimum_pulls_the_minimum_down(page) -> None:  # type: ignore[no-untyped-def]
+    ready(page)
+    _type(page, "Minimum rating", "1500")
+    page.keyboard.press("Enter")
+    _type(page, "Maximum rating", "1200")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(400)
+    assert page.get_by_label("Minimum rating").input_value().replace(",", "") == "1200"
+    assert page.get_by_label("Maximum rating").input_value().replace(",", "") == "1200"
+
+
+def test_cleared_rating_box_reverts_on_blur(page) -> None:  # type: ignore[no-untyped-def]
+    ready(page)
+    everything = count_text(page)
+    box = page.get_by_label("Maximum rating")
+    before = box.input_value()
+    box.click()
+    box.press("Control+a")
+    box.press("Delete")
+    page.keyboard.press("Tab")
+    page.wait_for_timeout(400)
+    assert box.input_value() == before
+    assert count_text(page) == everything
+
+
+def test_double_click_skip_mid_puzzle_fails_only_the_shown_puzzle(page) -> None:  # type: ignore[no-untyped-def]
+    start_mate_in_one(page)
+    page.evaluate("() => { const b = document.querySelector('[data-testid=next-button]'); b.click(); b.click(); }")
+    your_turn(page)
+    page.wait_for_timeout(800)
+    assert page.get_by_test_id("stat-failed").inner_text() == "1"
+    assert "Puzzle 2" in page.get_by_test_id("puzzle-header").inner_text()

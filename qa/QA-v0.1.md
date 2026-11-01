@@ -190,3 +190,59 @@ The xfail tests are `strict=True`. When a bug is fixed, its test XPASSes and fai
 - Ctrl+C during `fetch_puzzle_db.py` in a PowerShell window (it should print "cancelling…" and stop). It can't be sent from this shell.
 - Close the **Update puzzle database** dialog while an update runs, then reopen it. Check that it still shows the progress, not fresh Download buttons. Not verified by QA.
 - The live count on the first launch after a reboot (cold disk cache). QA measured ≤ 290 ms only with the file already cached.
+
+---
+
+# Re-verification: round 2, 2026-11-01
+
+Fix commit `784155a` (branch `v0.1`). I re-tested B1–B10, B12 and B13. B11 (`uv_build` not in the plan) is left for Adam to decide and doesn't count against this round. No product code or docs were changed by QA. After a docs-screenshot run I restored `docs/img/solved.png` with `git checkout` (see B14).
+
+## Verdict: **PASS WITH ISSUES** (minor only)
+
+Every major bug is fixed and verified. The remaining items are minor: B11 (Adam's call), plus two new minor ones, B14 and B15.
+
+## Fixed bugs re-tested
+
+| Bug | Result | Evidence |
+|---|---|---|
+| B1 double click on Next/Skip | **Fixed** | Strict-xfail tests now pass: `tests/smoke/test_qa_v01_real_app.py::test_two_quick_clicks_on_skip_fail_only_one_puzzle` (real app: Failed 1 on Puzzle 2 of 20) and `tests/e2e/test_qa_v01_ui.py::test_double_click_next_does_not_fail_an_unseen_puzzle`. New: `test_double_click_skip_mid_puzzle_fails_only_the_shown_puzzle` |
+| B2 re-import mid-session | **Fixed** | Real app: `test_reimport_during_a_session_keeps_the_filters` now keeps every rating in 400–600. Integration: `test_reimport_mid_session_keeps_serving_matching_puzzles`. New edge tests: `test_puzzle_in_progress_survives_a_swap_that_drops_it`, `test_two_swaps_in_one_session_never_repeat` (covers the whole pool exactly once across two swaps), `test_swap_to_an_export_with_no_matches_ends_the_session` |
+| B3 typing the maximum rating | **Fixed** | `test_typing_a_maximum_rating_keystroke_by_keystroke` passes. New: `test_typed_maximum_updates_the_count_on_tab`, `test_typed_maximum_applies_when_start_is_clicked_straight_away` (the blur on clicking Start commits it; the served puzzle is rated 485), `test_maximum_below_minimum_pulls_the_minimum_down`, `test_cleared_rating_box_reverts_on_blur` |
+| B4 flaky smoke harness | **Fixed** | `uv run pytest -m smoke` 6 runs in a row: 10 passed every time (60/60), about 66 s per run |
+| B5 "1 puzzles match" | **Fixed** | Real app shows "1 puzzle matches" (`tests/e2e/artifacts/qa-v01-real-about.png`) |
+| B6 WebView2 version | **Fixed** | Real-app log banner: `WebView2 156.0.4314.50` |
+| B7 clipped Open buttons | **Fixed** | Real-app screenshot with a long pytest path: both Open buttons fully visible; `tests/smoke/test_real_app.py` now checks their bounds at 1000×700 |
+| B8 stale CHANGELOG line | **Fixed** | "No app code yet." removed |
+| B9 bare `npm` in the Developer Guide | **Fixed** | Now `npm.cmd --prefix web install` / `npm.cmd --prefix web ci` |
+| B10 privacy section | **Fixed** | New bullet "Links that open your browser" |
+| B12 real game URL | **Fixed** | Now `lichess.org/Xy12Ab34` |
+| B13 seed not logged | **Fixed** | Log shows `random seed: <n>` right after the banner |
+
+## Full suite (round 2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | 192 passed (includes 3 new round-2 integration tests) |
+| `uv run pytest -m fulldb` | 45 passed (143 s) |
+| `uv run pytest -m e2e` | 23 passed (includes 5 new round-2 tests) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` ×6 | 10 passed ×6 |
+| `uv run pytest -m docs_screenshots` | 4 passed; `solved.png` differs from the committed file (B14) |
+| ruff check / format, mypy, tsc, ESLint, `pre-commit run --all-files`, `uv lock --check` | all clean |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings |
+
+`%LOCALAPPDATA%\WeakSquare` still doesn't exist; the real Start menu was not touched.
+
+## New findings (round 2)
+
+### v0.1-B14: minor: the committed `docs/img/solved.png` isn't what the screenshot spec produces
+Four runs of `uv run pytest -m docs_screenshots` all produce the same `solved.png` (sha1 `1585b4af…`), but it differs from the committed file (`ee74d92c…`). The two look identical, so the difference is pixel-level only. The other six images match byte for byte. The builder should regenerate and commit it at the handoff.
+
+### v0.1-B15: minor (docs): the User Guide doesn't say when a typed rating applies
+After the B3 fix, a typed rating takes effect when you press Enter or leave the box; the count doesn't change while you type. The *Choosing your puzzles* table still just says "type exact numbers in the boxes". Suggested addition: "…then press Enter or click elsewhere."
+
+## Tests added in round 2
+- `tests/integration/test_qa_v01_edges.py`: `test_puzzle_in_progress_survives_a_swap_that_drops_it`, `test_two_swaps_in_one_session_never_repeat`, `test_swap_to_an_export_with_no_matches_ends_the_session`
+- `tests/e2e/test_qa_v01_ui.py`: `test_typed_maximum_updates_the_count_on_tab`, `test_typed_maximum_applies_when_start_is_clicked_straight_away`, `test_maximum_below_minimum_pulls_the_minimum_down`, `test_cleared_rating_box_reverts_on_blur`, `test_double_click_skip_mid_puzzle_fails_only_the_shown_puzzle`
+
+## Still for Adam's manual test
+Everything listed in round 1 still applies, except the B1 and B3 warnings, which are no longer needed. Also decide on B11 (`uv_build`).

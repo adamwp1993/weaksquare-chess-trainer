@@ -77,7 +77,7 @@ The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The
 | **Themes** | Opens a list of every theme in the database, grouped (Motifs, Advanced, Mates, Mate patterns, Phases, Special moves, Goals, Lengths, Origin) with how many puzzles have each. Type in **Search themes** to find one. **Select all** ticks every theme shown by the search; **Clear** unticks everything. Leaving it empty means all themes. |
 | **Match: ANY / ALL** | ANY: puzzles with *at least one* chosen theme. ALL: puzzles with *every* chosen theme, e.g. Fork + Long finds long puzzles that involve a fork. |
 | **Exclude themes** | Puzzles with *any* of these themes are left out, whatever else they match. |
-| **Rating** | Drag either end of the slider, or type exact numbers in the boxes. The range runs from the easiest to the hardest puzzle in the database. |
+| **Rating** | Drag either end of the slider, or type exact numbers in the boxes. A typed number applies when you press **Enter** or click elsewhere. If the maximum you type is below the minimum, the minimum moves down to match. The range runs from the easiest to the hardest puzzle in the database. |
 | **Number of moves** | How many moves *you* make: 1, 2, 3 or 4 and more. Tick any combination, or **All**. This is counted from the solution itself, not from the One-move/Short/Long/Very long theme tags. |
 | **You play** | White, Black or Either. |
 | **Puzzles** / **Endless** | A session of a fixed number of puzzles (1 to 500), or an endless one. |
