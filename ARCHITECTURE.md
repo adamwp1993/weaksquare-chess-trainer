@@ -45,9 +45,12 @@ weaksquare-chess-trainer/
 │  ├─ engine_manifest.json     # pinned Stockfish release: tag, asset, URL, SHA-256   (v0.4)
 │  ├─ bridge/
 │  │  ├─ api.py                # class Api: methods exposed to JS (thin)
+│  │  ├─ errors.py             # @bridge_call: argument checks, logging, {code, message, retryable}
 │  │  ├─ dto.py                # dataclasses for everything crossing to JS
 │  │  └─ events.py             # Python → JS push (job progress, sync status)
 │  ├─ core/
+│  │  ├─ clock.py              # Clock protocol + FixedClock (the real clock is an adapter)
+│  │  ├─ errors.py             # AppError and friends: code + user-facing message
 │  │  ├─ chess_rules.py        # FEN/UCI helpers, player color, length, mate-in-1 acceptance
 │  │  ├─ puzzle.py             # Puzzle, PuzzleRef(source, id), PuzzleSource protocol
 │  │  ├─ filters.py            # FilterSpec (+ JSON schema, validation)
@@ -62,11 +65,17 @@ weaksquare-chess-trainer/
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
+│  │  │  ├─ migrate.py         # numbered migrations, backup first, newer-schema refusal
+│  │  │  ├─ puzzles_indexes.sql  # built after each puzzle import's bulk load
 │  │  │  ├─ migrations/puzzles/0001_init.sql …
 │  │  │  ├─ migrations/user/0001_init.sql …
 │  │  │  └─ repos/             # one repository per aggregate
 │  │  ├─ http.py               # shared httpx client: UA, timeouts, retry/backoff, redaction
 │  │  ├─ secret_store.py       # the ONLY module that imports keyring
+│  │  ├─ system_clock.py       # SystemClock + the seeded Random, built only in app.py
+│  │  ├─ logging_setup.py      # rotating logs, redaction, crash hooks
+│  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
+│  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
 │  │  ├─ stockfish.py          # EngineClient impl (python-chess UCI)  (v0.4)
 │  │  ├─ lichess.py            # (v0.3)   chesscom.py (v0.8)
 │  │  └─ llm/                  # LLMProvider protocol, anthropic.py, openai.py (v0.7)
@@ -82,9 +91,12 @@ weaksquare-chess-trainer/
 │  ├─ unit/                    # core/ — fast, no I/O
 │  ├─ integration/             # services + real SQLite (tmp) + fake clients
 │  ├─ e2e/                     # Playwright against web/ with mockClient
+│  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
+│  ├─ fulldb/                  # opt-in timings against the full puzzle DB
 │  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
-                               #   (thin CLIs over services, download + hash check), check_docs.py
+                               #   (thin CLIs over services, download + hash check), check_docs.py,
+                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts)
 ```
 
 `services/` and later `adapters/` modules are created **in the version that first needs them**. The tree shows the end state.
@@ -172,6 +184,41 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-01, v0.1: Pin MIME types for the local web server
+- Context: on some Windows machines the registry maps `.js` to `text/plain`. Python's `mimetypes` reads that, pywebview's local server sends the bundle as `text/plain`, and WebView2 refuses to run module scripts, so the window is blank. It happened on the first real-app smoke run.
+- Decision: `app.fix_mime_types()` pins `.js`, `.mjs`, `.css` and `.svg` before the window starts. A regression test covers it.
+- Alternatives: a single inline bundle, rejected because it conflicts with the strict CSP (SR-3).
+- Consequences: none beyond the four lines.
+
+### 2026-11-01, v0.1: `--dev` decides the data folder and permits the test debugging port
+- Context: NFR-2 wants dev runs kept apart from real history. SR-16 says "release builds" refuse the WebView2 debugging port, but the app runs from source, so there is no separate release build.
+- Decision: `python -m weaksquare` (the Start-menu shortcut) uses `%LOCALAPPDATA%\WeakSquare`; `--dev` uses `WeakSquare-dev`; `WEAKSQUARE_DATA_DIR` overrides both. The app refuses to start if `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` contains `--remote-debugging-port` unless `--dev` is given, and the smoke harness always launches with `--dev` and a temp data folder. Under pytest, `config.resolve_paths` raises if it resolves to either real folder.
+- Alternatives: a separate environment variable to allow the port, rejected as one more thing a stray environment could set.
+- Consequences: the real app can never be attached to, and a dev run never sees real history.
+
+### 2026-11-01, v0.1: SQLite threading details
+- Context: decision 12 says one connection per thread, but FR-2.3 swaps `puzzles.db` while the app runs, and Windows can't replace a file that's open.
+- Decision: every query runs inside `Database.session()`, which holds a shared lock. `swap_puzzles_db()` takes the exclusive lock (so no query is running), closes every registered connection, replaces the file, and bumps a generation counter so each thread reopens lazily. That's the only time a connection is touched from another thread (connections are opened with `check_same_thread=False` for that reason alone). WAL is set once when `Database` is created, because switching it from several threads at once fails with "database is locked". `puzzles.db` is attached read-only (`mode=ro`), so it never has `-wal` files.
+- Alternatives: versioned puzzle files (`puzzles-<date>.db`) with a pointer, rejected because FR-2.3 names the `puzzles.new.db` → `puzzles.db` swap and cleanup is messier.
+- Consequences: a swap waits for running queries to finish (milliseconds).
+
+### 2026-11-01, v0.1: The DTO contract is generated
+- Context: decision 8 needs `bridge/dto.py` and `web/src/api/types.ts` to match.
+- Decision: `scripts/gen_types.py` writes `types.ts` from the dataclasses listed in `dto.EXPORTED`, and a contract test runs it with `--check`. Every bridge result is wrapped as `{ok: true, data}` or `{ok: false, error: {code, message, retryable}}` by `@bridge_call` (NFR-5), and the TypeScript client unwraps it and throws `ApiCallError`.
+- Alternatives: hand-written types plus a parser that compares them, which is more code and still drifts.
+- Consequences: changing a DTO means re-running the generator, and the test says so.
+
+### 2026-11-01, v0.1: First dependencies
+- Context: the v0.1 scaffold (plans/v0.1.md). Every name was checked on PyPI and npm first (SR-14b).
+- Decision:
+  - Python runtime: `pywebview` (window and JS bridge; pulls in `pythonnet` on Windows), `chess` (python-chess), `platformdirs` (`%LOCALAPPDATA%`), `httpx` (the one HTTP client), `zstandard` (streaming `.csv.zst`; the stdlib `compression.zstd` needs Python 3.14).
+  - Python dev: `pytest`, `ruff`, `mypy`, `pre-commit`, `playwright` (Python). One Playwright drives both the mock-client e2e tests and the real-app CDP smoke test.
+  - Build backend: `uv_build`, which is part of uv and is only used to install the package into the venv.
+  - npm runtime: `react`, `react-dom`, `@mantine/core`, `@mantine/hooks`, `chessground` (GPL-3.0), `chess.js` (BSD-2-Clause).
+  - npm dev: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`, `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`. npm resolved `typescript` to 6.x, the newest that `typescript-eslint` supports.
+- Alternatives: npm `@playwright/test` plus Python Playwright (two browsers to install); `pywin32` for the Start-menu shortcut, replaced by an inline PowerShell `-Command` that calls COM.
+- Consequences: `npm audit` reports a moderate `minimatch` advisory inside ESLint's dependency tree. It's dev-only, never shipped or run on untrusted input, and has no non-breaking fix yet.
 
 ### 2026-10-31, pre-v0.1: Named WeakSquare Chess Trainer
 - Context: the working name, "Lichess Puzzle Mixer", matched a GitHub repo (`lichess-puzzle-mixer`) that distributed SmartLoader malware as a zipped `.exe`. Using "Lichess" in the name would also suggest an official connection.

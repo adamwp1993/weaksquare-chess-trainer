@@ -16,3 +16,8 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 ### Added
 - Project specification, architecture, roadmap, QA agent, documentation set and repo guardrails. No app code yet.
 - Licensed AGPL-3.0-or-later.
+- The app window opens from the **WeakSquare Chess Trainer** shortcut in the Start menu, which `python scripts/setup.py` creates along with everything else the app needs. Re-running setup is safe. [NFR-8]
+- **About** screen (the **?** button): version, your data and logs folders with Open buttons, the license and a link to the source code. [NFR-7]
+- Only one copy runs at a time: starting it again brings the open window to the front. [NFR-1]
+- Before an update changes your `user.db`, a backup goes to the `backups` folder (the last five are kept). A `user.db` from a newer version of the app is refused and left untouched. [NFR-3]
+- Problems are written to rotating log files in the `logs` folder, with sign-in tokens and keys removed. [NFR-4] [SR-10]

@@ -1,0 +1,53 @@
+[project]
+name = "weaksquare"
+version = "0.1.0"
+description = "WeakSquare Chess Trainer: a Windows desktop app for chess tactics training on the Lichess puzzle database"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "chess>=1.11.2",
+    "httpx>=0.28.1",
+    "platformdirs>=4.14.2",
+    "pywebview>=6.2.1",
+    "zstandard>=0.25.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".claude", "scripts/check_docs.py"]  # check_docs.py is maintained by hand, outside ruff
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "fulldb: needs the full imported puzzle DB (skipped when it isn't there)",
+    "e2e: Playwright against the web UI with the mock client",
+    "smoke: real-app smoke test (launches the pywebview window, attaches over CDP)",
+    "docs_screenshots: regenerates the user-guide screenshots in docs/img",
+    "live: talks to real external services (opt-in)",
+]
+addopts = "-m 'not fulldb and not e2e and not smoke and not docs_screenshots and not live' -p no:cacheprovider"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "playwright>=1.64.1",
+    "pre-commit>=4.7.0",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]

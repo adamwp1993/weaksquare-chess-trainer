@@ -53,3 +53,6 @@ htmlcov/
 
 # --- Claude Code local overrides (personal, not shared) ---
 .claude/settings.local.json
+
+# --- Front-end mock build (Playwright e2e and screenshots) ---
+web/dist-mock/

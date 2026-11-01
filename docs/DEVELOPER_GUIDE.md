@@ -5,26 +5,29 @@ How to set up, run, test and change the code. **What** to build is in [REQUIREME
 `TODO(v0.x)` marks something that version must fill in. `python scripts/check_docs.py --strict` fails if a marker for the current or an earlier version is still here.
 
 ## Prerequisites
-Windows 10 or 11 with Git for Windows, Python 3.12 (64-bit), Node.js LTS and the Microsoft Edge WebView2 Runtime. `scripts/setup.py` installs [uv](https://docs.astral.sh/uv/) with pip if it's missing, and `pre-commit install` is part of setup. Claude Code is optional, needed only to build with it.
+Windows 10 or 11 with Git for Windows, Python 3.12 or newer (64-bit), Node.js LTS and the Microsoft Edge WebView2 Runtime. `scripts/setup.py` installs [uv](https://docs.astral.sh/uv/) with pip if it's missing, and `pre-commit install` is part of setup. Claude Code is optional, needed only to build with it.
+
+The project's virtual environment uses Python 3.12 (pinned in `.python-version`); uv finds it or downloads it. If setup installed uv with pip, uv's folder may not be on your PATH. Setup says so, and you can then type `python -m uv` wherever this guide says `uv`.
 
 ## Commands
 Run from the repo root in PowerShell unless noted. Keep this table exact: QA runs every command here as written. Commands use `npm.cmd`, `npx.cmd` and `uv run`, never `.ps1` scripts or venv activation, so they work under any PowerShell execution policy (including AllSigned), in cmd and in Git Bash.
 
 | Task | Command |
 |---|---|
-| Set up a fresh clone (`scripts/setup.py`) | TODO(v0.1) |
+| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py` (add `--no-shortcut` to skip the Start-menu shortcut). Safe to re-run. |
 | Download and import the puzzle database | TODO(v0.1) |
 | Install or repair Stockfish (`scripts/fetch_stockfish.py`) | TODO(v0.4) |
-| Run the app | TODO(v0.1) |
-| Dev mode (hot-reloading front end) | TODO(v0.1) |
-| Unit, integration and contract tests | TODO(v0.1) |
+| Run the app (dev data folder) | `npm.cmd --prefix web run build` once, then `uv run python -m weaksquare --dev`. The Start-menu shortcut runs the app without `--dev`. |
+| Dev mode (hot-reloading front end) | `npm.cmd --prefix web run dev`, then in a second window `uv run python -m weaksquare --dev-server`. For the UI alone in a browser with fixed data: `npm.cmd --prefix web run dev -- --mode mock`, then open http://127.0.0.1:5173 |
+| Unit, integration and contract tests | `uv run pytest` |
 | End-to-end UI tests (mock client) | TODO(v0.1) |
-| Real-app smoke test | TODO(v0.1) |
-| Lint and format | TODO(v0.1) |
-| Type checks (`mypy`, `tsc --noEmit`, ESLint) | TODO(v0.1) |
+| Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times) |
+| Lint and format | `uv run ruff check .` and `uv run ruff format --check .` (drop `--check` to reformat) |
+| Type checks (`mypy`, `tsc --noEmit`, ESLint) | `uv run mypy src`, `npm.cmd --prefix web run typecheck` and `npm.cmd --prefix web run lint` |
 | Full-DB tests (needs the imported puzzle DB) | TODO(v0.1) |
-| All pre-commit checks | `pre-commit run --all-files` |
+| All pre-commit checks | `uv run pre-commit run --all-files` |
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
+| Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |
 | Regenerate the user-guide screenshots | TODO(v0.1) |
 | Store the live-test Lichess token (run it yourself, outside Claude Code) | TODO(v0.3) |
 | Live tests (opt-in) | TODO(v0.3) |
@@ -47,11 +50,22 @@ The layer rules and full repo tree are in ARCHITECTURE.md §1–2. Docs:
 - Stockfish version: pinned in `src/weaksquare/engine_manifest.json`. To upgrade, change the tag, asset and SHA-256 there, add an ARCHITECTURE.md §7 entry, and re-run `scripts/fetch_stockfish.py`.
 - `WEAKSQUARE_DATA_DIR` overrides the data folder. Dev runs default to `%LOCALAPPDATA%\WeakSquare-dev` and tests use a temp folder, so your real history is never touched (REQUIREMENTS.md NFR-2).
 - Backups of `user.db` taken before each migration: `<data folder>\backups\` (last 5 kept). Logs: `<data folder>\logs\`.
-- Other settings and environment variables: TODO(v0.1)
-- Reset to a clean state for testing: TODO(v0.1)
+- Other settings and environment variables:
+  - `python -m weaksquare --dev` uses the dev data folder. `--dev-server` does the same and also loads the front end from the Vite dev server (http://localhost:5173) instead of `web/dist`.
+  - `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` with `--remote-debugging-port` is set only by the smoke-test harness. The app refuses to start with it unless `--dev` is given (REQUIREMENTS.md SR-16).
+  - `WEAKSQUARE_NO_DIALOGS=1` makes start-up errors print to the console without a message box. Tests set it.
+  - `<data folder>\weaksquare.lock` stops a second copy from starting (NFR-1). Windows releases it when the app exits, even after a crash.
+- Reset to a clean state for testing: close the app and delete the dev data folder, `%LOCALAPPDATA%\WeakSquare-dev`. Tests never need this, because each one gets a fresh temp folder.
 
 ## Database migrations
-Schema changes are **new numbered files** in `adapters/db/migrations/puzzles/` or `adapters/db/migrations/user/`. Never edit a migration that has been applied. How to add one and run it: TODO(v0.1)
+Schema changes are **new numbered files** in `adapters/db/migrations/puzzles/` or `adapters/db/migrations/user/`. Never edit a migration that has been applied.
+
+To add one:
+1. Create the next file in sequence, e.g. `src/weaksquare/adapters/db/migrations/user/0002_add_rated.sql`: four digits, a lowercase name, no gaps. Separate statements with `;`. New columns on `attempts` must be nullable (ARCHITECTURE.md §3 decision 4).
+2. Add a test that migrates a database from the previous version and checks the change.
+3. Run the app or the tests. `user.db` is migrated at startup, after a backup to `<data folder>\backups\user-<old version>-<timestamp>.db` (the last 5 are kept). A `user.db` with a newer version than the app knows is refused and left untouched (NFR-3).
+
+`puzzles.db` is never migrated in place. Every import builds a new file from all the puzzle migrations, then creates the indexes in `adapters/db/puzzles_indexes.sql` after the bulk load.
 
 ## Testing
 Levels and when each runs: ARCHITECTURE.md §6. Rules:

@@ -32,3 +32,36 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - Before an update changes `user.db`, the app saves a copy in the `backups` folder next to it and keeps the last five.
 - **Sign-ins and API keys** are never written to files. From v0.3, your Lichess sign-in, and from v0.7 any AI provider key, are stored in **Windows Credential Manager**. Signing out removes them.
 - **Nothing leaves your PC** unless you use a feature that needs the internet. Those features are listed in their own sections, along with what they send.
+
+## Installing from source
+*Added in v0.1.*
+
+WeakSquare runs from its source code; there's no installer to download. You need Windows 10 or 11 with **Git**, **Python 3.12 or newer** and **Node.js LTS** installed.
+
+1. Open PowerShell (or a Command Prompt) in the folder where you want the app, and run:
+   ```powershell
+   git clone https://github.com/adamwp1993/weaksquare-chess-trainer
+   cd weaksquare-chess-trainer
+   python scripts/setup.py
+   ```
+2. Setup takes a few minutes. It installs everything into the project folder, builds the app, and adds **WeakSquare Chess Trainer** to your Start menu.
+3. Start the app from the Start menu.
+
+**Updating:** in the same folder, run `git pull`, then `python scripts/setup.py` again. Setup skips anything that's already up to date, and your data isn't touched.
+
+**Gotchas**
+- If setup says uv isn't on your PATH, that's fine: setup carries on without it.
+- Only one copy of the app runs at a time. Starting it again brings the open window to the front.
+
+## The About screen
+*Added in v0.1.*
+
+Click **?** at the top right to see:
+
+| Item | What it shows |
+|---|---|
+| **Version** | The app version you're running. |
+| **Data folder** | Where your puzzles, attempts and settings live. **Open** shows it in File Explorer. |
+| **Logs folder** | Log files that help diagnose problems. **Open** shows it in File Explorer. Sign-in tokens and keys are removed before anything is written. |
+| **Puzzle database** | How many puzzles are imported, and the date of the Lichess export they came from. |
+| **License** and **Source code** | The app is open source under AGPL-3.0-or-later. The link opens the code in your browser. |
