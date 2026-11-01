@@ -164,3 +164,23 @@ def test_window_has_the_app_icon(app_page, real_app: RunningApp) -> None:  # typ
         raise AssertionError("no window of the app has a big icon set")
     log = (real_app.data_dir / "logs" / "weaksquare.log").read_text(encoding="utf-8")
     assert "window icon set" in log
+
+
+def test_smoke_launches_never_call_lichess(pw, with_puzzles) -> None:  # type: ignore[no-untyped-def]
+    """v0.2-B4: the harness turns the daily update check off, so no smoke test depends on the network.
+    With a puzzle database installed the app would otherwise check at once."""
+    from tests.smoke.conftest import attach
+
+    app = launch_app(with_puzzles, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            page.wait_for_timeout(1500)
+            assert page.get_by_test_id("update-banner").count() == 0
+            assert page.evaluate("pywebview.api.get_update_offer()") == {"ok": True, "data": None}
+            settings = page.evaluate("pywebview.api.get_settings()")
+            assert settings["data"]["auto_check"] is False
+    finally:
+        assert app.close() == 0
+    log = (with_puzzles / "logs" / "weaksquare.log").read_text(encoding="utf-8")
+    assert "newer puzzle database" not in log and "update check failed" not in log

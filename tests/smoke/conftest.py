@@ -100,8 +100,32 @@ def launch_app(data_dir: Path, port: int, extra_env: dict[str, str] | None = Non
     env["WEAKSQUARE_NO_DIALOGS"] = "1"
     env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = f"--remote-debugging-port={port}"
     env.update(extra_env or {})
+    no_update_check(data_dir)
     process = subprocess.Popen([sys.executable, "-m", "weaksquare", "--dev"], cwd=ROOT, env=env)
     return RunningApp(process, data_dir, port)
+
+
+def no_update_check(data_dir: Path) -> None:
+    """v0.2-B4: the app's daily update check would call database.lichess.org from every test launch
+    (and its banner would appear mid-test). Turn it off in the test data folder's user.db, as the
+    Settings switch does; the check itself is tested against recorded responses."""
+    import sqlite3
+
+    from weaksquare.adapters.db.migrate import migrate
+    from weaksquare.core.clock import FixedClock
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    user_db = data_dir / "user.db"
+    migrate(user_db, config.MIGRATIONS_DIR / "user", FixedClock())
+    conn = sqlite3.connect(user_db)
+    try:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('puzzle_db.auto_check', 'false')"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def wait_for(predicate: Callable[[], bool], timeout: float, what: str) -> None:
