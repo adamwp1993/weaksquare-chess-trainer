@@ -71,7 +71,7 @@ Shown when the app launches.
 - **FR-1.12** **Appearance: dark mode.** A color-scheme setting with **Light** / **Dark** / **Match system** (default **Light**), reachable from the main menu (and from the gear settings once FR-1.8 exists). It applies immediately to every screen (filters, trainer, dialogs, importer, About, Stats) without a restart, and is saved in `user.db` through the bridge (never browser storage, ARCHITECTURE.md §3), so it survives a relaunch. The app starts in the saved scheme without flashing the other one first where WebView2 allows. *Match system* follows the operating system's light/dark setting (the Windows app theme today) and updates if it changes while the app is open. The name is OS-neutral so it carries over to v1.1. The board and pieces stay readable in both schemes, and text keeps at least WCAG AA contrast.
 - **FR-1.13** **Move sounds.** Short sound effects on the board, for your moves and the opponent's alike:
   - **Events:** move, capture, check, checkmate (a checkmate plays only the mate sound), castling (uses the move sound unless the set has its own), puzzle solved and puzzle failed.
-  - **Setting:** a **Sounds** on/off toggle plus a volume slider, reachable from the main menu (and the gear settings once FR-1.8 exists). The default is **on**, at 70% volume. The setting applies immediately, without a restart, and is saved in `user.db` through the bridge (never browser storage).
+  - **Setting:** a **Sounds** on/off toggle, a volume slider and a **sound set** picker, reachable from the main menu (and the gear settings once FR-1.8 exists). The default is **on**, at 70% volume, with the **sfx** set. *(Decided at v0.2 planning: the four Lichess sets by Enigmahack, **sfx**, **piano**, **nes** and **futuristic**, which lila's `COPYING.md` lists as AGPLv3+. Lichess's "standard" set is a non-free exception there and isn't used. None of the four has a castling sound, so castling plays the move sound.)* The setting applies immediately, without a restart, and is saved in `user.db` through the bridge (never browser storage).
   - **Behavior:**
     - Sounds play from local files bundled with the front end. No CDN, no network.
     - A sound never delays the board or the next puzzle.
@@ -110,12 +110,12 @@ Shown when the app launches.
 - `Themes` is space-separated. Display names and groups come from Lichess's theme list (`translation/source/puzzleTheme.xml` in the lila repo).
 
 ### 4.3 Schema (suggested)
-- `puzzles(n PK, id UNIQUE, fen, moves, rating, rating_dev, popularity, nb_plays, themes, game_url, opening_tags, length, player_color, t0, t1, t2)`. `t0`–`t2` are theme bitmasks (62 bits each), with the bit for each theme in `theme_bits(theme, bit, count)`. A covering index on `(rating, length, player_color, t0, t1, t2)` serves the live count. Indexes for the v0.2 filters (`popularity`, `nb_plays`) are added when those filters are. *(Decided in v0.1 instead of a `puzzle_themes(puzzle_id, theme)` table, which was too large and slow for ALL counts; see ARCHITECTURE.md §7.)*
+- `puzzles(n PK, id UNIQUE, fen, moves, rating, rating_dev, popularity, nb_plays, themes, game_url, opening_tags, length, player_color, t0, t1, t2)`. `t0`–`t2` are theme bitmasks (62 bits each), with the bit for each theme in `theme_bits(theme, bit, count)`. A covering index on `(rating, length, player_color, t0, t1, t2, popularity, nb_plays)` serves the live count. The opening filter (v0.2) uses `opening_family` and `opening_variation`, integer ids into `openings(id, tag, family_id, count)` built at import, each with an index on `(opening_…, rating)`. *(Decided in v0.1 instead of a `puzzle_themes(puzzle_id, theme)` table, which was too large and slow for ALL counts; see ARCHITECTURE.md §7.)*
 - `meta(key, value)` in `puzzles.db`: row count, rating range, export date, SHA-256, import time.
-- `attempts(id, puzzle_id, mode, started_at, finished_at, win, help_used, first_move_correct, line_correct, time_ms, rated, angle, sync_status, synced_at, rating_diff)`
+- `attempts(id, puzzle_id, mode, started_at, finished_at, win, help_used, first_move_correct, line_correct, time_ms, puzzle_rating, rated, angle, sync_status, synced_at, rating_diff)`. `puzzle_rating` (v0.2) is the puzzle's rating when you played it, so Stats' rating bands survive a re-import.
 - `lichess_history(puzzle_id PK, win, played_at)`, imported from Lichess (§8.4).
 - `srs(puzzle_id PK, box, due_at)`
-- `presets(name PK, filters_json)`
+- `presets(name PK, filters_json, created_at, updated_at)`
 - `llm_cache(key PK, provider, model, response_json, input_tokens, output_tokens, created_at)`
 - `settings(key PK, value)`. **Non-secret only.**
 - `llm_usage(id, ts, feature, provider, model, input_tokens, output_tokens, cost_usd)`, used for the budget (§9.3)
@@ -146,8 +146,8 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.5 | Side to move | White / Black / Either | Player color |
 | FR-3.6 | Phase / goal / origin | Covered by the theme picker groups | e.g. endgame, mate, crushing, master games |
 | FR-3.7 | Opening | Searchable multi-select from `OpeningTags` | e.g. Italian Game, Caro-Kann, London |
-| FR-3.8 | Quality | Min popularity, min plays | Defaults chosen at build time and adjustable |
-| FR-3.9 | History | Checkboxes: exclude solved here / exclude played on Lichess / **only my misses** | Uses `attempts` and `lichess_history` |
+| FR-3.8 | Quality | Min popularity, min plays | On by default at **popularity ≥ 50** (Lichess popularity runs from -100 to 100) and **≥ 100 plays**; both adjustable, and clearing a box turns that threshold off |
+| FR-3.9 | History | Checkboxes: exclude solved here / exclude played on Lichess / **only my misses** | Uses `attempts` and `lichess_history`. *Exclude solved here* (**on by default**) hides puzzles you've **won at least once** in this app; ones you only failed can still come up. *Only my misses* (off by default) keeps only puzzles whose **latest** attempt here was a loss, so a miss drops out once you solve it. |
 | FR-3.10 | **Ratios** (optional) | Weighted buckets, e.g. 50% fork, 30% capture-the-defender, 20% one-move | Draws from each bucket by weight |
 | FR-3.11 | Order | Random / easy → hard / grouped by theme | |
 | FR-3.12 | Queue size | Fixed N or endless | |
