@@ -2,7 +2,8 @@
 
 Usage (from the repo root, in PowerShell, cmd or Git Bash):
     python scripts/setup.py                      # everything
-    python scripts/setup.py --no-shortcut        # don't create the Start-menu shortcut
+    python scripts/setup.py --no-desktop-shortcut  # the Start-menu shortcut only
+    python scripts/setup.py --no-shortcut        # neither shortcut
     python scripts/setup.py --skip-puzzle-db     # don't download/import the puzzle database now
     python scripts/setup.py --puzzle-file PATH   # import a lichess_db_puzzle.csv.zst you already have
     python scripts/setup.py --dev                # import the puzzles into the dev data folder instead
@@ -10,22 +11,28 @@ Usage (from the repo root, in PowerShell, cmd or Git Bash):
 Steps: uv (installed with pip if missing) -> Python packages from uv.lock -> npm packages from
 package-lock.json -> front-end build -> Playwright's Chromium -> pre-commit hooks -> puzzle database
 (the entire Lichess puzzle database: about 300 MB to download, about 6 million puzzles, roughly
-1.5 GB once imported; skipped if already imported) -> Start-menu shortcut. Standard library only, because it runs before anything is installed.
+1.5 GB once imported; skipped if already imported) -> Start-menu and desktop shortcuts, with the
+WeakSquare icon (NFR-8a). Standard library only, because it runs before anything is installed.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 SHORTCUT_NAME = "WeakSquare Chess Trainer.lnk"
+ICON = ROOT / "assets" / "icon" / "weaksquare.ico"
+FOLDERID_DESKTOP = "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}"
 
 
 def step(title: str) -> None:
@@ -124,32 +131,82 @@ def import_puzzles(uv: list[str], args: argparse.Namespace) -> None:
     run(cmd)
 
 
-def create_shortcut(args: argparse.Namespace) -> None:
-    step("Start-menu shortcut")
-    if args.no_shortcut:
-        print("   skipped (--no-shortcut)")
-        return
-    pythonw = ROOT / ".venv" / "Scripts" / "pythonw.exe"
-    if not pythonw.is_file():
-        fail(f"{pythonw} is missing; the Python step didn't finish.")
-    programs = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-    link = programs / SHORTCUT_NAME
-    # An inline -Command (not a .ps1 file), so it runs under any execution policy, including AllSigned.
-    # Values travel in environment variables to avoid quoting problems.
+def desktop_folder() -> Path:
+    """The Desktop through the Windows known-folder API: it's often redirected to OneDrive, so
+    %USERPROFILE%\\Desktop can be the wrong place (NFR-8a)."""
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("d1", ctypes.c_ulong),
+            ("d2", ctypes.c_ushort),
+            ("d3", ctypes.c_ushort),
+            ("d4", ctypes.c_ubyte * 8),
+        ]
+
+    guid = GUID()
+    ole32 = ctypes.windll.ole32  # type: ignore[attr-defined]
+    if ole32.CLSIDFromString(ctypes.c_wchar_p(FOLDERID_DESKTOP), ctypes.byref(guid)) != 0:
+        raise OSError("CLSIDFromString failed")
+    path_ptr = ctypes.c_wchar_p()
+    if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(path_ptr)) != 0:  # type: ignore[attr-defined]
+        raise OSError("SHGetKnownFolderPath failed")
+    try:
+        return Path(path_ptr.value or "")
+    finally:
+        ole32.CoTaskMemFree(path_ptr)
+
+
+def start_menu_folder() -> Path:
+    return Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+
+
+def make_shortcut(link: Path, target: Path, run: Callable[..., Any] = subprocess.run) -> None:
+    """Create or replace `link` (saving to the same path overwrites, so re-runs never duplicate).
+    An inline -Command (not a .ps1 file), so it runs under any execution policy, including AllSigned.
+    Values travel in environment variables to avoid quoting problems."""
     script = (
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:WS_LINK);"
         "$s.TargetPath = $env:WS_TARGET; $s.Arguments = '-m weaksquare';"
         "$s.WorkingDirectory = $env:WS_DIR; $s.Description = 'WeakSquare Chess Trainer';"
-        "$s.Save()"
+        "$s.IconLocation = $env:WS_ICON; $s.Save()"
     )
-    env = dict(os.environ, WS_LINK=str(link), WS_TARGET=str(pythonw), WS_DIR=str(ROOT))
-    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], check=True, env=env)
+    env = dict(os.environ, WS_LINK=str(link), WS_TARGET=str(target), WS_DIR=str(ROOT), WS_ICON=f"{ICON},0")
+    run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], check=True, env=env)
     print(f"   {link}")
+
+
+def create_shortcuts(
+    args: argparse.Namespace,
+    run: Callable[..., Any] = subprocess.run,
+    desktop: Callable[[], Path] = desktop_folder,
+    start_menu: Callable[[], Path] = start_menu_folder,
+) -> list[Path]:
+    """The Start-menu shortcut, and a desktop one unless --no-desktop-shortcut (NFR-8a).
+    --no-shortcut skips both. Returns the shortcuts written."""
+    step("Shortcuts")
+    if args.no_shortcut:
+        print("   skipped (--no-shortcut)")
+        return []
+    pythonw = ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    if not pythonw.is_file():
+        fail(f"{pythonw} is missing; the Python step didn't finish.")
+    links = [start_menu() / SHORTCUT_NAME]
+    if args.no_desktop_shortcut:
+        print("   desktop shortcut skipped (--no-desktop-shortcut)")
+    else:
+        try:
+            links.append(desktop() / SHORTCUT_NAME)
+        except OSError as e:
+            print(f"   couldn't find your Desktop folder ({e}); skipping the desktop shortcut")
+    for link in links:
+        make_shortcut(link, pythonw, run)
+    return links
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--no-shortcut", action="store_true")
+    ap.add_argument("--no-shortcut", action="store_true", help="create neither shortcut")
+    ap.add_argument("--no-desktop-shortcut", action="store_true", help="create the Start-menu shortcut only")
     ap.add_argument("--skip-puzzle-db", action="store_true")
     ap.add_argument("--puzzle-file", metavar="PATH")
     ap.add_argument("--dev", action="store_true", help="import the puzzles into the dev data folder")
@@ -163,8 +220,8 @@ def main() -> int:
     install_playwright(uv)
     install_pre_commit(uv)
     import_puzzles(uv, args)
-    create_shortcut(args)
-    print("\nSetup complete. Start WeakSquare Chess Trainer from the Start menu.")
+    create_shortcuts(args)
+    print("\nSetup complete. Start WeakSquare Chess Trainer from the Start menu or your desktop.")
     return 0
 
 

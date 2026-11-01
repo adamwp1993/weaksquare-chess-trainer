@@ -14,7 +14,7 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 
 | Task | Command |
 |---|---|
-| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py` (add `--no-shortcut` to skip the Start-menu shortcut). Safe to re-run. |
+| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py`. Creates Start-menu and desktop shortcuts with the app icon: add `--no-desktop-shortcut` for the Start menu only, or `--no-shortcut` for neither. Safe to re-run (the shortcuts are replaced, never duplicated). |
 | Download and import the puzzle database | `uv run python scripts/fetch_puzzle_db.py --dev` (dev data folder; drop `--dev` for the real one). `--file PATH` imports a `lichess_db_puzzle.csv.zst` you already have. Close the app first. |
 | Install or repair Stockfish (`scripts/fetch_stockfish.py`) | TODO(v0.4) |
 | Run the app (dev data folder) | `npm.cmd --prefix web run build` once, then `uv run python -m weaksquare --dev`. The Start-menu shortcut runs the app without `--dev`. |
@@ -29,6 +29,7 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
 | Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |
 | Regenerate the user-guide screenshots | `uv run pytest -m docs_screenshots` (writes `docs/img/*.png` from the mock client) |
+| Rebuild the app icon after changing `assets/icon/weaksquare.svg` | `uv run python scripts/make_icon.py` (commit the `.ico` with the SVG; `--check` tells you if they've drifted, and `uv run pytest -m e2e` runs that check) |
 | Re-record the update-check responses (needs the internet) | `uv run python tests/fixtures/tools/record_db_update.py` (writes scrubbed copies to `tests/fixtures/http/lichess_db/`; review the diff before committing) |
 | Store the live-test Lichess token (run it yourself, outside Claude Code) | TODO(v0.3) |
 | Live tests (opt-in) | TODO(v0.3) |

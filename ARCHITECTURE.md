@@ -37,6 +37,7 @@ weaksquare-chess-trainer/
 ├─ plans/                      # the approved plan for each version, ticked off as work lands
 ├─ README.md  REQUIREMENTS.md  ARCHITECTURE.md  ROADMAP.md  CLAUDE.md  CHANGELOG.md
 ├─ docs/                      # USER_GUIDE.md, DEVELOPER_GUIDE.md, img/ (generated screenshots)
+├─ assets/icon/               # weaksquare.svg (source), weaksquare.ico (built by scripts/make_icon.py), CREDITS.md
 ├─ .claude/  .gitleaks.toml  .pre-commit-config.yaml  .gitignore
 ├─ src/weaksquare/
 │  ├─ __main__.py              # python -m weaksquare
@@ -190,6 +191,12 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-01, v0.2: App icon, taskbar identity and the desktop shortcut
+- Context: NFR-8a.
+- Decision: `assets/icon/weaksquare.svg` is a 2×2 board in chessground's brown colors with the cburnett black queen (Colin M. L. Burnett, GPL-2.0-or-later), copied from chessground's CSS; credits are in `assets/icon/CREDITS.md`. `scripts/make_icon.py` renders it with Playwright's Chromium at 16–256 px and packs PNG entries into an `.ico` with `struct` (no new dependency); the build is deterministic, and `--check` (run by the e2e suite) compares it with the committed file. pywebview's `icon` argument only works on GTK and Qt, so `app.py` sets an explicit AppUserModelID (`WeakSquare.ChessTrainer`) before the window exists, and once it's shown sends `WM_SETICON` with the `.ico` (`adapters/desktop.py`). `setup.py` finds the Desktop with `SHGetKnownFolderPath(FOLDERID_Desktop)` (OneDrive redirection) and writes both shortcuts with `IconLocation`; saving to the same path replaces a shortcut.
+- Alternatives: Pillow plus cairosvg for the icon (two dependencies, one needing a native Cairo DLL); `%USERPROFILE%\Desktop` (wrong when OneDrive redirects it).
+- Consequences: the shortcuts don't carry the AppUserModelID (WScript.Shell can't set it), so a shortcut pinned to the taskbar may group separately from the running window. Adam's manual test checks the taskbar.
 
 ### 2026-11-01, v0.2: The puzzle-database update check
 - Context: FR-2.5.

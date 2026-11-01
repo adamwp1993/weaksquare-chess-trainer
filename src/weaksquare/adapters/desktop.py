@@ -49,6 +49,51 @@ def system_prefers_dark() -> bool:
     return value == 0
 
 
+APP_USER_MODEL_ID = "WeakSquare.ChessTrainer"
+
+
+def set_app_user_model_id() -> None:
+    """NFR-8a: give the process its own taskbar identity, so the taskbar shows the window's icon
+    instead of grouping it under python.exe. Call before the window is created."""
+    if sys.platform != "win32":  # pragma: no cover
+        return
+    import contextlib
+    import ctypes
+
+    with contextlib.suppress(AttributeError, OSError):
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)  # type: ignore[attr-defined]
+
+
+def set_window_icon(title: str, ico: Path) -> bool:
+    """NFR-8a: pywebview's `icon` only works on GTK and Qt, so on Windows send WM_SETICON (large and
+    small) to the window with this title. Returns False if the window or icon couldn't be found."""
+    if sys.platform != "win32" or not ico.is_file():  # pragma: no cover - v1.1 handles other systems
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    user32.FindWindowW.restype = wintypes.HWND
+    user32.LoadImageW.restype = wintypes.HANDLE
+    user32.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int, ctypes.c_int,
+                                  wintypes.UINT]  # fmt: skip
+    user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    image_icon, lr_loadfromfile, wm_seticon = 1, 0x10, 0x80
+    hwnd = user32.FindWindowW(None, title)
+    if not hwnd:
+        return False
+    sizes = {1: (user32.GetSystemMetrics(11), user32.GetSystemMetrics(12)),  # ICON_BIG: SM_CXICON, SM_CYICON
+             0: (user32.GetSystemMetrics(49), user32.GetSystemMetrics(50))}  # ICON_SMALL: SM_CXSMICON…  # fmt: skip
+    ok = True
+    for which, (cx, cy) in sizes.items():
+        hicon = user32.LoadImageW(None, str(ico), image_icon, cx, cy, lr_loadfromfile)
+        if not hicon:
+            ok = False
+            continue
+        user32.SendMessageW(hwnd, wm_seticon, which, hicon)
+    return ok
+
+
 def show_fatal(title: str, message: str) -> None:
     """A blocking error box for failures before the window exists, plus stderr for console runs.
 

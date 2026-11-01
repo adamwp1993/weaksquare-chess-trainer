@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -138,3 +139,28 @@ def test_sounds_may_play_without_a_click(app_page) -> None:  # type: ignore[no-u
         }"""
     )
     assert result == "played"
+
+
+def test_window_has_the_app_icon(app_page, real_app: RunningApp) -> None:  # type: ignore[no-untyped-def]
+    """NFR-8a: the window (and so its taskbar button) shows the WeakSquare icon, not Python's."""
+    import ctypes
+    from ctypes import wintypes
+
+    from tests.smoke.conftest import windows_of
+
+    app_page.get_by_test_id("import-view").wait_for(timeout=30_000)
+    pid = real_app.app_pid()
+    assert pid is not None
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    user32.SendMessageW.restype = wintypes.LPARAM
+    user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    wm_geticon, icon_big = 0x7F, 1
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if any(user32.SendMessageW(h, wm_geticon, icon_big, 0) for h in windows_of(pid)):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError("no window of the app has a big icon set")
+    log = (real_app.data_dir / "logs" / "weaksquare.log").read_text(encoding="utf-8")
+    assert "window icon set" in log

@@ -21,7 +21,13 @@ from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
 from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
-from weaksquare.adapters.desktop import Desktop, show_fatal, system_prefers_dark
+from weaksquare.adapters.desktop import (
+    Desktop,
+    set_app_user_model_id,
+    set_window_icon,
+    show_fatal,
+    system_prefers_dark,
+)
 from weaksquare.adapters.files import PuzzleCsv, sha256_file
 from weaksquare.adapters.http import HttpClient
 from weaksquare.adapters.logging_setup import setup_logging
@@ -226,6 +232,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     scheme = services.ui_settings.get().color_scheme
+    set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's
     window = webview.create_window(
         title,
         url,
@@ -240,6 +247,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     events.attach(window)
     desktop.attach(window)
     window.events.closing += events.detach
+    window.events.shown += lambda: log.info(
+        "window icon %s", "set" if set_window_icon(title, config.ICON_FILE) else "not set"
+    )
 
     try:
         webview.start(private_mode=True, http_server=not args.dev_server, debug=False)

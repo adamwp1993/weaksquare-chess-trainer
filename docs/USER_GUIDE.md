@@ -238,7 +238,7 @@ Choose **☰ → Settings…** to change how the app looks and sounds. Every cha
 - The sounds are Lichess's sets by Enigmahack, licensed AGPL-3.0 like this app. They're bundled with the app, so nothing is downloaded when they play.
 
 ## Installing from source
-*Added in v0.1.*
+*Added in v0.1. Changed in v0.2: a desktop shortcut and the app icon.*
 
 WeakSquare runs from its source code; there's no installer to download. You need Windows 10 or 11 with **Git**, **Python 3.12 or newer** and **Node.js LTS** installed.
 
@@ -248,14 +248,18 @@ WeakSquare runs from its source code; there's no installer to download. You need
    cd weaksquare-chess-trainer
    python scripts/setup.py
    ```
-2. Setup takes a few minutes. It installs everything into the project folder, builds the app, downloads and imports the puzzle database (see *Getting started*), and adds **WeakSquare Chess Trainer** to your Start menu. To skip the puzzle download, add `--skip-puzzle-db`; the app then offers it on first run.
-3. Start the app from the Start menu.
+2. Setup takes a few minutes. It installs everything into the project folder, builds the app, downloads and imports the puzzle database (see *Getting started*), and adds **WeakSquare Chess Trainer** to your Start menu and your desktop. To skip the puzzle download, add `--skip-puzzle-db`; the app then offers it on first run.
+3. Start the app from the Start menu or the desktop.
+
+Both shortcuts, the window and its taskbar button show the WeakSquare icon: four board squares with a black queen. `--no-desktop-shortcut` skips the desktop one, and `--no-shortcut` skips both. If your Desktop is in OneDrive, the shortcut goes there, where Windows shows it.
 
 **Updating:** in the same folder, run `git pull`, then `python scripts/setup.py` again. Setup skips anything that's already up to date, and your data isn't touched.
 
 **Gotchas**
 - If setup says uv isn't on your PATH, that's fine: setup carries on without it.
 - Only one copy of the app runs at a time. Starting it again brings the open window to the front.
+- Running setup again replaces the two shortcuts rather than adding more. If you deleted the desktop shortcut on purpose, use `--no-desktop-shortcut` next time.
+- A shortcut you pinned to the taskbar yourself, before v0.2, keeps its old icon. Unpin it and pin the app again.
 
 ## The About screen
 *Added in v0.1.*
