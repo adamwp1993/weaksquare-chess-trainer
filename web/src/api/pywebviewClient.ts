@@ -1,5 +1,5 @@
 // Real client: calls the Python `Api` through pywebview's js_api bridge.
-import { ApiCallError, type ApiClient, type BackendEvent } from "./ApiClient";
+import { ApiCallError, type ApiClient, type BackendEvent, type SettingValues } from "./ApiClient";
 import type {
   ApiError,
   AppInfo,
@@ -94,7 +94,7 @@ export class PywebviewClient implements ApiClient {
     return this.call<UiSettings>("get_settings");
   }
 
-  setSetting(key: "mixer.filters", value: FilterSpec) {
+  setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]) {
     return this.call<void>("set_setting", key, value);
   }
 

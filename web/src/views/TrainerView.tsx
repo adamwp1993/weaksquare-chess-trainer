@@ -6,6 +6,7 @@ import type { Outcome, PuzzleView, SessionStats } from "../api/types";
 import { AnswerPlayer, answerPositions, type AnswerPosition } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
 import { SessionBar } from "../components/SessionBar";
+import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
 const REPLY_DELAY_MS = 300;
@@ -25,9 +26,11 @@ export function TrainerView({
   sessionId,
   onNewSession,
   onHistoryChange,
+  coordinates = true,
 }: {
   sessionId: number;
   onNewSession: () => void;
+  coordinates?: boolean;
   /** An attempt may have been recorded: the mixer's history filters need a fresh count. */
   onHistoryChange?: () => void;
 }) {
@@ -191,6 +194,30 @@ export function TrainerView({
     }
   };
 
+  const decided = outcome !== null;
+  const shown = answer ? answer.positions[answer.step] : null;
+  const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
+  const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
+  const stepAnswer = (delta: number) => {
+    if (!answer) return;
+    const to = Math.min(Math.max(answer.step + delta, 0), answer.positions.length - 1);
+    if (to !== answer.step) setAnswer({ ...answer, step: to });
+  };
+  const next = () => {
+    if (complete) onNewSession();
+    else if (view && !busy) load();
+  };
+
+  // Keyboard shortcuts (state/shortcuts.ts has the list). Each does nothing unless its button is enabled.
+  useShortcuts({
+    n: next,
+    Enter: next,
+    h: () => canHint && requestHelp("hint"),
+    a: () => canAnswer && requestHelp("answer"),
+    ArrowLeft: () => stepAnswer(-1),
+    ArrowRight: () => stepAnswer(1),
+  });
+
   if (complete) {
     return (
       <Stack gap="md">
@@ -211,11 +238,6 @@ export function TrainerView({
     );
   }
 
-  const decided = outcome !== null;
-  const shown = answer ? answer.positions[answer.step] : null;
-  const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
-  const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
-
   return (
     <Stack gap="md">
       <SessionBar stats={stats} />
@@ -234,6 +256,7 @@ export function TrainerView({
               lastMove={shown ? shown.lastMove : lastMove}
               onMove={onMove}
               hintSquare={hintSquare}
+              coordinates={coordinates}
             />
           )}
         </div>
@@ -273,7 +296,7 @@ export function TrainerView({
             <AnswerPlayer
               positions={answer.positions}
               step={answer.step}
-              onStep={(step) => setAnswer({ ...answer, step })}
+              onStep={(to) => setAnswer({ ...answer, step: to })}
             />
           )}
           <Group gap="xs" grow data-testid="help-controls">

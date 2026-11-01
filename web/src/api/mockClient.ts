@@ -4,7 +4,7 @@
 // Scenarios via the page URL: `?scenario=empty` starts with no puzzle database imported, and
 // `?scenario=upgrade` with a v0.1 database that needs the local upgrade.
 import { Chess } from "chess.js";
-import type { ApiClient, BackendEvent } from "./ApiClient";
+import type { ApiClient, BackendEvent, SettingValues } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
@@ -143,7 +143,7 @@ export class MockClient implements ApiClient {
   private nextJob = 1;
   private sessions = new Map<number, MockSession>();
   private nextSession = 1;
-  private settings: UiSettings = { last_filters: null };
+  private settings: UiSettings = { last_filters: null, coordinates: true };
   private allTime = { solved: 41, failed: 17 };
   private presets = new Map<string, Preset>();
   private history = new Map<string, boolean[]>(); // puzzle id -> results here, oldest first
@@ -266,8 +266,10 @@ export class MockClient implements ApiClient {
     return { ...this.settings };
   }
 
-  async setSetting(_key: "mixer.filters", value: FilterSpec) {
-    this.settings = { last_filters: value };
+  async setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]) {
+    this.calls.push(`setting:${key}`);
+    if (key === "mixer.filters") this.settings = { ...this.settings, last_filters: value as FilterSpec };
+    if (key === "ui.coordinates") this.settings = { ...this.settings, coordinates: value as boolean };
   }
 
   async getThemeCatalog(): Promise<ThemeGroup[]> {

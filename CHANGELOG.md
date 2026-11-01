@@ -20,6 +20,10 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **Your history:** leave out puzzles you've solved here (on by default), or train only your misses. [FR-3.9]
 - **Order:** random, easy → hard, or grouped by theme. [FR-3.11]
 - **Presets:** save your filters under a name, then load, rename or delete them. [FR-3.13]
+- **Hint** circles the piece that moves next, and **Show answer** (unlocked by a Hint) steps through the rest of the solution with Back and Forward. Either one before the end fails the puzzle; after it, Show answer is free. [FR-5.2] [FR-5.4]
+- **Stats** (☰ → Stats): accuracy by theme, length and rating band, plus the "first move right, line wrong" rate. [FR-9.1] [FR-9.2]
+- **Keyboard shortcuts:** N or Enter for the next puzzle, H for Hint, A for Show answer, arrows to step through it, C for coordinates, ? for the list.
+- Show or hide the board coordinates (C, or the ☰ menu); your choice is saved.
 - After a puzzle-database update, the finish message gives the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." [FR-2.5]
 
 ### Changed

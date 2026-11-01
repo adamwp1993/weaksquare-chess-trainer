@@ -121,8 +121,23 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - Loading a preset replaces all your filters. Saving after a change doesn't update the preset unless you save it under the same name and replace it.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
+## Stats
+*Added in v0.2.*
+
+Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
+
+![Your stats](img/stats.png)
+
+- **Puzzles played** and **Accuracy**: a puzzle counts as solved only with no wrong move and no help.
+- **First move right, line wrong**: of the puzzles where your first move was right, how often the rest of the line went wrong. Spotting the idea but miscalculating the follow-up shows up here, so a falling number means your calculation is improving.
+- **By theme**, **By length** (how many moves you make) and **By rating** (200-point bands, using the puzzle's rating when you played it) break the same numbers down. A puzzle with several themes counts once under each.
+
+**Gotchas**
+- If a database update removes a puzzle you played, your attempt still counts in the totals and by rating, but not by theme or length. A note under the tables says how many.
+- Attempts from v0.1 get their puzzle's rating filled in the first time you open Stats, where the puzzle is still in the database.
+
 ## Solving a puzzle
-*Added in v0.1.*
+*Added in v0.1. Changed in v0.2: Hint, Show answer and keyboard shortcuts.*
 
 1. The board turns to your side and the opponent's move plays first. Then it's your turn: find the best move.
 2. Drag a piece, or click it and then its destination. When a pawn promotes, choose the piece.
@@ -137,10 +152,44 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - A **wrong move fails the puzzle at once**. The move is taken back and you can keep trying to finish the line, with nothing more to lose.
 - When the solution is a checkmate, **any** checkmating move counts.
 - Pressing **Skip (counts as failed)** before you've finished also records a failed attempt.
+- Using **Hint** or **Show answer** before the puzzle is decided fails it too (see below). After it's decided, Show answer is free.
 
 **The session bar** at the top shows this session's **Solved**, **Failed**, **Accuracy** and **Played**. On the right, **All time** counts every attempt you've ever made; your attempts are saved as you go, so they survive closing the app. When a fixed-length session ends, you get a summary and a **New session** button.
 
 ![A solved puzzle with its themes revealed](img/solved.png)
+
+## Getting unstuck: Hint and Show answer
+*Added in v0.2.*
+
+When you can't find the move, the **Hint** and **Show answer** buttons beside the board help, one step at a time.
+
+1. **Hint** circles the piece that moves next. You can still play the move and finish the line yourself.
+2. **Show answer** unlocks once you've used a Hint. It shows the rest of the solution from where you are, one move at a time: **Forward ▶** plays the next move (yours and the opponent's replies), **◀ Back** takes it back, and the line under the board names each move. The puzzle ends there, and **Next puzzle** moves on.
+
+![A hint: the circled knight moves next](img/hint.png)
+
+![Stepping through the answer](img/answer.png)
+
+**How it's scored**
+- Using either button **before the puzzle is decided fails it** (like on Lichess), and your Stats record that you needed help. The result panel shows **Failed** and the themes straight away.
+- If the puzzle is already decided (a wrong move, or you finished the line), Show answer is free and doesn't need a Hint. After a solved puzzle it replays the whole solution from the start.
+- After a wrong move you can open the answer directly. In v0.4, Show answer will also explain why your wrong move fails, using the Stockfish engine.
+
+## Keyboard shortcuts
+*Added in v0.2.*
+
+| Key | What it does |
+|---|---|
+| **N** or **Enter** | Next puzzle (before the puzzle is decided, that's Skip, which counts as failed). On the session summary, a new session. |
+| **H** | Hint |
+| **A** | Show answer (once it's unlocked) |
+| **←** / **→** | Step back / forward through the answer |
+| **C** | Show or hide the letters and numbers around the board |
+| **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
+
+Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
+
+**Board coordinates:** press **C**, or choose **☰ → Hide board coordinates** / **Show board coordinates**. Your choice is saved.
 
 ## Installing from source
 *Added in v0.1.*

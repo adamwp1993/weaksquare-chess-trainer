@@ -94,3 +94,61 @@ def test_stats_page(page) -> None:  # type: ignore[no-untyped-def]
     assert "4+ moves" in page.get_by_test_id("stats-by-length").inner_text()
     page.get_by_role("tab", name="By rating").click()
     assert "1200–1399" in page.get_by_test_id("stats-by-rating").inner_text()
+
+
+# ---- keyboard shortcuts, coordinates, auto-orient ----------------------------------------------
+def test_keyboard_hint_answer_steps_and_next(page) -> None:  # type: ignore[no-untyped-def]
+    start(page)
+    page.keyboard.press("a")  # Show answer is locked before a hint: nothing happens
+    page.wait_for_timeout(300)
+    assert page.get_by_test_id("answer-player").count() == 0
+    page.keyboard.press("h")
+    page.get_by_test_id("trainer-message").filter(has_text="Hint").wait_for()
+    page.keyboard.press("a")
+    page.get_by_test_id("answer-step").filter(has_text="Start").wait_for()
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowRight")
+    page.get_by_test_id("answer-step").filter(has_text="2/3").wait_for()
+    page.keyboard.press("ArrowLeft")
+    page.get_by_test_id("answer-step").filter(has_text="1/3").wait_for()
+    page.keyboard.press("n")
+    page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 2").wait_for()
+
+
+def test_shortcuts_ignored_while_typing(page) -> None:  # type: ignore[no-untyped-def]
+    start(page)
+    page.get_by_test_id("preset-save").click()
+    page.get_by_test_id("preset-name").type("hn")  # a dialog is open and focus is in a field
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    assert page.get_by_test_id("board").get_attribute("data-hint") == ""
+    assert "Puzzle 1" in page.get_by_test_id("puzzle-header").inner_text()
+
+
+def test_shortcut_list(page) -> None:  # type: ignore[no-untyped-def]
+    ready(page)
+    page.keyboard.press("?")
+    assert "Show answer" in page.get_by_test_id("shortcuts-list").inner_text()
+
+
+def test_coordinates_toggle_by_key_and_menu_is_saved(page) -> None:  # type: ignore[no-untyped-def]
+    start(page)
+    coords = page.locator("[data-testid=board] coords")
+    assert coords.count() > 0
+    page.keyboard.press("c")
+    page.wait_for_timeout(200)
+    assert coords.count() == 0
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_test_id("menu-coordinates").filter(has_text="Show board coordinates").click()
+    page.wait_for_timeout(200)
+    assert coords.count() > 0  # saving through the bridge is covered by tests/integration/test_ui_settings.py
+
+
+def test_board_faces_the_side_you_play(page) -> None:  # type: ignore[no-untyped-def]
+    """Auto-orient (v0.1, tested in v0.2): you play black in DtKOy, white in IRypK."""
+    start(page)
+    wrap = page.locator(".cg-wrap")
+    assert "orientation-black" in (wrap.get_attribute("class") or "")
+    page.get_by_test_id("next-button").click()  # skip
+    page.get_by_test_id("puzzle-header").filter(has_text="you play white").wait_for()
+    assert "orientation-white" in (wrap.get_attribute("class") or "")

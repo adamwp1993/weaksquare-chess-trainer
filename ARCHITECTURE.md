@@ -189,6 +189,15 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.2: `on_help`, Stats definitions, one UI-settings service
+- Context: §7.2 steps 1–2 without an engine; FR-9.1/9.2; and dark mode, sounds and coordinates all needing persisted UI settings.
+- Decision:
+  - `TrainingMode.on_help(state, "hint" | "answer", now)` returns a `HelpResult` (hint square, or the answer's start FEN and remaining UCI moves). Help before the attempt is decided appends the loss at that moment with `help_used` set; after that it's free (FR-5.4). Mid-puzzle, Show answer is refused (`conflict`) until a Hint; once decided it needs none. Show answer ends the puzzle. After a finished line it replays from the start. Since Hint always comes first, Standard mode records `help_used = 'hint'` in practice; `'answer'` stays for modes that allow it directly.
+  - Stats read the attempts log left-joined to puzzles.db. "First move right, line wrong" is a share of the attempts whose first move was right (it measures calculation, not spotting). Rating bands use `attempts.puzzle_rating`.
+  - `services/ui_settings.py` owns every UI setting key and its validator; `set_setting`'s key is a `Literal` of the allowed keys, and the front end's `SettingValues` type mirrors it.
+- Alternatives: recording help as a separate event row (the attempts log already has `help_used`); keeping settings in `MixerService` (it would have grown a key per feature).
+- Consequences: adding a UI setting means a validator in `ui_settings.py`, a field in `dto.UiSettings` and a key in `SettingValues`.
+
 ### 2026-11-01, v0.2: Ratios by quota, history filters in SQL, defaults that upgrade saved filters
 - Context: FR-3.8 to FR-3.11 and Adam's planning decisions (quality and Exclude solved on by default).
 - Decision:

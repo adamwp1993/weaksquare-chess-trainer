@@ -32,6 +32,12 @@ export class ApiCallError extends Error {
 
 export type BackendEvent = { name: "job"; payload: Job };
 
+/** The settings the UI may write, and the value each one takes (validated again in Python). */
+export interface SettingValues {
+  "mixer.filters": FilterSpec;
+  "ui.coordinates": boolean;
+}
+
 export interface ApiClient {
   getAppInfo(): Promise<AppInfo>;
   openFolder(kind: "data" | "logs"): Promise<void>;
@@ -46,7 +52,7 @@ export interface ApiClient {
   getJob(jobId: string): Promise<Job>;
   cancelJob(jobId: string): Promise<boolean>;
   getSettings(): Promise<UiSettings>;
-  setSetting(key: "mixer.filters", value: FilterSpec): Promise<void>;
+  setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]): Promise<void>;
   getThemeCatalog(): Promise<ThemeGroup[]>;
   countMatches(spec: FilterSpec): Promise<number>;
   /** The live count of each ratio group (FR-3.10). */

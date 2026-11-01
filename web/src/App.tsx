@@ -2,7 +2,9 @@ import { ActionIcon, Alert, AppShell, Center, Grid, Group, Loader, Menu, Modal, 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { FilterSpec, PuzzleDbStatus } from "./api/types";
+import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
+import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
@@ -15,6 +17,8 @@ const SAVE_FILTERS_DEBOUNCE_MS = 500;
 export function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [coordinates, setCoordinates] = useState(true);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<PuzzleDbStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +34,10 @@ export function App() {
   // The last filters you used come back from user.db (never browser storage).
   useEffect(() => {
     api.getSettings().then(
-      (s) => setSpec(s.last_filters ?? defaultFilters()),
+      (s) => {
+        setSpec(s.last_filters ?? defaultFilters());
+        setCoordinates(s.coordinates);
+      },
       () => setSpec(defaultFilters()),
     );
   }, []);
@@ -42,6 +49,14 @@ export function App() {
       api.setSetting("mixer.filters", next).catch(() => undefined);
     }, SAVE_FILTERS_DEBOUNCE_MS);
   }, []);
+
+  const toggleCoordinates = useCallback(() => {
+    const on = !coordinates;
+    setCoordinates(on);
+    api.setSetting("ui.coordinates", on).catch(() => undefined);
+  }, [coordinates]);
+
+  useShortcuts({ c: toggleCoordinates, "?": () => setShortcutsOpen(true) });
 
   const start = async () => {
     if (!spec) return;
@@ -124,6 +139,7 @@ export function App() {
               sessionId={sessionId}
               onNewSession={() => setSessionId(null)}
               onHistoryChange={historyChanged}
+              coordinates={coordinates}
             />
           )}
         </Grid.Col>
@@ -148,6 +164,11 @@ export function App() {
               <Menu.Item onClick={() => setStatsOpen(true)} disabled={!dbStatus?.installed}>
                 Stats
               </Menu.Item>
+              <Menu.Item onClick={toggleCoordinates} data-testid="menu-coordinates">
+                {coordinates ? "Hide board coordinates" : "Show board coordinates"}
+              </Menu.Item>
+              <Menu.Item onClick={() => setShortcutsOpen(true)}>Keyboard shortcuts</Menu.Item>
+              <Menu.Divider />
               <Menu.Item onClick={() => setAboutOpen(true)}>About</Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -156,6 +177,7 @@ export function App() {
       <AppShell.Main>{main}</AppShell.Main>
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
       <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
+      <ShortcutsHelp opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
         <ImportView firstRun={false} runningJobId={dbStatus?.import_job_id ?? null} onDone={imported} />
       </Modal>
