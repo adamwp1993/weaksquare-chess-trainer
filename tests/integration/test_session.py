@@ -186,3 +186,33 @@ def test_request_help_over_the_bridge(paths, clock, services) -> None:  # type: 
     hint = api.request_help(sid, "hint")["data"]
     assert hint["kind"] == "hint" and len(hint["hint_square"]) == 2 and hint["outcome"]["win"] is False
     assert api.request_help(sid, "explain")["error"]["code"] == "invalid_argument"
+
+
+def test_swap_between_the_version_check_and_the_read_never_serves_a_wrong_puzzle(services, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Regression for v0.2-B3: a re-import swapped in after next_puzzle checked the database version
+    but before it read the next queued key served whatever puzzle had that key in the new file (QA saw
+    a 953-rated puzzle under a 400–600 filter). The swap is forced into exactly that window here."""
+    from tests.integration.test_qa_v01_edges import _subset_db
+
+    spec = FilterSpec(rating_max=1000, queue_size=None, min_popularity=None, min_plays=None)
+    sid = services.sessions.start(spec).session_id
+    services.sessions.next_puzzle(sid)  # fills the queue with keys of the current file
+    # The new file drops the low-rated half, so every old key now points at a different puzzle.
+    new_db = _subset_db(tmp_path / "b.db", lambda r: r.rating > 1200 or r.rating % 2 == 0)
+    source = services.sessions._puzzles  # noqa: SLF001
+    real_get = source.get
+    swapped = []
+
+    def get_with_a_swap_first(key, version=None):  # type: ignore[no-untyped-def]
+        if not swapped:
+            swapped.append(True)
+            services.db.swap_puzzles_db(new_db)  # lands after the version check, before the read
+        return real_get(key, version)
+
+    source.get = get_with_a_swap_first
+    try:
+        served = [services.sessions.next_puzzle(sid) for _ in range(10)]
+    finally:
+        source.get = real_get
+    assert swapped
+    assert all(v is not None and v.rating <= 1000 for v in served), [v.rating for v in served if v]

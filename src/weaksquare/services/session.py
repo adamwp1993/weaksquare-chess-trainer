@@ -15,7 +15,7 @@ from typing import Protocol
 
 from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
-from weaksquare.core.errors import NotFoundError, ValidationError
+from weaksquare.core.errors import NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.standard import StandardMode, StandardState
@@ -41,7 +41,9 @@ class PuzzleSource(Protocol):
         self, spec: FilterSpec, k: int, rng: random.Random, exclude: set[int], match_count: int
     ) -> list[int]: ...
 
-    def get(self, key: int) -> Puzzle | None: ...
+    def get(self, key: int, version: int | None = None) -> Puzzle | None:
+        """With `version`: raises StaleKeyError if the database changed since."""
+        ...
 
     def describe(self, keys: list[int]) -> dict[int, tuple[int, tuple[str, ...]]]:
         """(rating, themes) per key, for ordering a queue."""
@@ -216,7 +218,11 @@ class SessionService:
                     s.exhausted = True
                     return None
                 key = s.queue.popleft()
-                puzzle = self._puzzles.get(key)
+                try:
+                    puzzle = self._puzzles.get(key, s.db_version)
+                except StaleKeyError:  # the database was swapped after the check above (v0.2-B3)
+                    self._follow_reimport(s)
+                    continue
                 if puzzle is None:  # dropped by a re-import (FR-2.4): skip it
                     continue
                 try:

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.repos.puzzle_import import BITS_PER_COLUMN, THEME_COLUMNS
+from weaksquare.core.errors import StaleKeyError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import SMALL_POOL, draw_batch_size, random_draws, sample_random
@@ -265,8 +266,13 @@ class LichessDbSource:
                                 return chosen
             return chosen
 
-    def get(self, key: int) -> Puzzle | None:
+    def get(self, key: int, version: int | None = None) -> Puzzle | None:
+        """The puzzle with key `key`. With `version`, raises StaleKeyError if puzzles.db was swapped
+        since that version: keys don't survive a re-import (v0.2-B3). The check and the read happen
+        in one session, which a swap can't interrupt, so a stale key can never return another puzzle."""
         with self._db.session() as conn:
+            if version is not None and self.version() != version:
+                raise StaleKeyError(version, self.version())
             r = conn.execute(
                 "SELECT id, fen, moves, rating, themes, game_url, opening_tags FROM pz.puzzles WHERE n = ?", (key,)
             ).fetchone()
