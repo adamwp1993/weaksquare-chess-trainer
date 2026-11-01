@@ -23,6 +23,7 @@ from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.mixer import LAST_FILTERS_KEY, MixerService
+from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.session import SessionService
 
@@ -43,7 +44,9 @@ class Api:
         puzzle_db: PuzzleDbService,
         mixer: MixerService,
         sessions: SessionService,
+        presets: PresetService,
     ) -> None:
+        self._presets = presets
         self._mixer = mixer
         self._sessions = sessions
         self._paths = paths
@@ -144,11 +147,44 @@ class Api:
     def count_matches(self, spec: dict) -> int:
         return self._mixer.count(FilterSpec.from_json(spec))
 
+    @bridge_call
+    def count_buckets(self, spec: dict) -> list[int]:
+        """The live count of each ratio group (FR-3.10)."""
+        return self._mixer.bucket_counts(FilterSpec.from_json(spec))
+
+    @bridge_call
+    def get_opening_catalog(self) -> list[dto.OpeningFamily]:
+        def opt(o: Any) -> dto.OpeningOption:
+            return dto.OpeningOption(o.tag, o.name, o.count)
+
+        return [dto.OpeningFamily(opt(f.family), [opt(v) for v in f.variations]) for f in self._mixer.opening_catalog()]
+
+    # ---- presets (FR-3.13) ------------------------------------------------------------------
+    @staticmethod
+    def _preset(p: Preset) -> dto.Preset:
+        return dto.Preset(p.name, p.spec, p.error, p.updated_at)
+
+    @bridge_call
+    def list_presets(self) -> list[dto.Preset]:
+        return [self._preset(p) for p in self._presets.list()]
+
+    @bridge_call
+    def save_preset(self, name: str, spec: dict, overwrite: bool = False) -> dto.Preset:
+        return self._preset(self._presets.save(name, FilterSpec.from_json(spec), overwrite))
+
+    @bridge_call
+    def rename_preset(self, old_name: str, new_name: str) -> None:
+        self._presets.rename(old_name, new_name)
+
+    @bridge_call
+    def delete_preset(self, name: str) -> None:
+        self._presets.delete(name)
+
     # ---- sessions (FR-3.11, 3.12, 3.14, FR-4.1, FR-5.1, 5.3) -----------------------------------
     @bridge_call
     def start_session(self, spec: dict) -> dto.SessionInfo:
         info = self._sessions.start(FilterSpec.from_json(spec))
-        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size)
+        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size, info.empty_buckets)
 
     @bridge_call
     def next_puzzle(self, session_id: int) -> dto.PuzzleView | None:

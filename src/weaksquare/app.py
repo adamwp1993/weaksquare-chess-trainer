@@ -16,6 +16,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
+from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
@@ -29,6 +30,7 @@ from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.session import SessionService
 
@@ -87,6 +89,7 @@ class Services:
     puzzle_db: PuzzleDbService
     mixer: MixerService
     sessions: SessionService
+    presets: PresetService
 
     def close(self) -> None:
         self.http.close()
@@ -124,7 +127,8 @@ def build_services(
     attempts = AttemptsRepo(db)
     mixer = MixerService(puzzles, SettingsRepo(db))
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
-    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions)
+    presets = PresetService(PresetsRepo(db), clock)
+    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions, presets=presets)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -182,6 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         puzzle_db=services.puzzle_db,
         mixer=services.mixer,
         sessions=services.sessions,
+        presets=services.presets,
     )
 
     window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))

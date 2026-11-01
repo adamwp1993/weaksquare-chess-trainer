@@ -74,6 +74,24 @@ export interface ThemeGroup {
   themes: ThemeOption[];
 }
 
+export interface OpeningOption {
+  tag: string;
+  name: string;
+  count: number;
+}
+
+export interface OpeningFamily {
+  family: OpeningOption;
+  variations: OpeningOption[];
+}
+
+export interface Preset {
+  name: string;
+  spec: FilterSpec | null;
+  error: string | null;
+  updated_at: string;
+}
+
 export interface UiSettings {
   last_filters: FilterSpec | null;
 }
@@ -82,6 +100,7 @@ export interface SessionInfo {
   session_id: number;
   match_count: number;
   queue_size: number | null;
+  empty_buckets: number[];
 }
 
 export interface PuzzleView {

@@ -73,10 +73,32 @@ class UiSettings:
 
 
 @dataclass(frozen=True)
+class OpeningOption:
+    tag: str  # the Lichess OpeningTags value, e.g. Sicilian_Defense_Najdorf_Variation
+    name: str  # for display: "Najdorf Variation" under its family "Sicilian Defense"
+    count: int
+
+
+@dataclass(frozen=True)
+class OpeningFamily:
+    family: OpeningOption
+    variations: list[OpeningOption]
+
+
+@dataclass(frozen=True)
+class Preset:
+    name: str
+    spec: FilterSpec | None  # None when this version can't use it; `error` says why
+    error: str | None
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class SessionInfo:
     session_id: int
     match_count: int
     queue_size: int | None
+    empty_buckets: list[int]  # ratio groups with no matching puzzles, left out of this session
 
 
 @dataclass(frozen=True)
@@ -138,6 +160,9 @@ EXPORTED: list[type] = [
     FilterSpec,
     ThemeOption,
     ThemeGroup,
+    OpeningOption,
+    OpeningFamily,
+    Preset,
     UiSettings,
     SessionInfo,
     PuzzleView,

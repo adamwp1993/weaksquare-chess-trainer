@@ -38,6 +38,7 @@ def build_api(paths: Paths, clock: FixedClock, desktop: Desktop | None = None, h
         puzzle_db=services.puzzle_db,
         mixer=services.mixer,
         sessions=services.sessions,
+        presets=services.presets,
     )
 
 
