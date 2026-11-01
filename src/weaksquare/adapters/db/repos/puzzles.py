@@ -220,6 +220,19 @@ class LichessDbSource:
             opening_tags=tuple(r["opening_tags"].split()),
         )
 
+    def describe(self, keys: Sequence[int]) -> dict[int, tuple[int, tuple[str, ...]]]:
+        """(rating, themes) per key, for ordering a queue (FR-3.11)."""
+        out: dict[int, tuple[int, tuple[str, ...]]] = {}
+        keys = list(keys)
+        with self._db.session() as conn:
+            for i in range(0, len(keys), 500):
+                chunk = keys[i : i + 500]
+                rows = conn.execute(
+                    f"SELECT n, rating, themes FROM pz.puzzles WHERE n IN ({', '.join('?' * len(chunk))})", chunk
+                )
+                out.update((r["n"], (r["rating"], tuple(r["themes"].split()))) for r in rows)
+        return out
+
     def theme_counts(self) -> dict[str, int]:
         with self._db.session() as conn:
             return {r["theme"]: r["count"] for r in conn.execute("SELECT theme, count FROM pz.theme_bits")}
