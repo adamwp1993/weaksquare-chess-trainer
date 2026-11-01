@@ -12,6 +12,8 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+
+## [v0.1] - 2026-11-01
 Candidates: v0.1-rc1 (2026-11-01)
 
 ### Added
