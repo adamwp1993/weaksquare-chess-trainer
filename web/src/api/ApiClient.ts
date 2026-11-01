@@ -13,6 +13,7 @@ import type {
   PuzzleView,
   SessionInfo,
   SessionStats,
+  StatsReport,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -62,6 +63,8 @@ export interface ApiClient {
   /** Hint, then Show answer (§7.2). Before the puzzle is decided, either one makes it a loss. */
   requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse>;
   getSessionStats(sessionId: number): Promise<SessionStats>;
+  /** The Stats page (FR-9.1, 9.2): every attempt you've made here. */
+  getStats(): Promise<StatsReport>;
   /** Subscribe to pushed events (job progress). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

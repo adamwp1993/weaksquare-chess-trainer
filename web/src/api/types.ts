@@ -151,3 +151,21 @@ export interface SessionStats {
   all_time_solved: number;
   all_time_failed: number;
 }
+
+export interface StatRow {
+  key: string;
+  label: string;
+  attempts: number;
+  solved: number;
+  accuracy: number | null;
+  first_right: number;
+  line_wrong_rate: number | null;
+}
+
+export interface StatsReport {
+  overall: StatRow;
+  by_theme: StatRow[];
+  by_length: StatRow[];
+  by_rating: StatRow[];
+  missing: number;
+}

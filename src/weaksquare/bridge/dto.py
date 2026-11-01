@@ -162,6 +162,26 @@ class SessionStats:
     all_time_failed: int
 
 
+@dataclass(frozen=True)
+class StatRow:
+    key: str
+    label: str
+    attempts: int
+    solved: int
+    accuracy: float | None
+    first_right: int  # attempts where the first move was right
+    line_wrong_rate: float | None  # of those, the share where the line then went wrong (FR-9.2)
+
+
+@dataclass(frozen=True)
+class StatsReport:
+    overall: StatRow
+    by_theme: list[StatRow]
+    by_length: list[StatRow]
+    by_rating: list[StatRow]
+    missing: int  # attempts on puzzles no longer in the database
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -182,4 +202,6 @@ EXPORTED: list[type] = [
     MoveFeedback,
     HelpResponse,
     SessionStats,
+    StatRow,
+    StatsReport,
 ]

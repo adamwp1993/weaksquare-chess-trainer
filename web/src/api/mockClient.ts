@@ -19,6 +19,8 @@ import type {
   PuzzleView,
   SessionInfo,
   SessionStats,
+  StatRow,
+  StatsReport,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -471,6 +473,31 @@ export class MockClient implements ApiClient {
       all_time_solved: this.allTime.solved,
       all_time_failed: this.allTime.failed,
     };
+  }
+
+  async getStats(): Promise<StatsReport> {
+    const r = (key: string, label: string, attempts: number, solved: number, firstRight: number, lineWrong: number): StatRow => ({
+      key,
+      label,
+      attempts,
+      solved,
+      accuracy: attempts ? solved / attempts : null,
+      first_right: firstRight,
+      line_wrong_rate: firstRight ? lineWrong / firstRight : null,
+    });
+    return {
+      overall: r("all", "All puzzles", 58, 41, 49, 8),
+      by_theme: [
+        r("middlegame", "Middlegame", 31, 23, 27, 4), r("fork", "Fork", 22, 17, 19, 2),
+        r("endgame", "Endgame", 19, 12, 15, 3), r("mateIn2", "Mate in 2", 9, 8, 9, 1),
+        r("pin", "Pin", 8, 4, 6, 2), r("discoveredAttack", "Discovered attack", 5, 2, 4, 2),
+      ],
+      by_length: [r("1", "1 move", 14, 13, 13, 0), r("2", "2 moves", 27, 19, 23, 4), r("3", "3 moves", 12, 7, 10, 3),
+        r("4", "4+ moves", 5, 2, 3, 1)],
+      by_rating: [r("1000", "1000–1199", 9, 8, 9, 1), r("1200", "1200–1399", 21, 16, 18, 2),
+        r("1400", "1400–1599", 19, 12, 15, 3), r("1600", "1600–1799", 9, 5, 7, 2)],
+      missing: 0,
+    }; // prettier-ignore
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

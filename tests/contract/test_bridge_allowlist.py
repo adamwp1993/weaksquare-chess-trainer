@@ -36,6 +36,7 @@ ALLOWLIST = {
     "submit_move",
     "request_help",
     "get_session_stats",
+    "get_stats",
 }
 
 

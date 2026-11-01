@@ -26,6 +26,7 @@ from weaksquare.services.mixer import LAST_FILTERS_KEY, MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.session import SessionService
+from weaksquare.services.stats import StatsService
 
 log = logging.getLogger("weaksquare.frontend")
 
@@ -45,7 +46,9 @@ class Api:
         mixer: MixerService,
         sessions: SessionService,
         presets: PresetService,
+        stats: StatsService,
     ) -> None:
+        self._stats = stats
         self._presets = presets
         self._mixer = mixer
         self._sessions = sessions
@@ -219,6 +222,19 @@ class Api:
         r = self._sessions.request_help(session_id, kind)
         h = r.help
         return dto.HelpResponse(h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome))
+
+    # ---- stats (FR-9.1, 9.2) ---------------------------------------------------------------------
+    @bridge_call
+    def get_stats(self) -> dto.StatsReport:
+        r = self._stats.report()
+
+        def row(t: Any) -> dto.StatRow:
+            return dto.StatRow(t.key, t.label, t.attempts, t.solved, t.accuracy, t.first_right, t.line_wrong_rate)
+
+        return dto.StatsReport(
+            row(r.overall), [row(t) for t in r.by_theme], [row(t) for t in r.by_length],
+            [row(t) for t in r.by_rating], r.missing,
+        )  # fmt: skip
 
     @bridge_call
     def get_session_stats(self, session_id: int) -> dto.SessionStats:

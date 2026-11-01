@@ -19,6 +19,7 @@ from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
+from weaksquare.adapters.db.repos.stats import StatsRepo
 from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
 from weaksquare.adapters.desktop import Desktop, show_fatal
 from weaksquare.adapters.files import PuzzleCsv, sha256_file
@@ -33,6 +34,7 @@ from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.session import SessionService
+from weaksquare.services.stats import StatsService
 
 log = logging.getLogger("weaksquare")
 
@@ -90,6 +92,7 @@ class Services:
     mixer: MixerService
     sessions: SessionService
     presets: PresetService
+    stats: StatsService
 
     def close(self) -> None:
         self.http.close()
@@ -128,7 +131,8 @@ def build_services(
     mixer = MixerService(puzzles, SettingsRepo(db))
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
     presets = PresetService(PresetsRepo(db), clock)
-    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions, presets=presets)
+    stats = StatsService(StatsRepo(db), attempts)
+    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions, presets=presets, stats=stats)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -187,6 +191,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         mixer=services.mixer,
         sessions=services.sessions,
         presets=services.presets,
+        stats=services.stats,
     )
 
     window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))

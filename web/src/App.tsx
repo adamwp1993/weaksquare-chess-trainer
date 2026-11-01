@@ -6,6 +6,7 @@ import { defaultFilters } from "./state/filters";
 import { AboutModal } from "./views/AboutModal";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
+import { StatsView } from "./views/StatsView";
 import { TrainerView } from "./views/TrainerView";
 import { UpgradeView } from "./views/UpgradeView";
 
@@ -13,6 +14,7 @@ const SAVE_FILTERS_DEBOUNCE_MS = 500;
 
 export function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<PuzzleDbStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +145,9 @@ export function App() {
               {dbStatus?.installed && (
                 <Menu.Item onClick={() => setUpdateOpen(true)}>Update puzzle database…</Menu.Item>
               )}
+              <Menu.Item onClick={() => setStatsOpen(true)} disabled={!dbStatus?.installed}>
+                Stats
+              </Menu.Item>
               <Menu.Item onClick={() => setAboutOpen(true)}>About</Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -150,6 +155,7 @@ export function App() {
       </AppShell.Header>
       <AppShell.Main>{main}</AppShell.Main>
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
       <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
         <ImportView firstRun={false} runningJobId={dbStatus?.import_job_id ?? null} onDone={imported} />
       </Modal>

@@ -95,3 +95,26 @@ def test_presets(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("preset-save").click()
     page.get_by_test_id("preset-name").fill("Combo night")
     shot(page, "presets")
+
+
+def test_stats(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Stats").click()
+    page.get_by_test_id("stats-view").wait_for()
+    shot(page, "stats")
+
+
+def test_hint_and_answer(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for()
+    page.get_by_test_id("hint-button").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Hint").wait_for()
+    shot(page, "hint")
+    page.get_by_test_id("answer-button").click()
+    page.get_by_role("button", name="Forward").click()
+    page.get_by_test_id("answer-step").filter(has_text="1/3").wait_for()
+    shot(page, "answer")

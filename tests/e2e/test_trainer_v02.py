@@ -75,3 +75,22 @@ def test_answer_after_solving_is_free(page) -> None:  # type: ignore[no-untyped-
     page.get_by_test_id("answer-step").filter(has_text="Start").wait_for()
     page.get_by_test_id("session-bar").filter(has_text="Solved 1").wait_for()  # still solved (FR-5.4)
     assert "Failed 0" in page.get_by_test_id("session-bar").inner_text()
+
+
+def open_stats(page) -> None:  # type: ignore[no-untyped-def]
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Stats").click()
+    page.get_by_test_id("stats-view").wait_for()
+
+
+def test_stats_page(page) -> None:  # type: ignore[no-untyped-def]
+    ready(page)
+    open_stats(page)
+    assert page.get_by_test_id("stats-played").inner_text() == "58"
+    assert page.get_by_test_id("stats-accuracy").inner_text() == "71%"
+    assert page.get_by_test_id("stats-line-wrong").inner_text() == "16%"  # 8 of 49
+    assert "Fork" in page.get_by_test_id("stats-by-theme").inner_text()
+    page.get_by_role("tab", name="By length").click()
+    assert "4+ moves" in page.get_by_test_id("stats-by-length").inner_text()
+    page.get_by_role("tab", name="By rating").click()
+    assert "1200–1399" in page.get_by_test_id("stats-by-rating").inner_text()

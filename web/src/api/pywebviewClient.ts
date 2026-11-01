@@ -13,6 +13,7 @@ import type {
   PuzzleView,
   SessionInfo,
   SessionStats,
+  StatsReport,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -147,6 +148,10 @@ export class PywebviewClient implements ApiClient {
 
   getSessionStats(sessionId: number) {
     return this.call<SessionStats>("get_session_stats", sessionId);
+  }
+
+  getStats() {
+    return this.call<StatsReport>("get_stats");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {
