@@ -4,6 +4,7 @@ import type {
   ApiError,
   AppInfo,
   FilterSpec,
+  HelpResponse,
   Job,
   MoveFeedback,
   OpeningFamily,
@@ -138,6 +139,10 @@ export class PywebviewClient implements ApiClient {
 
   submitMove(sessionId: number, uci: string) {
     return this.call<MoveFeedback>("submit_move", sessionId, uci);
+  }
+
+  requestHelp(sessionId: number, kind: "hint" | "answer") {
+    return this.call<HelpResponse>("request_help", sessionId, kind);
   }
 
   getSessionStats(sessionId: number) {

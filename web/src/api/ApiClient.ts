@@ -4,6 +4,7 @@ import type {
   ApiError,
   AppInfo,
   FilterSpec,
+  HelpResponse,
   Job,
   MoveFeedback,
   OpeningFamily,
@@ -58,6 +59,8 @@ export interface ApiClient {
   /** The next puzzle, or null when the session is complete. */
   nextPuzzle(sessionId: number): Promise<PuzzleView | null>;
   submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;
+  /** Hint, then Show answer (§7.2). Before the puzzle is decided, either one makes it a loss. */
+  requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse>;
   getSessionStats(sessionId: number): Promise<SessionStats>;
   /** Subscribe to pushed events (job progress). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;

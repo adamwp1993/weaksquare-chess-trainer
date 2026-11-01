@@ -3,6 +3,7 @@ import { Chess } from "chess.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Outcome, PuzzleView, SessionStats } from "../api/types";
+import { AnswerPlayer, answerPositions, type AnswerPosition } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
 import { SessionBar } from "../components/SessionBar";
 
@@ -17,7 +18,9 @@ function uciMove(uci: string) {
 
 // Standard mode (FR-4.1): the opponent's first move plays, you answer, replies play automatically.
 // Themes stay hidden until the attempt is decided (FR-3.14). A wrong move is a loss (FR-5.3); you
-// can keep going to finish the line, or move on.
+// can keep going to finish the line, or move on. When stuck (§7.2): Hint circles the piece that
+// moves next, then Show answer steps through the rest of the line. Before the end, either one is a
+// loss (FR-5.2); after it, Show answer is free (FR-5.4) and replays the whole line.
 export function TrainerView({
   sessionId,
   onNewSession,
@@ -38,6 +41,10 @@ export function TrainerView({
   const [message, setMessage] = useState<Message>(null);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hintSquare, setHintSquare] = useState<string | null>(null);
+  const [hinted, setHinted] = useState(false);
+  const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number } | null>(null);
+  const [helpBusy, setHelpBusy] = useState(false);
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
@@ -64,6 +71,9 @@ export function TrainerView({
     setLineDone(false);
     setMessage(null);
     setMovable(null);
+    setHintSquare(null);
+    setHinted(false);
+    setAnswer(null);
     try {
       const next = await api.nextPuzzle(sessionId);
       refreshStats();
@@ -119,6 +129,7 @@ export function TrainerView({
         setOutcome(fb.outcome);
         refreshStats();
       }
+      if (fb.kind !== "wrong" && fb.kind !== "illegal") setHintSquare(null);
       if (fb.kind === "correct" && fb.reply) {
         chess.current = after;
         setMessage({ color: "green", text: "Correct. Keep going." });
@@ -150,6 +161,36 @@ export function TrainerView({
     }
   };
 
+  const requestHelp = async (kind: "hint" | "answer") => {
+    if (helpBusy) return;
+    setHelpBusy(true);
+    try {
+      const help = await api.requestHelp(sessionId, kind);
+      if (help.outcome) {
+        setOutcome(help.outcome);
+        refreshStats();
+      }
+      const lost = help.outcome ? " This puzzle now counts as failed." : "";
+      if (kind === "hint") {
+        setHintSquare(help.hint_square);
+        setHinted(true);
+        setMessage({ color: "gray", text: `Hint: the circled piece moves next.${lost}` });
+      } else if (help.answer_fen) {
+        timers.current.forEach(clearTimeout);
+        timers.current = [];
+        setHintSquare(null);
+        setMovable(null);
+        setLineDone(true);
+        setAnswer({ positions: answerPositions(help.answer_fen, help.answer_moves), step: 0 });
+        setMessage({ color: "gray", text: `The answer: step through it with Back and Forward.${lost}` });
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setHelpBusy(false);
+    }
+  };
+
   if (complete) {
     return (
       <Stack gap="md">
@@ -171,6 +212,9 @@ export function TrainerView({
   }
 
   const decided = outcome !== null;
+  const shown = answer ? answer.positions[answer.step] : null;
+  const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
+  const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
 
   return (
     <Stack gap="md">
@@ -183,7 +227,14 @@ export function TrainerView({
       <Group align="flex-start" gap="lg" wrap="nowrap">
         <div style={{ flex: "1 1 560px", minWidth: 320 }}>
           {fen && view && (
-            <Board fen={fen} orientation={view.player_color} movable={movable} lastMove={lastMove} onMove={onMove} />
+            <Board
+              fen={shown ? shown.fen : fen}
+              orientation={view.player_color}
+              movable={shown ? null : movable}
+              lastMove={shown ? shown.lastMove : lastMove}
+              onMove={onMove}
+              hintSquare={hintSquare}
+            />
           )}
         </div>
         <Stack gap="sm" style={{ flex: "0 0 260px" }}>
@@ -217,6 +268,33 @@ export function TrainerView({
                 </Anchor>
               </Stack>
             </Paper>
+          )}
+          {answer && (
+            <AnswerPlayer
+              positions={answer.positions}
+              step={answer.step}
+              onStep={(step) => setAnswer({ ...answer, step })}
+            />
+          )}
+          <Group gap="xs" grow data-testid="help-controls">
+            <Button variant="light" color="gray" disabled={!canHint} onClick={() => requestHelp("hint")} data-testid="hint-button">
+              Hint
+            </Button>
+            <Button
+              variant="light"
+              color="gray"
+              disabled={!canAnswer}
+              onClick={() => requestHelp("answer")}
+              title={hinted || decided || lineDone ? undefined : "Use Hint first"}
+              data-testid="answer-button"
+            >
+              Show answer
+            </Button>
+          </Group>
+          {!decided && !lineDone && (
+            <Text size="xs" c="dimmed">
+              Hint and Show answer count the puzzle as failed. Show answer unlocks after a Hint.
+            </Text>
           )}
           <Button
             onClick={load}

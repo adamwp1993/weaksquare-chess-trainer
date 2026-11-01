@@ -10,6 +10,7 @@ import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
   AppInfo,
   FilterSpec,
+  HelpResponse,
   Job,
   MoveFeedback,
   OpeningFamily,
@@ -119,7 +120,16 @@ interface MockSession {
   spec: FilterSpec;
   queue: MockPuzzle[];
   served: number;
-  current: { puzzle: MockPuzzle; chess: Chess; next: number; decided: boolean; failed: boolean } | null;
+  current: {
+    puzzle: MockPuzzle;
+    chess: Chess;
+    start: string;
+    next: number;
+    decided: boolean;
+    failed: boolean;
+    hinted: boolean;
+    finished: boolean;
+  } | null;
   solved: number;
   failed: number;
 }
@@ -355,7 +365,7 @@ export class MockClient implements ApiClient {
     const puzzle = s.queue[s.served++];
     const chess = new Chess(puzzle.fen);
     chess.move(uciToMove(puzzle.moves[0]));
-    s.current = { puzzle, chess, next: 1, decided: false, failed: false };
+    s.current = { puzzle, chess, start: chess.fen(), next: 1, decided: false, failed: false, hinted: false, finished: false };
     return {
       number: s.served,
       puzzle_id: puzzle.id,
@@ -370,6 +380,7 @@ export class MockClient implements ApiClient {
     const s = this.session(sessionId);
     const c = s.current;
     if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    if (c.finished) return { kind: "illegal", reply: null, finished: true, outcome: null };
     const expected = c.puzzle.moves[c.next];
     let ok = uci === expected;
     if (!ok) {
@@ -394,6 +405,7 @@ export class MockClient implements ApiClient {
     c.chess.move(uciToMove(uci));
     c.next++;
     if (c.next >= c.puzzle.moves.length || c.chess.isCheckmate()) {
+      c.finished = true;
       const outcome = c.decided ? null : this.outcome(c.puzzle, true);
       if (!c.decided) {
         c.decided = true;
@@ -406,6 +418,32 @@ export class MockClient implements ApiClient {
     const reply = c.puzzle.moves[c.next++];
     c.chess.move(uciToMove(reply));
     return { kind: "correct", reply, finished: false, outcome: null };
+  }
+
+  async requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse> {
+    const s = this.session(sessionId);
+    const c = s.current;
+    const conflict = (message: string) => new ApiCallError({ code: "conflict", message, retryable: false });
+    if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    const decide = () => {
+      if (c.decided) return null;
+      c.decided = c.failed = true;
+      s.failed++;
+      this.allTime.failed++;
+      this.record(c.puzzle, false);
+      return this.outcome(c.puzzle, false);
+    };
+    if (kind === "hint") {
+      if (c.finished) throw conflict("The puzzle is over: there's nothing left to hint.");
+      const outcome = decide();
+      c.hinted = true;
+      return { kind, hint_square: c.puzzle.moves[c.next].slice(0, 2), answer_fen: null, answer_moves: [], outcome };
+    }
+    if (c.finished) return { kind, hint_square: null, answer_fen: c.start, answer_moves: c.puzzle.moves.slice(1), outcome: null };
+    if (!c.decided && !c.hinted) throw conflict("Try a Hint first: Show answer unlocks after it.");
+    const outcome = decide();
+    c.finished = true;
+    return { kind, hint_square: null, answer_fen: c.chess.fen(), answer_moves: c.puzzle.moves.slice(c.next), outcome };
   }
 
   private outcome(p: MockPuzzle, win: boolean) {
