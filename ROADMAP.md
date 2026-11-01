@@ -1,0 +1,171 @@
+# Roadmap: versions and test checkpoints
+
+Each version is a **checkpoint**. Claude Code builds that version, an independent QA agent verifies it, then Claude Code **stops** and hands it to Adam for manual testing. The next version starts only after Adam signs off. Requirement IDs refer to REQUIREMENTS.md.
+
+## How every version is built and tested
+
+Each version lives on a branch (`v0.x`), merged to `main` only after Adam signs off.
+
+| Step | Who | What |
+|---|---|---|
+| 1. Plan | Builder (plan mode) | Reads CLAUDE.md, ARCHITECTURE.md, this version's section and its requirement IDs, then proposes a plan: files, interfaces, tests, any new dependency with its purpose, and anything out of scope. **Adam approves** before any code is written. The approved plan is saved to `plans/v0.x.md` as a checklist and ticked off as work lands, so a `/clear` or context reset can resume from the file. |
+| 2. Build | Builder | Implements in small commits, running unit and integration tests as it goes. Each commit that changes behavior also updates CHANGELOG `[Unreleased]` and the affected docs (CLAUDE.md "Documentation"). |
+| 3. Self-check | Builder | Full suite, `ruff`, `mypy`, `tsc --noEmit`, ESLint, `pre-commit run --all-files`, Playwright, the full-DB tests if the DB is imported, regenerate the user-guide screenshots, `python scripts/check_docs.py --strict`. Everything green before QA. |
+| 4. Independent QA | `qa-tester` subagent | Fresh context. Verifies every *Done when* item and requirement ID with evidence, writes missing tests under `tests/`, runs a real-app smoke test (Playwright attached to the app's WebView2), explores edge cases, checks scope and security, and checks the docs against the app (runs every Developer Guide command, follows the new User Guide steps). Writes `qa/QA-v0.x.md`. Never fixes product code. |
+| 5. Fix loop | Builder, then QA | The builder fixes every blocker and major issue, adding a regression test per bug. QA re-verifies those bugs and re-runs the full suite. At most 3 rounds, then escalate to Adam. |
+| 6. Handoff | Builder | Add the rc to the CHANGELOG `Candidates:` line, commit, tag **`v0.x-rc1`**, and post: what's in, how to run it, known limits, the QA verdict, and the manual checklist below. Then **stop**. |
+| 7. Manual test | **Adam** | Run the checklist, plus free exploration. Read this version's User Guide sections and CHANGELOG entry against what you see; wrong or confusing docs are bugs too. Log issues in `qa/manual-v0.x.md` (steps, expected, actual, screenshot). |
+| 8. Fix and re-test | Builder, QA, Adam | Fix with regression tests → QA re-verifies → Adam re-checks only those items. Re-tag `-rc2`, `-rc3`… as needed. |
+| 9. Sign-off | Adam, then builder | Rename CHANGELOG `[Unreleased]` to `[v0.x] - <date>` and open a new empty `[Unreleased]`, update the README status line, tag **`v0.x`**, merge to `main`. The next version starts in a **fresh session** (`/clear`). |
+
+### Checkpoint gate (all must be true at step 6)
+- [ ] All unit, integration, contract and Playwright tests pass; QA verdict is PASS or PASS WITH ISSUES (minor issues only).
+- [ ] Static checks clean (`ruff`, `mypy`, `tsc`, ESLint), `pre-commit run --all-files` clean (gitleaks included), and CI green on the branch once the repo is on GitHub.
+- [ ] No dependency added that wasn't in the approved plan; `uv.lock` and `package-lock.json` committed.
+- [ ] Nothing from a **later** version was built (interfaces only, per ARCHITECTURE.md).
+- [ ] `python scripts/check_docs.py --strict` passes (changelog and guides changed with the code, links resolve, no `TODO(v0.x)` left for this version or earlier).
+- [ ] CHANGELOG `[Unreleased]` covers every user-visible *Done when* item.
+- [ ] User-guide screenshots regenerated; QA ran every Developer Guide command as written.
+- [ ] ARCHITECTURE.md §2 and §7 updated if the structure changed or a decision was made.
+
+---
+
+## v0.1: The puzzle mixer (MVP)
+**Goal:** pick any mix of puzzles and solve them. Offline, no account, no engine.
+
+v0.1 is too big for one sitting, so it's built in three internal steps, each committed and ticked off in `plans/v0.1.md`. QA runs once, at the end.
+- **v0.1a Foundations:** scaffold, `setup.py`, data folder and single-instance lock, migrations with backup and newer-schema refusal, logging, the `@bridge_call` decorator with its allowlist test, injected clock and RNG, the real-app smoke harness, CI, About screen.
+- **v0.1b Puzzle DB:** download, verify, import into a new file and swap.
+- **v0.1c Mixer:** filters, queue, trainer, attempts.
+
+Scope:
+- Scaffold: repo layout, `pyproject.toml`, React/Vite/Mantine app, pywebview window, composition root, job runner, both DB migrations, `mockClient`.
+- `scripts/setup.py`: one command for a fresh clone (uv if missing, the Python virtual environment from `uv.lock`, npm packages with `npm ci`, the Playwright browser, pre-commit hooks, the puzzle DB, a Start-menu shortcut). Safe to re-run. Later versions add their own steps to it.
+- Robustness basics (§3 decisions 12–17; NFR-1 to NFR-7): thread-local SQLite connections, the bridge decorator and allowlist test, no browser storage, injected clock and RNG, the data-folder override and dev folder, backup before migrating and refusing a newer schema, rotating logs with crash hooks, clean shutdown, and an About screen.
+- `.github/workflows/ci.yml` (Windows runner): `uv sync --locked`, `npm ci`, static checks, unit, integration and contract tests on the fixture, `check_docs.py`.
+- **Real-app smoke harness:** a pytest fixture that launches the app with the WebView2 CDP port enabled (SR-16) and attaches Playwright, so QA can drive the real window and not just the mock.
+- Puzzle DB: download plus hash check script, resumable background import with progress bar, into `puzzles.db` (FR-2.1–2.3, §4.2 semantics).
+- Filters (FR-3.1–3.5): theme dropdown with grouped checkboxes, search, Select all/Clear, ANY/ALL; excluded themes; rating range slider; move-count dropdown (1/2/3/4+/All); side to move; **live match count**.
+- Queue: random order, fixed N or endless (FR-3.11 random only, FR-3.12).
+- Trainer: chessground board, **Standard mode** only, mate-in-1 acceptance, themes hidden until the puzzle ends (FR-3.14), wrong move = loss (FR-5.1, 5.3).
+- Attempts saved in `user.db`. A session bar shows solved / failed / accuracy.
+- **Docs:** every `TODO(v0.1)` in the Developer Guide filled in; User Guide chapters for first run, choosing puzzles and solving; a Playwright spec that regenerates the user-guide screenshots into `docs/img/` from the mock client with fixed data.
+
+**Done when:**
+- Unit tests prove FEN semantics against 10 known puzzles (color, first move, solution), plus the mate-in-1 alternative case.
+- The filter count matches a direct SQL query for 20 random FilterSpecs, and returns in under 500 ms on the full DB (`-m fulldb`); building a 50-puzzle random queue from a 1M-puzzle pool also takes under 500 ms.
+- A test proves the bridge exposes exactly the allowlisted methods; a test proves a newer-schema `user.db` is refused untouched; a test proves a migration writes a backup first.
+- A cancelled import leaves the existing `puzzles.db` working.
+- Playwright: set filters → solve 3 puzzles via the mock → session stats update.
+
+**Adam's manual test:** run `setup.py` from a fresh clone → launch from the Start-menu shortcut → import the full DB → `fork AND long`, rating 1200–1600 → solve 10 → try ANY vs ALL and excludes → close and reopen (attempts persisted) → launch a second copy (the first window comes forward) → check the About screen paths.
+
+---
+
+## v0.2: Mixer complete + basics
+- Remaining filters: phase/goal/origin groups, opening multi-select, quality thresholds, history excludes ("solved here", "only my misses") (FR-3.6–3.9).
+- Ratios, ordering options, presets save/load/rename/delete (FR-3.10, 3.11, 3.13).
+- Stuck ladder steps 1–2 **from the dataset solution**: Hint and Show answer, both counting as a loss (FR-5.2, §7.2). There's no engine yet.
+- Basic Stats page: accuracy per theme, length and rating band (FR-9.1, 9.2).
+- Keyboard shortcuts, auto-orient the board, coordinates toggle.
+
+**Done when:** preset round-trip test; ratio sampling test (±5% over 1,000 draws); hint/answer recorded as a loss.
+**Adam's manual test:** build a "Combo night" preset with a 50/30/20 ratio, save, reload, play 15 puzzles, check Stats.
+
+---
+
+## v0.3: Lichess account + sync
+- Startup page: Sign in with Lichess (PKCE, loopback), Continue as `<username>`, gear settings (FR-1.1–1.8, 1.11 Lichess part, FR-6.1–6.7).
+- `secret_store` via keyring (SR-7 to SR-10).
+- History import (FR-6.17), the "exclude played on Lichess" filter, and the "already played" badge.
+- Sync queue: batches under 100, backoff, offline mode, Rated toggle, angle rule (FR-1.7, 1.9, FR-6.8–6.16).
+- Sign-out revokes the token.
+- `scripts/set_test_token.py`: prompts for the live-test token with hidden input (`getpass`) and stores it through `secret_store` under `weaksquare-test`. Adam runs it himself in a normal PowerShell window, never inside Claude Code.
+
+**Done when:** angle-rule unit tests cover all FR-6.13/6.14 cases; sync integration tests run against the fake client; the live test (`-m live`) syncs 3 `rated:false` solves using the separate test token (SR-13).
+**Adam's manual test:** sign in → solve offline (Wi-Fi off) → reconnect → queue drains → solves appear on Lichess → sign out → token is gone from Credential Manager.
+
+---
+
+## v0.4: Stockfish
+- Engine install (FR-7.5): `engine_manifest.json` pinned to `sf_19` with its SHA-256, `services/engine_install.py`, `scripts/fetch_stockfish.py`, a Stockfish step in `setup.py`, and the in-app *Stockfish isn't installed* banner with Install.
+- `EngineClient` with its interactive engine, position validation and crash recovery (FR-7.1, 7.6; ARCHITECTURE §3 decision 12); engine settings, including the custom engine path (FR-7.4, 7.5).
+- Refutation of wrong moves in Show answer; post-puzzle eval and top lines, never shown during a puzzle (FR-7.2, 7.3).
+
+**Done when:** engine integration tests (a known position gives the expected best move); no eval is visible while solving (Playwright check); installer tests against a local fake download: a hash mismatch refuses and leaves nothing behind, a zip with `..` paths is rejected, and a second run does nothing; an invalid position sent past validation causes one restart and a clean error, not a hang.
+**Adam's manual test:** compare the SHA-256 in `engine_manifest.json` with the digest GitHub shows next to the asset on the sf_19 release page → delete the `engines` folder under `%LOCALAPPDATA%\WeakSquare` → the app shows the Install banner → Install works → deliberately play wrong moves → refutations make sense; check engine CPU usage is sane.
+
+---
+
+## v0.5: Training modes I
+- **Commit the line**, **Spaced repetition** (exact repeats), **Depth ladder** (FR-4.2, 4.5, 4.6).
+- Mode selector on the main page.
+
+**Done when:** mode state-machine unit tests; SRS scheduling tests (box moves on win/loss).
+**Adam's manual test:** one session per mode; misses resurface on schedule (use a "fast-forward time" debug setting).
+
+---
+
+## v0.6: Training modes II + mistake reasons
+- **Name the idea first** and **Danger spotting** (with Stockfish-verified safe candidates) (FR-4.3, 4.4).
+- **Mistake reasons** for puzzles: chips, keyboard 1–6, suggestions, misclick handling (§7.3, FR-5.6–5.11).
+- Stats: reason breakdown, Commit/Name/Danger accuracy (FR-9.3, 9.7).
+
+**Done when:** safe-candidate verification test; reason-suggestion rule tests; a misclick is excluded from local stats but still sent as a loss.
+**Adam's manual test:** 20 Danger-spotting puzzles (roughly half should be safe), tag reasons on misses, check the breakdown.
+
+---
+
+## v0.7: LLM Explain + cost guardrails
+- Provider interface, Anthropic and OpenAI, model field, **Test key** (FR-1.2–1.4).
+- **All guardrails first:** price table, usage log, estimates, per-run cap, monthly budget, `max_tokens`, reasoning setting, spend indicator (§9.3, FR-1.10).
+- Explain (stuck ladder step 3): grounded context, structured output, validation, board annotations, caching (FR-8.1–8.8).
+
+**Done when:** budget and cap enforcement tests (blocked when over); annotation-validation tests drop illegal moves and squares; the live test makes 1 real Explain call with Haiku or nano under the cap.
+**Adam's manual test:** set a $0.05 monthly budget → Explain until blocked → raise it → compare one puzzle across two models.
+
+---
+
+## v0.8: Game library + Game Review (engine)
+- Linked chess.com username with Verify; library page with filters and incremental sync for both platforms (§11.5).
+- Import: paste, file, Lichess URL, chess.com URL (§11.1).
+- Analysis pipeline, `game_analysis` and the analysis queue on the **background engine** (§11.2; ARCHITECTURE §3 decision 12). Review screen: eval graph, move symbols, key moments, refutations (§11.3).
+- Retry mode; Save as puzzle plus the **My games** puzzle source (FR-3.15, 11.15, 11.16); mistake reasons on game moves.
+
+**Done when:** PGN edge-case tests (multi-game file, bad PGN, variants rejected); chess.com optional-field tests; the serial-request rule is enforced in the chess.com client; analysis is reused on re-import; a puzzle refutation returns promptly while a game analysis is running; recorded game fixtures are anonymized (SR-12a).
+**Adam's manual test:** link both accounts → sync → review one Lichess and one chess.com game → retry mistakes → save 2 puzzles → drill them.
+
+---
+
+## v0.9: Game Review AI
+- Explain this move; **Explain my game** (narrative plus key moments) with the cost estimate and Confirm; SAN-only anonymized context; caching (FR-11.17–11.21).
+
+**Done when:** an anonymization test (no names, URLs, dates or clocks in the prompt); cache-hit test; budget enforcement.
+**Adam's manual test:** Explain my game on a recent loss; check the explanations match the engine lines.
+
+---
+
+## v0.10: Coach
+- lichess-puzzler tagger and **habit tags** (FR-10.11–10.13, 10.27).
+- Multi-game aggregation reusing the v0.8 pipeline; puzzle-history source; free report; gap table (§10.1–10.5).
+- **Suggested default mix** with "Why this mix", the Apply/Compare/Dismiss banner, and reasons picking drill modes (§10.7).
+- Optional LLM coaching with validated presets (§10.6).
+
+**Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test).
+**Adam's manual test:** run the Coach on 50 rapid games → sanity-check the top 3 weaknesses against your own sense of your games → apply the Suggested mix.
+
+---
+
+## v1.0: Fix tracking + release
+- **Checkpoints** every 10 eligible games plus Run now; weakness metrics and statuses with the sample-size guard; Progress page; optional auto AI summary (§10.8).
+- Release from source (NFR-8): a first-run wizard (puzzle DB download, Stockfish install, both through the existing install services), the setup script's Start-menu shortcut, and a GitHub Release from the `v1.0` tag with notes from CHANGELOG. No packaged `.exe`.
+- Polish pass: error states, empty states, performance on the full DB.
+- **Docs:** User Guide complete, including installing from source, updating and troubleshooting; README status reads "v1.0".
+
+**Done when:** weakness status-transition tests cover every rule in FR-10.35, using synthetic data; a checkpoint runs end to end on recorded data; a fresh clone on a clean Windows user profile goes from `setup.py` to a working app through the first-run wizard.
+**Adam's manual test:** clone and run `setup.py` from scratch on a clean Windows user profile → full first-run → play and sync 10 games over a few days → a checkpoint fires → Progress page updates.
+
+---
+
+## After v1.0 (parked ideas from review, not committed)
+Threat-scan habit trainer, "Is there a tactic?" mode, visualization mode, think-first lock and timers, conversion practice vs. Stockfish, Play from here, self-review-before-engine, "What if?" questions, opening trouble spots, adaptive difficulty, pattern-based SRS, daily session builder, confirm-move toggle, notes and pattern journal, CSV export, in-app Help panel that renders the User Guide, a packaged and code-signed installer if other people ask for one.

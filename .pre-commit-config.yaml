@@ -1,0 +1,17 @@
+# Install once after cloning:  pip install pre-commit  &&  pre-commit install
+# Scan everything on demand:   pre-commit run --all-files
+# Update hook versions:        pre-commit autoupdate
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks          # uses .gitleaks.toml in the repo root
+
+  - repo: local
+    hooks:
+      - id: no-keyring-outside-secret-store
+        name: keyring only in secret_store.py
+        language: pygrep
+        entry: '\bimport keyring\b|\bfrom keyring\b|keyring\.(get_password|set_password|delete_password|get_credential)'
+        files: '\.py$'
+        exclude: '(^|/)secret_store\.py$|^\.claude/hooks/'

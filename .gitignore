@@ -1,0 +1,55 @@
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# --- Front end ---
+node_modules/
+web/dist/
+
+# --- Large / generated data (never commit) ---
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.zst
+lichess_db_puzzle*.csv
+
+# --- Engine binaries (downloaded at setup, verified by hash) ---
+engines/
+*.exe
+*.dll
+
+# --- Runtime output ---
+logs/
+*.log
+llm_cache/
+
+# --- Defensive: the app keeps secrets in Windows Credential Manager, never in files.
+# These patterns exist so a mistake can't be committed. ---
+.env
+.env.*
+*.pem
+*.key
+secrets.*
+*token*.txt
+tests/fixtures/_raw/
+
+# --- Test artifacts ---
+tests/e2e/artifacts/
+test-results/
+playwright-report/
+.coverage
+htmlcov/
+
+# --- Claude Code local overrides (personal, not shared) ---
+.claude/settings.local.json

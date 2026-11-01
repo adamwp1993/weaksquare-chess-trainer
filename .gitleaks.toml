@@ -1,0 +1,30 @@
+title = "weaksquare gitleaks config"
+
+# Keep all of gitleaks' built-in rules (includes Anthropic and OpenAI key formats).
+[extend]
+useDefault = true
+
+# Lichess tokens and auth codes use an "li?_" prefix by convention
+# (e.g. "liu_" for authorization codes, verified in lila's oauth module).
+# Lichess says not to rely on the prefix for parsing, but it's a good leak signal.
+[[rules]]
+id = "lichess-token"
+description = "Lichess OAuth access token, personal token or authorization code"
+regex = '''\bli[a-z]_[A-Za-z0-9]{16,}\b'''
+keywords = ["lip_", "lio_", "liu_"]
+
+[[rules]]
+id = "bearer-header"
+description = "Hard-coded Authorization: Bearer value"
+regex = '''(?i)authorization["'\s:=]+bearer\s+[A-Za-z0-9_\-\.]{20,}'''
+keywords = ["bearer"]
+
+# Obvious test placeholders are fine.
+[[allowlists]]
+description = "Test placeholders"
+regexes = [
+  '''lip_FAKE\w*''',
+  '''sk-ant-FAKE\w*''',
+  '''sk-FAKE\w*''',
+  '''REDACTED''',
+]
