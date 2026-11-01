@@ -155,9 +155,10 @@ Scope:
 - Multi-game aggregation reusing the v0.8 pipeline; puzzle-history source; free report; gap table (§10.1–10.5).
 - **Suggested default mix** with "Why this mix", the Apply/Compare/Dismiss banner, and reasons picking drill modes (§10.7).
 - Optional LLM coaching with validated presets (§10.6).
+- **Puzzles from your games** (§10.9, FR-10.39–10.45): the analysis turns qualifying mistakes into `custom_puzzles` (new migration), with a severity-level setting (Blunders only / Mistakes and blunders / plus inaccuracies). Includes a quality check, Missed solved as you and Allowed solved as your opponent, the 30 cp tolerance with engine continuation, My games filters, a share of these puzzles in the Suggested mix, and archive.
 
-**Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test).
-**Adam's manual test:** run the Coach on 50 rapid games → sanity-check the top 3 weaknesses against your own sense of your games → apply the Suggested mix.
+**Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test); quality-check tests accept and reject known positions (unique best move, several equal moves, already-decided position); each severity level produces the right set from fixture analysis, and narrowing archives (never deletes) with attempts kept; re-runs create no duplicates; Missed and Allowed puzzles have the right side to move and orientation; an alternative move within tolerance is accepted, and the engine continues from it; changing the level runs no new game analysis (test).
+**Adam's manual test:** run the Coach on 50 rapid games → sanity-check the top 3 weaknesses against your own sense of your games → apply the Suggested mix. Analyze your last 100 games with *Mistakes and blunders* → drill 10 of the generated puzzles (each should be a real mistake from your games, with a sensible answer and correct orientation) → switch to *Blunders only* (the count drops, no re-analysis) and back → try an Allowed puzzle as your opponent → open one in Game Review from its link.
 
 ---
 

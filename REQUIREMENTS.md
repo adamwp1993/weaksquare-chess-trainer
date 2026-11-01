@@ -127,7 +127,7 @@ Shown when the app launches.
 - `weakness_metrics(weakness_id, checkpoint_id, window_games, occurrences, game_rate, puzzle_attempts, puzzle_first_try_accuracy)`: the trend data for each weakness at each checkpoint
 - `game_analysis(game_id, ply, fen_before, move_uci, mover, eval_before, eval_after, best_move, multipv_json, cp_loss, classification, themes, kind, phase, low_clock)`: one row per analyzed move. Shared by Game Review (§11) and the Coach (§10). `kind` is missed / allowed / other for mistakes.
 - `game_errors`: a **view** over `game_analysis`, containing the user's mistakes only, used by the Coach
-- `custom_puzzles(id PK, game_id, ply, fen, solution_uci, themes, created_at)`: key moments saved from your own games. Their attempts are stored in `attempts` with ids prefixed `my:`.
+- `custom_puzzles(id PK, game_id, ply, fen, solution_uci, themes, origin, kind, severity, cp_loss, phase, time_control, game_date, solve_as, status, created_at, UNIQUE(game_id, ply))`: puzzles from your own games. `origin` is manual (Save as puzzle, FR-11.16) or coach (FR-10.39). `kind` is missed / allowed. `severity` is inaccuracy / mistake / blunder. `solution_uci` holds the full line. `solve_as` is you / opponent. `status` is active / archived. They live in `user.db`, never `puzzles.db`, which is replaced on every re-import (FR-2.3). Their attempts are stored in `attempts` with ids prefixed `my:`.
 - `mistake_reasons(id PK, source, ref_id, reason, suggested_reason, note, created_at)`: why you missed something (§7.3). `source` is puzzle / game / retry / danger; `ref_id` points to an `attempts` row or a `game_analysis` (game_id, ply).
 - `coach_reports(id, created_at, sources_json, params_json, report_json, provider, model, cost_usd)`
 
@@ -153,7 +153,7 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.12 | Queue size | Fixed N or endless | |
 | FR-3.13 | **Presets** | Save / load / rename / delete named filter sets | Stored as JSON |
 | FR-3.14 | Hidden labels | Themes are **not shown** while solving | Revealed after the puzzle ends |
-| FR-3.15 | Puzzle source | Lichess DB / **My games** / Both | "My games" = `custom_puzzles` saved from Game Review (§11). These never sync to Lichess. |
+| FR-3.15 | Puzzle source | Lichess DB / **My games** / Both | "My games" = `custom_puzzles`, saved from Game Review (§11) or created by the Coach (§10.9). These never sync to Lichess. Extra filters for My games: severity level (FR-10.40), Missed / Allowed, phase, time control, game date, origin. They have no rating, so the rating filter doesn't apply to them. |
 
 ---
 
@@ -403,6 +403,29 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.38** **Progress page:** one card per weakness, showing status, baseline vs. current game rate, a trend line across checkpoints (game rate and puzzle accuracy on the same chart), the **mistake-reason breakdown** for that weakness (e.g. *"Knight forks: 70% didn't look, 20% miscalculated"*), and click-through to the latest game examples. Plus a checkpoint history with the overall game-health trends, and an optional notification when a weakness changes status (*"Allowed forks: Improving → Fixed"*).
 
 ---
+
+### 10.9 Puzzles from your games
+- **FR-10.39** **Created by the analysis:** when the Coach analyzes your games (default your last 50, up to 200, FR-10.4; checkpoints add only new games), it turns qualifying mistakes into puzzles in `custom_puzzles` with `origin = coach`. It's part of the same background job and the same pipeline (FR-10.26). Games already analyzed aren't analyzed again. Re-runs never create duplicates (one puzzle per game and ply). Everything stays local and never syncs to Lichess.
+- **FR-10.40** **Severity level (user setting):** which mistakes become puzzles. **Blunders only** / **Mistakes and blunders** (default) / **Inaccuracies, mistakes and blunders**. The levels use the shared thresholds (FR-11.9).
+  - Changing the level rebuilds the set from the stored `game_analysis`, with no new engine pass over the games. Only new candidates get the quality check (FR-10.41).
+  - Narrowing the level **archives** the puzzles outside it, never deletes them, so their attempt history is kept. Widening restores them.
+  - The same three choices are also a filter when training the My games source (FR-3.15).
+- **FR-10.41** **Quality check:** a mistake becomes a puzzle only if it has a clear answer.
+  - The best move must be clearly better than the second best (default gap 150 cp, configurable), or be the only move that keeps the advantage.
+  - The position must not already be decided (beyond ±500 cp before the move).
+  - The line extends while the solver's move stays the only good one, the way Lichess builds multi-move puzzles.
+  - Prefer reusing lichess-puzzler's generator logic (AGPL-3.0, already a dependency for tagging) over writing our own. Confirm this in the v0.10 plan.
+  - Inaccuracies are kept only when they pass the same check, so the inaccuracy level may add few puzzles. The setting says so.
+- **FR-10.42** **Missed and Allowed:**
+  - **Missed** (you had a tactic and didn't play it): you solve from your own position, as the side you played.
+  - **Allowed** (your move let your opponent in): you solve **as your opponent**, from the position after your mistake, finding the punishment. The board is oriented for the side to move, and the puzzle is labelled *"Find what your opponent could have played."*
+  - Allowed positions can also feed Danger spotting (FR-4.4) once that mode exists.
+- **FR-10.43** **Solving rules:** these come from engine analysis, not a verified single solution, so any move within 30 cp of the best (configurable, shared with Retry mode FR-11.15) counts. The interactive engine then continues the line from the move you played. Themes come from the lichess-puzzler tagger and stay hidden until the puzzle ends (FR-3.14). Any help before completion is a loss, as everywhere (§7.1).
+- **FR-10.44** **Training them:**
+  - **My games** works as a source on its own or mixed with Lichess puzzles, in every mode that supports it, including **Spaced repetition** (FR-4.6).
+  - The Suggested mix (§10.7) may include a share of your own-game puzzles (default 20%) linked to your top weaknesses, and "Why this mix" says so.
+  - Each puzzle links back to its game in Game Review. You can archive any puzzle you don't want.
+- **FR-10.45** **Progress:** accuracy on your own-game puzzles appears on each weakness card (FR-10.38) next to Lichess-puzzle accuracy. It's a secondary signal only. A weakness's status is still decided by its game rate (§10.8), never by puzzle accuracy.
 
 ## 11. Game Review: import a game, analyze it, explain better moves
 
