@@ -102,7 +102,8 @@ def build_where(spec: FilterSpec, bits: dict[str, int], openings: dict[str, int]
         params.append(spec.min_plays)
 
     if spec.openings:
-        ids = sorted({openings[o] for o in spec.openings if o in (openings or {})})
+        known = openings or {}
+        ids = sorted({known[o] for o in spec.openings if o in known})
         if not ids:
             parts.append("0")  # openings this database doesn't have
         else:
