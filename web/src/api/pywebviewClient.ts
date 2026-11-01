@@ -1,6 +1,18 @@
 // Real client: calls the Python `Api` through pywebview's js_api bridge.
 import { ApiCallError, type ApiClient, type BackendEvent } from "./ApiClient";
-import type { ApiError, AppInfo, Job, PuzzleDbStatus } from "./types";
+import type {
+  ApiError,
+  AppInfo,
+  FilterSpec,
+  Job,
+  MoveFeedback,
+  PuzzleDbStatus,
+  PuzzleView,
+  SessionInfo,
+  SessionStats,
+  ThemeGroup,
+  UiSettings,
+} from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 type PyApi = Record<string, (...args: unknown[]) => Promise<Envelope<unknown>>>;
@@ -68,6 +80,38 @@ export class PywebviewClient implements ApiClient {
 
   cancelJob(jobId: string) {
     return this.call<boolean>("cancel_job", jobId);
+  }
+
+  getSettings() {
+    return this.call<UiSettings>("get_settings");
+  }
+
+  setSetting(key: "mixer.filters", value: FilterSpec) {
+    return this.call<void>("set_setting", key, value);
+  }
+
+  getThemeCatalog() {
+    return this.call<ThemeGroup[]>("get_theme_catalog");
+  }
+
+  countMatches(spec: FilterSpec) {
+    return this.call<number>("count_matches", spec);
+  }
+
+  startSession(spec: FilterSpec) {
+    return this.call<SessionInfo>("start_session", spec);
+  }
+
+  nextPuzzle(sessionId: number) {
+    return this.call<PuzzleView | null>("next_puzzle", sessionId);
+  }
+
+  submitMove(sessionId: number, uci: string) {
+    return this.call<MoveFeedback>("submit_move", sessionId, uci);
+  }
+
+  getSessionStats(sessionId: number) {
+    return this.call<SessionStats>("get_session_stats", sessionId);
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

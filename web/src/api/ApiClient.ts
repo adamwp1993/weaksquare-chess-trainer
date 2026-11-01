@@ -1,6 +1,18 @@
 // The only way the UI talks to the backend (ARCHITECTURE §3 decision 8).
 // Two implementations: pywebviewClient (the real app) and mockClient (UI development, Playwright).
-import type { ApiError, AppInfo, Job, PuzzleDbStatus } from "./types";
+import type {
+  ApiError,
+  AppInfo,
+  FilterSpec,
+  Job,
+  MoveFeedback,
+  PuzzleDbStatus,
+  PuzzleView,
+  SessionInfo,
+  SessionStats,
+  ThemeGroup,
+  UiSettings,
+} from "./types";
 
 export class ApiCallError extends Error {
   readonly code: string;
@@ -27,6 +39,15 @@ export interface ApiClient {
   startPuzzleImport(localPath: string | null): Promise<string>;
   getJob(jobId: string): Promise<Job>;
   cancelJob(jobId: string): Promise<boolean>;
+  getSettings(): Promise<UiSettings>;
+  setSetting(key: "mixer.filters", value: FilterSpec): Promise<void>;
+  getThemeCatalog(): Promise<ThemeGroup[]>;
+  countMatches(spec: FilterSpec): Promise<number>;
+  startSession(spec: FilterSpec): Promise<SessionInfo>;
+  /** The next puzzle, or null when the session is complete. */
+  nextPuzzle(sessionId: number): Promise<PuzzleView | null>;
+  submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;
+  getSessionStats(sessionId: number): Promise<SessionStats>;
   /** Subscribe to pushed events (job progress). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

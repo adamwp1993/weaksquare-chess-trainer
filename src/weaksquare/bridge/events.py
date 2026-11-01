@@ -32,6 +32,10 @@ class EventSink:
     def attach(self, window: JsWindow) -> None:
         self._window = window
 
+    def detach(self) -> None:
+        """Stop delivering events (the window is closing; its WebView2 is being disposed)."""
+        self._window = None
+
     def emit(self, name: str, payload: Any) -> None:
         if self._window is None:
             return

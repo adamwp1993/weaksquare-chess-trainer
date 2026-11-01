@@ -20,15 +20,15 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Run the app (dev data folder) | `npm.cmd --prefix web run build` once, then `uv run python -m weaksquare --dev`. The Start-menu shortcut runs the app without `--dev`. |
 | Dev mode (hot-reloading front end) | `npm.cmd --prefix web run dev`, then in a second window `uv run python -m weaksquare --dev-server`. For the UI alone in a browser with fixed data: `npm.cmd --prefix web run dev -- --mode mock`, then open http://127.0.0.1:5173 |
 | Unit, integration and contract tests | `uv run pytest` |
-| End-to-end UI tests (mock client) | TODO(v0.1) |
+| End-to-end UI tests (mock client) | `uv run pytest -m e2e` (builds `web/dist-mock` first if it's out of date) |
 | Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times) |
 | Lint and format | `uv run ruff check .` and `uv run ruff format --check .` (drop `--check` to reformat) |
 | Type checks (`mypy`, `tsc --noEmit`, ESLint) | `uv run mypy src`, `npm.cmd --prefix web run typecheck` and `npm.cmd --prefix web run lint` |
-| Full-DB tests (needs the imported puzzle DB) | TODO(v0.1) |
+| Full-DB tests (needs the imported puzzle DB) | `uv run pytest -m fulldb`. Reads the dev data folder's `puzzles.db` read-only; add `--fulldb-path PATH` to use another one. Skips if there isn't one. |
 | All pre-commit checks | `uv run pre-commit run --all-files` |
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
 | Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |
-| Regenerate the user-guide screenshots | TODO(v0.1) |
+| Regenerate the user-guide screenshots | `uv run pytest -m docs_screenshots` (writes `docs/img/*.png` from the mock client) |
 | Store the live-test Lichess token (run it yourself, outside Claude Code) | TODO(v0.3) |
 | Live tests (opt-in) | TODO(v0.3) |
 | Build the Windows installer | TODO(v1.0) |
@@ -77,7 +77,12 @@ Levels and when each runs: ARCHITECTURE.md §6. Rules:
 
 ## How-to recipes
 Each recipe is written when the first real example exists, using that example.
-- Add a puzzle filter: TODO(v0.1)
+- Add a puzzle filter. The v0.1 side-to-move filter is the worked example:
+  1. **Schema:** add the field to `FilterSpec` in `src/weaksquare/core/filters.py` with a default that means "no restriction", plus its type check in `_coerce` and its rule in `validate()`. If the field already exists for a later version, remove it from the `later` list in `validate()`, which rejects it until then.
+  2. **SQL:** add its condition to `build_where` in `src/weaksquare/adapters/db/repos/puzzles.py`. If it needs a new column or index in `puzzles.db`, add a puzzle migration and update `puzzles_indexes.sql`. A full re-import picks both up.
+  3. **Tests:** extend `oracle_count` in `tests/integration/test_filter_count.py` with an independent version of the rule (plain SQL on the raw columns), and let `random_spec` generate the field. The 20 random specs then cover it, on the fixture and with `-m fulldb`.
+  4. **Bridge and UI:** run `uv run python scripts/gen_types.py`, add the field to `defaultFilters()` in `web/src/state/filters.ts` and to the mock's `matches()` in `web/src/api/mockClient.ts`, and add a control to `web/src/views/MixerView.tsx`.
+  5. **Docs:** the User Guide's *Choosing your puzzles* table, and CHANGELOG.
 - Add a training mode: TODO(v0.5)
 - Add an LLM provider: TODO(v0.7)
 

@@ -41,8 +41,12 @@ WeakSquare trains on the Lichess open puzzle database: about 6 million puzzles, 
 
 If setup already imported it, the app opens straight to your puzzles. Otherwise the first screen is **Get the puzzle database**:
 
+![The first-run screen](img/first-run.png)
+
 1. Click **Download from Lichess**. The app downloads about 300 MB, checks it against the checksum Lichess publishes, and imports it. Expect a few minutes; the progress bar shows each stage.
 2. When it's finished, the app switches to your puzzles.
+
+![The import in progress](img/first-run-importing.png)
 
 **Already have the file?** Click **Use a file I already have…** and choose a `lichess_db_puzzle.csv.zst` (or an unpacked `.csv`) from database.lichess.org.
 
@@ -53,6 +57,58 @@ If setup already imported it, the app opens straight to your puzzles. Otherwise 
 - If the download doesn't match Lichess's checksum, it's deleted and nothing changes. Try again later (Lichess may be updating the file).
 - Importing never touches your attempts or settings.
 - **What it sends:** the download is a plain file request to database.lichess.org. Nothing about you or your training is sent.
+
+## Choosing your puzzles
+*Added in v0.1.*
+
+The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match.
+
+1. Pick **Themes**, or leave it at **All themes**.
+2. Choose **ANY** (a puzzle needs at least one of your themes) or **ALL** (it needs every one).
+3. Narrow it down with **Exclude themes**, **Rating**, **Number of moves** and **You play**.
+4. Set how many **Puzzles** you want, or switch on **Endless**.
+5. Press **Start**.
+
+![The filter panel with Fork, ALL, rating 1100–1700 and 2-move puzzles](img/mixer.png)
+
+| Control | What it does |
+|---|---|
+| **Themes** | Opens a list of every theme in the database, grouped (Motifs, Advanced, Mates, Mate patterns, Phases, Special moves, Goals, Lengths, Origin) with how many puzzles have each. Type in **Search themes** to find one. **Select all** ticks every theme shown by the search; **Clear** unticks everything. Leaving it empty means all themes. |
+| **Match: ANY / ALL** | ANY: puzzles with *at least one* chosen theme. ALL: puzzles with *every* chosen theme, e.g. Fork + Long finds long puzzles that involve a fork. |
+| **Exclude themes** | Puzzles with *any* of these themes are left out, whatever else they match. |
+| **Rating** | Drag either end of the slider, or type exact numbers in the boxes. The range runs from the easiest to the hardest puzzle in the database. |
+| **Number of moves** | How many moves *you* make: 1, 2, 3 or 4 and more. Tick any combination, or **All**. This is counted from the solution itself, not from the One-move/Short/Long/Very long theme tags. |
+| **You play** | White, Black or Either. |
+| **Puzzles** / **Endless** | A session of a fixed number of puzzles (1 to 500), or an endless one. |
+
+Puzzles come in random order, and no puzzle repeats within a session. Your filters are remembered the next time you open the app.
+
+![The theme list with search and Select all / Clear](img/theme-picker.png)
+
+**Gotchas**
+- If the count says **0 puzzles match**, Start is disabled. Widen a filter. A common cause is ALL with two themes that never appear together, such as One-move and Very long.
+- Themes are hidden while you solve (see below), so choosing a single theme tells you the idea in advance. Mix several themes for a real test.
+
+## Solving a puzzle
+*Added in v0.1.*
+
+1. The board turns to your side and the opponent's move plays first. Then it's your turn: find the best move.
+2. Drag a piece, or click it and then its destination. When a pawn promotes, choose the piece.
+3. If your move is right, the opponent's reply plays automatically. Keep going until the line is complete.
+4. When the puzzle ends, the result panel shows whether you **Solved** or **Failed** it, and reveals its **themes**. **Open this puzzle on Lichess** shows it on the Lichess website.
+5. Press **Next puzzle**.
+
+![The trainer, waiting for your move](img/trainer.png)
+
+**How it's scored**
+- **Solved** means you played every move of the solution with no wrong move.
+- A **wrong move fails the puzzle at once**. The move is taken back and you can keep trying to finish the line, with nothing more to lose.
+- When the solution is a checkmate, **any** checkmating move counts.
+- Pressing **Skip (counts as failed)** before you've finished also records a failed attempt.
+
+**The session bar** at the top shows this session's **Solved**, **Failed**, **Accuracy** and **Played**. On the right, **All time** counts every attempt you've ever made; your attempts are saved as you go, so they survive closing the app. When a fixed-length session ends, you get a summary and a **New session** button.
+
+![A solved puzzle with its themes revealed](img/solved.png)
 
 ## Installing from source
 *Added in v0.1.*
@@ -78,6 +134,9 @@ WeakSquare runs from its source code; there's no installer to download. You need
 *Added in v0.1.*
 
 Open the menu (**☰**, top right) and choose **About** to see:
+
+![The About screen](img/about.png)
+
 
 | Item | What it shows |
 |---|---|

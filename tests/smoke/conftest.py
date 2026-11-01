@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import json
 import os
 import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from collections.abc import Callable, Iterator
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -128,31 +130,43 @@ def app_page(real_app: RunningApp):  # type: ignore[no-untyped-def]
     """A Playwright page attached to the real app's WebView2 over CDP."""
     from playwright.sync_api import sync_playwright
 
+    with sync_playwright() as pw, attach(pw, real_app) as page:
+        yield page
+
+
+@contextlib.contextmanager
+def attach(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
     endpoint = f"http://127.0.0.1:{real_app.port}"
 
-    def cdp_up() -> bool:
-        with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", real_app.port), timeout=0.5):
-            return True
+    def app_page_listed() -> bool:
+        """True once the debugging endpoint lists the app's page. Checked over plain HTTP *before*
+        connecting: the sync Playwright API only learns about new pages while a call is running."""
         if real_app.process.poll() is not None:
             raise RuntimeError(f"the app exited early with code {real_app.process.returncode}")
+        try:
+            with urllib.request.urlopen(f"{endpoint}/json/list", timeout=2) as r:
+                targets = json.loads(r.read())
+        except OSError:
+            return False
+        return any(t.get("type") == "page" and t.get("url", "").startswith("http") for t in targets)
+
+    wait_for(app_page_listed, 90, "the app page on the debugging port")
+    browser = pw.chromium.connect_over_cdp(endpoint)
+    page = None
+
+    def page_ready() -> bool:
+        nonlocal page
+        for ctx in browser.contexts:
+            for p in ctx.pages:
+                if p.url.startswith("http"):
+                    page = p
+                    return True
         return False
 
-    wait_for(cdp_up, 60, "the WebView2 debugging port")
-    with sync_playwright() as pw:
-        browser = pw.chromium.connect_over_cdp(endpoint)
-        page = None
-
-        def page_ready() -> bool:
-            nonlocal page
-            for ctx in browser.contexts:
-                for p in ctx.pages:
-                    if not p.url.startswith("about:"):
-                        page = p
-                        return True
-            return False
-
-        wait_for(page_ready, 30, "the app page")
-        assert page is not None
-        page.wait_for_function("() => !!(window.pywebview && window.pywebview.api)", timeout=30_000)
+    wait_for(page_ready, 30, "the app page")
+    assert page is not None
+    page.wait_for_function("() => !!(window.pywebview && window.pywebview.api)", timeout=30_000)
+    try:
         yield page
+    finally:
         browser.close()

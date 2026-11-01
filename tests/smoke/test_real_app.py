@@ -56,3 +56,36 @@ def test_debug_port_refused_without_dev(tmp_path) -> None:  # type: ignore[no-un
     proc = subprocess.run([sys.executable, "-m", "weaksquare"], env=env, capture_output=True, timeout=30)
     assert proc.returncode == 2
     assert b"refuses to start" in proc.stderr
+
+
+@pytest.fixture
+def with_puzzles(prepare_data_dir, fixture_puzzles_db):  # type: ignore[no-untyped-def]
+    import shutil
+
+    shutil.copyfile(fixture_puzzles_db, prepare_data_dir / "puzzles.db")
+    return prepare_data_dir
+
+
+def test_session_runs_and_attempts_persist_across_restart(with_puzzles, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from playwright.sync_api import sync_playwright
+
+    from tests.smoke.conftest import attach
+
+    def run(check_all_time: str | None) -> None:
+        app = launch_app(with_puzzles, free_port())
+        try:
+            with sync_playwright() as pw, attach(pw, app) as page:
+                page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+                if check_all_time is None:
+                    page.get_by_role("button", name="Start").click()
+                    page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for()
+                    page.get_by_test_id("next-button").click()  # skip = a recorded loss
+                    page.get_by_test_id("stat-failed").filter(has_text="1").wait_for()
+                else:
+                    page.get_by_role("button", name="Start").click()
+                    page.get_by_test_id("stat-all-time").filter(has_text=check_all_time).wait_for()
+        finally:
+            assert app.close() == 0
+
+    run(None)
+    run("0 solved, 1 failed")

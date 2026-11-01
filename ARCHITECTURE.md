@@ -52,7 +52,10 @@ weaksquare-chess-trainer/
 │  │  ├─ clock.py              # Clock protocol + FixedClock (the real clock is an adapter)
 │  │  ├─ errors.py             # AppError and friends: code + user-facing message
 │  │  ├─ chess_rules.py        # FEN/UCI helpers, player color, length, mate-in-1 acceptance
-│  │  ├─ puzzle.py             # Puzzle, PuzzleRef(source, id), PuzzleSource protocol
+│  │  ├─ puzzle.py             # Puzzle, PuzzleRef(source, id)  (PuzzleSource protocol: services/session.py)
+│  │  ├─ csv_rows.py           # puzzle CSV rows by header name
+│  │  ├─ themes.py             # theme catalog: names and picker groups
+│  │  ├─ checksums.py          # sha256sums.txt parsing
 │  │  ├─ filters.py            # FilterSpec (+ JSON schema, validation)
 │  │  ├─ queue.py              # ordering, ratios, queue building (pure; takes candidate ids)
 │  │  ├─ scoring.py            # win/loss, help → loss, angle selection
@@ -62,6 +65,7 @@ weaksquare-chess-trainer/
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
+│  │                           #   v0.1: puzzle_db.py (import job), mixer.py (catalog, counts), session.py
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -84,9 +88,9 @@ weaksquare-chess-trainer/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
 │  └─ src/
 │     ├─ api/                  # ApiClient interface + pywebviewClient + mockClient
-│     ├─ components/           # Board (chessground wrapper), ThemePicker, RatingSlider, …
+│     ├─ components/           # Board (chessground wrapper), ThemePicker, FilterControls, SessionBar, …
 │     ├─ views/                # Startup, Trainer, Settings, Stats, Library, Review, Coach, Progress
-│     └─ state/                # small store; no business logic
+│     └─ state/                # small hooks and defaults (useJob, defaultFilters); no business logic
 ├─ tests/
 │  ├─ unit/                    # core/ — fast, no I/O
 │  ├─ integration/             # services + real SQLite (tmp) + fake clients
@@ -184,6 +188,23 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-01, v0.1: Standard-mode scoring details and the `TrainingMode` shape
+- Context: Show answer arrives only in v0.2, so v0.1 needed a defined behavior after a wrong move and when you move on early.
+- Decision: a wrong move decides the attempt as a loss at that moment (it's appended to `attempts` then), the move is taken back, and you can keep playing the line with nothing more recorded. Moving on before the attempt is decided (**Skip**) records a loss. Themes are revealed with the decision. The v0.1 protocol is `start`, `on_move` and `give_up`; `on_help` joins it in v0.2 with Hint and Show answer, rather than shipping unused.
+- Alternatives: recording the attempt only when the line ends (an abandoned puzzle would then never be recorded).
+- Consequences: every attempt reaches `user.db` as soon as it's decided, so closing the app loses nothing.
+
+### 2026-11-01, v0.1: Queue sampling and count tuning
+- Context: plan decision 3, and the < 500 ms targets on the full DB.
+- Decision: pools of ≤ 100k puzzles are fetched and sampled with the injected `Random`; larger pools use rejection sampling over the dense key `n` in batches sized from the match density, keeping the rng's order so a seed always gives the same queue. The attached `puzzles.db` uses `mmap_size` = 2 GB, which cut full-range count scans by about 20% (worst case ~330 ms, warm).
+- Alternatives: `ORDER BY random() LIMIT 50`, which sorts the whole pool.
+- Consequences: deterministic tests for queues; memory-mapped pages count toward the app's working set, but they're file-backed and shared with the OS cache.
+
+### 2026-11-01, v0.1: Test harness details
+- Context: the real-app smoke harness and the screenshot spec had timing problems on the first runs.
+- Decision: the smoke harness waits until the WebView2 debugging endpoint lists the app's page (polled over HTTP at `/json/list`) before attaching, because the sync Playwright API only learns about new pages while a call is running. It closes the app with `WM_CLOSE` to the PID the app writes into its lock file (the venv's `python.exe` is a launcher with a child process). The screenshot spec drives the mock's progress timers with Playwright's fake clock. The mock client serves fixed puzzles taken from the fixture (`web/src/api/mockPuzzles.ts`).
+- Consequences: smoke runs were stable over repeated runs, and screenshots are reproducible.
 
 ### 2026-11-01, v0.1: Theme bitmasks on `puzzles` instead of a `puzzle_themes` table
 - Context: the live match count must answer within 500 ms on ~6.2M puzzles, including ALL across several themes (FR-3.1). A `puzzle_themes` join table would hold ~25M rows (~1 GB more) and makes ALL a multi-way intersection.

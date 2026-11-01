@@ -185,6 +185,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise RuntimeError("could not create the window")
     events.attach(window)
     desktop.attach(window)
+    window.events.closing += events.detach
 
     try:
         webview.start(private_mode=True, http_server=not args.dev_server, debug=False)
