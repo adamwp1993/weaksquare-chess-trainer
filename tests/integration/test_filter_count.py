@@ -191,3 +191,20 @@ def test_v02_edge_expectations(services, raw: sqlite3.Connection) -> None:  # ty
     assert count(dataclasses.replace(every, exclude_solved_here=True)) == count(every) - len(solved)
     # Only my misses wins over Exclude solved: won-then-lost puzzles are misses.
     assert count(dataclasses.replace(every, exclude_solved_here=True, only_my_misses=True)) == len(missed)
+
+
+@pytest.mark.parametrize("excludes_solved", [True, False])
+def test_ratio_counts_match_the_oracle(services, raw: sqlite3.Connection, excludes_solved: bool) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.2 self-check): the live count of a ratio mix counted the whole database, because
+    the groups' themes weren't applied. Now: the union of the groups, and each group's own count."""
+    from weaksquare.core.filters import RatioBucket
+
+    solved, missed = seed_history(services, raw)
+    spec = FilterSpec(
+        ratios=(RatioBucket(("fork",), 50), RatioBucket(("pin", "skewer"), 30), RatioBucket(("mateIn1",), 20)),
+        rating_min=900, exclude_solved_here=excludes_solved, min_plays=None,
+    )  # fmt: skip
+    union = dataclasses.replace(spec, themes=("fork", "pin", "skewer", "mateIn1"), match="any", ratios=())
+    assert services.mixer.count(spec) == oracle_count(raw, union, solved, missed)
+    assert services.mixer.bucket_counts(spec) == [oracle_count(raw, spec.bucket(i), solved, missed) for i in range(3)]
+    assert services.mixer.count(spec) < services.mixer.count(dataclasses.replace(spec, ratios=()))

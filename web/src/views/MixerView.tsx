@@ -82,8 +82,12 @@ export function MixerView({
     const id = ++requestId.current;
     const timer = setTimeout(() => {
       setCounting(true);
-      const buckets = spec.ratios.length > 0 ? api.countBuckets(spec) : Promise.resolve(null);
-      Promise.all([api.countMatches(spec), buckets]).then(
+      // A ratio mix gets its total and its groups from one call (one scan of the database).
+      const counted =
+        spec.ratios.length > 0
+          ? api.countBuckets(spec).then((c) => [c.total, c.buckets] as const)
+          : api.countMatches(spec).then((n) => [n, null] as const);
+      counted.then(
         ([n, perBucket]) => {
           if (id !== requestId.current) return;
           setCount(n);

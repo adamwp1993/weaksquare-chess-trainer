@@ -85,6 +85,11 @@ export interface OpeningFamily {
   variations: OpeningOption[];
 }
 
+export interface BucketCounts {
+  total: number;
+  buckets: number[];
+}
+
 export interface Preset {
   name: string;
   spec: FilterSpec | null;

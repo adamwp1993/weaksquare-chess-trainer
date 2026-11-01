@@ -8,7 +8,9 @@ user.db, which is the main schema of every connection (puzzles.db is attached as
 
 from __future__ import annotations
 
+import dataclasses
 import random
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -47,6 +49,13 @@ def _masks(themes: Sequence[str], bits: dict[str, int]) -> tuple[list[int], list
     return masks, unknown
 
 
+def any_theme(themes: Sequence[str], bits: dict[str, int]) -> tuple[str, list[int]]:
+    """SQL true when a puzzle has at least one of `themes`."""
+    masks, _ = _masks(themes, bits)
+    ors = [f"(p.{col} & ?)" for col, m in zip(COLS, masks, strict=True) if m]
+    return ("(" + " | ".join(ors) + ") != 0" if ors else "0"), [m for m in masks if m]
+
+
 def build_where(spec: FilterSpec, bits: dict[str, int], openings: dict[str, int] | None = None) -> Where:
     """SQL condition over `p` (pz.puzzles) for a validated FilterSpec. With ratios, pass one
     bucket's spec (`spec.bucket(i)`): the buckets' themes aren't combined here."""
@@ -83,9 +92,9 @@ def build_where(spec: FilterSpec, bits: dict[str, int], openings: dict[str, int]
                     parts.append(f"(p.{col} & ?) = ?")
                     params += [m, m]
         else:
-            ors = [f"(p.{col} & ?)" for col, m in zip(COLS, masks, strict=True) if m]
-            params += [m for m in masks if m]
-            parts.append("(" + " | ".join(ors) + ") != 0" if ors else "0")
+            any_sql, any_params = any_theme(spec.themes, bits)
+            parts.append(any_sql)
+            params += any_params
 
     if spec.exclude_themes:
         masks, _ = _masks(spec.exclude_themes, bits)  # excluding a theme no puzzle has excludes nothing
@@ -161,10 +170,57 @@ class LichessDbSource:
             ).fetchall()
         return [(r["tag"], r["family"], r["count"]) for r in rows]
 
-    def count(self, spec: FilterSpec) -> int:
-        where = self.where(spec)
+    def count_with_buckets(self, spec: FilterSpec) -> tuple[int, list[int]]:
+        """For a ratio mix (FR-3.10): the union of the groups and each group's count, in one scan of
+        the covering index (one count per group would take a scan each). Exclude solved is subtracted,
+        as in `count`."""
+        bits = self.theme_bits()
+        conds = [any_theme(b.themes, bits) for b in spec.ratios]
+        union_sql = "(" + " OR ".join(c[0] for c in conds) + ")"
+        union_params = [p for c in conds for p in c[1]]
+        # The union goes in WHERE, so only matching rows evaluate the per-group sums (~40% faster).
+        select = ", ".join(["COUNT(*)"] + [f"SUM({c[0]})" for c in conds])
+        select_params = [p for c in conds for p in c[1]]
+        plain = dataclasses.replace(spec, themes=(), match="any", ratios=())
+        base_spec = dataclasses.replace(plain, exclude_solved_here=False) if spec.excludes_solved else plain
+        base = self.where(base_spec)
         with self._db.session() as conn:
+            row = conn.execute(
+                f"SELECT {select} FROM pz.puzzles p WHERE {base.sql} AND {union_sql}",
+                (*select_params, *base.params, *union_params),
+            )
+            totals = [int(x or 0) for x in row.fetchone()]
+            if spec.excludes_solved:
+                row = conn.execute(
+                    f"SELECT {select} FROM pz.puzzles p WHERE p.id IN ({SOLVED_IDS}) AND {base.sql} AND {union_sql}",
+                    (*select_params, *base.params, *union_params),
+                )
+                totals = [t - int(x or 0) for t, x in zip(totals, row.fetchone(), strict=True)]
+        return totals[0], totals[1:]
+
+    def count(self, spec: FilterSpec) -> int:
+        """With ratios, the union of the groups (see count_with_buckets). Exclude solved (on by default) is counted by subtraction: `id NOT IN (…)` would make SQLite
+        read every row of the table, because `id` isn't in the covering index (4 s instead of 0.3 s on
+        the full export). So count without it, then subtract the solved puzzles that match, which the
+        unique `id` index finds directly."""
+        if spec.ratios:
+            return self.count_with_buckets(spec)[0]
+        with self._db.session() as conn:
+            if spec.excludes_solved:
+                base = self.where(dataclasses.replace(spec, exclude_solved_here=False))
+                total = conn.execute(f"SELECT COUNT(*) FROM pz.puzzles p WHERE {base.sql}", base.params).fetchone()[0]
+                solved = conn.execute(
+                    f"SELECT COUNT(*) FROM pz.puzzles p WHERE p.id IN ({SOLVED_IDS}) AND {base.sql}", base.params
+                ).fetchone()[0]
+                return int(total) - int(solved)
+            where = self.where(spec)
             return int(conn.execute(f"SELECT COUNT(*) FROM pz.puzzles p WHERE {where.sql}", where.params).fetchone()[0])
+
+    def _solved_keys(self, conn: sqlite3.Connection, spec: FilterSpec) -> set[int]:
+        """Keys of the solved puzzles that would otherwise match (for sampling, like count)."""
+        base = self.where(dataclasses.replace(spec, exclude_solved_here=False))
+        rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE p.id IN ({SOLVED_IDS}) AND {base.sql}", base.params)
+        return {r[0] for r in rows}
 
     def sample_keys(
         self, spec: FilterSpec, k: int, rng: random.Random, exclude: set[int], match_count: int
@@ -175,8 +231,14 @@ class LichessDbSource:
         where = self.where(spec)
         with self._db.session() as conn:
             if match_count <= SMALL_POOL:
-                keys = [r[0] for r in conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE {where.sql}", where.params)]
-                return sample_random(keys, k, rng, exclude)
+                if spec.excludes_solved:  # the covering index, minus the solved keys (see count)
+                    base = self.where(dataclasses.replace(spec, exclude_solved_here=False))
+                    rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE {base.sql}", base.params)
+                    skip = set(exclude) | self._solved_keys(conn, spec)
+                else:
+                    rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE {where.sql}", where.params)
+                    skip = set(exclude)
+                return sample_random([r[0] for r in rows], k, rng, skip)
             max_key = int(conn.execute("SELECT MAX(n) FROM pz.puzzles").fetchone()[0])
             chosen: list[int] = []
             seen = set(exclude)

@@ -6,7 +6,6 @@ appended to `attempts` at once, so closing the app never loses a result.
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 import random
 import threading
@@ -35,6 +34,8 @@ class PuzzleSource(Protocol):
     def keys_for_ids(self, ids: list[str]) -> set[int]: ...
 
     def count(self, spec: FilterSpec) -> int: ...
+
+    def count_with_buckets(self, spec: FilterSpec) -> tuple[int, list[int]]: ...
 
     def sample_keys(
         self, spec: FilterSpec, k: int, rng: random.Random, exclude: set[int], match_count: int
@@ -164,8 +165,10 @@ class SessionService:
 
     def start(self, spec: FilterSpec) -> SessionInfo:
         buckets = [spec.bucket(i) for i in range(len(spec.ratios))]
-        bucket_counts = [self._puzzles.count(b) for b in buckets]
-        count = self._puzzles.count(union_of_buckets(spec)) if buckets else self._puzzles.count(spec)
+        if buckets:
+            count, bucket_counts = self._puzzles.count_with_buckets(spec)
+        else:
+            count, bucket_counts = self._puzzles.count(spec), []
         if count == 0:
             raise ValidationError("No puzzles match these filters. Widen them and try again.")
         sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), self._mode.name,
@@ -241,9 +244,8 @@ class SessionService:
         s.served_keys = self._puzzles.keys_for_ids(s.served_ids)
         s.key_bucket.clear()
         if s.buckets:
-            s.bucket_counts = [self._puzzles.count(b) for b in s.buckets]
+            s.match_count, s.bucket_counts = self._puzzles.count_with_buckets(s.spec)
             s.weights = [r.weight if n > 0 else 0 for r, n in zip(s.spec.ratios, s.bucket_counts, strict=True)]
-            s.match_count = self._puzzles.count(union_of_buckets(s.spec))
         else:
             s.match_count = self._puzzles.count(s.spec)
 
@@ -337,9 +339,3 @@ class SessionService:
             all_time_solved=a.solved,  # type: ignore[attr-defined]
             all_time_failed=a.failed,  # type: ignore[attr-defined]
         )
-
-
-def union_of_buckets(spec: FilterSpec) -> FilterSpec:
-    """Every puzzle any ratio group could draw: the groups' themes together, matched ANY."""
-    themes = tuple(dict.fromkeys(t for b in spec.ratios for t in b.themes))
-    return dataclasses.replace(spec, themes=themes, match="any", ratios=())

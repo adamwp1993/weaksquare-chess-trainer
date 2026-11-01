@@ -9,6 +9,7 @@ import type { ApiClient, BackendEvent, SettingValues } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
+  BucketCounts,
   AppInfo,
   FilterSpec,
   HelpResponse,
@@ -333,8 +334,11 @@ export class MockClient implements ApiClient {
     return this.pool(spec).length * SCALE;
   }
 
-  async countBuckets(spec: FilterSpec) {
-    return spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i)).length * SCALE);
+  async countBuckets(spec: FilterSpec): Promise<BucketCounts> {
+    return {
+      total: await this.countMatches(spec),
+      buckets: spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i)).length * SCALE),
+    };
   }
 
   async getOpeningCatalog() {

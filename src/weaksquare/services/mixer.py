@@ -16,6 +16,8 @@ class PuzzleCounter(Protocol):
 
     def openings(self) -> list[tuple[str, str | None, int]]: ...
 
+    def count_with_buckets(self, spec: FilterSpec) -> tuple[int, list[int]]: ...
+
 
 @dataclass(frozen=True)
 class ThemeOption:
@@ -73,7 +75,11 @@ class MixerService:
 
     def bucket_counts(self, spec: FilterSpec) -> list[int]:
         """The live count of each ratio group (FR-3.10): these filters with that group's themes."""
-        return [self._puzzles.count(spec.bucket(i)) for i in range(len(spec.ratios))]
+        return self.counts_with_buckets(spec)[1]
+
+    def counts_with_buckets(self, spec: FilterSpec) -> tuple[int, list[int]]:
+        """(all groups together, each group), from one scan."""
+        return self._puzzles.count_with_buckets(spec) if spec.ratios else (self._puzzles.count(spec), [])
 
     def opening_catalog(self) -> list[OpeningFamily]:
         """Opening families A–Z, each with its variations (FR-3.7)."""

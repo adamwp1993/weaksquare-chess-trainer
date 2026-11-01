@@ -1,6 +1,7 @@
 // Real client: calls the Python `Api` through pywebview's js_api bridge.
 import { ApiCallError, type ApiClient, type BackendEvent, type SettingValues } from "./ApiClient";
 import type {
+  BucketCounts,
   ApiError,
   AppInfo,
   FilterSpec,
@@ -120,7 +121,7 @@ export class PywebviewClient implements ApiClient {
   }
 
   countBuckets(spec: FilterSpec) {
-    return this.call<number[]>("count_buckets", spec);
+    return this.call<BucketCounts>("count_buckets", spec);
   }
 
   getOpeningCatalog() {

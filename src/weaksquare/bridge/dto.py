@@ -98,6 +98,14 @@ class OpeningFamily:
 
 
 @dataclass(frozen=True)
+class BucketCounts:
+    """A ratio mix's live counts (FR-3.10), from one scan: all groups together, and each group."""
+
+    total: int
+    buckets: list[int]
+
+
+@dataclass(frozen=True)
 class Preset:
     name: str
     spec: FilterSpec | None  # None when this version can't use it; `error` says why
@@ -220,6 +228,7 @@ EXPORTED: list[type] = [
     ThemeGroup,
     OpeningOption,
     OpeningFamily,
+    BucketCounts,
     Preset,
     SoundSettings,
     UiSettings,

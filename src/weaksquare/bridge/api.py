@@ -188,9 +188,10 @@ class Api:
         return self._mixer.count(FilterSpec.from_json(spec))
 
     @bridge_call
-    def count_buckets(self, spec: dict) -> list[int]:
-        """The live count of each ratio group (FR-3.10)."""
-        return self._mixer.bucket_counts(FilterSpec.from_json(spec))
+    def count_buckets(self, spec: dict) -> dto.BucketCounts:
+        """A ratio mix's live counts (FR-3.10): the total and each group, in one call and one scan."""
+        total, buckets = self._mixer.counts_with_buckets(FilterSpec.from_json(spec))
+        return dto.BucketCounts(total, buckets)
 
     @bridge_call
     def get_opening_catalog(self) -> list[dto.OpeningFamily]:

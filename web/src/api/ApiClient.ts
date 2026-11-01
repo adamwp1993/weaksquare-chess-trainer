@@ -1,6 +1,7 @@
 // The only way the UI talks to the backend (ARCHITECTURE §3 decision 8).
 // Two implementations: pywebviewClient (the real app) and mockClient (UI development, Playwright).
 import type {
+  BucketCounts,
   ApiError,
   AppInfo,
   FilterSpec,
@@ -64,8 +65,8 @@ export interface ApiClient {
   setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]): Promise<void>;
   getThemeCatalog(): Promise<ThemeGroup[]>;
   countMatches(spec: FilterSpec): Promise<number>;
-  /** The live count of each ratio group (FR-3.10). */
-  countBuckets(spec: FilterSpec): Promise<number[]>;
+  /** A ratio mix's live counts (FR-3.10): all groups together, and each group, in one call. */
+  countBuckets(spec: FilterSpec): Promise<BucketCounts>;
   getOpeningCatalog(): Promise<OpeningFamily[]>;
   listPresets(): Promise<Preset[]>;
   savePreset(name: string, spec: FilterSpec, overwrite: boolean): Promise<Preset>;

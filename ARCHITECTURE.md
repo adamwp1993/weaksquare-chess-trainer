@@ -192,6 +192,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.2: Fast counts with Exclude solved and ratios (found by the full-DB self-check)
+- Context: with v0.2's defaults, the full-DB count took 4 s. `p.id NOT IN (solved ids)` needs `id`, which the covering index doesn't hold, so SQLite read every table row. A ratio mix also counted each group in its own scan, and its live match count ignored the groups' themes (counting the whole database).
+- Decision: Exclude solved is counted by subtraction: the count without it (covering index), minus the solved puzzles that match (looked up through the unique `id` index). Sampling a small pool drops the solved keys the same way. A ratio mix is counted in one scan, `SELECT COUNT(*), SUM(<group 1>), …` with the groups' union in `WHERE` (`count_with_buckets`), and `count_buckets` returns the total and the groups in one bridge call.
+- Alternatives: adding `id` to the covering index (a bigger index, and the per-row `NOT IN` check still costs).
+- Consequences: the default count takes about 315 ms on the 6.16M export. A three-group ratio over the whole rating range takes about 550 ms, just over the 500 ms target; narrower filters are faster.
+
 ### 2026-11-01, v0.2: App icon, taskbar identity and the desktop shortcut
 - Context: NFR-8a.
 - Decision: `assets/icon/weaksquare.svg` is a 2×2 board in chessground's brown colors with the cburnett black queen (Colin M. L. Burnett, GPL-2.0-or-later), copied from chessground's CSS; credits are in `assets/icon/CREDITS.md`. `scripts/make_icon.py` renders it with Playwright's Chromium at 16–256 px and packs PNG entries into an `.ico` with `struct` (no new dependency); the build is deterministic, and `--check` (run by the e2e suite) compares it with the committed file. pywebview's `icon` argument only works on GTK and Qt, so `app.py` sets an explicit AppUserModelID (`WeakSquare.ChessTrainer`) before the window exists, and once it's shown sends `WM_SETICON` with the `.ico` (`adapters/desktop.py`). `setup.py` finds the Desktop with `SHGetKnownFolderPath(FOLDERID_Desktop)` (OneDrive redirection) and writes both shortcuts with `IconLocation`; saving to the same path replaces a shortcut.
