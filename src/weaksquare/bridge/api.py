@@ -22,11 +22,12 @@ from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
-from weaksquare.services.mixer import LAST_FILTERS_KEY, MixerService
+from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
+from weaksquare.services.ui_settings import UiSettingsService
 
 log = logging.getLogger("weaksquare.frontend")
 
@@ -47,7 +48,9 @@ class Api:
         sessions: SessionService,
         presets: PresetService,
         stats: StatsService,
+        ui_settings: UiSettingsService,
     ) -> None:
+        self._ui_settings = ui_settings
         self._stats = stats
         self._presets = presets
         self._mixer = mixer
@@ -131,12 +134,12 @@ class Api:
     # ---- settings (UI state persists here, never in browser storage) ---------------------------
     @bridge_call
     def get_settings(self) -> dto.UiSettings:
-        stored = self._mixer.ui_settings().get(LAST_FILTERS_KEY)
-        return dto.UiSettings(last_filters=FilterSpec.from_json(stored) if stored else None)
+        s = self._ui_settings.get()
+        return dto.UiSettings(last_filters=s.last_filters, coordinates=s.coordinates)
 
     @bridge_call
-    def set_setting(self, key: Literal["mixer.filters"], value: Any) -> None:
-        self._mixer.set_ui_setting(key, value)
+    def set_setting(self, key: Literal["mixer.filters", "ui.coordinates"], value: Any) -> None:
+        self._ui_settings.set(key, value)
 
     # ---- the mixer (FR-3.1–3.5) -----------------------------------------------------------------
     @bridge_call

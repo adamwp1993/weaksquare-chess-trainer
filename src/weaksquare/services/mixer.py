@@ -1,18 +1,12 @@
-"""The puzzle mixer: theme catalog, live match count, remembered filters (FR-3.1–3.5)."""
+"""The puzzle mixer: theme and opening catalogs, live match counts (FR-3.1–3.10)."""
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
-from weaksquare.core.errors import ValidationError
-from weaksquare.core.filters import SAVED_FILTERS_VERSION, FilterSpec, upgrade_saved
+from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import GROUP_ORDER, info
-
-LAST_FILTERS_KEY = "mixer.filters"
-FILTERS_VERSION_KEY = "mixer.filters_version"  # which version's defaults the saved filters have
-UI_SETTING_KEYS = (LAST_FILTERS_KEY,)
 
 
 class PuzzleCounter(Protocol):
@@ -21,12 +15,6 @@ class PuzzleCounter(Protocol):
     def theme_counts(self) -> dict[str, int]: ...
 
     def openings(self) -> list[tuple[str, str | None, int]]: ...
-
-
-class SettingsStore(Protocol):
-    def get(self, key: str) -> Any | None: ...
-
-    def set(self, key: str, value: Any) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -64,9 +52,8 @@ def opening_name(tag: str, family: str | None = None) -> str:
 
 
 class MixerService:
-    def __init__(self, puzzles: PuzzleCounter, settings: SettingsStore) -> None:
+    def __init__(self, puzzles: PuzzleCounter) -> None:
         self._puzzles = puzzles
-        self._settings = settings
 
     def theme_catalog(self) -> list[ThemeGroup]:
         """Themes present in the imported database, grouped and ordered for the picker."""
@@ -101,24 +88,3 @@ class MixerService:
             OpeningFamily(families[f], sorted(variations.get(f, []), key=lambda o: o.name.casefold()))
             for f in sorted(families, key=lambda f: families[f].name.casefold())
         ]
-
-    def ui_settings(self) -> dict[str, Any]:
-        out: dict[str, Any] = {}
-        stored = self._settings.get(LAST_FILTERS_KEY)
-        version = self._settings.get(FILTERS_VERSION_KEY) or 1
-        if stored is not None and version < SAVED_FILTERS_VERSION:
-            stored = upgrade_saved(stored, version)
-            self._settings.set(LAST_FILTERS_KEY, stored)
-            self._settings.set(FILTERS_VERSION_KEY, SAVED_FILTERS_VERSION)
-        if stored is not None:
-            # Stored by an older or newer version and no longer valid: fall back to the defaults.
-            with contextlib.suppress(ValidationError):
-                out[LAST_FILTERS_KEY] = FilterSpec.from_json(stored).to_json()
-        return out
-
-    def set_ui_setting(self, key: str, value: Any) -> None:
-        if key == LAST_FILTERS_KEY:
-            self._settings.set(key, FilterSpec.from_json(value).to_json())
-            self._settings.set(FILTERS_VERSION_KEY, SAVED_FILTERS_VERSION)
-        else:
-            raise ValidationError(f"unknown setting: {key[:40]}")

@@ -40,6 +40,7 @@ def build_api(paths: Paths, clock: FixedClock, desktop: Desktop | None = None, h
         sessions=services.sessions,
         presets=services.presets,
         stats=services.stats,
+        ui_settings=services.ui_settings,
     )
 
 

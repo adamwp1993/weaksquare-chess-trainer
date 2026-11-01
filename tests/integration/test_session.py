@@ -141,12 +141,12 @@ def test_saved_v01_filters_upgraded_once(services) -> None:  # type: ignore[no-u
     v01 = {**FilterSpec(rating_min=1200).to_json(), "min_popularity": None, "min_plays": None,
            "exclude_solved_here": False}  # fmt: skip
     settings.set("mixer.filters", v01)  # as v0.1 left it: no version marker
-    first = services.mixer.ui_settings()["mixer.filters"]
+    first = services.ui_settings.get().last_filters.to_json()
     assert (first["min_popularity"], first["min_plays"], first["exclude_solved_here"]) == (50, 100, True)
     assert first["rating_min"] == 1200
-    services.mixer.set_ui_setting("mixer.filters", {**first, "min_plays": None, "exclude_solved_here": False})
-    again = services.mixer.ui_settings()["mixer.filters"]
-    assert again["min_plays"] is None and again["exclude_solved_here"] is False
+    services.ui_settings.set("mixer.filters", {**first, "min_plays": None, "exclude_solved_here": False})
+    again = services.ui_settings.get().last_filters
+    assert again.min_plays is None and again.exclude_solved_here is False
 
 
 # ---- v0.2: Hint and Show answer are recorded as a loss (Done when) ------------------------------

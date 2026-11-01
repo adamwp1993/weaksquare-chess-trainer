@@ -35,6 +35,7 @@ from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
+from weaksquare.services.ui_settings import UiSettingsService
 
 log = logging.getLogger("weaksquare")
 
@@ -93,6 +94,7 @@ class Services:
     sessions: SessionService
     presets: PresetService
     stats: StatsService
+    ui_settings: UiSettingsService
 
     def close(self) -> None:
         self.http.close()
@@ -128,11 +130,21 @@ def build_services(
     )
     puzzles = LichessDbSource(db)
     attempts = AttemptsRepo(db)
-    mixer = MixerService(puzzles, SettingsRepo(db))
+    mixer = MixerService(puzzles)
+    ui_settings = UiSettingsService(SettingsRepo(db))
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
     presets = PresetService(PresetsRepo(db), clock)
     stats = StatsService(StatsRepo(db), attempts)
-    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions, presets=presets, stats=stats)
+    return Services(
+        db=db,
+        http=http,
+        puzzle_db=puzzle_db,
+        mixer=mixer,
+        sessions=sessions,
+        presets=presets,
+        stats=stats,
+        ui_settings=ui_settings,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -192,6 +204,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sessions=services.sessions,
         presets=services.presets,
         stats=services.stats,
+        ui_settings=services.ui_settings,
     )
 
     window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))

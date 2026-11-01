@@ -70,6 +70,7 @@ class ThemeGroup:
 @dataclass(frozen=True)
 class UiSettings:
     last_filters: FilterSpec | None
+    coordinates: bool  # letters and numbers around the board
 
 
 @dataclass(frozen=True)

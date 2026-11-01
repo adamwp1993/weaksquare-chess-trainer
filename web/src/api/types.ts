@@ -94,6 +94,7 @@ export interface Preset {
 
 export interface UiSettings {
   last_filters: FilterSpec | null;
+  coordinates: boolean;
 }
 
 export interface SessionInfo {
