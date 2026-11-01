@@ -140,3 +140,27 @@ def test_v1_puzzles_db_is_upgraded_in_the_real_app(pw, tmp_path: Path) -> None: 
     with sqlite3.connect(d / "puzzles.db") as conn:
         assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] >= 2
         assert conn.execute("SELECT COUNT(*) FROM openings").fetchone()[0] > 0
+
+
+def test_enter_after_mouse_clicks_is_next_in_the_real_app(pw, data_dir: Path) -> None:  # type: ignore[no-untyped-def]
+    """v0.2-B1 in the real window (round 2): click Start, then Hint, with the mouse; Enter must go to
+    puzzle 2 of the same session, not press Start or Hint again."""
+    app = launch_app(data_dir, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            page.get_by_role("button", name="Start").click()
+            page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for(timeout=15_000)
+            page.keyboard.press("Enter")  # focus is still on Start: this is Skip (counts as failed)
+            page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 2 of").wait_for(timeout=15_000)
+            assert page.get_by_test_id("stat-failed").inner_text() == "1"
+            page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for(timeout=15_000)
+            page.get_by_test_id("hint-button").click()
+            page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+            page.keyboard.press("Enter")
+            page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 3 of").wait_for(timeout=15_000)
+            assert page.get_by_test_id("stat-failed").inner_text() == "2"
+        assert app.close() == 0
+    finally:
+        if app.process.poll() is None:
+            app.process.kill()

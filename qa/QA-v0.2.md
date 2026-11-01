@@ -200,3 +200,65 @@ These couldn't be verified automatically:
 - **Long session after an update:** play for a while after an update mid-session and watch for a puzzle outside your filters (B3).
 - **Sound licenses:** the AGPL claim against lila's `COPYING.md` at the pinned commit. QA didn't fetch it.
 - **B1 in the real window:** click Start, solve, press Enter.
+
+---
+
+# Round 2: re-verification, 2026-11-01
+
+Branch `v0.2` at `4cde058`. Fix commits: `a3699e2` (B1), `b23835f` (B3), `e8fe8df` (B4), `4cde058` (B5–B10). As in round 1, QA changed no product code, docs or config. `%LOCALAPPDATA%\WeakSquare` still doesn't exist, and the dev `puzzles.db` is unchanged (mtime 13:42).
+
+## Verdict: **PASS WITH ISSUES** (minor only)
+
+B1 (major) and B3, B4, B6, B7, B8, B9 and B10 are fixed and verified. B5 is mostly fixed: 13 of the 14 screenshots now reproduce byte for byte, but `presets.png` still varies from run to run (pixel-level only). B2 remains a known minor limit. One new minor finding: the builder's B3 regression test doesn't catch the bug on the pre-fix code. QA added a test that does (R2-1).
+
+## Commands (full suite after the fixes)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **406 passed** (75 s), including the new QA test |
+| `uv run ruff check .` / `uv run ruff format --check .` | All checks passed / 139 files formatted |
+| `uv run mypy src` | no issues, 52 files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | gitleaks Passed; keyring-only Passed |
+| `python scripts/check_docs.py --strict` and without `--strict` | 0 errors, 0 warnings |
+| `uv lock --check`, `uv run python scripts/make_icon.py --check`, `uv run python scripts/gen_types.py` | clean; icon up to date; `types.ts` unchanged |
+| `uv run pytest -m e2e` | **82 passed**, 0 xfailed (the B1 test now passes without its marker) |
+| `uv run pytest -m fulldb` | **55 passed, 1 xfailed** (B2, kept) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke`, **6 full runs** | **16/16 passed in all 6 runs** (round 1: 1 failure in 6). QA smoke file with the new B1 test: 3 passed |
+| `uv run pytest -m docs_screenshots`, twice | 9 passed both times. 13 images identical to the committed ones in both runs; `presets.png` differs between runs and from the committed file (B5). Restored with `git checkout docs/img` |
+| `python scripts/setup.py --no-shortcut --skip-puzzle-db` and `--help` | rc 0; ends "Setup complete. Start the app with: uv run python -m weaksquare". `--help` prints the full description, including the entire database, about 300 MB, about 6 million puzzles and about 1.5 GB |
+
+## Bugs re-tested
+
+| Bug | Result | Evidence |
+|---|---|---|
+| B1 Enter restarts the session | **Fixed** | Mock: `tests/e2e/test_qa_v02_ui.py::test_enter_after_a_mouse_session_goes_to_the_next_puzzle` passes (marker removed), plus the builder's `test_trainer_v02.py::test_enter_on_a_keyboard_focused_button_still_presses_it` and `::test_enter_after_clicking_hint_goes_to_the_next_puzzle`. **Real window (new):** `tests/smoke/test_qa_v02_real_app.py::test_enter_after_mouse_clicks_is_next_in_the_real_app`. Mouse Start then Enter gives Puzzle 2 and Failed 1; mouse Hint then Enter gives Puzzle 3 and Failed 2 |
+| B2 ratio count ~550 ms | **Kept** as a known limit (as agreed) | xfail and the 700 ms guard are unchanged; fulldb run as above |
+| B3 wrong puzzle after a mid-session re-import | **Fixed** | 6 full smoke runs with no failure. The fix checks the generation and reads the row in one shared-lock session, so a swap (exclusive lock) can't fall between them; `next_puzzle` then follows the re-import and retries. See R2-1 for the regression test |
+| B4 smoke tests call Lichess | **Fixed** | Builder's `test_real_app.py::test_smoke_launches_never_call_lichess` passes. Across the 15 app logs of one full smoke run, none mentions the update check or a newer database |
+| B5 screenshots not reproducible; `mixer.png` cropped | **Partly fixed (minor, open)** | `mixer.png` now shows the panel from the top (title, Preset row, Mix by ratio). 13 of 14 images are byte-stable. `presets.png` gave three different hashes (committed, `a000479…`, `de1fcc6…`). Playwright already hides the caret, so the source is something else in that modal |
+| B6 `setup.py` wording | **Fixed** | `--help` and the final line, as above; `tests/unit/test_setup_shortcuts.py` passes |
+| B7 version 0.1.0 | **Fixed** | the log banner in every smoke run reads "WeakSquare 0.2.0 starting"; `tests/contract/test_versions_agree.py` passes. The lockfile diffs are the project's own version only (no dependency change) |
+| B8 "no filters" count wording | **Fixed** | *Getting started* now says the count equals the imported total "with every filter cleared, including the quality filter", and is lower with the default quality filter on |
+| B9 page-level scrollbar | **Fixed** | `test_mixer_v02.py::test_no_page_scrollbar_beside_the_filter_panel` (3 sizes) passes; real-app screenshot `tests/e2e/artifacts/qa-v02-real/after-upgrade.png` has no outer scrollbar |
+| B10 ARCHITECTURE §2 | **Fixed** | §2 lists `core/move_sounds.py`, `core/stats.py`, `core/db_update.py`, the v0.2 services, `scripts/make_icon.py` and `tests/fixtures/tools/` |
+
+## New findings (round 2)
+
+### v0.2-R2-1: minor (test): the builder's B3 regression test doesn't catch the bug on the pre-fix code
+`tests/integration/test_session.py::test_swap_between_the_version_check_and_the_read_never_serves_a_wrong_puzzle` was described as failing on the pre-fix code. In a scratch worktree at `3c20bf5`, it fails there only with a `TypeError`, because the old `get()` has no `version` argument. With the call adapted to the old signature, it **passes** on the buggy code. The stale key happened to land on a 468-rated puzzle, which still matches its `rating_max=1000` filter, because the new file keeps many low-rated puzzles.
+
+QA added `tests/integration/test_qa_v02_round2.py::test_stale_key_after_a_swap_inside_the_read_window_is_never_served`. Its new file keeps only puzzles rated above the filter, plus a few matching ones. Results:
+- **Pre-fix `3c20bf5`:** fails with `[('MJXhc', 912), …]`, a 912-rated puzzle served under `rating_max=900`.
+- **Fixed `4cde058`:** passes.
+
+The fix itself is correct. Only the builder's test is weak. I deleted the worktree afterwards.
+
+Note, not a bug: with the panel now scrolled to the top, `docs/img/mixer.png` cuts off the match count at the bottom edge ("307,865 puzzles match" is half visible). It's cosmetic, and the caption doesn't mention the count.
+
+## Tests added in round 2
+- `tests/integration/test_qa_v02_round2.py::test_stale_key_after_a_swap_inside_the_read_window_is_never_served` (R2-1; checked against both the pre-fix and fixed code).
+- `tests/smoke/test_qa_v02_real_app.py::test_enter_after_mouse_clicks_is_next_in_the_real_app` (B1 in the real WebView2 window).
+
+## Still for Adam's manual test
+The round-1 list stands, except that B1 has now been checked in the real window. B3 can still be watched for after a real mid-session update.
