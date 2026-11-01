@@ -18,6 +18,7 @@ ALLOWLIST = {
     "get_puzzle_db_status",
     "choose_puzzle_file",
     "start_puzzle_import",
+    "start_puzzle_db_upgrade",
     "get_job",
     "cancel_job",
     "get_settings",

@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from weaksquare import config
 from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
-from weaksquare.adapters.db.migrate import NewerSchemaError, migrate
-from weaksquare.adapters.db.repos.puzzle_import import PuzzleDbWriter
+from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
@@ -113,13 +113,17 @@ def build_services(
             sha256=sha256_file,
             swap=db.swap_puzzles_db,
             read_meta=meta.read,
+            open_existing=ExistingPuzzleDb,
+            schema_version=read_version,
+            latest_schema=load_migrations(config.MIGRATIONS_DIR / "puzzles")[-1].version,
         ),
         runner,
         clock,
     )
     puzzles = LichessDbSource(db)
+    attempts = AttemptsRepo(db)
     mixer = MixerService(puzzles, SettingsRepo(db))
-    sessions = SessionService(puzzles, AttemptsRepo(db), SessionsRepo(db), clock, rng)
+    sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
     return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions)
 
 

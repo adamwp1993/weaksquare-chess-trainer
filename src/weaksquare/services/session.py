@@ -43,7 +43,14 @@ class PuzzleSource(Protocol):
 
 class Attempts(Protocol):
     def append(
-        self, ref: PuzzleRef, session_id: int, mode: str, started_at: str, finished_at: str, result: AttemptResult
+        self,
+        ref: PuzzleRef,
+        session_id: int,
+        mode: str,
+        started_at: str,
+        finished_at: str,
+        result: AttemptResult,
+        puzzle_rating: int | None = None,
     ) -> int: ...
 
     def session_tally(self, session_id: int) -> object: ...
@@ -154,7 +161,7 @@ class SessionService:
         assert s.current is not None
         p = s.current.state.puzzle
         self._attempts.append(p.ref, s.id, self._mode.name, s.current.started_at,
-                              self._clock.now().isoformat(timespec="seconds"), result)  # fmt: skip
+                              self._clock.now().isoformat(timespec="seconds"), result, p.rating)  # fmt: skip
         return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating)
 
     def next_puzzle(self, session_id: int) -> PuzzleView | None:

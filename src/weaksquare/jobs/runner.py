@@ -105,7 +105,7 @@ class JobRunner:
 
         def run() -> None:
             try:
-                fn(progress, token)
+                result = fn(progress, token)
             except JobCancelled:
                 self._set(job_id, state="cancelled", message="Cancelled")
                 log.info("%s (%s) cancelled", job_id, kind)
@@ -115,8 +115,8 @@ class JobRunner:
             except Exception:
                 log.exception("%s (%s) crashed", job_id, kind)
                 self._set(job_id, state="failed", message="Something went wrong. See the log.", error_code="internal")
-            else:
-                self._set(job_id, state="done", progress=1.0, message="Done")
+            else:  # a job may return its own finish message (e.g. the import's new/removed counts)
+                self._set(job_id, state="done", progress=1.0, message=result if isinstance(result, str) else "Done")
 
         thread = threading.Thread(target=run, name=f"{kind}-{job_id}", daemon=True)
         with self._lock:

@@ -67,6 +67,8 @@ To add one:
 
 `puzzles.db` is never migrated in place. Every import builds a new file from all the puzzle migrations, then creates the indexes in `adapters/db/puzzles_indexes.sql` after the bulk load.
 
+When you add a puzzle migration, an existing `puzzles.db` has an older `schema_version` than the app knows. The app then shows **Upgrade the puzzle database**, which rebuilds the file from its own rows (`ExistingPuzzleDb` in `adapters/db/repos/puzzle_import.py`) through the same import path, with no download. The v0.2 upgrade (schema 1 → 2) adds the opening ids. A new column computed at import (like `opening_family`) needs its value derived from the CSV fields in `PuzzleDbWriter.add`, because the upgrade only replays those fields.
+
 ## Testing
 Levels and when each runs: ARCHITECTURE.md §6. Rules:
 - Tests mock `secret_store`, never `keyring`.

@@ -59,15 +59,31 @@ class AttemptsRepo:
         started_at: str,
         finished_at: str,
         result: AttemptResult,
+        puzzle_rating: int | None = None,
     ) -> int:
         with self._db.session() as conn:
             cur = conn.execute(
                 "INSERT INTO attempts (puzzle_source, puzzle_id, session_id, mode, started_at, finished_at, win,"
-                " help_used, first_move_correct, line_correct, time_ms) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " help_used, first_move_correct, line_correct, time_ms, puzzle_rating)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ref.source, ref.id, session_id, mode, started_at, finished_at, int(result.win), result.help_used,
-                 int(result.first_move_correct), int(result.line_correct), result.time_ms),
+                 int(result.first_move_correct), int(result.line_correct), result.time_ms, puzzle_rating),
             )  # fmt: skip
             return int(cur.lastrowid or 0)
+
+    def backfill_puzzle_ratings(self) -> int:
+        """Fill `puzzle_rating` on attempts recorded before v0.2, from puzzles.db where the puzzle still
+        exists. Idempotent and cheap (only rows still missing it); returns how many were filled."""
+        with self._db.session() as conn:
+            attached = conn.execute("SELECT 1 FROM pragma_database_list WHERE name = 'pz'").fetchone()
+            if not attached:
+                return 0
+            cur = conn.execute(
+                "UPDATE attempts SET puzzle_rating = (SELECT p.rating FROM pz.puzzles p WHERE p.id = attempts.puzzle_id)"
+                " WHERE puzzle_rating IS NULL AND puzzle_source = 'lichess'"
+                " AND EXISTS (SELECT 1 FROM pz.puzzles p WHERE p.id = attempts.puzzle_id)"
+            )
+            return cur.rowcount
 
     def _tally(self, where: str, params: tuple[Any, ...]) -> Tally:
         with self._db.session() as conn:

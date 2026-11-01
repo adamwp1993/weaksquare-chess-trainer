@@ -90,8 +90,9 @@ class Api:
     def get_puzzle_db_status(self) -> PuzzleDbStatus:
         s = self._puzzle_db.status()
         return PuzzleDbStatus(
-            s.installed, s.puzzle_count, s.export_date, s.imported_at, s.rating_min, s.rating_max, s.import_job_id
-        )
+            s.installed, s.puzzle_count, s.export_date, s.imported_at, s.rating_min, s.rating_max, s.import_job_id,
+            s.needs_upgrade,
+        )  # fmt: skip
 
     @bridge_call
     def choose_puzzle_file(self) -> str | None:
@@ -103,6 +104,11 @@ class Api:
         if local_path is not None and (len(local_path) > 1000 or chr(0) in local_path):
             raise ValidationError("That isn't a valid file path.")
         return self._puzzle_db.start_import(local_path)
+
+    @bridge_call
+    def start_puzzle_db_upgrade(self) -> str:
+        """Rebuild an older-schema puzzles.db from its own rows (no download). Returns the job ID."""
+        return self._puzzle_db.start_upgrade()
 
     # ---- jobs -----------------------------------------------------------------------------------
     @bridge_call

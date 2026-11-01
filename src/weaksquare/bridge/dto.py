@@ -51,6 +51,7 @@ class PuzzleDbStatus:
     rating_min: int | None
     rating_max: int | None
     import_job_id: str | None
+    needs_upgrade: bool  # an older-schema puzzles.db: rebuild it locally (no download) first
 
 
 @dataclass(frozen=True)

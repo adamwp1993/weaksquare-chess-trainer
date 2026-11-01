@@ -35,6 +35,7 @@ export interface PuzzleDbStatus {
   rating_min: number | null;
   rating_max: number | null;
   import_job_id: string | null;
+  needs_upgrade: boolean;
 }
 
 export interface RatioBucket {

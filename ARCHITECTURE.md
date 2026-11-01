@@ -189,6 +189,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.2: puzzles.db schema v2, upgraded locally from the old file
+- Context: the opening (FR-3.7) and quality (FR-3.8) filters need new columns and a wider covering index. puzzles.db is attached read-only, and the download is deleted after an import, so a v1 database can't be migrated in place or simply re-imported from disk.
+- Decision: `puzzles/0002_openings_quality.sql` adds `opening_family` and `opening_variation` (ids into a new `openings(id, tag, family_id, count)` table; the first OpeningTags tag is the family, the second its variation). The covering index becomes `(rating, length, player_color, t0, t1, t2, popularity, nb_plays)`, plus `(opening_family, rating)` and `(opening_variation, rating)`. When `puzzles.db` has an older schema, the app offers an **upgrade** job: `ExistingPuzzleDb` streams the current file's rows CSV-shaped through the same parser and `PuzzleDbWriter` into `puzzles.new.db`, which is checked and swapped as in FR-2.3. The writer also attaches the database it replaces and counts new and removed puzzle IDs before the swap (FR-2.5); a job can now return its own finish message. user.db `0002` adds `presets` and a nullable `attempts.puzzle_rating`, which is backfilled from puzzles.db where the puzzle still exists.
+- Alternatives: `ALTER TABLE` plus a 6M-row `UPDATE` on a copy of the live file (slower, and a second import path); forcing a 300 MB re-download.
+- Consequences: one code path builds every puzzles.db. Each future puzzles.db schema change reuses the upgrade job.
+
 ### 2026-11-01, v0.1: Standard-mode scoring details and the `TrainingMode` shape
 - Context: Show answer arrives only in v0.2, so v0.1 needed a defined behavior after a wrong move and when you move on early.
 - Decision: a wrong move decides the attempt as a loss at that moment (it's appended to `attempts` then), the move is taken back, and you can keep playing the line with nothing more recorded. Moving on before the attempt is decided (**Skip**) records a loss. Themes are revealed with the decision. The v0.1 protocol is `start`, `on_move` and `give_up`; `on_help` joins it in v0.2 with Hint and Show answer, rather than shipping unused.
