@@ -83,10 +83,11 @@ Scope:
 - History import (FR-6.17), the "exclude played on Lichess" filter, and the "already played" badge.
 - Sync queue: batches under 100, backoff, offline mode, Rated toggle, angle rule (FR-1.7, 1.9, FR-6.8–6.16).
 - Sign-out revokes the token.
+- **Puzzle rating display** (FR-6.11a–d, FR-9.4): your Lichess puzzle rating in the header, the +/− change per puzzle on the result panel (with Syncing… / Will sync later / Unrated states), the session total in the session bar, the change stored per attempt, and a rating trend chart on Stats.
 - `scripts/set_test_token.py`: prompts for the live-test token with hidden input (`getpass`) and stores it through `secret_store` under `weaksquare-test`. Adam runs it himself in a normal PowerShell window, never inside Claude Code.
 
-**Done when:** angle-rule unit tests cover all FR-6.13/6.14 cases; sync integration tests run against the fake client; the live test (`-m live`) syncs 3 `rated:false` solves using the separate test token (SR-13).
-**Adam's manual test:** sign in → solve offline (Wi-Fi off) → reconnect → queue drains → solves appear on Lichess → sign out → token is gone from Credential Manager.
+**Done when:** angle-rule unit tests cover all FR-6.13/6.14 cases; sync integration tests run against the fake client; the live test (`-m live`) syncs 3 `rated:false` solves using the separate test token (SR-13), and records the real response shape for the fake client; rating-display tests cover a positive change, a negative change, offline then synced, Rated off, already played, a 0 or missing change, and the session total, all against the fake client; a test proves the header rating only ever comes from Lichess responses.
+**Adam's manual test:** sign in (your rating appears in the header and matches lichess.org) → solve a few rated `mix` puzzles (each shows +/− and the header and session total update; compare with lichess.org) → solve offline (Wi-Fi off; Will sync later) → reconnect → queue drains and the changes fill in → solves appear on Lichess → check the rating trend on Stats → sign out → token is gone from Credential Manager.
 
 ---
 

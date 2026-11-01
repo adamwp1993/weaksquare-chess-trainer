@@ -226,7 +226,15 @@ Habit tags (FR-10.27) and themes describe **what** went wrong. Mistake reasons r
 - **FR-6.8** Endpoint: `POST https://lichess.org/api/puzzle/batch/{angle}` (scope `puzzle:write`). Body: `{"solutions":[{"id":"…","win":true,"rated":true}, …]}`.
 - **FR-6.9** **Fewer than 100 solutions per request** (the server rejects 100 or more).
 - **FR-6.10** **Rate limit** (from Lichess server source, Oct 2026): 400 cost per hour per IP, and an authenticated solve costs 2, so about **200 solves per hour**. Send in batches and back off on HTTP 429.
-- **FR-6.11** Use `rating_diff` and `glicko` from the response to update the local display of the Lichess puzzle rating.
+- **FR-6.11** Use `rating_diff` and `glicko` from the response to update the local display of the Lichess puzzle rating. (Check the exact response field names against a live response in v0.3 and record them in the fake client.)
+  - **FR-6.11a** **Your rating, always visible when signed in:** the main page header shows your current Lichess puzzle rating, with `?` while it's provisional. It's read from `GET /api/account` (`perfs.puzzle`) at sign-in, then updated from every sync response. It's never computed or estimated locally (never inflate ratings). When you're not signed in, it isn't shown.
+  - **FR-6.11b** **Change per puzzle:** after a puzzle ends, the result panel shows its rating change, e.g. **+8** in green or **−12** in red, as soon as Lichess returns it.
+    - Solves sync right away when online (FR-6.16), so this normally appears within a second or two.
+    - Until Lichess replies it shows *Syncing…*. Offline it shows *Will sync later*, and the number fills in on the attempt once the queue drains.
+    - When Lichess doesn't rate the solve, it says why instead of showing a number: *Unrated (Rated is off)*, *Already played: rating unaffected* (FR-4.6), or *Not rated by Lichess* for a 0 or missing change.
+    - A tooltip explains that themed angles count for less than `mix` (§8.3), so a small change after a themed session is expected.
+  - **FR-6.11c** **Session total:** the session bar shows the net rating change for this session (e.g. *+34 this session*), summed only from changes Lichess actually returned.
+  - **FR-6.11d** **History:** each returned change and the new rating are saved with the attempt in `user.db` (new migration), and feed the rating trend (FR-9.4).
 - **FR-6.12** Puzzles no longer on Lichess are silently skipped by the server. Mark them `sync_status = skipped`, not as an error.
 
 ### 8.3 Angle reporting (rating integrity)
@@ -451,7 +459,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-9.1** Accuracy per theme, per length, per mode, and per rating band.
 - **FR-9.2** **First move right, line wrong** rate. This is the key metric for whether calculation is improving.
 - **FR-9.3** Time to solve, help usage, Commit-mode calculation accuracy, Name-the-idea tag accuracy, Danger-spotting accuracy.
-- **FR-9.4** Lichess puzzle rating trend, from sync responses.
+- **FR-9.4** Lichess puzzle rating trend, from sync responses (stored per FR-6.11d): a line chart of your rating over time on the Stats page, with the change per session.
 - **FR-9.5** Weakest themes list, with a one-click "drill these" preset.
 - **FR-9.6** Weakness tracking and checkpoint history are on the Coach's Progress page (FR-10.38). Stats links to it.
 - **FR-9.7** **Mistake-reason breakdown** (§7.3): overall, and filterable by theme, habit tag, mode and source (puzzles vs. games), with a trend over time. Puzzle-vs-game comparison is included (e.g. forks you miss in games because you didn't look but solve fine in puzzles). Misclicks are shown separately.
