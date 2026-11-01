@@ -152,3 +152,24 @@ def test_board_faces_the_side_you_play(page) -> None:  # type: ignore[no-untyped
     page.get_by_test_id("next-button").click()  # skip
     page.get_by_test_id("puzzle-header").filter(has_text="you play white").wait_for()
     assert "orientation-white" in (wrap.get_attribute("class") or "")
+
+
+def test_enter_on_a_keyboard_focused_button_still_presses_it(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.2-B1 regression, the other side: Tab to a button and press Enter, and the button acts
+    (here Hint), rather than the Next shortcut."""
+    start(page)
+    page.get_by_test_id("hint-button").focus()
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")  # keyboard focus: :focus-visible
+    page.keyboard.press("Enter")
+    page.get_by_test_id("trainer-message").filter(has_text="Hint").wait_for()
+    assert "Puzzle 1" in page.get_by_test_id("puzzle-header").inner_text()
+
+
+def test_enter_after_clicking_hint_goes_to_the_next_puzzle(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.2-B1: after a mouse click on Hint, Enter is Next, not a second Hint."""
+    start(page)
+    page.get_by_test_id("hint-button").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Hint").wait_for()
+    page.keyboard.press("Enter")
+    page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 2").wait_for()

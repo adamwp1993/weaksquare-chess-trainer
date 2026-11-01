@@ -157,7 +157,6 @@ def test_preset_name_of_61_characters_is_refused(page) -> None:  # type: ignore[
     assert not any(isinstance(c, str) and c.startswith("save_preset:" + "x" * 61) for c in names)
 
 
-@pytest.mark.xfail(strict=True, reason="v0.2-B1: Enter re-clicks the focused Start button and restarts the session")
 def test_enter_after_a_mouse_session_goes_to_the_next_puzzle(page) -> None:  # type: ignore[no-untyped-def]
     """User Guide, Keyboard shortcuts: 'N or Enter: Next puzzle'. Start and solve with the mouse (focus
     stays on Start), then press Enter: you should get puzzle 2 of the same session."""
