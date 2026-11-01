@@ -109,7 +109,7 @@ export function MixerView({
                 {countError}
               </Text>
             ) : (
-              <Text fw={600}>{count === null ? "…" : `${count.toLocaleString("en-US")} puzzles match`}</Text>
+              <Text fw={600}>{count === null ? "…" : `${count.toLocaleString("en-US")} ${count === 1 ? "puzzle matches" : "puzzles match"}`}</Text>
             )}
           </Group>
         </Group>

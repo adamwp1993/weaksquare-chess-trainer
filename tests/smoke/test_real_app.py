@@ -19,6 +19,13 @@ def test_about_screen_shows_the_data_folder(app_page, real_app: RunningApp) -> N
     dialog.get_by_text("Data folder").wait_for()
     assert str(real_app.data_dir) in dialog.inner_text()
     assert "AGPL-3.0-or-later" in dialog.inner_text()
+    # Regression for v0.1-B7: with a long path (this temp folder), the Open buttons stay inside the dialog.
+    app_page.set_viewport_size({"width": 1000, "height": 700})
+    content = dialog.bounding_box()
+    for button in dialog.get_by_role("button", name="Open").all():
+        box = button.bounding_box()
+        assert box is not None and content is not None
+        assert box["x"] + box["width"] <= content["x"] + content["width"] + 1
 
 
 def test_first_run_shows_the_import_screen(app_page) -> None:  # type: ignore[no-untyped-def]

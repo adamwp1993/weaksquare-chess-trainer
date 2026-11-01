@@ -32,9 +32,9 @@ export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () =
               <Table.Tr>
                 <Table.Th>Data folder</Table.Th>
                 <Table.Td>
-                  <Group gap="xs" wrap="nowrap">
-                    <Code style={{ wordBreak: "break-all" }}>{info.data_dir}</Code>
-                    <Button size="compact-xs" variant="light" onClick={() => open("data")}>
+                  <Group gap="xs" wrap="nowrap" align="flex-start">
+                    <Code style={{ wordBreak: "break-all", flex: 1, minWidth: 0 }}>{info.data_dir}</Code>
+                    <Button size="compact-xs" variant="light" style={{ flexShrink: 0 }} onClick={() => open("data")}>
                       Open
                     </Button>
                   </Group>
@@ -43,9 +43,9 @@ export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () =
               <Table.Tr>
                 <Table.Th>Logs folder</Table.Th>
                 <Table.Td>
-                  <Group gap="xs" wrap="nowrap">
-                    <Code style={{ wordBreak: "break-all" }}>{info.logs_dir}</Code>
-                    <Button size="compact-xs" variant="light" onClick={() => open("logs")}>
+                  <Group gap="xs" wrap="nowrap" align="flex-start">
+                    <Code style={{ wordBreak: "break-all", flex: 1, minWidth: 0 }}>{info.logs_dir}</Code>
+                    <Button size="compact-xs" variant="light" style={{ flexShrink: 0 }} onClick={() => open("logs")}>
                       Open
                     </Button>
                   </Group>

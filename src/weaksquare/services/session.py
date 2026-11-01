@@ -28,6 +28,10 @@ MAX_BAD_PUZZLES = 20
 
 
 class PuzzleSource(Protocol):
+    def version(self) -> int: ...
+
+    def keys_for_ids(self, ids: list[str]) -> set[int]: ...
+
     def count(self, spec: FilterSpec) -> int: ...
 
     def sample_keys(
@@ -62,8 +66,10 @@ class _Session:
     id: int
     spec: FilterSpec
     match_count: int
+    db_version: int
     queue: deque[int] = field(default_factory=deque)
     served_keys: set[int] = field(default_factory=set)
+    served_ids: list[str] = field(default_factory=list)
     served: int = 0
     current: _Current | None = None
     exhausted: bool = False
@@ -135,7 +141,7 @@ class SessionService:
             raise ValidationError("No puzzles match these filters. Widen them and try again.")
         sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), self._mode.name,
                                          spec.to_json(), spec.queue_size)  # fmt: skip
-        self._sessions[sid] = _Session(sid, spec, count)
+        self._sessions[sid] = _Session(sid, spec, count, self._puzzles.version())
         return SessionInfo(sid, count, spec.queue_size)
 
     def _session(self, session_id: int) -> _Session:
@@ -161,6 +167,7 @@ class SessionService:
                 if result is not None:
                     self._record(s, result)
                 s.current = None
+            self._follow_reimport(s)
             for _ in range(MAX_BAD_PUZZLES):
                 if s.spec.queue_size is not None and s.served >= s.spec.queue_size:
                     return None
@@ -179,10 +186,23 @@ class SessionService:
                     log.warning("skipping puzzle %s: its moves aren't legal", puzzle.ref)
                     continue
                 s.served += 1
+                s.served_ids.append(puzzle.ref.id)
                 s.current = _Current(state, self._clock.now().isoformat(timespec="seconds"))
                 return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, puzzle.moves[0],
                                   "white" if state.board.turn else "black", puzzle.rating)  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
+
+    def _follow_reimport(self, s: _Session) -> None:
+        """A puzzle-DB update was swapped in mid-session: queued keys now point at other puzzles.
+        Drop them, re-find the puzzles already served by ID (so none repeats), and re-count."""
+        version = self._puzzles.version()
+        if version == s.db_version:
+            return
+        log.info("session %d: the puzzle database changed; rebuilding its queue", s.id)
+        s.db_version = version
+        s.queue.clear()
+        s.served_keys = self._puzzles.keys_for_ids(s.served_ids)
+        s.match_count = self._puzzles.count(s.spec)
 
     def _refill(self, s: _Session) -> None:
         n = refill_size(s.spec.queue_size, s.served, len(s.queue))

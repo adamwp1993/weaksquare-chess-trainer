@@ -33,6 +33,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
 - **Sign-ins and API keys** are never written to files. From v0.3, your Lichess sign-in, and from v0.7 any AI provider key, are stored in **Windows Credential Manager**. Signing out removes them.
 - **Nothing leaves your PC** unless you use a feature that needs the internet. Those features are listed in their own sections, along with what they send.
   - **Puzzle database download** (v0.1): requests the public puzzle file and its checksum list from database.lichess.org. Nothing else is sent.
+  - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
 ## Getting started: the puzzle database
 *Added in v0.1.*

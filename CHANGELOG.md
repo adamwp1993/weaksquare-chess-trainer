@@ -14,7 +14,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 ## [Unreleased]
 
 ### Added
-- Project specification, architecture, roadmap, QA agent, documentation set and repo guardrails. No app code yet.
+- Project specification, architecture, roadmap, QA agent, documentation set and repo guardrails.
 - Licensed AGPL-3.0-or-later.
 - The app window opens from the **WeakSquare Chess Trainer** shortcut in the Start menu, which `python scripts/setup.py` creates along with everything else the app needs. Re-running setup is safe. [NFR-8]
 - **About** screen (the **?** button): version, your data and logs folders with Open buttons, the license and a link to the source code. [NFR-7]

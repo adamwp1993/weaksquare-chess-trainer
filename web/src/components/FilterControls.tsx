@@ -1,7 +1,46 @@
 import { Checkbox, Group, NumberInput, RangeSlider, SegmentedControl, Stack, Switch, Text } from "@mantine/core";
+import { useState } from "react";
 import { LENGTH_OPTIONS } from "../state/filters";
 
+// A number box that only commits on blur or Enter, so typing "1600" isn't clamped keystroke by
+// keystroke (v0.1-B3). Re-mounted (via `key`) whenever the committed value changes elsewhere.
+function CommitNumberInput({
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | number>(value);
+  const commit = () => {
+    const n = typeof draft === "number" ? draft : Number.parseInt(draft, 10);
+    if (Number.isFinite(n)) onCommit(Math.min(Math.max(Math.round(n), min), max));
+    else setDraft(value);
+  };
+  return (
+    <NumberInput
+      aria-label={label}
+      size="xs"
+      value={draft}
+      allowDecimal={false}
+      allowNegative={false}
+      onChange={setDraft}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+      }}
+    />
+  );
+}
+
 // FR-3.3: two-handle slider plus numeric min/max. `null` means "the dataset's bound".
+// Typed values commit on blur or Enter and are clamped to the bounds then.
 export function RatingSlider({
   bounds,
   min,
@@ -33,21 +72,21 @@ export function RatingSlider({
         aria-label="Rating range"
       />
       <Group grow gap="xs">
-        <NumberInput
-          aria-label="Minimum rating"
-          size="xs"
-          min={lo}
-          max={vmax}
+        <CommitNumberInput
+          key={`min-${vmin}`}
+          label="Minimum rating"
           value={vmin}
-          onChange={(v) => typeof v === "number" && emit(Math.min(Math.max(v, lo), vmax), vmax)}
-        />
-        <NumberInput
-          aria-label="Maximum rating"
-          size="xs"
-          min={vmin}
+          min={lo}
           max={hi}
+          onCommit={(a) => emit(a, Math.max(a, vmax))}
+        />
+        <CommitNumberInput
+          key={`max-${vmax}`}
+          label="Maximum rating"
           value={vmax}
-          onChange={(v) => typeof v === "number" && emit(vmin, Math.max(Math.min(v, hi), vmin))}
+          min={lo}
+          max={hi}
+          onCommit={(b) => emit(Math.min(vmin, b), b)}
         />
       </Group>
     </Stack>

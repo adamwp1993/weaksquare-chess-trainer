@@ -87,6 +87,7 @@ class Database:
         self._registry_lock = threading.Lock()
         self._registry: set[sqlite3.Connection] = set()
         self._generation = 0
+        self._puzzles_generation = 0
         self._closed = False
         # WAL is a property of the file; set it once here rather than racing on every thread's open.
         init = sqlite3.connect(user_db, timeout=5.0)
@@ -94,6 +95,11 @@ class Database:
             init.execute("PRAGMA journal_mode=WAL")
         finally:
             init.close()
+
+    @property
+    def puzzles_generation(self) -> int:
+        """Bumped every time puzzles.db is swapped; puzzle keys (`n`) from an older generation are stale."""
+        return self._puzzles_generation
 
     @property
     def puzzles_db_path(self) -> Path:
@@ -160,6 +166,7 @@ class Database:
         with self._lock.exclusive():
             self._close_registered()
             os.replace(new_file, self._puzzles_db)
+            self._puzzles_generation += 1
             log.info("puzzles.db replaced")
 
     def close_all(self) -> None:

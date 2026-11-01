@@ -31,6 +31,10 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
   const [error, setError] = useState<string | null>(null);
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
+  // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
+  // failure for a puzzle you never saw (v0.1-B1).
+  const loading = useRef(false);
+  const [busy, setBusy] = useState(false);
 
   const later = (fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
@@ -41,6 +45,9 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
   }, [sessionId]);
 
   const load = useCallback(async () => {
+    if (loading.current) return;
+    loading.current = true;
+    setBusy(true);
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setOutcome(null);
@@ -69,6 +76,9 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
       }, OPPONENT_DELAY_MS);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      loading.current = false;
+      setBusy(false);
     }
   }, [sessionId, refreshStats]);
 
@@ -201,7 +211,7 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
           <Button
             onClick={load}
             variant={decided || lineDone ? "filled" : "default"}
-            disabled={!view}
+            disabled={!view || busy}
             data-testid="next-button"
           >
             {decided || lineDone ? "Next puzzle" : "Skip (counts as failed)"}

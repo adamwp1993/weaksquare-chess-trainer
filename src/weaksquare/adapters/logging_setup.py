@@ -42,7 +42,32 @@ class RedactingFilter(logging.Filter):
         return True
 
 
-def setup_logging(logs_dir: Path, app_version: str, *, webview_version: str = "unknown") -> RotatingFileHandler:
+WEBVIEW2_CLIENT = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+
+
+def webview2_version() -> str:
+    """The installed WebView2 Runtime version, from where Microsoft documents it in the registry."""
+    if sys.platform != "win32":  # pragma: no cover
+        return "n/a"
+    import winreg
+
+    places = [
+        (winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\" + WEBVIEW2_CLIENT),
+        (winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\" + WEBVIEW2_CLIENT),
+        (winreg.HKEY_CURRENT_USER, "Software\\" + WEBVIEW2_CLIENT),
+    ]
+    for hive, key in places:
+        try:
+            with winreg.OpenKey(hive, key) as k:
+                value, _ = winreg.QueryValueEx(k, "pv")
+                if value and value != "0.0.0.0":
+                    return str(value)
+        except OSError:
+            continue
+    return "not found"
+
+
+def setup_logging(logs_dir: Path, app_version: str, *, webview_version: str | None = None) -> RotatingFileHandler:
     logs_dir.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(
         logs_dir / "weaksquare.log", maxBytes=2 * 1024 * 1024, backupCount=4, encoding="utf-8"
@@ -59,7 +84,7 @@ def setup_logging(logs_dir: Path, app_version: str, *, webview_version: str = "u
         app_version,
         platform.python_version(),
         platform.platform(),
-        webview_version,
+        webview_version or webview2_version(),
     )
     install_crash_hooks()
     return handler

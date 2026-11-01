@@ -40,5 +40,5 @@ def test_anonymized(path: Path) -> None:
 
 
 def test_checker_catches_a_real_url() -> None:
-    assert GAME_URL.search("https://lichess.org/787zsVup/black#48")
+    assert GAME_URL.search("https://lichess.org/Xy12Ab34/black#48")  # shaped like a real ID (v0.1-B12)
     assert not GAME_URL.search("https://lichess.org/GAMEID01")

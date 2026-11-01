@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 import secrets
 import time
@@ -17,5 +18,7 @@ class SystemClock:
 
 
 def make_rng() -> random.Random:
-    """One seeded Random for the whole app. The seed is logged so a session can be replayed."""
-    return random.Random(secrets.randbits(64))
+    """One seeded Random for the whole app. The seed is logged so a session's queue can be replayed."""
+    seed = secrets.randbits(64)
+    logging.getLogger("weaksquare").info("random seed: %d", seed)
+    return random.Random(seed)

@@ -42,3 +42,21 @@ def test_filter_redacts_args_and_tracebacks(tmp_path: Path) -> None:
     assert FAKE_LICHESS not in content
     assert "FAKEFAKEFAKEFAKEFAKEFAKE" not in content
     assert "[REDACTED]" in content
+
+
+def test_banner_records_the_webview2_version(tmp_path: Path) -> None:
+    """Regression for v0.1-B6: the first log line named WebView2 as 'unknown'."""
+    import re
+
+    from weaksquare.adapters.logging_setup import setup_logging, webview2_version
+
+    assert re.fullmatch(r"\d+(\.\d+)+|not found", webview2_version())
+    handler = setup_logging(tmp_path, "0.1.0")
+    root = logging.getLogger()
+    try:
+        first = (tmp_path / "weaksquare.log").read_text(encoding="utf-8").splitlines()[0]
+    finally:
+        root.removeHandler(handler)
+        handler.close()
+    assert "WebView2 unknown" not in first
+    assert f"WebView2 {webview2_version()}" in first

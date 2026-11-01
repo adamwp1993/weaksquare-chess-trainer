@@ -153,15 +153,20 @@ def attach(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
     page = None
 
     def page_ready() -> bool:
+        """Find the app's page. While waiting, wait_for_event keeps Playwright's event loop running so
+        the page's attach event is processed (a plain sleep doesn't; that was v0.1-B4)."""
         nonlocal page
         for ctx in browser.contexts:
             for p in ctx.pages:
                 if p.url.startswith("http"):
                     page = p
                     return True
+        for ctx in browser.contexts[:1]:
+            with contextlib.suppress(Exception):
+                ctx.wait_for_event("page", timeout=1000)
         return False
 
-    wait_for(page_ready, 30, "the app page")
+    wait_for(page_ready, 60, "the app page")
     assert page is not None
     page.wait_for_function("() => !!(window.pywebview && window.pywebview.api)", timeout=30_000)
     try:

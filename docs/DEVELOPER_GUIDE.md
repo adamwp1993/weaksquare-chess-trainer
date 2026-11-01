@@ -87,7 +87,7 @@ Each recipe is written when the first real example exists, using that example.
 - Add an LLM provider: TODO(v0.7)
 
 ## Dependencies
-Add a dependency only when the version plan lists it. Check the exact package name on PyPI or npm first, add it with `uv add` or `npm install`, and commit `uv.lock` or `package-lock.json` with an ARCHITECTURE.md §7 entry. CI installs only from the lockfiles (`uv sync --locked`, `npm ci`).
+Add a dependency only when the version plan lists it. Check the exact package name on PyPI or npm first, add it with `uv add` or `npm.cmd --prefix web install`, and commit `uv.lock` or `package-lock.json` with an ARCHITECTURE.md §7 entry. CI installs only from the lockfiles (`uv sync --locked`, `npm.cmd --prefix web ci`).
 
 ## Continuous integration
 `.github/workflows/ci.yml` runs on every push and pull request on a Windows runner: static checks, unit, integration and contract tests on the small fixture, and `check_docs.py`. The real-app smoke, full-DB and live tests run locally only.

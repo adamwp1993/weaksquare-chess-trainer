@@ -33,7 +33,9 @@ def test_filters_then_solve_three(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_text("ALL", exact=True).click()
     # Rating 1100-1700, 2-move puzzles, a queue of 3.
     page.get_by_label("Minimum rating").fill("1100")
+    page.get_by_label("Minimum rating").press("Enter")
     page.get_by_label("Maximum rating").fill("1700")
+    page.get_by_label("Maximum rating").press("Enter")
     page.get_by_label("2 moves").check()
     page.get_by_label("Puzzles").fill("3")
     count.filter(has_text="307,865 puzzles match").wait_for()  # 5 mock puzzles
@@ -84,6 +86,7 @@ def your_turn_after_reply(page) -> None:  # type: ignore[no-untyped-def]
 def test_no_matches_disables_start(page) -> None:  # type: ignore[no-untyped-def]
     page.goto(page.base_url + "/")
     page.get_by_label("Minimum rating").fill("3200")
+    page.get_by_label("Minimum rating").press("Enter")
     page.get_by_test_id("match-count").filter(has_text="0 puzzles match").wait_for()
     assert page.get_by_role("button", name="Start").is_disabled()
 

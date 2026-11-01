@@ -94,6 +94,21 @@ class LichessDbSource:
     def __init__(self, db: Database) -> None:
         self._db = db
 
+    def version(self) -> int:
+        """Changes whenever puzzles.db is replaced by an import: puzzle keys don't survive that."""
+        return self._db.puzzles_generation
+
+    def keys_for_ids(self, ids: Sequence[str]) -> set[int]:
+        """Current keys of these puzzle IDs (IDs a newer export dropped are simply missing)."""
+        out: set[int] = set()
+        ids = list(ids)
+        with self._db.session() as conn:
+            for i in range(0, len(ids), 500):
+                chunk = ids[i : i + 500]
+                q = f"SELECT n FROM pz.puzzles WHERE id IN ({', '.join('?' * len(chunk))})"
+                out.update(r[0] for r in conn.execute(q, chunk))
+        return out
+
     def theme_bits(self) -> dict[str, int]:
         with self._db.session() as conn:
             return {r["theme"]: r["bit"] for r in conn.execute("SELECT theme, bit FROM pz.theme_bits")}
