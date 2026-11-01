@@ -1,0 +1,174 @@
+"""One-command setup for a fresh clone (NFR-8). Safe to re-run: every step skips what's already done.
+
+Usage (from the repo root, in PowerShell, cmd or Git Bash):
+    python scripts/setup.py                      # everything
+    python scripts/setup.py --no-shortcut        # don't create the Start-menu shortcut
+    python scripts/setup.py --skip-puzzle-db     # don't download/import the puzzle database now
+    python scripts/setup.py --puzzle-file PATH   # import a lichess_db_puzzle.csv.zst you already have
+    python scripts/setup.py --dev                # import the puzzles into the dev data folder instead
+
+Steps: uv (installed with pip if missing) -> Python packages from uv.lock -> npm packages from
+package-lock.json -> front-end build -> Playwright's Chromium -> pre-commit hooks -> puzzle database
+(about 300 MB download, skipped if already imported) -> Start-menu shortcut. Standard library only, because it runs before anything is installed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+WEB = ROOT / "web"
+SHORTCUT_NAME = "WeakSquare Chess Trainer.lnk"
+
+
+def step(title: str) -> None:
+    print(f"\n==> {title}", flush=True)
+
+
+def run(cmd: list[str], **kwargs: object) -> None:
+    print("   $ " + " ".join(cmd), flush=True)
+    subprocess.run(cmd, check=True, cwd=kwargs.pop("cwd", ROOT), **kwargs)  # type: ignore[call-overload]
+
+
+def fail(msg: str) -> None:
+    print(f"\nSetup stopped: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def check_prerequisites() -> str:
+    step("Checking prerequisites")
+    if sys.version_info < (3, 12):  # noqa: UP036 - runs on whatever Python the user has
+        fail(f"Python 3.12 or newer is needed (this is {sys.version.split()[0]}).")
+    if sys.platform != "win32":
+        fail("WeakSquare runs on Windows 10 or 11 only.")
+    npm = shutil.which("npm")  # resolves npm.cmd, which works under any PowerShell execution policy
+    if not npm:
+        fail("Node.js LTS isn't installed (npm wasn't found). Install it from nodejs.org and re-run.")
+    if not shutil.which("git"):
+        fail("Git for Windows isn't installed.")
+    print("   Python, Node.js and Git found.")
+    return npm
+
+
+def ensure_uv() -> list[str]:
+    step("uv (Python package manager)")
+    found = shutil.which("uv")
+    if found:
+        print(f"   found {found}")
+        return [found]
+    probe = subprocess.run([sys.executable, "-m", "uv", "--version"], capture_output=True)
+    if probe.returncode != 0:
+        run([sys.executable, "-m", "pip", "install", "--user", "uv"])
+    print(
+        "   Note: uv isn't on your PATH, so this setup runs it as `python -m uv`. The commands in the\n"
+        "   Developer Guide use `uv run …`; either add Python's user Scripts folder to PATH, or type\n"
+        "   `python -m uv run …` instead."
+    )
+    return [sys.executable, "-m", "uv"]
+
+
+def sync_python(uv: list[str]) -> None:
+    step("Python packages (uv sync --locked)")
+    run([*uv, "sync", "--locked"])
+
+
+def _lock_digest() -> str:
+    return hashlib.sha256((WEB / "package-lock.json").read_bytes()).hexdigest()
+
+
+def sync_npm(npm: str) -> None:
+    step("Front-end packages (npm ci)")
+    marker = WEB / "node_modules" / ".weaksquare-lock-sha256"
+    if marker.is_file() and marker.read_text().strip() == _lock_digest():
+        print("   already installed from the current package-lock.json")
+        return
+    run([npm, "ci"], cwd=WEB)
+    marker.write_text(_lock_digest())
+
+
+def build_front_end(npm: str) -> None:
+    step("Front-end build (web/dist)")
+    run([npm, "run", "build"], cwd=WEB)
+
+
+def install_playwright(uv: list[str]) -> None:
+    step("Playwright's Chromium (for the UI tests)")
+    run([*uv, "run", "playwright", "install", "chromium"])
+
+
+def install_pre_commit(uv: list[str]) -> None:
+    step("pre-commit hooks")
+    if (ROOT / ".git" / "hooks" / "pre-commit").is_file():
+        print("   already installed")
+        return
+    run([*uv, "run", "pre-commit", "install"])
+
+
+def import_puzzles(uv: list[str], args: argparse.Namespace) -> None:
+    step("Puzzle database")
+    if args.skip_puzzle_db:
+        print("   skipped (--skip-puzzle-db). You can import it from inside the app instead.")
+        return
+    cmd = [*uv, "run", "python", "scripts/fetch_puzzle_db.py", "--skip-if-present"]
+    if args.puzzle_file:
+        cmd += ["--file", str(Path(args.puzzle_file).resolve())]
+    if args.dev:
+        cmd.append("--dev")
+    run(cmd)
+
+
+def create_shortcut(args: argparse.Namespace) -> None:
+    step("Start-menu shortcut")
+    if args.no_shortcut:
+        print("   skipped (--no-shortcut)")
+        return
+    pythonw = ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    if not pythonw.is_file():
+        fail(f"{pythonw} is missing; the Python step didn't finish.")
+    programs = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    link = programs / SHORTCUT_NAME
+    # An inline -Command (not a .ps1 file), so it runs under any execution policy, including AllSigned.
+    # Values travel in environment variables to avoid quoting problems.
+    script = (
+        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:WS_LINK);"
+        "$s.TargetPath = $env:WS_TARGET; $s.Arguments = '-m weaksquare';"
+        "$s.WorkingDirectory = $env:WS_DIR; $s.Description = 'WeakSquare Chess Trainer';"
+        "$s.Save()"
+    )
+    env = dict(os.environ, WS_LINK=str(link), WS_TARGET=str(pythonw), WS_DIR=str(ROOT))
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], check=True, env=env)
+    print(f"   {link}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--no-shortcut", action="store_true")
+    ap.add_argument("--skip-puzzle-db", action="store_true")
+    ap.add_argument("--puzzle-file", metavar="PATH")
+    ap.add_argument("--dev", action="store_true", help="import the puzzles into the dev data folder")
+    args = ap.parse_args()
+
+    npm = check_prerequisites()
+    uv = ensure_uv()
+    sync_python(uv)
+    sync_npm(npm)
+    build_front_end(npm)
+    install_playwright(uv)
+    install_pre_commit(uv)
+    import_puzzles(uv, args)
+    create_shortcut(args)
+    print("\nSetup complete. Start WeakSquare Chess Trainer from the Start menu.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except subprocess.CalledProcessError as e:
+        fail(f"a step failed (exit code {e.returncode}): {' '.join(map(str, e.cmd))}")

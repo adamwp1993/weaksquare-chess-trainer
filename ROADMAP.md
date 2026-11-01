@@ -68,9 +68,14 @@ Scope:
 - Stuck ladder steps 1–2 **from the dataset solution**: Hint and Show answer, both counting as a loss (FR-5.2, §7.2). There's no engine yet.
 - Basic Stats page: accuracy per theme, length and rating band (FR-9.1, 9.2).
 - Keyboard shortcuts, auto-orient the board, coordinates toggle.
+- **Dark mode** (FR-1.12): Light / Dark / Match system, saved in `user.db` through the bridge.
+- **Importer wording** (FR-2.1a): the importer page and the User Guide say the download is the **whole** Lichess puzzle database, about 300 MB compressed (~6M puzzles, ~1.5 GB once imported).
+- **Desktop shortcut and app icon** (NFR-8a): `setup.py` makes a desktop shortcut too (`--no-desktop-shortcut` to skip). The new icon (2×2 board squares with the black cburnett queen) is used on both shortcuts, the window and the taskbar.
+- **Move sounds** (FR-1.13): move, capture, check, checkmate, castling, puzzle solved and failed; an on/off toggle and volume, saved in `user.db` through the bridge; licensed sound files with credits.
+- **Puzzle DB update check** (FR-2.5): daily background check against database.lichess.org, a banner with export dates, download size and an approximate puzzle count, Update now / Not now / Skip this export, and exact new/removed counts after the import.
 
-**Done when:** preset round-trip test; ratio sampling test (±5% over 1,000 draws); hint/answer recorded as a loss.
-**Adam's manual test:** build a "Combo night" preset with a 50/30/20 ratio, save, reload, play 15 puzzles, check Stats.
+**Done when:** preset round-trip test; ratio sampling test (±5% over 1,000 draws); hint/answer recorded as a loss; the color-scheme setting round-trips through the bridge and is applied on relaunch, and a test proves no browser storage is used for it; Playwright checks the main screens in both Light and Dark; the importer page text names the full database and its ~300 MB size; User Guide screenshots include one dark-mode shot; update-check tests with recorded, scrubbed HTTP fixtures cover same hash (no banner), new hash (banner with dates and size), no hash in `meta` (falls back to dates), offline (silent), an unreadable puzzle count (line omitted), the once-a-day limit via the injected clock, and Skip this export; a test proves the new/removed counts against two fixture databases; unit tests map each move to the right sound (quiet move, capture, check, mate, castling, en passant, promotion with capture) and prove a mate plays only the mate sound; Playwright with a stubbed audio player proves sounds play when on, never when off, and that the setting persists through the bridge; `CREDITS.md` lists every sound file with an AGPL-compatible license; `setup.py` tests (with a fake shell call) prove it creates both shortcuts with the icon, honors `--no-desktop-shortcut` and `--no-shortcut`, uses the known-folder Desktop path, and doesn't duplicate on re-run; the `.ico` contains every size from 16 to 256 px and matches what the icon script builds from the SVG.
+**Adam's manual test:** build a "Combo night" preset with a 50/30/20 ratio, save, reload, play 15 puzzles, check Stats. Switch to Dark, solve a puzzle and open every dialog (nothing unreadable), relaunch (still Dark), try Match system while toggling the Windows theme. Open the importer (☰ → Update puzzle database…) and check that the wording makes clear it's the full database. Relaunch with an older DB installed and check that the update banner appears with sensible details. Run the update and check the new/removed counts, then confirm that relaunching the same day doesn't check again. With sounds on, play puzzles with captures, checks and a mate, and listen for the right sounds, including the opponent's first move. Change the volume, turn sounds off (silent), relaunch (still off), and turn them back on. Re-run `setup.py`: a WeakSquare icon appears on your desktop (one, not two) and in Start, the icon looks right at desktop and taskbar size, and launching from the desktop works.
 
 ---
 
@@ -80,10 +85,11 @@ Scope:
 - History import (FR-6.17), the "exclude played on Lichess" filter, and the "already played" badge.
 - Sync queue: batches under 100, backoff, offline mode, Rated toggle, angle rule (FR-1.7, 1.9, FR-6.8–6.16).
 - Sign-out revokes the token.
+- **Puzzle rating display** (FR-6.11a–d, FR-9.4): your Lichess puzzle rating in the header, the +/− change per puzzle on the result panel (with Syncing… / Will sync later / Unrated states), the session total in the session bar, the change stored per attempt, and a rating trend chart on Stats.
 - `scripts/set_test_token.py`: prompts for the live-test token with hidden input (`getpass`) and stores it through `secret_store` under `weaksquare-test`. Adam runs it himself in a normal PowerShell window, never inside Claude Code.
 
-**Done when:** angle-rule unit tests cover all FR-6.13/6.14 cases; sync integration tests run against the fake client; the live test (`-m live`) syncs 3 `rated:false` solves using the separate test token (SR-13).
-**Adam's manual test:** sign in → solve offline (Wi-Fi off) → reconnect → queue drains → solves appear on Lichess → sign out → token is gone from Credential Manager.
+**Done when:** angle-rule unit tests cover all FR-6.13/6.14 cases; sync integration tests run against the fake client; the live test (`-m live`) syncs 3 `rated:false` solves using the separate test token (SR-13), and records the real response shape for the fake client; rating-display tests cover a positive change, a negative change, offline then synced, Rated off, already played, a 0 or missing change, and the session total, all against the fake client; a test proves the header rating only ever comes from Lichess responses.
+**Adam's manual test:** sign in (your rating appears in the header and matches lichess.org) → solve a few rated `mix` puzzles (each shows +/− and the header and session total update; compare with lichess.org) → solve offline (Wi-Fi off; Will sync later) → reconnect → queue drains and the changes fill in → solves appear on Lichess → check the rating trend on Stats → sign out → token is gone from Credential Manager.
 
 ---
 
@@ -150,9 +156,10 @@ Scope:
 - Multi-game aggregation reusing the v0.8 pipeline; puzzle-history source; free report; gap table (§10.1–10.5).
 - **Suggested default mix** with "Why this mix", the Apply/Compare/Dismiss banner, and reasons picking drill modes (§10.7).
 - Optional LLM coaching with validated presets (§10.6).
+- **Puzzles from your games** (§10.9, FR-10.39–10.45): the analysis turns qualifying mistakes into `custom_puzzles` (new migration), with a severity-level setting (Blunders only / Mistakes and blunders / plus inaccuracies). Includes a quality check, Missed solved as you and Allowed solved as your opponent, the 30 cp tolerance with engine continuation, My games filters, a share of these puzzles in the Suggested mix, and archive.
 
-**Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test).
-**Adam's manual test:** run the Coach on 50 rapid games → sanity-check the top 3 weaknesses against your own sense of your games → apply the Suggested mix.
+**Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test); quality-check tests accept and reject known positions (unique best move, several equal moves, already-decided position); each severity level produces the right set from fixture analysis, and narrowing archives (never deletes) with attempts kept; re-runs create no duplicates; Missed and Allowed puzzles have the right side to move and orientation; an alternative move within tolerance is accepted, and the engine continues from it; changing the level runs no new game analysis (test).
+**Adam's manual test:** run the Coach on 50 rapid games → sanity-check the top 3 weaknesses against your own sense of your games → apply the Suggested mix. Analyze your last 100 games with *Mistakes and blunders* → drill 10 of the generated puzzles (each should be a real mistake from your games, with a sensible answer and correct orientation) → switch to *Blunders only* (the count drops, no re-analysis) and back → try an Allowed puzzle as your opponent → open one in Game Review from its link.
 
 ---
 
@@ -164,6 +171,79 @@ Scope:
 
 **Done when:** weakness status-transition tests cover every rule in FR-10.35, using synthetic data; a checkpoint runs end to end on recorded data; a fresh clone on a clean Windows user profile goes from `setup.py` to a working app through the first-run wizard.
 **Adam's manual test:** clone and run `setup.py` from scratch on a clean Windows user profile → full first-run → play and sync 10 games over a few days → a checkpoint fires → Progress page updates.
+
+---
+
+## v1.1: macOS and Linux
+**Goal:** the same app, run from source, on Linux and macOS as well as Windows. No new features.
+
+Target platforms:
+- **Linux (fully supported):** Debian stable and Ubuntu LTS, x86-64, GTK desktop. Manually tested on clean VMs. Kali is a convenient extra check but not the reference distro.
+- **macOS (best effort):** Apple silicon and Intel. CI only, plus a manual pass when Adam has access to a real Mac (rented cloud Mac or borrowed hardware). macOS may only be virtualized on Apple hardware, so a VM on the Windows PC isn't an option. The README says "best effort" until a manual pass is done.
+
+Scope:
+- **Adapters:**
+  - single-instance lock with `fcntl` plus a local "bring your window forward" message
+  - open folders and links with `open` / `xdg-open`
+  - a portable fatal-error dialog
+  - the log banner records the WebKit/GTK version
+- **Window:** pywebview's GTK backend on Linux and Cocoa (WebKit) on macOS. Record the choice in ARCHITECTURE.md §7.
+- **Real-app smoke harness:** WebKit has no Chromium debugging port. Run the smoke tests through pywebview's Qt (Chromium) backend where possible, and document what can only be checked by hand.
+- **`setup.py`:**
+  - checks for the system packages pip can't install (WebKitGTK on Linux) and prints the exact install command
+  - creates a `.desktop` launcher on Linux and an app launcher on macOS
+- **Stockfish:** add the macOS and Linux entries to the manifest (FR-7.5).
+  - Linux has per-CPU builds, so add a small CPU-feature check with a safe baseline fallback.
+  - On macOS, mark the binary executable and clear its quarantine flag.
+- **Secrets:** macOS Keychain; Linux Secret Service. With no Secret Service running, refuse to store credentials with a clear message, and never fall back to a plaintext keyring (SR-1). Reword FR-6.5, SR-1 and SR-15 to be OS-neutral.
+- **Paths:** platformdirs locations per OS (NFR-2), shown on the About screen.
+- **CI:** add Linux and macOS runners.
+- **Docs:** README, Developer Guide and User Guide get per-OS install, launch and troubleshooting steps. REQUIREMENTS §2 drops "Windows only".
+
+**Done when:**
+- The full test suite and static checks pass on Windows, Linux and macOS CI.
+- The real-app smoke tests pass on Windows and Linux.
+- A test proves the Linux secret store refuses rather than writing plaintext when no Secret Service is available.
+- The engine installer picks the right manifest entry for each OS and architecture, and refuses unknown ones.
+- A fresh clone goes from `setup.py` to a working app on a clean Debian stable VM and a clean Ubuntu LTS VM.
+
+**Adam's manual test:**
+1. On clean Debian and Ubuntu VMs: clone → `setup.py` → launch from the app menu → import the DB → solve puzzles → install Stockfish → sign in to Lichess (token stored in the keyring) → review a game → relaunch (data persisted) → launch a second copy (the first window comes forward).
+2. Spot-check on Kali.
+3. On a Mac, if available: the same run. Otherwise record macOS as CI-only in the handoff.
+
+---
+
+## v2.0: Opening trainer
+**Goal:** learn openings with grounded explanations, build your own repertoire including your answers to the opponent's sidelines, and drill it with spaced repetition (REQUIREMENTS §18). It needs the engine (v0.4), the LLM guardrails (v0.7) and, for the explorer, Lichess sign-in (v0.3).
+
+Built in internal steps, like v0.1, each committed and ticked off in `plans/v2.0.md`. QA runs once, at the end.
+- **v2.0a Book and repertoire:** import the `chess-openings` book (FR-12.1); match lines by position; the repertoire tree and its migration (FR-12.4); a browse-and-pick screen; Learn mode's step-through with engine evals (FR-12.3, 12.6, without the LLM).
+- **v2.0b Explanations:** overviews and per-move Explain (FR-12.5, 12.6); the `opening_notes` cache and its migration; prefetch with the estimate and Confirm, plus Regenerate (FR-12.7); the optional explorer with caching (FR-12.2).
+- **v2.0c Deviations and practice:** "What if they play…?" with engine replies and stored branches (FR-12.8); Practice mode with per-position spaced repetition (FR-12.9, 12.10); opening stats (FR-12.11).
+- **Docs:** a User Guide chapter for the Opening trainer, including what it sends (FR-12.12).
+
+**Done when:**
+- Every book line passes python-chess validation at import, and transpositions map to the same position (test).
+- A test proves no move shown on the board or stored in the repertoire ever comes from LLM output.
+- Cache tests show a second request for the same position, move, provider and model makes no API call.
+- Prefetch skips stored items and their cost, and is blocked by the per-run cap and the monthly budget.
+- Each scope preset gives the right line and move counts, and Custom is clamped to its limits.
+- The estimate's cost comes from `llm_prices` (test with a changed price).
+- The warnings appear at the 25%-of-budget and 10-minute thresholds.
+- Split-into-runs keeps every run under the cap.
+- A cancelled prefetch keeps the finished items.
+- An illegal deviation is rejected before it reaches Stockfish.
+- A deviation branch is stored and then drilled in Practice.
+- Spaced-repetition scheduling tests use the injected clock.
+- The explorer is skipped cleanly when you're signed out or offline.
+- Recorded LLM and explorer fixtures are scrubbed.
+
+**Adam's manual test:**
+1. Pick the Italian Game as White → read the overview → step through the main line with Explain on a few moves.
+2. Open the prefetch dialog and switch between Light, Standard and Deep (the counts, cost and time update and read sensibly) → prefetch with Standard (confirm, then check the spend indicator against the estimate) → close and reopen, and check the notes load with no new spend.
+3. Enter 2 sidelines for Black with "What if they play…?" and check the engine replies and explanations make sense.
+4. Practice for 15 positions, including a deliberate mistake → come back the next day and check the due positions.
 
 ---
 

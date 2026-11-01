@@ -13,6 +13,19 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.1] - 2026-11-01
+Candidates: v0.1-rc1 (2026-11-01)
+
 ### Added
-- Project specification, architecture, roadmap, QA agent, documentation set and repo guardrails. No app code yet.
+- Project specification, architecture, roadmap, QA agent, documentation set and repo guardrails.
 - Licensed AGPL-3.0-or-later.
+- The app window opens from the **WeakSquare Chess Trainer** shortcut in the Start menu, which `python scripts/setup.py` creates along with everything else the app needs. Re-running setup is safe. [NFR-8]
+- **About** screen (the **?** button): version, your data and logs folders with Open buttons, the license and a link to the source code. [NFR-7]
+- Only one copy runs at a time: starting it again brings the open window to the front. [NFR-1]
+- Before an update changes your `user.db`, a backup goes to the `backups` folder (the last five are kept). A `user.db` from a newer version of the app is refused and left untouched. [NFR-3]
+- Problems are written to rotating log files in the `logs` folder, with sign-in tokens and keys removed. [NFR-4] [SR-10]
+- **Puzzle database import:** on first run the app downloads the Lichess puzzle database (about 300 MB, roughly 6 million puzzles), checks it against the checksum Lichess publishes, and imports it with a progress bar. You can also import a file you already have, cancel at any time, and later update from the menu (**☰ → Update puzzle database…**). An interrupted download resumes. A cancelled or failed import leaves your current puzzles and all your data untouched. [FR-2.1] [FR-2.3] [SR-6]
+- **Choose your puzzles:** pick any mix of themes from a grouped, searchable list, matching ANY or ALL of them; exclude themes; set a rating range with a slider or exact numbers; choose the number of moves (1, 2, 3, 4+) and the side you play. A live count shows how many puzzles match, and your filters are remembered. [FR-3.1] [FR-3.2] [FR-3.3] [FR-3.4] [FR-3.5]
+- Sessions of a fixed number of puzzles or endless, in random order with no repeats. [FR-3.11] [FR-3.12]
+- **Solve puzzles on a board:** the opponent's move plays first, your correct moves get the reply automatically, and any checkmating move counts when the solution is a mate. A wrong move fails the puzzle but you can finish the line. Themes stay hidden until the puzzle is decided. [FR-4.1] [FR-5.1] [FR-5.3] [FR-3.14]
+- Every attempt is saved. A session bar shows solved, failed and accuracy for the session, plus your all-time totals. [FR-5.5]

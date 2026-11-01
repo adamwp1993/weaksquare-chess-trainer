@@ -20,7 +20,8 @@ Solves sync to the user's Lichess account so they count toward their real puzzle
 
 ### Non-goals
 - Writing a chess engine. Stockfish does the analysis, and a rules library handles legality.
-- Mobile, macOS, Linux or multi-user support.
+- Mobile or multi-user support. macOS and Linux are out of scope **until v1.1** (ROADMAP.md).
+- BSD and other Unix systems: no official Stockfish builds, so not planned.
 - A packaged installer or signed `.exe`. The app runs from source: clone, run `scripts/setup.py`, launch from the shortcut it creates (§15, §17).
 - Online play of any kind.
 
@@ -30,7 +31,7 @@ Solves sync to the user's Lichess account so they count toward their real puzzle
 
 | Layer | Choice | Notes |
 |---|---|---|
-| OS | **Windows** (10/11, x64) | Only target |
+| OS | **Windows** (10/11, x64) | Only target through v1.0. macOS and Linux are planned for v1.1 (ROADMAP.md); until then, OS-specific code stays in adapters and new features don't assume Windows |
 | App shell | **pywebview** window using **WebView2** (Chromium-based Edge) | Native window, web UI inside |
 | Backend | **Python** (3.12+) | Thin: data, auth, engine, sync, LLM calls |
 | Database | **SQLite** (`sqlite3`) | Puzzle DB + all user data, local |
@@ -67,6 +68,17 @@ Shown when the app launches.
 - **FR-1.8** **Gear icon** opens the same settings as the startup page (linked Lichess and chess.com accounts, game-sync options, LLM provider/model/key, engine settings) plus the **LLM price table and budget** (§9.3), without leaving the main page.
 - **FR-1.10** A small **LLM spend indicator** (this month's spend vs. budget) appears whenever an LLM is configured.
 - **FR-1.9** **Rated toggle** (session-level, default ON). When off, every solve this session syncs as `rated: false`.
+- **FR-1.12** **Appearance: dark mode.** A color-scheme setting with **Light** / **Dark** / **Match system** (default **Light**), reachable from the main menu (and from the gear settings once FR-1.8 exists). It applies immediately to every screen (filters, trainer, dialogs, importer, About, Stats) without a restart, and is saved in `user.db` through the bridge (never browser storage, ARCHITECTURE.md §3), so it survives a relaunch. The app starts in the saved scheme without flashing the other one first where WebView2 allows. *Match system* follows the operating system's light/dark setting (the Windows app theme today) and updates if it changes while the app is open. The name is OS-neutral so it carries over to v1.1. The board and pieces stay readable in both schemes, and text keeps at least WCAG AA contrast.
+- **FR-1.13** **Move sounds.** Short sound effects on the board, for your moves and the opponent's alike:
+  - **Events:** move, capture, check, checkmate (a checkmate plays only the mate sound), castling (uses the move sound unless the set has its own), puzzle solved and puzzle failed.
+  - **Setting:** a **Sounds** on/off toggle plus a volume slider, reachable from the main menu (and the gear settings once FR-1.8 exists). The default is **on**, at 70% volume. The setting applies immediately, without a restart, and is saved in `user.db` through the bridge (never browser storage).
+  - **Behavior:**
+    - Sounds play from local files bundled with the front end. No CDN, no network.
+    - A sound never delays the board or the next puzzle.
+    - Rapid moves cut the previous sound off rather than queueing.
+    - Off means fully silent; nothing is loaded or played.
+    - The opponent's first move plays a sound even before you've clicked anything; WebView2's autoplay policy has to allow this.
+  - **Assets must be licensed for an AGPL project** (§15): CC0 or another AGPL-compatible license, or sounds made for this project. **Never** copy sounds from chess.com or any other proprietary app. Lichess's sound sets are a candidate only after their license is checked in the plan. The source and license of every file are recorded in `web/public/sounds/CREDITS.md` and in ARCHITECTURE.md §7.
 
 ---
 
@@ -75,10 +87,18 @@ Shown when the app launches.
 ### 4.1 Source
 - Lichess open puzzle database: `lichess_db_puzzle.csv.zst` from database.lichess.org. Public domain, ~6M puzzles as of the 2026-07-29 export.
 - **FR-2.1** First-run importer: download (or accept a local file path), decompress the zstd stream, and import into SQLite with a progress bar. It must be **resumable or restartable** and must not block the UI.
+  - **FR-2.1a** The importer page states plainly that **Download from Lichess** fetches the **entire** Lichess puzzle database (every puzzle, not a sample or a starter set): about 300 MB compressed, about 6 million puzzles, roughly 1.5 GB on disk once imported. After the import, the match count with no filters equals the imported puzzle count. The User Guide uses the same wording.
 - **FR-2.2** Read the CSV **by header name, not column position**, and tolerate extra columns. The current export documents a `DailyDate` field in addition to the classic columns:
   `PuzzleId, FEN, Moves, Rating, RatingDeviation, Popularity, NbPlays, Themes, GameUrl, OpeningTags`
 - **FR-2.3** Re-import of a newer export **never touches user data** (attempts, SRS, presets, cache). It builds a new `puzzles.new.db` and swaps it in only when the import finishes and passes a row-count and integrity check. A failed or cancelled import leaves the current database untouched, and restarting simply starts the new file over.
 - **FR-2.4** A newer export can drop puzzle IDs you've already attempted. Stats, SRS, history and the Coach treat a missing puzzle as "no longer in the database" (left joins, no crash), and the queue skips it.
+- **FR-2.5** **Update check and prompt.**
+  - **How it checks:** a background check, never blocking startup and silent when offline. It fetches `sha256sums.txt` and sends a `HEAD` request for the puzzle file (`Last-Modified`, `Content-Length`), all through `adapters/http.py`. A newer export exists when the published SHA-256 differs from the `sha256` in `puzzles.db`'s `meta`. If `meta` has no hash (a local-file import), it compares `Last-Modified` with `export_date` instead.
+  - **When:** automatically at launch at most once a day (injected `Clock`, last check time saved in `user.db`), plus a **Check for updates** button in the update dialog. A setting turns the automatic check off. It's on by default.
+  - **The prompt:** a non-blocking banner, never a modal mid-puzzle. Example: *"A newer puzzle database is available (exported 2026-11-01, yours is from 2026-10-02). Download about 295 MB?"* It offers **Update now** (starts the FR-2.3 import), **Not now** (asks again next launch) and **Skip this export** (stays quiet until a newer one than the skipped hash appears).
+  - **Puzzle count before downloading:** the database.lichess.org page lists a count, which the app reads best-effort as *"about N puzzles (+M)"*. The page can lag the file, so the count is labeled approximate. If it's missing or can't be read, the line is left out and the check still works.
+  - **Exact numbers after the import:** before the swap, the import compares puzzle IDs between the old and new database. The finish message reports the exact numbers: *"6,201,004 puzzles: 44,112 new, 450 removed."* Removed puzzles you'd attempted are handled as in FR-2.4.
+  - **What it sends:** only these plain requests to database.lichess.org. Nothing about you or your training.
 
 ### 4.2 Semantics (critical)
 - `FEN` is the position **before the opponent's move**. The first move in `Moves` is the opponent's. Apply it, animated, then the player solves from move 2 onward.
@@ -90,8 +110,8 @@ Shown when the app launches.
 - `Themes` is space-separated. Display names and groups come from Lichess's theme list (`translation/source/puzzleTheme.xml` in the lila repo).
 
 ### 4.3 Schema (suggested)
-- `puzzles(id PK, fen, moves, rating, rating_dev, popularity, nb_plays, game_url, opening_tags, length, player_color)` with indexes on `rating`, `length`, `popularity`, `nb_plays`.
-- `puzzle_themes(puzzle_id, theme)` with index `(theme, puzzle_id)`. If multi-theme counts are too slow, add precomputed theme bitmask columns (there are more than 64 themes, so this needs two or more integer columns).
+- `puzzles(n PK, id UNIQUE, fen, moves, rating, rating_dev, popularity, nb_plays, themes, game_url, opening_tags, length, player_color, t0, t1, t2)`. `t0`–`t2` are theme bitmasks (62 bits each), with the bit for each theme in `theme_bits(theme, bit, count)`. A covering index on `(rating, length, player_color, t0, t1, t2)` serves the live count. Indexes for the v0.2 filters (`popularity`, `nb_plays`) are added when those filters are. *(Decided in v0.1 instead of a `puzzle_themes(puzzle_id, theme)` table, which was too large and slow for ALL counts; see ARCHITECTURE.md §7.)*
+- `meta(key, value)` in `puzzles.db`: row count, rating range, export date, SHA-256, import time.
 - `attempts(id, puzzle_id, mode, started_at, finished_at, win, help_used, first_move_correct, line_correct, time_ms, rated, angle, sync_status, synced_at, rating_diff)`
 - `lichess_history(puzzle_id PK, win, played_at)`, imported from Lichess (§8.4).
 - `srs(puzzle_id PK, box, due_at)`
@@ -107,7 +127,7 @@ Shown when the app launches.
 - `weakness_metrics(weakness_id, checkpoint_id, window_games, occurrences, game_rate, puzzle_attempts, puzzle_first_try_accuracy)`: the trend data for each weakness at each checkpoint
 - `game_analysis(game_id, ply, fen_before, move_uci, mover, eval_before, eval_after, best_move, multipv_json, cp_loss, classification, themes, kind, phase, low_clock)`: one row per analyzed move. Shared by Game Review (§11) and the Coach (§10). `kind` is missed / allowed / other for mistakes.
 - `game_errors`: a **view** over `game_analysis`, containing the user's mistakes only, used by the Coach
-- `custom_puzzles(id PK, game_id, ply, fen, solution_uci, themes, created_at)`: key moments saved from your own games. Their attempts are stored in `attempts` with ids prefixed `my:`.
+- `custom_puzzles(id PK, game_id, ply, fen, solution_uci, themes, origin, kind, severity, cp_loss, phase, time_control, game_date, solve_as, status, created_at, UNIQUE(game_id, ply))`: puzzles from your own games. `origin` is manual (Save as puzzle, FR-11.16) or coach (FR-10.39). `kind` is missed / allowed. `severity` is inaccuracy / mistake / blunder. `solution_uci` holds the full line. `solve_as` is you / opponent. `status` is active / archived. They live in `user.db`, never `puzzles.db`, which is replaced on every re-import (FR-2.3). Their attempts are stored in `attempts` with ids prefixed `my:`.
 - `mistake_reasons(id PK, source, ref_id, reason, suggested_reason, note, created_at)`: why you missed something (§7.3). `source` is puzzle / game / retry / danger; `ref_id` points to an `attempts` row or a `game_analysis` (game_id, ply).
 - `coach_reports(id, created_at, sources_json, params_json, report_json, provider, model, cost_usd)`
 
@@ -133,7 +153,7 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.12 | Queue size | Fixed N or endless | |
 | FR-3.13 | **Presets** | Save / load / rename / delete named filter sets | Stored as JSON |
 | FR-3.14 | Hidden labels | Themes are **not shown** while solving | Revealed after the puzzle ends |
-| FR-3.15 | Puzzle source | Lichess DB / **My games** / Both | "My games" = `custom_puzzles` saved from Game Review (§11). These never sync to Lichess. |
+| FR-3.15 | Puzzle source | Lichess DB / **My games** / Both | "My games" = `custom_puzzles`, saved from Game Review (§11) or created by the Coach (§10.9). These never sync to Lichess. Extra filters for My games: severity level (FR-10.40), Missed / Allowed, phase, time control, game date, origin. They have no rating, so the rating filter doesn't apply to them. |
 
 ---
 
@@ -216,7 +236,15 @@ Habit tags (FR-10.27) and themes describe **what** went wrong. Mistake reasons r
 - **FR-6.8** Endpoint: `POST https://lichess.org/api/puzzle/batch/{angle}` (scope `puzzle:write`). Body: `{"solutions":[{"id":"…","win":true,"rated":true}, …]}`.
 - **FR-6.9** **Fewer than 100 solutions per request** (the server rejects 100 or more).
 - **FR-6.10** **Rate limit** (from Lichess server source, Oct 2026): 400 cost per hour per IP, and an authenticated solve costs 2, so about **200 solves per hour**. Send in batches and back off on HTTP 429.
-- **FR-6.11** Use `rating_diff` and `glicko` from the response to update the local display of the Lichess puzzle rating.
+- **FR-6.11** Use `rating_diff` and `glicko` from the response to update the local display of the Lichess puzzle rating. (Check the exact response field names against a live response in v0.3 and record them in the fake client.)
+  - **FR-6.11a** **Your rating, always visible when signed in:** the main page header shows your current Lichess puzzle rating, with `?` while it's provisional. It's read from `GET /api/account` (`perfs.puzzle`) at sign-in, then updated from every sync response. It's never computed or estimated locally (never inflate ratings). When you're not signed in, it isn't shown.
+  - **FR-6.11b** **Change per puzzle:** after a puzzle ends, the result panel shows its rating change, e.g. **+8** in green or **−12** in red, as soon as Lichess returns it.
+    - Solves sync right away when online (FR-6.16), so this normally appears within a second or two.
+    - Until Lichess replies it shows *Syncing…*. Offline it shows *Will sync later*, and the number fills in on the attempt once the queue drains.
+    - When Lichess doesn't rate the solve, it says why instead of showing a number: *Unrated (Rated is off)*, *Already played: rating unaffected* (FR-4.6), or *Not rated by Lichess* for a 0 or missing change.
+    - A tooltip explains that themed angles count for less than `mix` (§8.3), so a small change after a themed session is expected.
+  - **FR-6.11c** **Session total:** the session bar shows the net rating change for this session (e.g. *+34 this session*), summed only from changes Lichess actually returned.
+  - **FR-6.11d** **History:** each returned change and the new rating are saved with the attempt in `user.db` (new migration), and feed the rating trend (FR-9.4).
 - **FR-6.12** Puzzles no longer on Lichess are silently skipped by the server. Mark them `sync_status = skipped`, not as an error.
 
 ### 8.3 Angle reporting (rating integrity)
@@ -240,7 +268,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-7.3** **No eval bar or engine lines are visible while a puzzle is in progress.** They appear after the puzzle ends.
 - **FR-7.4** Settings: think time (default 1 s), threads (default CPU cores − 1), hash (default 256 MB).
 - **FR-7.5** **Engine install.** The binary is gitignored, so an installer fetches it. One implementation, `services/engine_install.py`, is used by `scripts/fetch_stockfish.py`, `scripts/setup.py`, the in-app Install button and the v1.0 first-run wizard.
-  - **Pinned, never "latest":** `engine_manifest.json` records the release tag, asset name, URL and SHA-256 (taken from the digest GitHub publishes for the asset). Upgrading Stockfish means editing the manifest, with an ARCHITECTURE.md §7 decision-log entry.
+  - **Pinned, never "latest":** `engine_manifest.json` records the release tag, asset name, URL and SHA-256 (taken from the digest GitHub publishes for the asset). Assets are **keyed by OS and CPU architecture** (e.g. `windows-x86_64`) from the start. Through v1.0 only the Windows entry exists, and on any other platform the installer refuses with a clear message. v1.1 adds the macOS and Linux entries without changing the format. Upgrading Stockfish means editing the manifest, with an ARCHITECTURE.md §7 decision-log entry.
   - **Verify before extracting:** download over HTTPS through `adapters/http.py` to a temp file and check the SHA-256. On a mismatch, delete the file and stop with a clear error.
   - **Extract safely:** take only the expected `.exe`. Reject absolute paths and `..` entries.
   - **Install location:** `%LOCALAPPDATA%\WeakSquare\engines\<tag>\stockfish.exe`, outside the repo. Install into a temp folder and rename it into place, so a failed install leaves nothing half-written.
@@ -376,6 +404,29 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 
 ---
 
+### 10.9 Puzzles from your games
+- **FR-10.39** **Created by the analysis:** when the Coach analyzes your games (default your last 50, up to 200, FR-10.4; checkpoints add only new games), it turns qualifying mistakes into puzzles in `custom_puzzles` with `origin = coach`. It's part of the same background job and the same pipeline (FR-10.26). Games already analyzed aren't analyzed again. Re-runs never create duplicates (one puzzle per game and ply). Everything stays local and never syncs to Lichess.
+- **FR-10.40** **Severity level (user setting):** which mistakes become puzzles. **Blunders only** / **Mistakes and blunders** (default) / **Inaccuracies, mistakes and blunders**. The levels use the shared thresholds (FR-11.9).
+  - Changing the level rebuilds the set from the stored `game_analysis`, with no new engine pass over the games. Only new candidates get the quality check (FR-10.41).
+  - Narrowing the level **archives** the puzzles outside it, never deletes them, so their attempt history is kept. Widening restores them.
+  - The same three choices are also a filter when training the My games source (FR-3.15).
+- **FR-10.41** **Quality check:** a mistake becomes a puzzle only if it has a clear answer.
+  - The best move must be clearly better than the second best (default gap 150 cp, configurable), or be the only move that keeps the advantage.
+  - The position must not already be decided (beyond ±500 cp before the move).
+  - The line extends while the solver's move stays the only good one, the way Lichess builds multi-move puzzles.
+  - Prefer reusing lichess-puzzler's generator logic (AGPL-3.0, already a dependency for tagging) over writing our own. Confirm this in the v0.10 plan.
+  - Inaccuracies are kept only when they pass the same check, so the inaccuracy level may add few puzzles. The setting says so.
+- **FR-10.42** **Missed and Allowed:**
+  - **Missed** (you had a tactic and didn't play it): you solve from your own position, as the side you played.
+  - **Allowed** (your move let your opponent in): you solve **as your opponent**, from the position after your mistake, finding the punishment. The board is oriented for the side to move, and the puzzle is labelled *"Find what your opponent could have played."*
+  - Allowed positions can also feed Danger spotting (FR-4.4) once that mode exists.
+- **FR-10.43** **Solving rules:** these come from engine analysis, not a verified single solution, so any move within 30 cp of the best (configurable, shared with Retry mode FR-11.15) counts. The interactive engine then continues the line from the move you played. Themes come from the lichess-puzzler tagger and stay hidden until the puzzle ends (FR-3.14). Any help before completion is a loss, as everywhere (§7.1).
+- **FR-10.44** **Training them:**
+  - **My games** works as a source on its own or mixed with Lichess puzzles, in every mode that supports it, including **Spaced repetition** (FR-4.6).
+  - The Suggested mix (§10.7) may include a share of your own-game puzzles (default 20%) linked to your top weaknesses, and "Why this mix" says so.
+  - Each puzzle links back to its game in Game Review. You can archive any puzzle you don't want.
+- **FR-10.45** **Progress:** accuracy on your own-game puzzles appears on each weakness card (FR-10.38) next to Lichess-puzzle accuracy. It's a secondary signal only. A weakness's status is still decided by its game rate (§10.8), never by puzzle accuracy.
+
 ## 11. Game Review: import a game, analyze it, explain better moves
 
 **Principle:** Stockfish grades every move locally, for free. The AI explains key moments using the same grounded-context and validation rules as Explain (§9.2). Without an LLM key, Game Review still works as a full engine review.
@@ -441,7 +492,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-9.1** Accuracy per theme, per length, per mode, and per rating band.
 - **FR-9.2** **First move right, line wrong** rate. This is the key metric for whether calculation is improving.
 - **FR-9.3** Time to solve, help usage, Commit-mode calculation accuracy, Name-the-idea tag accuracy, Danger-spotting accuracy.
-- **FR-9.4** Lichess puzzle rating trend, from sync responses.
+- **FR-9.4** Lichess puzzle rating trend, from sync responses (stored per FR-6.11d): a line chart of your rating over time on the Stats page, with the change per session.
 - **FR-9.5** Weakest themes list, with a one-click "drill these" preset.
 - **FR-9.6** Weakness tracking and checkpoint history are on the Coach's Progress page (FR-10.38). Stats links to it.
 - **FR-9.7** **Mistake-reason breakdown** (§7.3): overall, and filterable by theme, habit tag, mode and source (puzzles vs. games), with a trend over time. Puzzle-vs-game comparison is included (e.g. forks you miss in games because you didn't look but solve fine in puzzles). Misclicks are shown separately.
@@ -506,6 +557,7 @@ The project is open source under **AGPL-3.0-or-later** from the first commit (`L
 - **Lichess puzzle database:** public domain (CC0). It's downloaded at setup, never committed.
 - **The About screen** shows the license and a link to the source code (NFR-7).
 - Third-party npm and Python packages keep their own licenses. A dependency with a license incompatible with AGPL-3.0 isn't added.
+- The same applies to bundled assets (sounds, images, fonts): each has a recorded source and an AGPL-compatible license (FR-1.13).
 
 ---
 
@@ -561,3 +613,64 @@ Estimated cost per request at these prices (my token estimates; actual usage get
 - **NFR-6** **Clean shutdown.** Closing the window cancels running jobs (each saves its progress), stops the engine processes and closes database connections. Pending sync stays queued in `user.db` for next time.
 - **NFR-7** **About screen.** App version, data folder (with an Open button), logs folder (with an Open button), puzzle database export date, Stockfish version and path (from v0.4), the license and a link to the source repository.
 - **NFR-8** **Runs from source.** `scripts/setup.py` installs everything into a virtual environment and creates a Start-menu shortcut that launches the app without a console window. Updating is `git pull` followed by `scripts/setup.py` again.
+  - **NFR-8a** **Desktop shortcut and app icon** (v0.2).
+    - **Desktop shortcut:** `setup.py` also creates one by default. `--no-desktop-shortcut` skips it, and `--no-shortcut` skips both shortcuts. It finds the Desktop through the Windows known-folder API, because the Desktop is often redirected to OneDrive. Re-running replaces the shortcuts and never duplicates them.
+    - **The icon:** four board squares (2×2, in the board's light and dark colors) with a **black** queen on top (chosen over a white queen because the solid shape stays readable at 32 px and below). The queen comes from the **cburnett** piece set the board already uses (Colin M. L. Burnett, GPL-2.0-or-later, shipped with chessground), so its license is compatible with AGPL-3.0.
+    - **Files:** the SVG source is committed. A small script builds a multi-size `.ico` (16–256 px) from it, and the `.ico` is committed too, so `setup.py` needs no image tools. Both shortcuts use it, and the app window and taskbar use it where pywebview allows. The plan checks how to make the taskbar show it rather than the Python icon.
+    - **Credits:** recorded in the repo's asset credits and ARCHITECTURE.md §7, like the sounds (§15).
+
+---
+
+## 18. Opening trainer (v2.0)
+
+Learn an opening line by line with grounded explanations, build your own repertoire (including your answers to the opponent's sidelines), then drill it. **The moves always come from a book, the engine or you, never from the LLM.** The LLM only explains moves that already exist and have been validated, exactly as in §9.2.
+
+### 18.1 Where the lines come from
+- **FR-12.1** **Opening book:** the Lichess `chess-openings` dataset (ECO code, name, PGN; about 3,500 named lines; CC0 public domain). It's bundled with the app or downloaded through `adapters/http.py` with a pinned hash, and imported into its own table. Every line is validated with python-chess at import. Lines are matched by **position (FEN)**, not move order, so transpositions are recognized.
+- **FR-12.2** **Main lines of an opening:** the named sub-lines under the chosen opening in the book. You can also add popularity data from the **Lichess opening explorer** (masters and Lichess games, the most common replies with their frequencies). The explorer API needs a Lichess token (it returns 401 without one, checked 2026-11-01). It's used only when you're signed in (§8.1), with responses cached locally, and the trainer still works without it. The prefetch scope is configurable (FR-12.7a).
+- **FR-12.3** **Engine:** Stockfish evaluates every position you study (the interactive engine, ARCHITECTURE §3 decision 12), and suggests replies to deviations (FR-12.8). All positions and move lists are validated before they're sent (FR-7.6).
+
+### 18.2 Repertoire
+- **FR-12.4** **Your repertoire** is a tree of positions per color (White and Black). Each move records its **source**: book / engine / you. You pick openings and lines to add, and can remove, reorder or mark a move as "main" or "sideline". Stored in `user.db` (new migration): `repertoire_nodes(id, color, parent_id, fen_before, move_uci, san, source, is_main, created_at)`, unique per (color, fen_before, move). A transposition reuses the same position.
+
+### 18.3 Learn mode (walks you through lines)
+- **FR-12.5** **Overview first:** opening a line starts with an overview of the opening: its key ideas, typical plans for both sides, pawn structures, common traps and what to aim for. It's generated by the LLM from grounded context (the opening name, ECO code, the line's SAN moves and the engine evaluations of its key positions). It's shown as escaped text (FR-8.7), and every square or move it mentions is validated before it's drawn (FR-8.4/8.5).
+- **FR-12.6** **Step through the line:** the board walks the moves one at a time, with forward and back controls. Each move has an **Explain** button: why this move, what it prepares, and what happens if you don't play it, grounded in the engine's top lines for that position. Without an LLM configured, the step-through still works with engine evals and lines only.
+- **FR-12.7** **Store everything, ask once:** overviews and move explanations are saved in `opening_notes` in `user.db`, keyed by position (FEN), move, kind (overview / move), provider, model and prompt version. They're reused across lines and transpositions, and the LLM is never asked twice for the same thing.
+  - **Prefetch when you start an opening:** the trainer offers to fetch the overview and every move explanation for its main lines in one go. Requests are batched one line per request to keep cost down. It shows the pre-run estimate with **Confirm**, and the per-run cap, monthly budget and hard `max_tokens` all apply (§9.3). Already-stored items are skipped and not charged.
+  - **FR-12.7a** **Prefetch scope (configurable, with suggested presets):**
+
+    | Preset | Sub-lines | Moves per line | Use |
+    |---|---|---|---|
+    | **Light** | main line + 1 | 8 | a quick look, lowest cost |
+    | **Standard** (default) | main line + 3 | 12 | the usual choice |
+    | **Deep** | main line + 6 | 16 | serious study of one opening |
+    | **Custom** | 0–10 | 4–20 | your own numbers |
+
+    The global default is in the opening-trainer settings, and you can change it for each prefetch in the prefetch dialog.
+  - **FR-12.7b** **What it will cost and how long it takes:** the prefetch dialog updates as you change the scope. Before you confirm, it shows:
+    - **How much:** the number of lines, positions and LLM requests, with how many are already stored (and so free).
+    - **Usage:** estimated input and output tokens and cost, computed from the `llm_prices` table for your provider and model (never hard-coded), plus what share of the remaining monthly budget that is. It says plainly whether the run fits under the per-run cap (FR-8.12).
+    - **Time:** estimated LLM time (requests × the recent average response time for your model, or a conservative default until there's history) plus engine time (positions × the analysis time per position).
+    - **Blurb:** a short plain-language note, e.g. *"About 45 moves across 4 lines: ~4 requests, ~$0.03 (≈1% of this month's budget), about 2 minutes. Already-saved notes are free. You can keep using the app while it runs, and cancel at any time; whatever is finished stays saved."*
+    - **Larger scopes:** a yellow warning when the estimate is above 25% of the remaining monthly budget or longer than 10 minutes. When it's over the per-run cap, the dialog offers to **split it into several runs**, each under the cap. It never raises the cap automatically.
+    - **Without an LLM:** the dialog shows engine time only.
+    - **While it runs:** prefetch is a background job with progress and Cancel. Finished items are saved as they arrive.
+  - Saved notes work offline. A **Regenerate** button on any note replaces it after showing the cost. You can also export or delete an opening's notes.
+- **FR-12.8** **"What if they play…?" (your own deviations):** at any position in a line, you can enter a move for the **other side**, either on the board or as SAN.
+  - The move is validated with python-chess.
+  - Stockfish gives your best replies (MultiPV, default top 3, with evals), and you pick one, by default the best.
+  - **Explain** says why that reply works, the same way as FR-12.6.
+  - The branch (their move, your reply, the engine evals and the explanation) is **stored** in your repertoire with `source = you` / `engine`, and is drilled in Practice like any other line.
+  - Engine results are cached by position and depth, so revisiting a branch costs nothing.
+
+### 18.4 Practice mode (quizzes you on your lines)
+- **FR-12.9** **Drill your repertoire:** the app plays the opponent's moves from your repertoire, picking among the stored replies (weighted toward main lines, and by explorer popularity when it's available). You play your side.
+  - **Correct:** any move stored as yours at that position, or one within the engine tolerance if you allow it in settings (off by default, because the point is to learn *your* line).
+  - **Wrong:** shows the correct move, its stored explanation and the engine's view of your move (the refutation, using the same tools as Game Review FR-11.14). Any help before the line ends is a loss (§7.1).
+  - Mistake reasons (§7.3) work here too.
+- **FR-12.10** **Spaced repetition per position:** each of your decision points has its own Leitner box (same schedule as FR-4.6). Practice shows positions that are due first, and **New lines** introduces unseen branches a few at a time. Sessions can be limited to one opening, one color or one branch.
+- **FR-12.11** **Stats:** per opening and per line, the accuracy, due count and weakest positions. All local, never synced to Lichess, and no effect on any rating.
+
+### 18.5 Privacy and cost
+- **FR-12.12** The LLM receives only opening data: names, ECO codes, SAN moves of book or repertoire lines, engine evals and lines. It never receives anything about you or your games. Explorer requests send positions to Lichess with your token, to the documented API only, and appear in the User Guide's privacy section. Prefetch estimates reuse the §9.3 machinery. A typical opening (overview plus 4 lines of about 12 moves) is roughly 20–30k input tokens and 8–12k output tokens in total. The v2.0 plan replaces this with figures from the `llm_prices` table, never hard-coded.

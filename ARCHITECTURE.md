@@ -45,11 +45,17 @@ weaksquare-chess-trainer/
 │  ├─ engine_manifest.json     # pinned Stockfish release: tag, asset, URL, SHA-256   (v0.4)
 │  ├─ bridge/
 │  │  ├─ api.py                # class Api: methods exposed to JS (thin)
+│  │  ├─ errors.py             # @bridge_call: argument checks, logging, {code, message, retryable}
 │  │  ├─ dto.py                # dataclasses for everything crossing to JS
 │  │  └─ events.py             # Python → JS push (job progress, sync status)
 │  ├─ core/
+│  │  ├─ clock.py              # Clock protocol + FixedClock (the real clock is an adapter)
+│  │  ├─ errors.py             # AppError and friends: code + user-facing message
 │  │  ├─ chess_rules.py        # FEN/UCI helpers, player color, length, mate-in-1 acceptance
-│  │  ├─ puzzle.py             # Puzzle, PuzzleRef(source, id), PuzzleSource protocol
+│  │  ├─ puzzle.py             # Puzzle, PuzzleRef(source, id)  (PuzzleSource protocol: services/session.py)
+│  │  ├─ csv_rows.py           # puzzle CSV rows by header name
+│  │  ├─ themes.py             # theme catalog: names and picker groups
+│  │  ├─ checksums.py          # sha256sums.txt parsing
 │  │  ├─ filters.py            # FilterSpec (+ JSON schema, validation)
 │  │  ├─ queue.py              # ordering, ratios, queue building (pure; takes candidate ids)
 │  │  ├─ scoring.py            # win/loss, help → loss, angle selection
@@ -59,14 +65,21 @@ weaksquare-chess-trainer/
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
+│  │                           #   v0.1: puzzle_db.py (import job), mixer.py (catalog, counts), session.py
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
+│  │  │  ├─ migrate.py         # numbered migrations, backup first, newer-schema refusal
+│  │  │  ├─ puzzles_indexes.sql  # built after each puzzle import's bulk load
 │  │  │  ├─ migrations/puzzles/0001_init.sql …
 │  │  │  ├─ migrations/user/0001_init.sql …
 │  │  │  └─ repos/             # one repository per aggregate
 │  │  ├─ http.py               # shared httpx client: UA, timeouts, retry/backoff, redaction
 │  │  ├─ secret_store.py       # the ONLY module that imports keyring
+│  │  ├─ system_clock.py       # SystemClock + the seeded Random, built only in app.py
+│  │  ├─ logging_setup.py      # rotating logs, redaction, crash hooks
+│  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
+│  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
 │  │  ├─ stockfish.py          # EngineClient impl (python-chess UCI)  (v0.4)
 │  │  ├─ lichess.py            # (v0.3)   chesscom.py (v0.8)
 │  │  └─ llm/                  # LLMProvider protocol, anthropic.py, openai.py (v0.7)
@@ -75,16 +88,19 @@ weaksquare-chess-trainer/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
 │  └─ src/
 │     ├─ api/                  # ApiClient interface + pywebviewClient + mockClient
-│     ├─ components/           # Board (chessground wrapper), ThemePicker, RatingSlider, …
+│     ├─ components/           # Board (chessground wrapper), ThemePicker, FilterControls, SessionBar, …
 │     ├─ views/                # Startup, Trainer, Settings, Stats, Library, Review, Coach, Progress
-│     └─ state/                # small store; no business logic
+│     └─ state/                # small hooks and defaults (useJob, defaultFilters); no business logic
 ├─ tests/
 │  ├─ unit/                    # core/ — fast, no I/O
 │  ├─ integration/             # services + real SQLite (tmp) + fake clients
 │  ├─ e2e/                     # Playwright against web/ with mockClient
+│  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
+│  ├─ fulldb/                  # opt-in timings against the full puzzle DB
 │  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
-                               #   (thin CLIs over services, download + hash check), check_docs.py
+                               #   (thin CLIs over services, download + hash check), check_docs.py,
+                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts)
 ```
 
 `services/` and later `adapters/` modules are created **in the version that first needs them**. The tree shows the end state.
@@ -173,6 +189,70 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.1: Standard-mode scoring details and the `TrainingMode` shape
+- Context: Show answer arrives only in v0.2, so v0.1 needed a defined behavior after a wrong move and when you move on early.
+- Decision: a wrong move decides the attempt as a loss at that moment (it's appended to `attempts` then), the move is taken back, and you can keep playing the line with nothing more recorded. Moving on before the attempt is decided (**Skip**) records a loss. Themes are revealed with the decision. The v0.1 protocol is `start`, `on_move` and `give_up`; `on_help` joins it in v0.2 with Hint and Show answer, rather than shipping unused.
+- Alternatives: recording the attempt only when the line ends (an abandoned puzzle would then never be recorded).
+- Consequences: every attempt reaches `user.db` as soon as it's decided, so closing the app loses nothing.
+
+### 2026-11-01, v0.1: Queue sampling and count tuning
+- Context: plan decision 3, and the < 500 ms targets on the full DB.
+- Decision: pools of ≤ 100k puzzles are fetched and sampled with the injected `Random`; larger pools use rejection sampling over the dense key `n` in batches sized from the match density, keeping the rng's order so a seed always gives the same queue. The attached `puzzles.db` uses `mmap_size` = 2 GB, which cut full-range count scans by about 20% (worst case ~330 ms, warm).
+- Alternatives: `ORDER BY random() LIMIT 50`, which sorts the whole pool.
+- Consequences: deterministic tests for queues; memory-mapped pages count toward the app's working set, but they're file-backed and shared with the OS cache.
+
+### 2026-11-01, v0.1: Test harness details
+- Context: the real-app smoke harness and the screenshot spec had timing problems on the first runs.
+- Decision: the smoke harness waits until the WebView2 debugging endpoint lists the app's page (polled over HTTP at `/json/list`) before attaching, because the sync Playwright API only learns about new pages while a call is running. It closes the app with `WM_CLOSE` to the PID the app writes into its lock file (the venv's `python.exe` is a launcher with a child process). The screenshot spec drives the mock's progress timers with Playwright's fake clock. The mock client serves fixed puzzles taken from the fixture (`web/src/api/mockPuzzles.ts`).
+- Consequences: smoke runs were stable over repeated runs, and screenshots are reproducible.
+
+### 2026-11-01, v0.1: Theme bitmasks on `puzzles` instead of a `puzzle_themes` table
+- Context: the live match count must answer within 500 ms on ~6.2M puzzles, including ALL across several themes (FR-3.1). A `puzzle_themes` join table would hold ~25M rows (~1 GB more) and makes ALL a multi-way intersection.
+- Decision: `puzzles` gets three integer columns `t0`, `t1`, `t2` (62 theme bits each, up to 186 themes) plus `theme_bits(theme, bit, count)`, built at import, so a theme new to an export gets a bit automatically. A covering index `(rating, length, player_color, t0, t1, t2)` answers every v0.1 filter without touching the table. `puzzles.n` is a dense integer key used for random sampling. The plan named a separate narrow `puzzle_index` table; a covering index gives the same narrow scan without a second copy of the rows. Indexes are built after the bulk load (`puzzles_indexes.sql`). REQUIREMENTS §4.3 is updated to match.
+- Alternatives: `puzzle_themes(theme, puzzle_id)`, which the spec suggested first and allowed replacing "if multi-theme counts are too slow".
+- Consequences: measured on the 2026-10-02 export, a full import takes about 90 s and `puzzles.db` is 1.4 GB. Warm counts take 80–400 ms (the worst cases scan the whole rating range). A filter on a theme beyond bit 186 isn't possible; the importer logs it.
+
+### 2026-11-01, v0.1: The puzzle download is verified against Lichess's published SHA-256
+- Context: plan decision 8 had to be confirmed at build time. database.lichess.org publishes `sha256sums.txt` at its root, and it lists `lichess_db_puzzle.csv.zst`.
+- Decision: the importer fetches that list, downloads (resuming with `Range` / `If-Range`), and compares hashes. On a mismatch it deletes the file and stops. A complete earlier download that matches is reused. If the list ever stops naming the file, the import continues with a logged warning. The export date is the file's `Last-Modified`. `scripts/fetch_puzzle_db.py` takes the single-instance lock, so it can't replace `puzzles.db` under a running app.
+- Alternatives: a hard-coded hash, impossible because the export changes every month.
+- Consequences: a download caught mid-update by Lichess fails cleanly and can be retried.
+
+### 2026-11-01, v0.1: Pin MIME types for the local web server
+- Context: on some Windows machines the registry maps `.js` to `text/plain`. Python's `mimetypes` reads that, pywebview's local server sends the bundle as `text/plain`, and WebView2 refuses to run module scripts, so the window is blank. It happened on the first real-app smoke run.
+- Decision: `app.fix_mime_types()` pins `.js`, `.mjs`, `.css` and `.svg` before the window starts. A regression test covers it.
+- Alternatives: a single inline bundle, rejected because it conflicts with the strict CSP (SR-3).
+- Consequences: none beyond the four lines.
+
+### 2026-11-01, v0.1: `--dev` decides the data folder and permits the test debugging port
+- Context: NFR-2 wants dev runs kept apart from real history. SR-16 says "release builds" refuse the WebView2 debugging port, but the app runs from source, so there is no separate release build.
+- Decision: `python -m weaksquare` (the Start-menu shortcut) uses `%LOCALAPPDATA%\WeakSquare`; `--dev` uses `WeakSquare-dev`; `WEAKSQUARE_DATA_DIR` overrides both. The app refuses to start if `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` contains `--remote-debugging-port` unless `--dev` is given, and the smoke harness always launches with `--dev` and a temp data folder. Under pytest, `config.resolve_paths` raises if it resolves to either real folder.
+- Alternatives: a separate environment variable to allow the port, rejected as one more thing a stray environment could set.
+- Consequences: the real app can never be attached to, and a dev run never sees real history.
+
+### 2026-11-01, v0.1: SQLite threading details
+- Context: decision 12 says one connection per thread, but FR-2.3 swaps `puzzles.db` while the app runs, and Windows can't replace a file that's open.
+- Decision: every query runs inside `Database.session()`, which holds a shared lock. `swap_puzzles_db()` takes the exclusive lock (so no query is running), closes every registered connection, replaces the file, and bumps a generation counter so each thread reopens lazily. That's the only time a connection is touched from another thread (connections are opened with `check_same_thread=False` for that reason alone). WAL is set once when `Database` is created, because switching it from several threads at once fails with "database is locked". `puzzles.db` is attached read-only (`mode=ro`), so it never has `-wal` files.
+- Alternatives: versioned puzzle files (`puzzles-<date>.db`) with a pointer, rejected because FR-2.3 names the `puzzles.new.db` → `puzzles.db` swap and cleanup is messier.
+- Consequences: a swap waits for running queries to finish (milliseconds).
+
+### 2026-11-01, v0.1: The DTO contract is generated
+- Context: decision 8 needs `bridge/dto.py` and `web/src/api/types.ts` to match.
+- Decision: `scripts/gen_types.py` writes `types.ts` from the dataclasses listed in `dto.EXPORTED`, and a contract test runs it with `--check`. Every bridge result is wrapped as `{ok: true, data}` or `{ok: false, error: {code, message, retryable}}` by `@bridge_call` (NFR-5), and the TypeScript client unwraps it and throws `ApiCallError`.
+- Alternatives: hand-written types plus a parser that compares them, which is more code and still drifts.
+- Consequences: changing a DTO means re-running the generator, and the test says so.
+
+### 2026-11-01, v0.1: First dependencies
+- Context: the v0.1 scaffold (plans/v0.1.md). Every name was checked on PyPI and npm first (SR-14b).
+- Decision:
+  - Python runtime: `pywebview` (window and JS bridge; pulls in `pythonnet` on Windows), `chess` (python-chess), `platformdirs` (`%LOCALAPPDATA%`), `httpx` (the one HTTP client), `zstandard` (streaming `.csv.zst`; the stdlib `compression.zstd` needs Python 3.14).
+  - Python dev: `pytest`, `ruff`, `mypy`, `pre-commit`, `playwright` (Python). One Playwright drives both the mock-client e2e tests and the real-app CDP smoke test.
+  - Build backend: `uv_build`, which is part of uv and is only used to install the package into the venv.
+  - npm runtime: `react`, `react-dom`, `@mantine/core`, `@mantine/hooks`, `chessground` (GPL-3.0), `chess.js` (BSD-2-Clause).
+  - npm dev: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`, `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`. npm resolved `typescript` to 6.x, the newest that `typescript-eslint` supports.
+- Alternatives: npm `@playwright/test` plus Python Playwright (two browsers to install); `pywin32` for the Start-menu shortcut, replaced by an inline PowerShell `-Command` that calls COM.
+- Consequences: `npm audit` reports a moderate `minimatch` advisory inside ESLint's dependency tree. It's dev-only, never shipped or run on untrusted input, and has no non-breaking fix yet.
+
 ### 2026-10-31, pre-v0.1: Named WeakSquare Chess Trainer
 - Context: the working name, "Lichess Puzzle Mixer", matched a GitHub repo (`lichess-puzzle-mixer`) that distributed SmartLoader malware as a zipped `.exe`. Using "Lichess" in the name would also suggest an official connection.
 - Decision: display name **WeakSquare Chess Trainer**; repo `weaksquare-chess-trainer`; Python package `weaksquare`; data folder `%LOCALAPPDATA%\WeakSquare`; environment variable `WEAKSQUARE_DATA_DIR`. A weak square is a hole the opponent can exploit, and the app finds and fixes yours.
@@ -202,3 +282,9 @@ Entry format:
 - Decision: a separate personal access token (`puzzle:read`, `puzzle:write` only) on Adam's account, stored as `weaksquare-test`; unrated solves only, at most 3 per run (SR-13).
 - Alternatives: a second Lichess account, rejected because Lichess's Terms of Service don't list testing as an allowed reason for one.
 - Consequences: a few unrated solves per live run appear in Adam's puzzle history. The test token can be revoked without touching the app's own sign-in.
+
+### 2026-11-01, v0.1 (planning): macOS and Linux deferred to v1.1; keep the code portable meanwhile
+- Context: Adam wants macOS and Linux support eventually. Porting while features are still being added would triple CI and manual testing at every checkpoint.
+- Decision: a dedicated v1.1 (ROADMAP.md) after v1.0. Until then, OS-specific code stays in adapters, and new features don't assume Windows. `engine_manifest.json` is keyed by OS and architecture from v0.4, with only the Windows entry filled in. The dark-mode option is named "Match system". Linux (Debian stable, Ubuntu LTS) is the fully tested target. macOS is best effort, CI only, until a real Mac is available, because macOS may only be virtualized on Apple hardware.
+- Alternatives: porting now, rejected for the testing cost; folding the port into a feature version, rejected for the same reason; never porting, which leaves the door closed for no saving.
+- Consequences: v1.1 is mostly adapter, setup and CI work. It needs per-CPU Stockfish selection on Linux, a Secret Service check that refuses rather than storing plaintext, and a non-WebView2 approach for the real-app smoke tests.
