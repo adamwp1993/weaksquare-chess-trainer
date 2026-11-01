@@ -1,14 +1,16 @@
 """FilterSpec: one serializable description of a puzzle selection (ARCHITECTURE §3 decision 5, REQUIREMENTS §5).
 
-The whole §5 schema is defined now, because presets, the Coach and the angle rule will all share it.
-v0.1 implements themes (ANY/ALL), excluded themes, rating, move count, side to move, random order
-and queue size. Fields for later versions are part of the schema but must keep their defaults:
-`validate()` rejects them with `unsupported_in_this_version` instead of silently ignoring them.
+The whole §5 schema is defined in one place, because presets, the Coach and the angle rule all share it.
+v0.1 implemented themes (ANY/ALL), excluded themes, rating, move count, side, random order and queue
+size; v0.2 adds openings, quality, the history filters, ratios and the other orders. Fields for later
+versions are part of the schema but must keep their defaults: `validate()` rejects them with
+`unsupported_in_this_version` instead of silently ignoring them.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -26,6 +28,14 @@ LENGTHS = (1, 2, 3, 4)  # 4 means "4 or more"
 MAX_THEMES = 200
 MAX_QUEUE = 500
 DEFAULT_QUEUE = 20
+# FR-3.8 quality defaults (decided at v0.2 planning): a light filter, adjustable; None turns one off.
+DEFAULT_MIN_POPULARITY = 50
+DEFAULT_MIN_PLAYS = 100
+POPULARITY_RANGE = (-100, 100)  # Lichess popularity
+MAX_MIN_PLAYS = 10_000_000
+MAX_OPENINGS = 200
+MAX_BUCKETS = 10
+_OPENING_TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_'-]{0,99}$")
 
 
 class UnsupportedInThisVersion(ValidationError):
@@ -50,16 +60,17 @@ class FilterSpec:
     rating_max: int | None = None
     lengths: tuple[int, ...] = ()  # empty = All; values from LENGTHS (FR-3.4)
     side: Side = "either"  # FR-3.5
-    order: Order = "random"  # FR-3.11 (random only in v0.1)
+    order: Order = "random"  # FR-3.11
     queue_size: int | None = DEFAULT_QUEUE  # None = endless (FR-3.12)
-    # --- later versions (schema only; must stay at the defaults in v0.1) ----------------
-    openings: tuple[str, ...] = ()  # FR-3.7 (v0.2)
-    min_popularity: int | None = None  # FR-3.8 (v0.2)
-    min_plays: int | None = None  # FR-3.8 (v0.2)
-    exclude_solved_here: bool = False  # FR-3.9 (v0.2)
+    # --- v0.2 ---------------------------------------------------------------------------
+    openings: tuple[str, ...] = ()  # FR-3.7: OpeningTags families or variations; empty = any
+    min_popularity: int | None = DEFAULT_MIN_POPULARITY  # FR-3.8; None = no threshold
+    min_plays: int | None = DEFAULT_MIN_PLAYS  # FR-3.8; None = no threshold
+    exclude_solved_here: bool = True  # FR-3.9: hide puzzles you've won at least once here
+    only_my_misses: bool = False  # FR-3.9: only puzzles whose latest attempt here was a loss
+    ratios: tuple[RatioBucket, ...] = ()  # FR-3.10: replaces `themes` when set
+    # --- later versions (schema only; must stay at the defaults) -------------------------
     exclude_played_on_lichess: bool = False  # FR-3.9 (v0.3)
-    only_my_misses: bool = False  # FR-3.9 (v0.2)
-    ratios: tuple[RatioBucket, ...] = ()  # FR-3.10 (v0.2)
     source: Source = "lichess"  # FR-3.15 (v0.8)
 
     @property
@@ -70,10 +81,26 @@ class FilterSpec:
     def all_lengths(self) -> bool:
         return not self.lengths or set(self.lengths) == set(LENGTHS)
 
+    @property
+    def excludes_solved(self) -> bool:
+        """Only my misses wins over Exclude solved: a puzzle you won once and missed since is a miss."""
+        return self.exclude_solved_here and not self.only_my_misses
+
+    def bucket(self, index: int) -> FilterSpec:
+        """The pool of ratio bucket `index`: these filters, with the bucket's themes (ANY) as the themes."""
+        b = self.ratios[index]
+        return dataclasses.replace(self, themes=b.themes, match="any", ratios=())
+
     # ---- JSON ---------------------------------------------------------------------------------
     def to_json(self) -> dict[str, Any]:
-        d = dataclasses.asdict(self)
-        return {k: list(v) if isinstance(v, tuple) else v for k, v in d.items()}
+        def plain(v: Any) -> Any:  # tuples (also inside ratio buckets) become JSON lists
+            if isinstance(v, (tuple, list)):
+                return [plain(x) for x in v]
+            if isinstance(v, dict):
+                return {k: plain(x) for k, x in v.items()}
+            return v
+
+        return {k: plain(v) for k, v in dataclasses.asdict(self).items()}
 
     @classmethod
     def from_json(cls, data: Any) -> FilterSpec:
@@ -109,20 +136,39 @@ class FilterSpec:
             raise ValidationError("side must be 'either', 'white' or 'black'")
         if self.queue_size is not None and not 1 <= self.queue_size <= MAX_QUEUE:
             raise ValidationError(f"The number of puzzles must be between 1 and {MAX_QUEUE}.")
+        if self.order not in ("random", "easy_to_hard", "by_theme"):
+            raise ValidationError("order must be 'random', 'easy_to_hard' or 'by_theme'")
+        if len(self.openings) > MAX_OPENINGS or not all(_OPENING_TAG.match(o) for o in self.openings):
+            raise ValidationError("openings contains an invalid opening")
+        lo, hi = POPULARITY_RANGE
+        if self.min_popularity is not None and not lo <= self.min_popularity <= hi:
+            raise ValidationError(f"The minimum popularity must be between {lo} and {hi}.")
+        if self.min_plays is not None and not 0 <= self.min_plays <= MAX_MIN_PLAYS:
+            raise ValidationError(f"The minimum number of plays must be between 0 and {MAX_MIN_PLAYS:,}.")
+        self._validate_ratios()
         later = {
-            "order": self.order != "random",
-            "openings": bool(self.openings),
-            "min_popularity": self.min_popularity is not None,
-            "min_plays": self.min_plays is not None,
-            "exclude_solved_here": self.exclude_solved_here,
             "exclude_played_on_lichess": self.exclude_played_on_lichess,
-            "only_my_misses": self.only_my_misses,
-            "ratios": bool(self.ratios),
             "source": self.source != "lichess",
         }
         used = [k for k, v in later.items() if v]
         if used:
             raise UnsupportedInThisVersion(f"This version doesn't support the filter(s): {', '.join(used)}.")
+
+    def _validate_ratios(self) -> None:
+        if not self.ratios:
+            return
+        if self.themes:
+            raise ValidationError("With ratios, the themes come from each ratio: clear the theme list.")
+        if not 2 <= len(self.ratios) <= MAX_BUCKETS:
+            raise ValidationError(f"Ratios need between 2 and {MAX_BUCKETS} groups.")
+        for b in self.ratios:
+            if not b.themes or len(b.themes) > MAX_THEMES or not all(is_valid_key(t) for t in b.themes):
+                raise ValidationError("Each ratio needs at least one valid theme.")
+            if not 1 <= b.weight <= 100:
+                raise ValidationError("Each ratio's share must be between 1% and 100%.")
+        total = sum(b.weight for b in self.ratios)
+        if total != 100:
+            raise ValidationError(f"The ratios must add up to 100% (they add up to {total}%).")
 
 
 def _coerce(key: str, value: Any) -> Any:
@@ -163,8 +209,29 @@ def _coerce(key: str, value: Any) -> Any:
                 not isinstance(themes, list)
                 or not all(isinstance(t, str) for t in themes)
                 or not isinstance(weight, int)
+                or isinstance(weight, bool)
             ):
                 raise ValidationError("each ratio needs a list of themes and a whole-number weight")
             buckets.append(RatioBucket(tuple(themes), weight))
         return tuple(buckets)
     raise ValidationError(f"unknown filter field: {key}")  # pragma: no cover
+
+
+SAVED_FILTERS_VERSION = 2
+
+
+def upgrade_saved(data: Any, version: int) -> Any:
+    """Filters saved by an older version, brought to this version's defaults once (v0.2 planning).
+
+    v0.1 stored the quality thresholds as null and Exclude solved as false, because it didn't have
+    them; v0.2 turns them on by default. After this upgrade, whatever you set is kept."""
+    if not isinstance(data, dict) or version >= SAVED_FILTERS_VERSION:
+        return data
+    out = dict(data)
+    if version < 2:
+        if out.get("min_popularity") is None:
+            out["min_popularity"] = DEFAULT_MIN_POPULARITY
+        if out.get("min_plays") is None:
+            out["min_plays"] = DEFAULT_MIN_PLAYS
+        out["exclude_solved_here"] = True
+    return out

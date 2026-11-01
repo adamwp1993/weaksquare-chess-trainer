@@ -2,6 +2,8 @@
 
 Owns the FilterSpec -> SQL translation. Theme filters use the bitmask columns t0..t2 (see
 puzzle_import.py); only mask columns that are non-zero are tested, so most filters touch one column.
+Openings use the integer ids in `openings`; the history filters (FR-3.9) look up `attempts` in
+user.db, which is the main schema of every connection (puzzles.db is attached as `pz`).
 """
 
 from __future__ import annotations
@@ -25,6 +27,14 @@ class Where:
     params: tuple[int, ...]
 
 
+# FR-3.9. Only Lichess puzzles live in puzzles.db; the `win` index makes both lookups cheap.
+SOLVED_IDS = "SELECT a.puzzle_id FROM attempts a WHERE a.puzzle_source = 'lichess' AND a.win = 1"
+MISSED_IDS = (
+    "SELECT a.puzzle_id FROM attempts a WHERE a.puzzle_source = 'lichess' AND a.win = 0"
+    " AND a.id = (SELECT MAX(b.id) FROM attempts b WHERE b.puzzle_source = 'lichess' AND b.puzzle_id = a.puzzle_id)"
+)
+
+
 def _masks(themes: Sequence[str], bits: dict[str, int]) -> tuple[list[int], list[str]]:
     masks = [0] * THEME_COLUMNS
     unknown = []
@@ -37,8 +47,9 @@ def _masks(themes: Sequence[str], bits: dict[str, int]) -> tuple[list[int], list
     return masks, unknown
 
 
-def build_where(spec: FilterSpec, bits: dict[str, int]) -> Where:
-    """SQL condition over `p` (pz.puzzles) for a validated FilterSpec."""
+def build_where(spec: FilterSpec, bits: dict[str, int], openings: dict[str, int] | None = None) -> Where:
+    """SQL condition over `p` (pz.puzzles) for a validated FilterSpec. With ratios, pass one
+    bucket's spec (`spec.bucket(i)`): the buckets' themes aren't combined here."""
     parts: list[str] = []
     params: list[int] = []
 
@@ -83,6 +94,27 @@ def build_where(spec: FilterSpec, bits: dict[str, int]) -> Where:
                 parts.append(f"(p.{col} & ?) = 0")
                 params.append(m)
 
+    if spec.min_popularity is not None:
+        parts.append("p.popularity >= ?")
+        params.append(spec.min_popularity)
+    if spec.min_plays is not None:
+        parts.append("p.nb_plays >= ?")
+        params.append(spec.min_plays)
+
+    if spec.openings:
+        ids = sorted({openings[o] for o in spec.openings if o in (openings or {})})
+        if not ids:
+            parts.append("0")  # openings this database doesn't have
+        else:
+            marks = ", ".join("?" * len(ids))
+            parts.append(f"(p.opening_family IN ({marks}) OR p.opening_variation IN ({marks}))")
+            params += ids + ids
+
+    if spec.only_my_misses:
+        parts.append(f"p.id IN ({MISSED_IDS})")
+    elif spec.excludes_solved:
+        parts.append(f"p.id NOT IN ({SOLVED_IDS})")
+
     return Where(" AND ".join(parts), tuple(params))
 
 
@@ -113,8 +145,23 @@ class LichessDbSource:
         with self._db.session() as conn:
             return {r["theme"]: r["bit"] for r in conn.execute("SELECT theme, bit FROM pz.theme_bits")}
 
+    def opening_ids(self) -> dict[str, int]:
+        with self._db.session() as conn:
+            return {r["tag"]: r["id"] for r in conn.execute("SELECT tag, id FROM pz.openings")}
+
+    def where(self, spec: FilterSpec) -> Where:
+        return build_where(spec, self.theme_bits(), self.opening_ids() if spec.openings else None)
+
+    def openings(self) -> list[tuple[str, str | None, int]]:
+        """(tag, family tag or None, puzzle count) for every opening in the database."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT o.tag, f.tag AS family, o.count FROM pz.openings o LEFT JOIN pz.openings f ON f.id = o.family_id"
+            ).fetchall()
+        return [(r["tag"], r["family"], r["count"]) for r in rows]
+
     def count(self, spec: FilterSpec) -> int:
-        where = build_where(spec, self.theme_bits())
+        where = self.where(spec)
         with self._db.session() as conn:
             return int(conn.execute(f"SELECT COUNT(*) FROM pz.puzzles p WHERE {where.sql}", where.params).fetchone()[0])
 
@@ -124,7 +171,7 @@ class LichessDbSource:
         """Up to `k` random matching puzzle keys not in `exclude` (plan decision 3)."""
         if k <= 0 or match_count <= 0:
             return []
-        where = build_where(spec, self.theme_bits())
+        where = self.where(spec)
         with self._db.session() as conn:
             if match_count <= SMALL_POOL:
                 keys = [r[0] for r in conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE {where.sql}", where.params)]

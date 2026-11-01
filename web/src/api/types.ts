@@ -57,9 +57,9 @@ export interface FilterSpec {
   min_popularity: number | null;
   min_plays: number | null;
   exclude_solved_here: boolean;
-  exclude_played_on_lichess: boolean;
   only_my_misses: boolean;
   ratios: RatioBucket[];
+  exclude_played_on_lichess: boolean;
   source: "lichess" | "my" | "both";
 }
 

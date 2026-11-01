@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from weaksquare.core.errors import ValidationError
-from weaksquare.core.filters import FilterSpec
+from weaksquare.core.filters import SAVED_FILTERS_VERSION, FilterSpec, upgrade_saved
 from weaksquare.core.themes import GROUP_ORDER, info
 
 LAST_FILTERS_KEY = "mixer.filters"
+FILTERS_VERSION_KEY = "mixer.filters_version"  # which version's defaults the saved filters have
 UI_SETTING_KEYS = (LAST_FILTERS_KEY,)
 
 
@@ -63,6 +64,11 @@ class MixerService:
     def ui_settings(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         stored = self._settings.get(LAST_FILTERS_KEY)
+        version = self._settings.get(FILTERS_VERSION_KEY) or 1
+        if stored is not None and version < SAVED_FILTERS_VERSION:
+            stored = upgrade_saved(stored, version)
+            self._settings.set(LAST_FILTERS_KEY, stored)
+            self._settings.set(FILTERS_VERSION_KEY, SAVED_FILTERS_VERSION)
         if stored is not None:
             # Stored by an older or newer version and no longer valid: fall back to the defaults.
             with contextlib.suppress(ValidationError):
@@ -72,5 +78,6 @@ class MixerService:
     def set_ui_setting(self, key: str, value: Any) -> None:
         if key == LAST_FILTERS_KEY:
             self._settings.set(key, FilterSpec.from_json(value).to_json())
+            self._settings.set(FILTERS_VERSION_KEY, SAVED_FILTERS_VERSION)
         else:
             raise ValidationError(f"unknown setting: {key[:40]}")

@@ -117,7 +117,7 @@ def test_bridge_round_trip(services, paths, clock) -> None:  # type: ignore[no-u
     spec = {"themes": ["mateIn1"], "match": "any", "queue_size": 2}
     assert api.count_matches(spec)["data"] > 0
     assert api.count_matches({"themes": 5})["error"]["code"] == "invalid_argument"
-    assert api.count_matches({"order": "easy_to_hard"})["error"]["code"] == "unsupported_in_this_version"
+    assert api.count_matches({"exclude_played_on_lichess": True})["error"]["code"] == "unsupported_in_this_version"
     sid = api.start_session(spec)["data"]["session_id"]
     view = api.next_puzzle(sid)["data"]
     assert "themes" not in view  # FR-3.14
@@ -131,3 +131,19 @@ def test_bridge_round_trip(services, paths, clock) -> None:  # type: ignore[no-u
     assert api.set_setting("mixer.filters", spec)["ok"]
     assert api.get_settings()["data"]["last_filters"]["themes"] == ["mateIn1"]
     assert api.set_setting("other", 1)["error"]["code"] == "invalid_argument"
+
+
+def test_saved_v01_filters_upgraded_once(services) -> None:  # type: ignore[no-untyped-def]
+    """The v0.1 → v0.2 defaults (quality on, Exclude solved on) apply once, then your choices stick."""
+    from weaksquare.adapters.db.repos.user_data import SettingsRepo
+
+    settings = SettingsRepo(services.db)
+    v01 = {**FilterSpec(rating_min=1200).to_json(), "min_popularity": None, "min_plays": None,
+           "exclude_solved_here": False}  # fmt: skip
+    settings.set("mixer.filters", v01)  # as v0.1 left it: no version marker
+    first = services.mixer.ui_settings()["mixer.filters"]
+    assert (first["min_popularity"], first["min_plays"], first["exclude_solved_here"]) == (50, 100, True)
+    assert first["rating_min"] == 1200
+    services.mixer.set_ui_setting("mixer.filters", {**first, "min_plays": None, "exclude_solved_here": False})
+    again = services.mixer.ui_settings()["mixer.filters"]
+    assert again["min_plays"] is None and again["exclude_solved_here"] is False
