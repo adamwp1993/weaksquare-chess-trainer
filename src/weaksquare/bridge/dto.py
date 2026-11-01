@@ -140,6 +140,17 @@ class MoveFeedback:
 
 
 @dataclass(frozen=True)
+class HelpResponse:
+    """Hint or Show answer (§7.2). `outcome` is set when the help decided the attempt (a loss)."""
+
+    kind: Literal["hint", "answer"]
+    hint_square: str | None  # Hint: the piece that moves next
+    answer_fen: str | None  # Show answer: where the answer starts…
+    answer_moves: list[str]  # …and the moves from there (UCI, both sides)
+    outcome: Outcome | None
+
+
+@dataclass(frozen=True)
 class SessionStats:
     solved: int
     failed: int
@@ -169,5 +180,6 @@ EXPORTED: list[type] = [
     ThemeLabel,
     Outcome,
     MoveFeedback,
+    HelpResponse,
     SessionStats,
 ]

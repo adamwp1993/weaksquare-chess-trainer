@@ -194,22 +194,31 @@ class Api:
         color: Literal["white", "black"] = "white" if v.player_color == "white" else "black"
         return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating)
 
+    @staticmethod
+    def _outcome(o: Any) -> dto.Outcome | None:
+        if o is None:
+            return None
+        return dto.Outcome(
+            win=o.win,
+            puzzle_id=o.puzzle_id,
+            rating=o.rating,
+            themes=[dto.ThemeLabel(t, display_name(t)) for t in o.themes],
+            solution=o.solution,
+            puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
+        )
+
     @bridge_call
     def submit_move(self, session_id: int, uci: str) -> dto.MoveFeedback:
         r = self._sessions.submit_move(session_id, uci[:8])
-        outcome = None
-        if r.outcome is not None:
-            o = r.outcome
-            outcome = dto.Outcome(
-                win=o.win,
-                puzzle_id=o.puzzle_id,
-                rating=o.rating,
-                themes=[dto.ThemeLabel(t, display_name(t)) for t in o.themes],
-                solution=o.solution,
-                puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
-            )
         f = r.feedback
-        return dto.MoveFeedback(f.kind, f.reply, f.finished, outcome)
+        return dto.MoveFeedback(f.kind, f.reply, f.finished, self._outcome(r.outcome))
+
+    @bridge_call
+    def request_help(self, session_id: int, kind: Literal["hint", "answer"]) -> dto.HelpResponse:
+        """The stuck ladder (§7.2): Hint, then Show answer. Before the end, either is a loss."""
+        r = self._sessions.request_help(session_id, kind)
+        h = r.help
+        return dto.HelpResponse(h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome))
 
     @bridge_call
     def get_session_stats(self, session_id: int) -> dto.SessionStats:

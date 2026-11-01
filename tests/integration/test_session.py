@@ -147,3 +147,42 @@ def test_saved_v01_filters_upgraded_once(services) -> None:  # type: ignore[no-u
     services.mixer.set_ui_setting("mixer.filters", {**first, "min_plays": None, "exclude_solved_here": False})
     again = services.mixer.ui_settings()["mixer.filters"]
     assert again["min_plays"] is None and again["exclude_solved_here"] is False
+
+
+# ---- v0.2: Hint and Show answer are recorded as a loss (Done when) ------------------------------
+def test_hint_and_answer_recorded_as_a_loss(services) -> None:  # type: ignore[no-untyped-def]
+    from weaksquare.core.errors import ConflictError
+
+    sid = services.sessions.start(FilterSpec(queue_size=3, exclude_solved_here=False)).session_id
+
+    first = services.sessions.next_puzzle(sid)
+    with pytest.raises(ConflictError):
+        services.sessions.request_help(sid, "answer")  # Show answer unlocks after Hint
+    hint = services.sessions.request_help(sid, "hint")
+    assert hint.outcome is not None and not hint.outcome.win and hint.help.hint_square
+    solve(services, sid, first)  # finishing the line afterwards adds nothing
+    answer_after_end = services.sessions.request_help(sid, "answer")
+    assert answer_after_end.outcome is None  # free after the end (FR-5.4)
+
+    second = services.sessions.next_puzzle(sid)
+    services.sessions.request_help(sid, "hint")
+    ans = services.sessions.request_help(sid, "answer")
+    assert ans.outcome is None and list(ans.help.answer_moves) == solution(services, second.puzzle_id)[1:]
+
+    assert services.sessions.next_puzzle(sid) is not None  # third…
+    assert services.sessions.next_puzzle(sid) is None  # …skipped: the session is over
+    rows = attempts(services)
+    assert [(r["win"], r["help_used"]) for r in rows] == [(0, "hint"), (0, "hint"), (0, "none")]
+    assert services.sessions.stats(sid).failed == 3
+
+
+def test_request_help_over_the_bridge(paths, clock, services) -> None:  # type: ignore[no-untyped-def]
+    from tests.helpers import build_api
+
+    api = build_api(paths, clock)
+    sid = api.start_session({"queue_size": 1, "exclude_solved_here": False})["data"]["session_id"]
+    api.next_puzzle(sid)
+    assert api.request_help(sid, "answer")["error"]["code"] == "conflict"
+    hint = api.request_help(sid, "hint")["data"]
+    assert hint["kind"] == "hint" and len(hint["hint_square"]) == 2 and hint["outcome"]["win"] is False
+    assert api.request_help(sid, "explain")["error"]["code"] == "invalid_argument"

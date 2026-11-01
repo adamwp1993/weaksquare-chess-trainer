@@ -133,6 +133,14 @@ export interface MoveFeedback {
   outcome: Outcome | null;
 }
 
+export interface HelpResponse {
+  kind: "hint" | "answer";
+  hint_square: string | null;
+  answer_fen: string | null;
+  answer_moves: string[];
+  outcome: Outcome | null;
+}
+
 export interface SessionStats {
   solved: number;
   failed: number;

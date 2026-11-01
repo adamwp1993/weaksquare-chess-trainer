@@ -34,6 +34,7 @@ ALLOWLIST = {
     "start_session",
     "next_puzzle",
     "submit_move",
+    "request_help",
     "get_session_stats",
 }
 

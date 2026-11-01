@@ -18,7 +18,7 @@ from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
-from weaksquare.core.modes.base import AttemptResult, Feedback
+from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.standard import StandardMode, StandardState
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
@@ -127,6 +127,12 @@ class Outcome:
 class MoveResult:
     feedback: Feedback
     outcome: Outcome | None
+
+
+@dataclass(frozen=True)
+class HelpOutcome:
+    help: HelpResult
+    outcome: Outcome | None  # set when this help decided the attempt (a loss, FR-5.2)
 
 
 @dataclass(frozen=True)
@@ -300,6 +306,16 @@ class SessionService:
             feedback = self._mode.on_move(s.current.state, uci, self._clock.monotonic_ms())
             outcome = self._record(s, feedback.attempt) if feedback.attempt else None
             return MoveResult(feedback, outcome)
+
+    def request_help(self, session_id: int, kind: HelpKind) -> HelpOutcome:
+        """Hint or Show answer (§7.2). Before the attempt is decided it's recorded as a loss."""
+        s = self._session(session_id)
+        with s.lock:
+            if s.current is None:
+                raise ValidationError("There's no puzzle in progress.")
+            result = self._mode.on_help(s.current.state, kind, self._clock.monotonic_ms())
+            outcome = self._record(s, result.attempt) if result.attempt else None
+            return HelpOutcome(result, outcome)
 
     def stats(self, session_id: int) -> SessionStats:
         s = self._session(session_id)
