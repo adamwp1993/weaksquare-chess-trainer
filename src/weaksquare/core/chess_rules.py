@@ -91,7 +91,10 @@ def parse_move(board: chess.Board, uci: str) -> chess.Move | None:
     """A legal move from untrusted input, or None."""
     if not isinstance(uci, str) or not UCI_MOVE.match(uci):
         return None
-    move = chess.Move.from_uci(uci)
+    try:
+        move = chess.Move.from_uci(uci)
+    except chess.InvalidMoveError:  # e.g. "a1a1": well-formed but not a move
+        return None
     return move if move in board.legal_moves else None
 
 

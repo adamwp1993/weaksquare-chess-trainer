@@ -136,5 +136,5 @@ def test_illegal_lines_are_rejected() -> None:
 def test_parse_move_rejects_untrusted_input() -> None:
     board, _ = start_position(KNOWN[0].fen, KNOWN[0].moves.split())
     assert parse_move(board, "f1f8") == chess.Move.from_uci("f1f8")
-    for bad in ["", "f1f9", "e2e4", "f1f8x", "<script>", 42]:
+    for bad in ["", "f1f9", "e2e4", "f1f8x", "<script>", 42, "a1a1"]:  # a1a1: regression, used to raise
         assert parse_move(board, bad) is None  # type: ignore[arg-type]

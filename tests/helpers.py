@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import random
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -27,7 +28,7 @@ class FakeDesktop(Desktop):
 
 def build_api(paths: Paths, clock: FixedClock, desktop: Desktop | None = None, http: object | None = None) -> Api:
     runner = JobRunner()
-    services = build_services(paths, clock, runner, http=http)  # type: ignore[arg-type]
+    services = build_services(paths, clock, runner, random.Random(1234), http=http)  # type: ignore[arg-type]
     return Api(
         paths=paths,
         desktop=desktop or FakeDesktop(),
@@ -35,6 +36,8 @@ def build_api(paths: Paths, clock: FixedClock, desktop: Desktop | None = None, h
         dev_mode=True,
         runner=runner,
         puzzle_db=services.puzzle_db,
+        mixer=services.mixer,
+        sessions=services.sessions,
     )
 
 

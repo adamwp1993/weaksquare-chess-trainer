@@ -20,6 +20,14 @@ ALLOWLIST = {
     "start_puzzle_import",
     "get_job",
     "cancel_job",
+    "get_settings",
+    "set_setting",
+    "get_theme_catalog",
+    "count_matches",
+    "start_session",
+    "next_puzzle",
+    "submit_move",
+    "get_session_stats",
 }
 
 

@@ -36,3 +36,90 @@ export interface PuzzleDbStatus {
   rating_max: number | null;
   import_job_id: string | null;
 }
+
+export interface RatioBucket {
+  themes: string[];
+  weight: number;
+}
+
+export interface FilterSpec {
+  themes: string[];
+  match: "any" | "all";
+  exclude_themes: string[];
+  rating_min: number | null;
+  rating_max: number | null;
+  lengths: number[];
+  side: "either" | "white" | "black";
+  order: "random" | "easy_to_hard" | "by_theme";
+  queue_size: number | null;
+  openings: string[];
+  min_popularity: number | null;
+  min_plays: number | null;
+  exclude_solved_here: boolean;
+  exclude_played_on_lichess: boolean;
+  only_my_misses: boolean;
+  ratios: RatioBucket[];
+  source: "lichess" | "my" | "both";
+}
+
+export interface ThemeOption {
+  key: string;
+  name: string;
+  count: number;
+}
+
+export interface ThemeGroup {
+  name: string;
+  themes: ThemeOption[];
+}
+
+export interface UiSettings {
+  last_filters: FilterSpec | null;
+}
+
+export interface SessionInfo {
+  session_id: number;
+  match_count: number;
+  queue_size: number | null;
+}
+
+export interface PuzzleView {
+  number: number;
+  puzzle_id: string;
+  fen: string;
+  opponent_move: string;
+  player_color: "white" | "black";
+  rating: number;
+}
+
+export interface ThemeLabel {
+  key: string;
+  name: string;
+}
+
+export interface Outcome {
+  win: boolean;
+  puzzle_id: string;
+  rating: number;
+  themes: ThemeLabel[];
+  solution: string[];
+  puzzle_url: string;
+}
+
+export interface MoveFeedback {
+  kind: "correct" | "solved" | "wrong" | "illegal";
+  reply: string | null;
+  finished: boolean;
+  outcome: Outcome | null;
+}
+
+export interface SessionStats {
+  solved: number;
+  failed: number;
+  accuracy: number | null;
+  played: number;
+  queue_size: number | null;
+  finished: boolean;
+  all_time_solved: number;
+  all_time_failed: number;
+}

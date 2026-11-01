@@ -6,6 +6,7 @@ import argparse
 import logging
 import mimetypes
 import os
+import random
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, migrate
 from weaksquare.adapters.db.repos.puzzle_import import PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
+from weaksquare.adapters.db.repos.puzzles import LichessDbSource
+from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
 from weaksquare.adapters.desktop import Desktop, show_fatal
 from weaksquare.adapters.files import PuzzleCsv, sha256_file
 from weaksquare.adapters.http import HttpClient
@@ -25,7 +28,9 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.mixer import MixerService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
+from weaksquare.services.session import SessionService
 
 log = logging.getLogger("weaksquare")
 
@@ -80,13 +85,17 @@ class Services:
     db: Database
     http: HttpClient
     puzzle_db: PuzzleDbService
+    mixer: MixerService
+    sessions: SessionService
 
     def close(self) -> None:
         self.http.close()
         self.db.close_all()
 
 
-def build_services(paths: config.Paths, clock: Clock, runner: JobRunner, http: HttpClient | None = None) -> Services:
+def build_services(
+    paths: config.Paths, clock: Clock, runner: JobRunner, rng: random.Random, http: HttpClient | None = None
+) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs."""
     db = Database(paths.user_db, paths.puzzles_db)
     http = http or HttpClient()
@@ -108,7 +117,10 @@ def build_services(paths: config.Paths, clock: Clock, runner: JobRunner, http: H
         runner,
         clock,
     )
-    return Services(db=db, http=http, puzzle_db=puzzle_db)
+    puzzles = LichessDbSource(db)
+    mixer = MixerService(puzzles, SettingsRepo(db))
+    sessions = SessionService(puzzles, AttemptsRepo(db), SessionsRepo(db), clock, rng)
+    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -155,10 +167,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     events = EventSink()
     runner = JobRunner(events)
-    services = build_services(paths, clock, runner)
+    services = build_services(paths, clock, runner, rng)
     desktop = Desktop()
-    api = Api(paths=paths, desktop=desktop, clock=clock, dev_mode=args.dev, runner=runner, puzzle_db=services.puzzle_db)
-    _ = rng  # handed to services as they arrive
+    api = Api(
+        paths=paths,
+        desktop=desktop,
+        clock=clock,
+        dev_mode=args.dev,
+        runner=runner,
+        puzzle_db=services.puzzle_db,
+        mixer=services.mixer,
+        sessions=services.sessions,
+    )
 
     window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))
     if window is None:  # pragma: no cover - pywebview returns None only if creation failed

@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from weaksquare import config  # noqa: E402
 from weaksquare.adapters import instance_lock  # noqa: E402
 from weaksquare.adapters.db.migrate import NewerSchemaError, migrate  # noqa: E402
-from weaksquare.adapters.system_clock import SystemClock  # noqa: E402
+from weaksquare.adapters.system_clock import SystemClock, make_rng  # noqa: E402
 from weaksquare.app import build_services  # noqa: E402
 from weaksquare.jobs.runner import JobRunner, JobStatus  # noqa: E402
 
@@ -62,7 +62,7 @@ def main() -> int:
     runner = JobRunner(progress)
     try:
         migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock, paths.backups_dir)
-        services = build_services(paths, clock, runner)
+        services = build_services(paths, clock, runner, make_rng())
         status = services.puzzle_db.status()
         if args.skip_if_present and status.installed:
             print(f"   puzzle database already imported ({status.puzzle_count:,} puzzles); skipping")
@@ -81,7 +81,7 @@ def main() -> int:
         if final is None or final.state != "done":
             print(f"   import {final.state if final else 'failed'}: {final.message if final else ''}", file=sys.stderr)
             return 1
-        st = build_services(paths, clock, runner).puzzle_db.status()
+        st = build_services(paths, clock, runner, make_rng()).puzzle_db.status()
         print(f"   imported {st.puzzle_count:,} puzzles in {time.monotonic() - started:,.0f} s"
               + (f" (Lichess export of {st.export_date})" if st.export_date else ""))  # fmt: skip
         return 0

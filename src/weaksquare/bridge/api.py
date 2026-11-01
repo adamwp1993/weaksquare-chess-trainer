@@ -9,17 +9,22 @@ means updating that allowlist in the same commit (ARCHITECTURE §3 decision 13).
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from weaksquare.adapters.desktop import Desktop
+from weaksquare.bridge import dto
 from weaksquare.bridge.dto import AppInfo, Job, PuzzleDbStatus
 from weaksquare.bridge.errors import bridge_call
 from weaksquare.bridge.events import job_dto
 from weaksquare.config import APP_VERSION, LICENSE_NAME, REPO_URL, Paths
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import NotFoundError, ValidationError
+from weaksquare.core.filters import FilterSpec
+from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.mixer import LAST_FILTERS_KEY, MixerService
 from weaksquare.services.puzzle_db import PuzzleDbService
+from weaksquare.services.session import SessionService
 
 log = logging.getLogger("weaksquare.frontend")
 
@@ -36,7 +41,11 @@ class Api:
         dev_mode: bool,
         runner: JobRunner,
         puzzle_db: PuzzleDbService,
+        mixer: MixerService,
+        sessions: SessionService,
     ) -> None:
+        self._mixer = mixer
+        self._sessions = sessions
         self._paths = paths
         self._runner = runner
         self._puzzle_db = puzzle_db
@@ -106,3 +115,62 @@ class Api:
     @bridge_call
     def cancel_job(self, job_id: str) -> bool:
         return self._runner.cancel(job_id)
+
+    # ---- settings (UI state persists here, never in browser storage) ---------------------------
+    @bridge_call
+    def get_settings(self) -> dto.UiSettings:
+        stored = self._mixer.ui_settings().get(LAST_FILTERS_KEY)
+        return dto.UiSettings(last_filters=FilterSpec.from_json(stored) if stored else None)
+
+    @bridge_call
+    def set_setting(self, key: Literal["mixer.filters"], value: Any) -> None:
+        self._mixer.set_ui_setting(key, value)
+
+    # ---- the mixer (FR-3.1–3.5) -----------------------------------------------------------------
+    @bridge_call
+    def get_theme_catalog(self) -> list[dto.ThemeGroup]:
+        return [
+            dto.ThemeGroup(g.name, [dto.ThemeOption(t.key, t.name, t.count) for t in g.themes])
+            for g in self._mixer.theme_catalog()
+        ]
+
+    @bridge_call
+    def count_matches(self, spec: dict) -> int:
+        return self._mixer.count(FilterSpec.from_json(spec))
+
+    # ---- sessions (FR-3.11, 3.12, 3.14, FR-4.1, FR-5.1, 5.3) -----------------------------------
+    @bridge_call
+    def start_session(self, spec: dict) -> dto.SessionInfo:
+        info = self._sessions.start(FilterSpec.from_json(spec))
+        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size)
+
+    @bridge_call
+    def next_puzzle(self, session_id: int) -> dto.PuzzleView | None:
+        v = self._sessions.next_puzzle(session_id)
+        if v is None:
+            return None
+        color: Literal["white", "black"] = "white" if v.player_color == "white" else "black"
+        return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating)
+
+    @bridge_call
+    def submit_move(self, session_id: int, uci: str) -> dto.MoveFeedback:
+        r = self._sessions.submit_move(session_id, uci[:8])
+        outcome = None
+        if r.outcome is not None:
+            o = r.outcome
+            outcome = dto.Outcome(
+                win=o.win,
+                puzzle_id=o.puzzle_id,
+                rating=o.rating,
+                themes=[dto.ThemeLabel(t, display_name(t)) for t in o.themes],
+                solution=o.solution,
+                puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
+            )
+        f = r.feedback
+        return dto.MoveFeedback(f.kind, f.reply, f.finished, outcome)
+
+    @bridge_call
+    def get_session_stats(self, session_id: int) -> dto.SessionStats:
+        s = self._sessions.stats(session_id)
+        return dto.SessionStats(s.solved, s.failed, s.accuracy, s.played, s.queue_size, s.finished,
+                                s.all_time_solved, s.all_time_failed)  # fmt: skip

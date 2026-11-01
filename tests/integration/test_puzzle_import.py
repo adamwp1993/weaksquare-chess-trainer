@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import dataclasses
 import hashlib
+import random
 import threading
 from pathlib import Path
 from typing import ClassVar
@@ -40,7 +41,7 @@ def make(paths: Paths, clock: FixedClock, runner: JobRunner, http: object | None
     from weaksquare.config import MIGRATIONS_DIR
 
     migrate(paths.user_db, MIGRATIONS_DIR / "user", clock)
-    return build_services(paths, clock, runner, http=http)  # type: ignore[arg-type]
+    return build_services(paths, clock, runner, random.Random(5), http=http)  # type: ignore[arg-type]
 
 
 def run_import(services: Services, runner: JobRunner, local: Path | None = None) -> str:

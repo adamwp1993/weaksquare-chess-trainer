@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from weaksquare.core.filters import FilterSpec, RatioBucket
+
 
 @dataclass(frozen=True)
 class ApiError:
@@ -51,4 +53,95 @@ class PuzzleDbStatus:
     import_job_id: str | None
 
 
-EXPORTED: list[type] = [ApiError, AppInfo, Job, PuzzleDbStatus]
+@dataclass(frozen=True)
+class ThemeOption:
+    key: str
+    name: str
+    count: int
+
+
+@dataclass(frozen=True)
+class ThemeGroup:
+    name: str
+    themes: list[ThemeOption]
+
+
+@dataclass(frozen=True)
+class UiSettings:
+    last_filters: FilterSpec | None
+
+
+@dataclass(frozen=True)
+class SessionInfo:
+    session_id: int
+    match_count: int
+    queue_size: int | None
+
+
+@dataclass(frozen=True)
+class PuzzleView:
+    """The puzzle as the board needs it. Never includes themes (FR-3.14)."""
+
+    number: int
+    puzzle_id: str
+    fen: str  # before the opponent's move
+    opponent_move: str  # UCI, played (animated) first
+    player_color: Literal["white", "black"]
+    rating: int
+
+
+@dataclass(frozen=True)
+class ThemeLabel:
+    key: str
+    name: str
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """Sent once per puzzle, when the attempt is decided; themes are revealed here."""
+
+    win: bool
+    puzzle_id: str
+    rating: int
+    themes: list[ThemeLabel]
+    solution: list[str]  # UCI, from the player's first move
+    puzzle_url: str
+
+
+@dataclass(frozen=True)
+class MoveFeedback:
+    kind: Literal["correct", "solved", "wrong", "illegal"]
+    reply: str | None  # the opponent's reply (UCI), to play on the board
+    finished: bool  # the whole line has been played
+    outcome: Outcome | None
+
+
+@dataclass(frozen=True)
+class SessionStats:
+    solved: int
+    failed: int
+    accuracy: float | None
+    played: int
+    queue_size: int | None
+    finished: bool
+    all_time_solved: int
+    all_time_failed: int
+
+
+EXPORTED: list[type] = [
+    ApiError,
+    AppInfo,
+    Job,
+    PuzzleDbStatus,
+    RatioBucket,
+    FilterSpec,
+    ThemeOption,
+    ThemeGroup,
+    UiSettings,
+    SessionInfo,
+    PuzzleView,
+    ThemeLabel,
+    Outcome,
+    MoveFeedback,
+    SessionStats,
+]
