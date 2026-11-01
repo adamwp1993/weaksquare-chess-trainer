@@ -282,3 +282,9 @@ Entry format:
 - Decision: a separate personal access token (`puzzle:read`, `puzzle:write` only) on Adam's account, stored as `weaksquare-test`; unrated solves only, at most 3 per run (SR-13).
 - Alternatives: a second Lichess account, rejected because Lichess's Terms of Service don't list testing as an allowed reason for one.
 - Consequences: a few unrated solves per live run appear in Adam's puzzle history. The test token can be revoked without touching the app's own sign-in.
+
+### 2026-11-01, v0.1 (planning): macOS and Linux deferred to v1.1; keep the code portable meanwhile
+- Context: Adam wants macOS and Linux support eventually. Porting while features are still being added would triple CI and manual testing at every checkpoint.
+- Decision: a dedicated v1.1 (ROADMAP.md) after v1.0. Until then, OS-specific code stays in adapters, and new features don't assume Windows. `engine_manifest.json` is keyed by OS and architecture from v0.4, with only the Windows entry filled in. The dark-mode option is named "Match system". Linux (Debian stable, Ubuntu LTS) is the fully tested target. macOS is best effort, CI only, until a real Mac is available, because macOS may only be virtualized on Apple hardware.
+- Alternatives: porting now, rejected for the testing cost; folding the port into a feature version, rejected for the same reason; never porting, which leaves the door closed for no saving.
+- Consequences: v1.1 is mostly adapter, setup and CI work. It needs per-CPU Stockfish selection on Linux, a Secret Service check that refuses rather than storing plaintext, and a non-WebView2 approach for the real-app smoke tests.

@@ -20,7 +20,8 @@ Solves sync to the user's Lichess account so they count toward their real puzzle
 
 ### Non-goals
 - Writing a chess engine. Stockfish does the analysis, and a rules library handles legality.
-- Mobile, macOS, Linux or multi-user support.
+- Mobile or multi-user support. macOS and Linux are out of scope **until v1.1** (ROADMAP.md).
+- BSD and other Unix systems: no official Stockfish builds, so not planned.
 - A packaged installer or signed `.exe`. The app runs from source: clone, run `scripts/setup.py`, launch from the shortcut it creates (§15, §17).
 - Online play of any kind.
 
@@ -30,7 +31,7 @@ Solves sync to the user's Lichess account so they count toward their real puzzle
 
 | Layer | Choice | Notes |
 |---|---|---|
-| OS | **Windows** (10/11, x64) | Only target |
+| OS | **Windows** (10/11, x64) | Only target through v1.0. macOS and Linux are planned for v1.1 (ROADMAP.md); until then, OS-specific code stays in adapters and new features don't assume Windows |
 | App shell | **pywebview** window using **WebView2** (Chromium-based Edge) | Native window, web UI inside |
 | Backend | **Python** (3.12+) | Thin: data, auth, engine, sync, LLM calls |
 | Database | **SQLite** (`sqlite3`) | Puzzle DB + all user data, local |
@@ -67,6 +68,7 @@ Shown when the app launches.
 - **FR-1.8** **Gear icon** opens the same settings as the startup page (linked Lichess and chess.com accounts, game-sync options, LLM provider/model/key, engine settings) plus the **LLM price table and budget** (§9.3), without leaving the main page.
 - **FR-1.10** A small **LLM spend indicator** (this month's spend vs. budget) appears whenever an LLM is configured.
 - **FR-1.9** **Rated toggle** (session-level, default ON). When off, every solve this session syncs as `rated: false`.
+- **FR-1.12** **Appearance: dark mode.** A color-scheme setting with **Light** / **Dark** / **Match system** (default **Light**), reachable from the main menu (and from the gear settings once FR-1.8 exists). It applies immediately to every screen (filters, trainer, dialogs, importer, About, Stats) without a restart, and is saved in `user.db` through the bridge (never browser storage, ARCHITECTURE.md §3), so it survives a relaunch. The app starts in the saved scheme without flashing the other one first where WebView2 allows. *Match system* follows the operating system's light/dark setting (the Windows app theme today) and updates if it changes while the app is open. The name is OS-neutral so it carries over to v1.1. The board and pieces stay readable in both schemes, and text keeps at least WCAG AA contrast.
 
 ---
 
@@ -75,10 +77,18 @@ Shown when the app launches.
 ### 4.1 Source
 - Lichess open puzzle database: `lichess_db_puzzle.csv.zst` from database.lichess.org. Public domain, ~6M puzzles as of the 2026-07-29 export.
 - **FR-2.1** First-run importer: download (or accept a local file path), decompress the zstd stream, and import into SQLite with a progress bar. It must be **resumable or restartable** and must not block the UI.
+  - **FR-2.1a** The importer page states plainly that **Download from Lichess** fetches the **entire** Lichess puzzle database (every puzzle, not a sample or a starter set): about 300 MB compressed, about 6 million puzzles, roughly 1.5 GB on disk once imported. After the import, the match count with no filters equals the imported puzzle count. The User Guide uses the same wording.
 - **FR-2.2** Read the CSV **by header name, not column position**, and tolerate extra columns. The current export documents a `DailyDate` field in addition to the classic columns:
   `PuzzleId, FEN, Moves, Rating, RatingDeviation, Popularity, NbPlays, Themes, GameUrl, OpeningTags`
 - **FR-2.3** Re-import of a newer export **never touches user data** (attempts, SRS, presets, cache). It builds a new `puzzles.new.db` and swaps it in only when the import finishes and passes a row-count and integrity check. A failed or cancelled import leaves the current database untouched, and restarting simply starts the new file over.
 - **FR-2.4** A newer export can drop puzzle IDs you've already attempted. Stats, SRS, history and the Coach treat a missing puzzle as "no longer in the database" (left joins, no crash), and the queue skips it.
+- **FR-2.5** **Update check and prompt.**
+  - **How it checks:** a background check, never blocking startup and silent when offline. It fetches `sha256sums.txt` and sends a `HEAD` request for the puzzle file (`Last-Modified`, `Content-Length`), all through `adapters/http.py`. A newer export exists when the published SHA-256 differs from the `sha256` in `puzzles.db`'s `meta`. If `meta` has no hash (a local-file import), it compares `Last-Modified` with `export_date` instead.
+  - **When:** automatically at launch at most once a day (injected `Clock`, last check time saved in `user.db`), plus a **Check for updates** button in the update dialog. A setting turns the automatic check off. It's on by default.
+  - **The prompt:** a non-blocking banner, never a modal mid-puzzle. Example: *"A newer puzzle database is available (exported 2026-11-01, yours is from 2026-10-02). Download about 295 MB?"* It offers **Update now** (starts the FR-2.3 import), **Not now** (asks again next launch) and **Skip this export** (stays quiet until a newer one than the skipped hash appears).
+  - **Puzzle count before downloading:** the database.lichess.org page lists a count, which the app reads best-effort as *"about N puzzles (+M)"*. The page can lag the file, so the count is labeled approximate. If it's missing or can't be read, the line is left out and the check still works.
+  - **Exact numbers after the import:** before the swap, the import compares puzzle IDs between the old and new database. The finish message reports the exact numbers: *"6,201,004 puzzles: 44,112 new, 450 removed."* Removed puzzles you'd attempted are handled as in FR-2.4.
+  - **What it sends:** only these plain requests to database.lichess.org. Nothing about you or your training.
 
 ### 4.2 Semantics (critical)
 - `FEN` is the position **before the opponent's move**. The first move in `Moves` is the opponent's. Apply it, animated, then the player solves from move 2 onward.
@@ -240,7 +250,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-7.3** **No eval bar or engine lines are visible while a puzzle is in progress.** They appear after the puzzle ends.
 - **FR-7.4** Settings: think time (default 1 s), threads (default CPU cores − 1), hash (default 256 MB).
 - **FR-7.5** **Engine install.** The binary is gitignored, so an installer fetches it. One implementation, `services/engine_install.py`, is used by `scripts/fetch_stockfish.py`, `scripts/setup.py`, the in-app Install button and the v1.0 first-run wizard.
-  - **Pinned, never "latest":** `engine_manifest.json` records the release tag, asset name, URL and SHA-256 (taken from the digest GitHub publishes for the asset). Upgrading Stockfish means editing the manifest, with an ARCHITECTURE.md §7 decision-log entry.
+  - **Pinned, never "latest":** `engine_manifest.json` records the release tag, asset name, URL and SHA-256 (taken from the digest GitHub publishes for the asset). Assets are **keyed by OS and CPU architecture** (e.g. `windows-x86_64`) from the start. Through v1.0 only the Windows entry exists, and on any other platform the installer refuses with a clear message. v1.1 adds the macOS and Linux entries without changing the format. Upgrading Stockfish means editing the manifest, with an ARCHITECTURE.md §7 decision-log entry.
   - **Verify before extracting:** download over HTTPS through `adapters/http.py` to a temp file and check the SHA-256. On a mismatch, delete the file and stop with a clear error.
   - **Extract safely:** take only the expected `.exe`. Reject absolute paths and `..` entries.
   - **Install location:** `%LOCALAPPDATA%\WeakSquare\engines\<tag>\stockfish.exe`, outside the repo. Install into a temp folder and rename it into place, so a failed install leaves nothing half-written.

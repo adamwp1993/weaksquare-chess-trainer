@@ -68,9 +68,12 @@ Scope:
 - Stuck ladder steps 1–2 **from the dataset solution**: Hint and Show answer, both counting as a loss (FR-5.2, §7.2). There's no engine yet.
 - Basic Stats page: accuracy per theme, length and rating band (FR-9.1, 9.2).
 - Keyboard shortcuts, auto-orient the board, coordinates toggle.
+- **Dark mode** (FR-1.12): Light / Dark / Match system, saved in `user.db` through the bridge.
+- **Importer wording** (FR-2.1a): the importer page and the User Guide say the download is the **whole** Lichess puzzle database, about 300 MB compressed (~6M puzzles, ~1.5 GB once imported).
+- **Puzzle DB update check** (FR-2.5): daily background check against database.lichess.org, a banner with export dates, download size and an approximate puzzle count, Update now / Not now / Skip this export, and exact new/removed counts after the import.
 
-**Done when:** preset round-trip test; ratio sampling test (±5% over 1,000 draws); hint/answer recorded as a loss.
-**Adam's manual test:** build a "Combo night" preset with a 50/30/20 ratio, save, reload, play 15 puzzles, check Stats.
+**Done when:** preset round-trip test; ratio sampling test (±5% over 1,000 draws); hint/answer recorded as a loss; the color-scheme setting round-trips through the bridge and is applied on relaunch, and a test proves no browser storage is used for it; Playwright checks the main screens in both Light and Dark; the importer page text names the full database and its ~300 MB size; User Guide screenshots include one dark-mode shot; update-check tests with recorded, scrubbed HTTP fixtures cover same hash (no banner), new hash (banner with dates and size), no hash in `meta` (falls back to dates), offline (silent), an unreadable puzzle count (line omitted), the once-a-day limit via the injected clock, and Skip this export; a test proves the new/removed counts against two fixture databases.
+**Adam's manual test:** build a "Combo night" preset with a 50/30/20 ratio, save, reload, play 15 puzzles, check Stats. Switch to Dark, solve a puzzle and open every dialog (nothing unreadable), relaunch (still Dark), try Match system while toggling the Windows theme. Open the importer (☰ → Update puzzle database…) and check that the wording makes clear it's the full database. Relaunch with an older DB installed and check that the update banner appears with sensible details. Run the update and check the new/removed counts, then confirm that relaunching the same day doesn't check again.
 
 ---
 
@@ -164,6 +167,46 @@ Scope:
 
 **Done when:** weakness status-transition tests cover every rule in FR-10.35, using synthetic data; a checkpoint runs end to end on recorded data; a fresh clone on a clean Windows user profile goes from `setup.py` to a working app through the first-run wizard.
 **Adam's manual test:** clone and run `setup.py` from scratch on a clean Windows user profile → full first-run → play and sync 10 games over a few days → a checkpoint fires → Progress page updates.
+
+---
+
+## v1.1: macOS and Linux
+**Goal:** the same app, run from source, on Linux and macOS as well as Windows. No new features.
+
+Target platforms:
+- **Linux (fully supported):** Debian stable and Ubuntu LTS, x86-64, GTK desktop. Manually tested on clean VMs. Kali is a convenient extra check but not the reference distro.
+- **macOS (best effort):** Apple silicon and Intel. CI only, plus a manual pass when Adam has access to a real Mac (rented cloud Mac or borrowed hardware). macOS may only be virtualized on Apple hardware, so a VM on the Windows PC isn't an option. The README says "best effort" until a manual pass is done.
+
+Scope:
+- **Adapters:**
+  - single-instance lock with `fcntl` plus a local "bring your window forward" message
+  - open folders and links with `open` / `xdg-open`
+  - a portable fatal-error dialog
+  - the log banner records the WebKit/GTK version
+- **Window:** pywebview's GTK backend on Linux and Cocoa (WebKit) on macOS. Record the choice in ARCHITECTURE.md §7.
+- **Real-app smoke harness:** WebKit has no Chromium debugging port. Run the smoke tests through pywebview's Qt (Chromium) backend where possible, and document what can only be checked by hand.
+- **`setup.py`:**
+  - checks for the system packages pip can't install (WebKitGTK on Linux) and prints the exact install command
+  - creates a `.desktop` launcher on Linux and an app launcher on macOS
+- **Stockfish:** add the macOS and Linux entries to the manifest (FR-7.5).
+  - Linux has per-CPU builds, so add a small CPU-feature check with a safe baseline fallback.
+  - On macOS, mark the binary executable and clear its quarantine flag.
+- **Secrets:** macOS Keychain; Linux Secret Service. With no Secret Service running, refuse to store credentials with a clear message, and never fall back to a plaintext keyring (SR-1). Reword FR-6.5, SR-1 and SR-15 to be OS-neutral.
+- **Paths:** platformdirs locations per OS (NFR-2), shown on the About screen.
+- **CI:** add Linux and macOS runners.
+- **Docs:** README, Developer Guide and User Guide get per-OS install, launch and troubleshooting steps. REQUIREMENTS §2 drops "Windows only".
+
+**Done when:**
+- The full test suite and static checks pass on Windows, Linux and macOS CI.
+- The real-app smoke tests pass on Windows and Linux.
+- A test proves the Linux secret store refuses rather than writing plaintext when no Secret Service is available.
+- The engine installer picks the right manifest entry for each OS and architecture, and refuses unknown ones.
+- A fresh clone goes from `setup.py` to a working app on a clean Debian stable VM and a clean Ubuntu LTS VM.
+
+**Adam's manual test:**
+1. On clean Debian and Ubuntu VMs: clone → `setup.py` → launch from the app menu → import the DB → solve puzzles → install Stockfish → sign in to Lichess (token stored in the keyring) → review a game → relaunch (data persisted) → launch a second copy (the first window comes forward).
+2. Spot-check on Kali.
+3. On a Mac, if available: the same run. Otherwise record macOS as CI-only in the handoff.
 
 ---
 
