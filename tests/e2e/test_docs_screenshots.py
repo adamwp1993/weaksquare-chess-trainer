@@ -18,6 +18,16 @@ pytestmark = pytest.mark.docs_screenshots
 IMG = Path(__file__).resolve().parents[2] / "docs" / "img"
 
 
+@pytest.fixture(scope="module")
+def browser(pw):  # type: ignore[no-untyped-def]
+    """Screenshots must come out byte for byte the same (v0.1-B14, v0.2-B5): GPU rasterization and
+    LCD text antialiasing vary by a pixel between runs, so render in software, without them."""
+    b = pw.chromium.launch(args=["--disable-gpu", "--disable-lcd-text", "--disable-partial-raster",
+                                 "--font-render-hinting=none", "--force-color-profile=srgb"])  # fmt: skip
+    yield b
+    b.close()
+
+
 def panel_top(page) -> None:  # type: ignore[no-untyped-def]
     """Scroll the filter panel to the top: where focus left it depends on timing (v0.2-B5), and the
     reader should see the panel's title, Preset and Mix by ratio."""
@@ -58,6 +68,7 @@ def test_choosing_puzzles(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_label("2 moves").check()
     page.get_by_test_id("match-count").filter(has_text="307,865").wait_for()
     page.locator("body").click(position={"x": 1100, "y": 600})  # take focus out of the rating box
+    page.set_viewport_size({"width": 1280, "height": 1180})  # the whole panel, down to Start
     panel_top(page)
     shot(page, "mixer")
 
@@ -102,6 +113,8 @@ def test_presets(page) -> None:  # type: ignore[no-untyped-def]
         page.get_by_test_id(f"ratio-weight-{i}").fill(w)
     page.get_by_test_id("ratio-total").filter(has_text="Total 100%").wait_for()
     page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.evaluate("document.activeElement && document.activeElement.blur()")  # the last share box (v0.2-B5)
+    page.wait_for_timeout(500)
     panel_top(page)
     page.get_by_test_id("preset-save").click()
     page.get_by_test_id("preset-name").fill("Combo night")
