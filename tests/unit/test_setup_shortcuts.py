@@ -91,3 +91,22 @@ def test_the_icon_file_exists() -> None:
 @pytest.mark.skipif(sys.platform != "win32", reason="the known-folder API is Windows-only")
 def test_real_known_folder_lookup_returns_an_existing_folder() -> None:
     assert setup_script.desktop_folder().is_dir()
+
+
+def test_finish_message_names_only_the_shortcuts_made() -> None:
+    """v0.2-B6: with --no-shortcut, setup said to start the app from the Start menu or desktop."""
+    name = "WeakSquare Chess Trainer.lnk"
+    both = setup_script.finish_message([START / name, ONEDRIVE_DESKTOP / name])
+    assert both.endswith("from the Start menu or your desktop.")
+    assert setup_script.finish_message([START / name]).endswith("from the Start menu.")
+    assert "uv run python -m weaksquare" in setup_script.finish_message([])
+
+
+def test_help_describes_the_whole_download() -> None:
+    """v0.2-B6 / FR-2.1a: --help says it's the entire database, with its sizes."""
+    import subprocess
+
+    out = subprocess.run([sys.executable, str(ROOT / "scripts" / "setup.py"), "--help"], capture_output=True, text=True)
+    assert out.returncode == 0
+    for words in ("entire Lichess puzzle database", "300 MB", "6 million", "1.5 GB", "--no-desktop-shortcut"):
+        assert words in out.stdout, words

@@ -207,7 +207,7 @@ export class MockClient implements ApiClient {
 
   async getAppInfo(): Promise<AppInfo> {
     return {
-      version: "0.1.0",
+      version: "0.2.0",
       data_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare",
       logs_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare\\logs",
       dev_mode: false,

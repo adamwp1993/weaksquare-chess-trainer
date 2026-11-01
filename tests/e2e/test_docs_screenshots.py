@@ -18,9 +18,17 @@ pytestmark = pytest.mark.docs_screenshots
 IMG = Path(__file__).resolve().parents[2] / "docs" / "img"
 
 
+def panel_top(page) -> None:  # type: ignore[no-untyped-def]
+    """Scroll the filter panel to the top: where focus left it depends on timing (v0.2-B5), and the
+    reader should see the panel's title, Preset and Mix by ratio."""
+    page.locator("[data-testid=mixer-scroll] .mantine-ScrollArea-viewport").first.evaluate("e => e.scrollTo(0, 0)")
+    page.mouse.move(1270, 890)  # no hover highlight anywhere
+
+
 def shot(page, name: str, **kwargs) -> None:  # type: ignore[no-untyped-def]
     IMG.mkdir(parents=True, exist_ok=True)
-    page.wait_for_timeout(400)  # let animations settle
+    page.evaluate("document.fonts.ready.then(() => true)")
+    page.wait_for_timeout(1000)  # let transitions (focus rings, the segmented-control indicator) settle (v0.2-B5)
     page.screenshot(path=str(IMG / f"{name}.png"), animations="disabled", **kwargs)
 
 
@@ -49,6 +57,8 @@ def test_choosing_puzzles(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_label("Maximum rating").press("Enter")
     page.get_by_label("2 moves").check()
     page.get_by_test_id("match-count").filter(has_text="307,865").wait_for()
+    page.locator("body").click(position={"x": 1100, "y": 600})  # take focus out of the rating box
+    panel_top(page)
     shot(page, "mixer")
 
 
@@ -92,6 +102,7 @@ def test_presets(page) -> None:  # type: ignore[no-untyped-def]
         page.get_by_test_id(f"ratio-weight-{i}").fill(w)
     page.get_by_test_id("ratio-total").filter(has_text="Total 100%").wait_for()
     page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    panel_top(page)
     page.get_by_test_id("preset-save").click()
     page.get_by_test_id("preset-name").fill("Combo night")
     shot(page, "presets")

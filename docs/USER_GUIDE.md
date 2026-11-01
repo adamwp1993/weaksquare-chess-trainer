@@ -39,7 +39,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
 ## Getting started: the puzzle database
 *Added in v0.1. Changed in v0.2: the wording says what you download.*
 
-WeakSquare trains on the Lichess open puzzle database, which is public domain. **Download from Lichess** fetches the **entire** database, every puzzle and not a sample: about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It's stored on your PC, so after the first download everything works offline. With no filters set, the match count equals the number of puzzles imported.
+WeakSquare trains on the Lichess open puzzle database, which is public domain. **Download from Lichess** fetches the **entire** database, every puzzle and not a sample: about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It's stored on your PC, so after the first download everything works offline. With every filter cleared, including the quality filter under **More filters**, the match count equals the number of puzzles imported. With the default quality filter on, it's lower (see *Choosing your puzzles*).
 
 If setup already imported it, the app opens straight to your puzzles. Otherwise the first screen is **Get the puzzle database**:
 

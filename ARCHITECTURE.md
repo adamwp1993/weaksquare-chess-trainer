@@ -59,6 +59,9 @@ weaksquare-chess-trainer/
 │  │  ├─ checksums.py          # sha256sums.txt parsing
 │  │  ├─ filters.py            # FilterSpec (+ JSON schema, validation)
 │  │  ├─ queue.py              # ordering, ratios, queue building (pure; takes candidate ids)
+│  │  ├─ move_sounds.py        # which sound a move makes (v0.2)
+│  │  ├─ stats.py              # Stats grouping: theme, length, rating band (v0.2)
+│  │  ├─ db_update.py          # newer-export rules, puzzle-count parsing (v0.2)
 │  │  ├─ scoring.py            # win/loss, help → loss, angle selection
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
@@ -66,7 +69,8 @@ weaksquare-chess-trainer/
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
-│  │                           #   v0.1: puzzle_db.py (import job), mixer.py (catalog, counts), session.py
+│  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
+│  │                           #   v0.2: presets.py, stats.py, ui_settings.py, db_update.py (update check job)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -100,10 +104,11 @@ weaksquare-chess-trainer/
 │  ├─ e2e/                     # Playwright against web/ with mockClient
 │  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
 │  ├─ fulldb/                  # opt-in timings against the full puzzle DB
-│  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings
+│  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/);
+│                              #   tools/ holds the dev-only generator and recorder scripts
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
                                #   (thin CLIs over services, download + hash check), check_docs.py,
-                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts)
+                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts), make_icon.py (v0.2)
 ```
 
 `services/` and later `adapters/` modules are created **in the version that first needs them**. The tree shows the end state.

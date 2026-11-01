@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import weaksquare
 from tests.e2e.conftest import play
 from tests.smoke.conftest import attach, free_port, launch_app
 
@@ -97,7 +98,7 @@ def test_main_flow_alternative_mate_wrong_move_persistence(pw, data_dir: Path) -
 
     log = (data_dir / "logs" / "weaksquare.log").read_text(encoding="utf-8")
     first = log.splitlines()[0]
-    assert "0.1.0" in first and "Python" in first, first  # NFR-4 version banner
+    assert weaksquare.__version__ in first and "Python" in first, first  # NFR-4 version banner
 
     app = launch_app(data_dir, free_port())
     try:

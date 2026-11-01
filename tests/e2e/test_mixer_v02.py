@@ -220,3 +220,18 @@ def test_user_guide_uses_the_same_wording() -> None:
     guide = (Path(__file__).resolve().parents[2] / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
     for words in ("**entire** database", "not a sample", "about 300 MB", "about 6 million puzzles", "1.5 GB"):
         assert words in guide, words
+
+
+@pytest.mark.parametrize("size", [(1280, 900), (1000, 700), (1920, 1080)])
+def test_no_page_scrollbar_beside_the_filter_panel(browser, mock_url: str, size: tuple[int, int]) -> None:  # type: ignore[no-untyped-def]
+    """v0.2-B9: the window showed a second, page-level scrollbar next to the filter panel's own.
+    Without the update banner the page fits the window; only the panel scrolls."""
+    ctx = browser.new_context(viewport={"width": size[0], "height": size[1]})
+    page = ctx.new_page()
+    try:
+        page.goto(mock_url + "/")
+        page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+        overflow = page.evaluate("document.documentElement.scrollHeight - window.innerHeight")
+        assert overflow <= 0, f"the page is {overflow}px taller than the window"
+    finally:
+        ctx.close()

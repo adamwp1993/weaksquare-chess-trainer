@@ -203,8 +203,20 @@ def create_shortcuts(
     return links
 
 
+def finish_message(links: list[Path]) -> str:
+    """Setup's last line: where to start the app (v0.2-B6: it named shortcuts it hadn't made)."""
+    places = []
+    if any("Start Menu" in str(p) for p in links):
+        places.append("the Start menu")
+    if any("Start Menu" not in str(p) for p in links):
+        places.append("your desktop")
+    if not places:
+        return "Setup complete. Start the app with: uv run python -m weaksquare"
+    return f"Setup complete. Start WeakSquare Chess Trainer from {' or '.join(places)}."
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--no-shortcut", action="store_true", help="create neither shortcut")
     ap.add_argument("--no-desktop-shortcut", action="store_true", help="create the Start-menu shortcut only")
     ap.add_argument("--skip-puzzle-db", action="store_true")
@@ -220,8 +232,8 @@ def main() -> int:
     install_playwright(uv)
     install_pre_commit(uv)
     import_puzzles(uv, args)
-    create_shortcuts(args)
-    print("\nSetup complete. Start WeakSquare Chess Trainer from the Start menu or your desktop.")
+    links = create_shortcuts(args)
+    print("\n" + finish_message(links))
     return 0
 
 

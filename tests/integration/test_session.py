@@ -199,7 +199,7 @@ def test_swap_between_the_version_check_and_the_read_never_serves_a_wrong_puzzle
     services.sessions.next_puzzle(sid)  # fills the queue with keys of the current file
     # The new file drops the low-rated half, so every old key now points at a different puzzle.
     new_db = _subset_db(tmp_path / "b.db", lambda r: r.rating > 1200 or r.rating % 2 == 0)
-    source = services.sessions._puzzles  # noqa: SLF001
+    source = services.sessions._puzzles
     real_get = source.get
     swapped = []
 

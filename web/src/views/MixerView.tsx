@@ -31,7 +31,8 @@ import { ThemePicker } from "../components/ThemePicker";
 
 const COUNT_DEBOUNCE_MS = 250;
 // The panel scrolls on its own, so the page (and the board beside it) never does.
-const PANEL_MAX_HEIGHT = "calc(100vh - 56px - 2 * var(--mantine-spacing-md))";
+// (56px header, the page padding above and below, and the panel's two 1px borders: v0.2-B9.)
+const PANEL_MAX_HEIGHT = "calc(100vh - 56px - 2 * var(--mantine-spacing-md) - 2px)";
 
 // A one-line summary of the "More filters" section, so its defaults are never invisible.
 function moreSummary(spec: FilterSpec): string {
