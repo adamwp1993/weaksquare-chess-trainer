@@ -51,7 +51,9 @@ If setup already imported it, the app opens straight to your puzzles. Otherwise 
 
 **Already have the file?** Click **Use a file I already have…** and choose a `lichess_db_puzzle.csv.zst` (or an unpacked `.csv`) from database.lichess.org.
 
-**Updating:** Lichess publishes a new export regularly. Choose **☰ → Update puzzle database…**. You can keep training while it runs; the new puzzles are switched in when it's finished.
+**Updating:** Lichess publishes a new export regularly. Choose **☰ → Update puzzle database…**. You can keep training while it runs; the new puzzles are switched in when it's finished. The finish message gives the exact numbers, for example *"6,201,004 puzzles: 44,112 new, 450 removed."* (*Added in v0.2.*)
+
+**The one-time upgrade** (*Added in v0.2*): the first time v0.2 starts, it shows **Upgrading your puzzle database**. The opening and quality filters need extra information in the database, so the app rebuilds it once from the copy you already have. Nothing is downloaded, it takes about 2 minutes, and your attempts and settings aren't touched. If it stops (for example, you close the app), it starts again next time and your current database keeps working until it finishes.
 
 **Gotchas**
 - **Cancel** stops at any point and leaves your current puzzles as they were. An interrupted download picks up where it stopped next time.
@@ -60,15 +62,16 @@ If setup already imported it, the app opens straight to your puzzles. Otherwise 
 - **What it sends:** the download is a plain file request to database.lichess.org. Nothing about you or your training is sent.
 
 ## Choosing your puzzles
-*Added in v0.1.*
+*Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets.*
 
-The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match.
+The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match. The panel scrolls on its own, so the board stays in view.
 
-1. Pick **Themes**, or leave it at **All themes**.
+1. Pick **Themes**, or leave it at **All themes**. To mix themes in fixed shares instead, switch on **Mix by ratio** (below).
 2. Choose **ANY** (a puzzle needs at least one of your themes) or **ALL** (it needs every one).
 3. Narrow it down with **Exclude themes**, **Rating**, **Number of moves** and **You play**.
-4. Set how many **Puzzles** you want, or switch on **Endless**.
-5. Press **Start**.
+4. Open **More filters** for openings, quality and your history. Its summary line shows what's on, even while it's closed.
+5. Choose the **Order**, then how many **Puzzles** you want, or switch on **Endless**.
+6. Press **Start**.
 
 ![The filter panel with Fork, ALL, rating 1100–1700 and 2-move puzzles](img/mixer.png)
 
@@ -81,14 +84,42 @@ The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The
 | **Number of moves** | How many moves *you* make: 1, 2, 3 or 4 and more. Tick any combination, or **All**. This is counted from the solution itself, not from the One-move/Short/Long/Very long theme tags. |
 | **You play** | White, Black or Either. |
 | **Puzzles** / **Endless** | A session of a fixed number of puzzles (1 to 500), or an endless one. |
+| **Preset** | Loads a saved set of filters. See [Presets](#presets). |
+| **Mix by ratio** | Replaces **Themes** with groups, each with a share of the session, e.g. 50% Fork, 30% Pin or Skewer, 20% One-move. A group matches *any* of its themes. Each group shows how many puzzles it has, and the shares must add up to 100% (**Total** turns red until they do). **Add group** re-splits the shares evenly; **Even split** does that for the groups you have. Every other filter applies to all groups. Switching ratios off brings back the themes you had before. |
+| **More filters → Openings** | Puzzles from the openings you choose. Type to search. Each opening family is listed with its variations; choosing **(any variation)** takes the whole family. Only puzzles that start before move 20 have an opening, so choosing one leaves out the rest. |
+| **More filters → Quality** | **Min popularity** (Lichess players' votes, from -100 to 100) and **Min plays**. They're on by default at 50 and 100, which leaves out puzzles players rated poorly or that few have played. Change either number, or empty a box and press **Enter** to turn it off. |
+| **More filters → Your history** | **Exclude solved here** (on by default) leaves out puzzles you've solved at least once in this app; ones you've only failed can still come up. **Only my misses** gives you only puzzles whose last attempt here was a fail, so a puzzle drops out once you solve it. While it's on, Exclude solved isn't needed and is greyed out. |
+| **Order** | **Random**; **Easy → hard** (lowest rating first); or **By theme**, which serves all the puzzles of your first chosen theme, then the next (with ratios: group by group). |
 
-Puzzles come in random order, and no puzzle repeats within a session. Your filters are remembered the next time you open the app.
+No puzzle repeats within a session. Your filters are remembered the next time you open the app, and the count updates as you play, because solved puzzles drop out.
 
 ![The theme list with search and Select all / Clear](img/theme-picker.png)
 
 **Gotchas**
 - If the count says **0 puzzles match**, Start is disabled. Widen a filter. A common cause is ALL with two themes that never appear together, such as One-move and Very long.
 - Themes are hidden while you solve (see below), so choosing a single theme tells you the idea in advance. Mix several themes for a real test.
+- **Exclude solved here is on by default.** If a puzzle you want to repeat doesn't come up, untick it under **More filters → Your history**.
+- With ratios, a group with no matching puzzles says **No puzzles: left out**. If you start anyway, a note says so and the other groups share its slots. If a group runs out during the session, the others fill in for it.
+- **Easy → hard** and **By theme** sort the whole session when it has a fixed size. With **Endless** they sort each block of 50 puzzles, which the panel points out.
+- The filters you used in v0.1 get the new defaults (quality on, Exclude solved on) once, the first time v0.2 opens. After that, your choices are kept.
+
+## Presets
+*Added in v0.2.*
+
+A preset is a named set of filters, such as "Combo night" with a 50/30/20 ratio, that you can load in one click. Presets are saved on this PC with the rest of your data.
+
+![Saving a preset](img/presets.png)
+
+1. Set up the filters you want.
+2. Click **Save as…**, type a name and click **Save**.
+3. Later, choose it from **Preset** to load those filters. You can still change them before you press Start.
+
+The **⋯** button next to it renames or deletes the preset you loaded.
+
+**Gotchas**
+- Names are up to 60 characters, and two presets can't share a name, ignoring capitals. If you save under a name that exists, the app asks before replacing it with **Replace it**.
+- Loading a preset replaces all your filters. Saving after a change doesn't update the preset unless you save it under the same name and replace it.
+- A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Solving a puzzle
 *Added in v0.1.*

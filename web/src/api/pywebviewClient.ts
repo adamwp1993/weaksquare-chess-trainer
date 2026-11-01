@@ -6,6 +6,8 @@ import type {
   FilterSpec,
   Job,
   MoveFeedback,
+  OpeningFamily,
+  Preset,
   PuzzleDbStatus,
   PuzzleView,
   SessionInfo,
@@ -74,6 +76,10 @@ export class PywebviewClient implements ApiClient {
     return this.call<string>("start_puzzle_import", localPath);
   }
 
+  startPuzzleDbUpgrade() {
+    return this.call<string>("start_puzzle_db_upgrade");
+  }
+
   getJob(jobId: string) {
     return this.call<Job>("get_job", jobId);
   }
@@ -96,6 +102,30 @@ export class PywebviewClient implements ApiClient {
 
   countMatches(spec: FilterSpec) {
     return this.call<number>("count_matches", spec);
+  }
+
+  countBuckets(spec: FilterSpec) {
+    return this.call<number[]>("count_buckets", spec);
+  }
+
+  getOpeningCatalog() {
+    return this.call<OpeningFamily[]>("get_opening_catalog");
+  }
+
+  listPresets() {
+    return this.call<Preset[]>("list_presets");
+  }
+
+  savePreset(name: string, spec: FilterSpec, overwrite: boolean) {
+    return this.call<Preset>("save_preset", name, spec, overwrite);
+  }
+
+  renamePreset(oldName: string, newName: string) {
+    return this.call<void>("rename_preset", oldName, newName);
+  }
+
+  deletePreset(name: string) {
+    return this.call<void>("delete_preset", name);
   }
 
   startSession(spec: FilterSpec) {

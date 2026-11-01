@@ -6,9 +6,9 @@ appended to `attempts` at once, so closing the app never loses a result.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import random
-import dataclasses
 import threading
 from collections import deque
 from dataclasses import dataclass, field

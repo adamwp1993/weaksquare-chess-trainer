@@ -76,7 +76,9 @@ def page(browser, mock_url: str):  # type: ignore[no-untyped-def]
 
 def click_square(page, square: str, orientation: str) -> None:  # type: ignore[no-untyped-def]
     """Click a square on the chessground board (click-click moves)."""
-    box = page.get_by_test_id("board").bounding_box()
+    board = page.get_by_test_id("board")
+    board.scroll_into_view_if_needed()  # the filter panel can push the board below the fold (v0.2)
+    box = board.bounding_box()
     size = box["width"] / 8
     file = "abcdefgh".index(square[0])
     rank = int(square[1]) - 1

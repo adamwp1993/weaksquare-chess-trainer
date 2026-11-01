@@ -1,7 +1,8 @@
 // Mock client with fixed data, for UI development (`npm.cmd --prefix web run dev -- --mode mock`)
 // and for Playwright. Deterministic: no clock-dependent data and no randomness, so screenshots are stable.
 //
-// Scenario via the page URL: `?scenario=empty` starts with no puzzle database imported.
+// Scenarios via the page URL: `?scenario=empty` starts with no puzzle database imported, and
+// `?scenario=upgrade` with a v0.1 database that needs the local upgrade.
 import { Chess } from "chess.js";
 import type { ApiClient, BackendEvent } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
@@ -11,6 +12,8 @@ import type {
   FilterSpec,
   Job,
   MoveFeedback,
+  OpeningFamily,
+  Preset,
   PuzzleDbStatus,
   PuzzleView,
   SessionInfo,
@@ -27,6 +30,7 @@ const INSTALLED: PuzzleDbStatus = {
   rating_min: 339,
   rating_max: 3297,
   import_job_id: null,
+  needs_upgrade: false,
 };
 
 const EMPTY: PuzzleDbStatus = {
@@ -37,6 +41,7 @@ const EMPTY: PuzzleDbStatus = {
   rating_min: null,
   rating_max: null,
   import_job_id: null,
+  needs_upgrade: false,
 };
 
 const IMPORT_STEPS: [number, string][] = [
@@ -62,6 +67,17 @@ const CATALOG: [string, [string, string, number][]][] = [
   ["Origin", [["master", "Master games", 88000]]],
 ]; // prettier-ignore
 
+const OPENINGS: OpeningFamily[] = [
+  { family: { tag: "Italian_Game", name: "Italian Game", count: 61200 }, variations: [
+    { tag: "Italian_Game_Evans_Gambit", name: "Evans Gambit", count: 4100 },
+    { tag: "Italian_Game_Two_Knights_Defense", name: "Two Knights Defense", count: 12900 }] },
+  { family: { tag: "Russian_Game", name: "Russian Game", count: 9800 }, variations: [
+    { tag: "Russian_Game_Damiano_Variation", name: "Damiano Variation", count: 310 }] },
+  { family: { tag: "Sicilian_Defense", name: "Sicilian Defense", count: 152000 }, variations: [
+    { tag: "Sicilian_Defense_Closed", name: "Closed", count: 9100 },
+    { tag: "Sicilian_Defense_Najdorf_Variation", name: "Najdorf Variation", count: 11800 }] },
+]; // prettier-ignore
+
 const NAMES = new Map(CATALOG.flatMap(([, themes]) => themes.map(([k, n]) => [k, n] as const)));
 const SCALE = 61573; // each mock puzzle stands for this many real ones, so counts look realistic
 
@@ -76,7 +92,27 @@ function matches(p: MockPuzzle, spec: FilterSpec): boolean {
     const has = (t: string) => p.themes.includes(t);
     if (spec.match === "all" ? !spec.themes.every(has) : !spec.themes.some(has)) return false;
   }
-  return !spec.exclude_themes.some((t) => p.themes.includes(t));
+  if (spec.exclude_themes.some((t) => p.themes.includes(t))) return false;
+  if (spec.min_popularity !== null && (p.popularity ?? 90) < spec.min_popularity) return false;
+  if (spec.min_plays !== null && (p.plays ?? 1000) < spec.min_plays) return false;
+  if (spec.openings.length > 0 && !spec.openings.some((o) => (p.openings ?? []).includes(o))) return false;
+  return true;
+}
+
+function validate(spec: FilterSpec) {
+  if (spec.ratios.length === 0) return;
+  const fail = (message: string) => {
+    throw new ApiCallError({ code: "invalid_argument", message, retryable: false });
+  };
+  if (spec.themes.length > 0) fail("With ratios, the themes come from each ratio: clear the theme list.");
+  if (spec.ratios.length < 2) fail("Ratios need between 2 and 10 groups.");
+  if (spec.ratios.some((b) => b.themes.length === 0)) fail("Each ratio needs at least one valid theme.");
+  const total = spec.ratios.reduce((a, b) => a + b.weight, 0);
+  if (total !== 100) fail(`The ratios must add up to 100% (they add up to ${total}%).`);
+}
+
+function bucketSpec(spec: FilterSpec, i: number): FilterSpec {
+  return { ...spec, themes: spec.ratios[i].themes, match: "any", ratios: [] };
 }
 
 interface MockSession {
@@ -97,11 +133,35 @@ export class MockClient implements ApiClient {
   private nextSession = 1;
   private settings: UiSettings = { last_filters: null };
   private allTime = { solved: 41, failed: 17 };
+  private presets = new Map<string, Preset>();
+  private history = new Map<string, boolean[]>(); // puzzle id -> results here, oldest first
   readonly calls: string[] = [];
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const scenario = new URLSearchParams(search).get("scenario");
-    this.status = scenario === "empty" ? { ...EMPTY } : { ...INSTALLED };
+    this.status =
+      scenario === "empty" ? { ...EMPTY } : scenario === "upgrade" ? { ...INSTALLED, needs_upgrade: true } : { ...INSTALLED };
+    this.presets.set("Endgame drill", {
+      name: "Endgame drill",
+      spec: null,
+      error: "This preset can't be used in this version: This version doesn't support the filter(s): source.",
+      updated_at: "2026-10-30T18:00:00",
+    });
+  }
+
+  private matchesHistory(p: MockPuzzle, spec: FilterSpec) {
+    const h = this.history.get(p.id) ?? [];
+    if (spec.only_my_misses) return h.length > 0 && !h[h.length - 1];
+    if (spec.exclude_solved_here) return !h.includes(true);
+    return true;
+  }
+
+  private pool(spec: FilterSpec) {
+    return MOCK_PUZZLES.filter((p) => matches(p, spec) && this.matchesHistory(p, spec));
+  }
+
+  private record(p: MockPuzzle, win: boolean) {
+    this.history.set(p.id, [...(this.history.get(p.id) ?? []), win]);
   }
 
   private emit(job: Job) {
@@ -163,6 +223,19 @@ export class MockClient implements ApiClient {
     return id;
   }
 
+  async startPuzzleDbUpgrade() {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push("upgrade");
+    this.status.import_job_id = id;
+    this.emit({ id, kind: "puzzle_import", state: "running", progress: 0.3, message: "Importing puzzles… 1,900,000", error_code: null });
+    setTimeout(() => {
+      if (this.jobs.get(id)?.state !== "running") return;
+      this.status = { ...INSTALLED };
+      this.emit({ id, kind: "puzzle_import", state: "done", progress: 1, message: "Upgraded: 6,157,341 puzzles, ready for the new filters.", error_code: null });
+    }, 600);
+    return id;
+  }
+
   async getJob(jobId: string) {
     const job = this.jobs.get(jobId);
     if (!job) throw new ApiCallError({ code: "not_found", message: "No such job.", retryable: false });
@@ -193,11 +266,63 @@ export class MockClient implements ApiClient {
   }
 
   async countMatches(spec: FilterSpec) {
-    return MOCK_PUZZLES.filter((p) => matches(p, spec)).length * SCALE;
+    validate(spec);
+    if (spec.ratios.length > 0) {
+      const ids = new Set(spec.ratios.flatMap((_, i) => this.pool(bucketSpec(spec, i)).map((p) => p.id)));
+      return ids.size * SCALE;
+    }
+    return this.pool(spec).length * SCALE;
+  }
+
+  async countBuckets(spec: FilterSpec) {
+    return spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i)).length * SCALE);
+  }
+
+  async getOpeningCatalog() {
+    return OPENINGS;
+  }
+
+  async listPresets() {
+    return [...this.presets.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async savePreset(name: string, spec: FilterSpec, overwrite: boolean) {
+    const clean = name.trim().split(/\s+/).join(" ");
+    if (!clean) throw new ApiCallError({ code: "invalid_argument", message: "Give the preset a name.", retryable: false });
+    const existing = [...this.presets.keys()].find((k) => k.toLowerCase() === clean.toLowerCase());
+    if (existing && !overwrite) {
+      throw new ApiCallError({
+        code: "conflict",
+        message: `A preset called "${existing}" already exists. Replace it, or pick another name.`,
+        retryable: false,
+      });
+    }
+    validate(spec);
+    if (existing) this.presets.delete(existing);
+    const preset = { name: clean, spec, error: null, updated_at: "2026-11-01T12:00:00" };
+    this.presets.set(clean, preset);
+    return preset;
+  }
+
+  async renamePreset(oldName: string, newName: string) {
+    const p = this.presets.get(oldName);
+    if (!p) throw new ApiCallError({ code: "not_found", message: `There's no preset called "${oldName}".`, retryable: false });
+    const clash = [...this.presets.keys()].find((k) => k.toLowerCase() === newName.trim().toLowerCase() && k !== oldName);
+    if (clash) throw new ApiCallError({ code: "conflict", message: `A preset called "${clash}" already exists.`, retryable: false });
+    this.presets.delete(oldName);
+    this.presets.set(newName.trim(), { ...p, name: newName.trim() });
+  }
+
+  async deletePreset(name: string) {
+    if (!this.presets.delete(name)) {
+      throw new ApiCallError({ code: "not_found", message: `There's no preset called "${name}".`, retryable: false });
+    }
   }
 
   async startSession(spec: FilterSpec): Promise<SessionInfo> {
-    const queue = MOCK_PUZZLES.filter((p) => matches(p, spec));
+    validate(spec);
+    const pools = spec.ratios.length > 0 ? spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i))) : [this.pool(spec)];
+    const queue = interleave(pools, spec);
     if (queue.length === 0) {
       throw new ApiCallError({
         code: "invalid_argument",
@@ -207,7 +332,8 @@ export class MockClient implements ApiClient {
     }
     const id = this.nextSession++;
     this.sessions.set(id, { spec, queue, served: 0, current: null, solved: 0, failed: 0 });
-    return { session_id: id, match_count: queue.length * SCALE, queue_size: spec.queue_size };
+    const empty = spec.ratios.length > 0 ? pools.flatMap((p, i) => (p.length === 0 ? [i] : [])) : [];
+    return { session_id: id, match_count: queue.length * SCALE, queue_size: spec.queue_size, empty_buckets: empty };
   }
 
   private session(id: number): MockSession {
@@ -221,6 +347,7 @@ export class MockClient implements ApiClient {
     if (s.current && !s.current.decided) {
       s.failed++;
       this.allTime.failed++;
+      this.record(s.current.puzzle, false);
     }
     s.current = null;
     const limit = s.spec.queue_size ?? Infinity;
@@ -261,6 +388,7 @@ export class MockClient implements ApiClient {
       c.decided = c.failed = true;
       s.failed++;
       this.allTime.failed++;
+      this.record(c.puzzle, false);
       return { kind: "wrong", reply: null, finished: false, outcome: this.outcome(c.puzzle, false) };
     }
     c.chess.move(uciToMove(uci));
@@ -271,6 +399,7 @@ export class MockClient implements ApiClient {
         c.decided = true;
         s.solved++;
         this.allTime.solved++;
+        this.record(c.puzzle, true);
       }
       return { kind: "solved", reply: null, finished: true, outcome };
     }
@@ -312,6 +441,34 @@ export class MockClient implements ApiClient {
       this.listeners.delete(listener);
     };
   }
+}
+
+// The mock's queue: ratio groups taken in turn (no repeats), then the chosen order (FR-3.10, 3.11).
+function interleave(pools: MockPuzzle[][], spec: FilterSpec): MockPuzzle[] {
+  const seen = new Set<string>();
+  const out: MockPuzzle[] = [];
+  const idx = pools.map(() => 0);
+  let added = true;
+  while (added) {
+    added = false;
+    pools.forEach((pool, i) => {
+      while (idx[i] < pool.length && seen.has(pool[idx[i]].id)) idx[i]++;
+      if (idx[i] < pool.length) {
+        seen.add(pool[idx[i]].id);
+        out.push(pool[idx[i]++]);
+        added = true;
+      }
+    });
+  }
+  if (spec.order === "easy_to_hard") out.sort((a, b) => a.rating - b.rating);
+  if (spec.order === "by_theme" && spec.themes.length > 0) {
+    const group = (p: MockPuzzle) => {
+      const i = spec.themes.findIndex((t) => p.themes.includes(t));
+      return i < 0 ? spec.themes.length : i;
+    };
+    out.sort((a, b) => group(a) - group(b));
+  }
+  return out;
 }
 
 function uciToMove(uci: string) {

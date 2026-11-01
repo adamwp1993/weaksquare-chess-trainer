@@ -7,6 +7,7 @@ import { AboutModal } from "./views/AboutModal";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
 import { TrainerView } from "./views/TrainerView";
+import { UpgradeView } from "./views/UpgradeView";
 
 const SAVE_FILTERS_DEBOUNCE_MS = 500;
 
@@ -19,6 +20,9 @@ export function App() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [startNotice, setStartNotice] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const historyChanged = useCallback(() => setHistoryVersion((v) => v + 1), []);
   const saveTimer = useRef<number | undefined>(undefined);
 
   // The last filters you used come back from user.db (never browser storage).
@@ -41,9 +45,14 @@ export function App() {
     if (!spec) return;
     setStarting(true);
     setStartError(null);
+    setStartNotice(null);
     try {
       const info = await api.startSession(spec);
       setSessionId(info.session_id);
+      if (info.empty_buckets.length > 0) {
+        const groups = info.empty_buckets.map((i) => `group ${i + 1}`).join(" and ");
+        setStartNotice(`No puzzles match ${groups}, so it's left out; the other groups share its share.`);
+      }
     } catch (e) {
       setStartError((e as Error).message);
     } finally {
@@ -72,6 +81,7 @@ export function App() {
     );
   else if (!dbStatus.installed)
     main = <ImportView firstRun runningJobId={dbStatus.import_job_id} onDone={imported} />;
+  else if (dbStatus.needs_upgrade) main = <UpgradeView runningJobId={dbStatus.import_job_id} onDone={imported} />;
   else if (!spec)
     main = (
       <Center h={300}>
@@ -82,10 +92,22 @@ export function App() {
     main = (
       <Grid gap="lg">
         <Grid.Col span={{ base: 12, md: 4 }}>
-          <MixerView spec={spec} onChange={changeSpec} dbStatus={dbStatus} onStart={start} starting={starting} />
+          <MixerView
+            spec={spec}
+            onChange={changeSpec}
+            dbStatus={dbStatus}
+            onStart={start}
+            starting={starting}
+            historyVersion={historyVersion}
+          />
           {startError && (
             <Alert color="red" mt="sm" data-testid="start-error">
               {startError}
+            </Alert>
+          )}
+          {startNotice && (
+            <Alert color="yellow" mt="sm" withCloseButton onClose={() => setStartNotice(null)} data-testid="start-notice">
+              {startNotice}
             </Alert>
           )}
         </Grid.Col>
@@ -95,7 +117,12 @@ export function App() {
               <Text c="dimmed">Choose your puzzles on the left, then press Start.</Text>
             </Paper>
           ) : (
-            <TrainerView key={sessionId} sessionId={sessionId} onNewSession={() => setSessionId(null)} />
+            <TrainerView
+              key={sessionId}
+              sessionId={sessionId}
+              onNewSession={() => setSessionId(null)}
+              onHistoryChange={historyChanged}
+            />
           )}
         </Grid.Col>
       </Grid>

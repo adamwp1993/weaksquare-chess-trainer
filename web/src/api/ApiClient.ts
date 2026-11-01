@@ -6,6 +6,8 @@ import type {
   FilterSpec,
   Job,
   MoveFeedback,
+  OpeningFamily,
+  Preset,
   PuzzleDbStatus,
   PuzzleView,
   SessionInfo,
@@ -37,12 +39,21 @@ export interface ApiClient {
   choosePuzzleFile(): Promise<string | null>;
   /** Starts the import job (download when localPath is null). Returns the job ID. */
   startPuzzleImport(localPath: string | null): Promise<string>;
+  /** Rebuilds an older-schema puzzle database from its own rows (no download). Returns the job ID. */
+  startPuzzleDbUpgrade(): Promise<string>;
   getJob(jobId: string): Promise<Job>;
   cancelJob(jobId: string): Promise<boolean>;
   getSettings(): Promise<UiSettings>;
   setSetting(key: "mixer.filters", value: FilterSpec): Promise<void>;
   getThemeCatalog(): Promise<ThemeGroup[]>;
   countMatches(spec: FilterSpec): Promise<number>;
+  /** The live count of each ratio group (FR-3.10). */
+  countBuckets(spec: FilterSpec): Promise<number[]>;
+  getOpeningCatalog(): Promise<OpeningFamily[]>;
+  listPresets(): Promise<Preset[]>;
+  savePreset(name: string, spec: FilterSpec, overwrite: boolean): Promise<Preset>;
+  renamePreset(oldName: string, newName: string): Promise<void>;
+  deletePreset(name: string): Promise<void>;
   startSession(spec: FilterSpec): Promise<SessionInfo>;
   /** The next puzzle, or null when the session is complete. */
   nextPuzzle(sessionId: number): Promise<PuzzleView | null>;

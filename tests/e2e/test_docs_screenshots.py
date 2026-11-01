@@ -71,3 +71,27 @@ def test_about(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_role("menuitem", name="About").click()
     page.get_by_role("dialog").get_by_text("Data folder").wait_for()
     shot(page, "about")
+
+
+def _pick(page, test_id: str, name: str) -> None:  # type: ignore[no-untyped-def]
+    page.get_by_test_id(test_id).click()
+    page.get_by_role("checkbox", name=re.compile(f"^{name}")).last.check()
+    page.keyboard.press("Escape")
+
+
+def test_presets(page) -> None:  # type: ignore[no-untyped-def]
+    """A 50/30/20 ratio being saved as "Combo night" (v0.2)."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("ratio-switch").click()
+    _pick(page, "ratio-themes-0", "Fork")
+    _pick(page, "ratio-themes-1", "Discovered attack")
+    page.get_by_role("button", name="Add group").click()
+    _pick(page, "ratio-themes-2", "Mate in 1")
+    for i, w in enumerate(("50", "30", "20")):
+        page.get_by_test_id(f"ratio-weight-{i}").fill(w)
+    page.get_by_test_id("ratio-total").filter(has_text="Total 100%").wait_for()
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("preset-save").click()
+    page.get_by_test_id("preset-name").fill("Combo night")
+    shot(page, "presets")

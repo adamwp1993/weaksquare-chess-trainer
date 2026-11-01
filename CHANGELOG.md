@@ -14,9 +14,17 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 ## [Unreleased]
 
 ### Added
+- **Mix by ratio:** give theme groups a share of the session, e.g. 50% forks, 30% pins or skewers, 20% one-movers. Each group shows its own count, and the mix holds to within one puzzle. [FR-3.10]
+- **Opening filter:** choose opening families or individual variations, with search. [FR-3.7]
+- **Quality filter:** minimum popularity and minimum plays, on by default at 50 and 100 (adjustable, or off). [FR-3.8]
+- **Your history:** leave out puzzles you've solved here (on by default), or train only your misses. [FR-3.9]
+- **Order:** random, easy → hard, or grouped by theme. [FR-3.11]
+- **Presets:** save your filters under a name, then load, rename or delete them. [FR-3.13]
 - After a puzzle-database update, the finish message gives the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." [FR-2.5]
 
 ### Changed
+- Phase, goal and origin themes are chosen in the theme list's own groups, alongside the other themes. [FR-3.6]
+- The filter panel scrolls on its own, so the board stays in view, and the match count updates as you play.
 - The first time v0.2 starts, it upgrades your puzzle database for the new opening and quality filters. This rebuilds it from the copy you already have (no download, about 2 minutes, with a progress bar), and your attempts and settings aren't touched. [FR-2.3]
 
 ## [v0.1] - 2026-11-01

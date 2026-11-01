@@ -18,7 +18,16 @@ function uciMove(uci: string) {
 // Standard mode (FR-4.1): the opponent's first move plays, you answer, replies play automatically.
 // Themes stay hidden until the attempt is decided (FR-3.14). A wrong move is a loss (FR-5.3); you
 // can keep going to finish the line, or move on.
-export function TrainerView({ sessionId, onNewSession }: { sessionId: number; onNewSession: () => void }) {
+export function TrainerView({
+  sessionId,
+  onNewSession,
+  onHistoryChange,
+}: {
+  sessionId: number;
+  onNewSession: () => void;
+  /** An attempt may have been recorded: the mixer's history filters need a fresh count. */
+  onHistoryChange?: () => void;
+}) {
   const [view, setView] = useState<PuzzleView | null>(null);
   const [complete, setComplete] = useState(false);
   const [fen, setFen] = useState<string | null>(null);
@@ -42,7 +51,8 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
 
   const refreshStats = useCallback(() => {
     api.getSessionStats(sessionId).then(setStats, () => undefined);
-  }, [sessionId]);
+    onHistoryChange?.();
+  }, [sessionId, onHistoryChange]);
 
   const load = useCallback(async () => {
     if (loading.current) return;

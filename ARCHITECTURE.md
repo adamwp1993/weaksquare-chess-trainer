@@ -189,6 +189,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.2: Ratios by quota, history filters in SQL, defaults that upgrade saved filters
+- Context: FR-3.8 to FR-3.11 and Adam's planning decisions (quality and Exclude solved on by default).
+- Decision:
+  - **Ratios** (`core.queue.allocate`): each refill computes every group's target share of everything drawn so far (largest remainder, ties broken by the injected rng), fills the shortfall and shuffles the slots. A 50/30/20 mix stays within one puzzle of exact. A group with no puzzles gets weight 0 at the start (`SessionInfo.empty_buckets`, shown as a notice), and one that runs dry mid-session gets weight 0 and its slots go to the others. Each group is the base filters with that group's themes (ANY); groups never repeat a puzzle between them.
+  - **Order:** a fixed-size queue in a non-random order is drawn whole, then sorted; an endless one sorts each refill of 50.
+  - **History filters** are subqueries on `attempts` (user.db is the main schema of every connection): `id NOT IN (ids ever won)` and `id IN (ids whose latest attempt lost)`. *Only my misses* overrides *Exclude solved*.
+  - **Changed defaults:** `FilterSpec` defaults are now popularity ≥ 50, ≥ 100 plays and Exclude solved on. Saved filters carry a `mixer.filters_version`; `upgrade_saved` gives v0.1 filters the new defaults once.
+  - The mixer recounts after each recorded attempt, since the history filters change the count.
+- Alternatives: a weighted coin per slot (drifts by several puzzles in short sessions); a history column copied into puzzles.db (it's replaced on every import).
+- Consequences: ratio sessions draw per group, so a session with N groups makes up to N sampling queries per refill.
+
 ### 2026-11-01, v0.2: puzzles.db schema v2, upgraded locally from the old file
 - Context: the opening (FR-3.7) and quality (FR-3.8) filters need new columns and a wider covering index. puzzles.db is attached read-only, and the download is deleted after an import, so a v1 database can't be migrated in place or simply re-imported from disk.
 - Decision: `puzzles/0002_openings_quality.sql` adds `opening_family` and `opening_variation` (ids into a new `openings(id, tag, family_id, count)` table; the first OpeningTags tag is the family, the second its variation). The covering index becomes `(rating, length, player_color, t0, t1, t2, popularity, nb_plays)`, plus `(opening_family, rating)` and `(opening_variation, rating)`. When `puzzles.db` has an older schema, the app offers an **upgrade** job: `ExistingPuzzleDb` streams the current file's rows CSV-shaped through the same parser and `PuzzleDbWriter` into `puzzles.new.db`, which is checked and swapped as in FR-2.3. The writer also attaches the database it replaces and counts new and removed puzzle IDs before the swap (FR-2.5); a job can now return its own finish message. user.db `0002` adds `presets` and a nullable `attempts.puzzle_rating`, which is backfilled from puzzles.db where the puzzle still exists.
