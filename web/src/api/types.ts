@@ -103,6 +103,7 @@ export interface UiSettings {
   coordinates: boolean;
   color_scheme: "light" | "dark" | "auto";
   sounds: SoundSettings;
+  auto_check: boolean;
 }
 
 export interface SessionInfo {
@@ -181,4 +182,12 @@ export interface StatsReport {
   by_length: StatRow[];
   by_rating: StatRow[];
   missing: number;
+}
+
+export interface UpdateOffer {
+  export_date: string | null;
+  current_export_date: string | null;
+  size: number | null;
+  approx_count: number | null;
+  approx_new: number | null;
 }

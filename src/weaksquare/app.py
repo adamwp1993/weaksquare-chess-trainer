@@ -30,6 +30,7 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
@@ -105,6 +106,7 @@ class Services:
     presets: PresetService
     stats: StatsService
     ui_settings: UiSettingsService
+    db_update: UpdateCheckService
 
     def close(self) -> None:
         self.http.close()
@@ -145,6 +147,10 @@ def build_services(
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
     presets = PresetService(PresetsRepo(db), clock)
     stats = StatsService(StatsRepo(db), attempts)
+    db_update = UpdateCheckService(
+        http, clock, SettingsRepo(db), meta.read, runner,
+        Urls(file=config.PUZZLE_DB_URL, sums=config.PUZZLE_SUMS_URL, page=config.PUZZLE_PAGE_URL),
+    )  # fmt: skip
     return Services(
         db=db,
         http=http,
@@ -154,6 +160,7 @@ def build_services(
         presets=presets,
         stats=stats,
         ui_settings=ui_settings,
+        db_update=db_update,
     )
 
 
@@ -215,6 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         presets=services.presets,
         stats=services.stats,
         ui_settings=services.ui_settings,
+        db_update=services.db_update,
     )
 
     scheme = services.ui_settings.get().color_scheme

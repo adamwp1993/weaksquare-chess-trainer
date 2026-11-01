@@ -17,6 +17,7 @@ FILTERS_VERSION_KEY = "mixer.filters_version"  # which version's defaults the sa
 COORDINATES_KEY = "ui.coordinates"
 COLOR_SCHEME_KEY = "ui.color_scheme"  # FR-1.12
 SOUNDS_KEY = "ui.sounds"  # FR-1.13
+AUTO_CHECK_KEY = "puzzle_db.auto_check"  # FR-2.5: the daily update check (default on)
 
 ColorScheme = Literal["light", "dark", "auto"]  # "auto" is Match system
 COLOR_SCHEMES = ("light", "dark", "auto")
@@ -42,6 +43,7 @@ class UiSettings:
     coordinates: bool  # file and rank letters around the board (default on)
     color_scheme: ColorScheme  # default light
     sounds: SoundSettings
+    auto_check: bool
 
 
 def _bool(name: str) -> Callable[[Any], Any]:
@@ -81,6 +83,7 @@ VALIDATORS: dict[str, Callable[[Any], Any]] = {
     COORDINATES_KEY: _bool("coordinates"),
     COLOR_SCHEME_KEY: _color_scheme,
     SOUNDS_KEY: _sounds,
+    AUTO_CHECK_KEY: _bool("auto_check"),
 }
 
 
@@ -110,6 +113,7 @@ class UiSettingsService:
             coordinates=coordinates if isinstance(coordinates, bool) else True,
             color_scheme=scheme if scheme in COLOR_SCHEMES else "light",
             sounds=self._sounds(),
+            auto_check=self._store.get(AUTO_CHECK_KEY) is not False,
         )
 
     def _sounds(self) -> SoundSettings:

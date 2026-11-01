@@ -22,6 +22,7 @@ from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
@@ -49,7 +50,9 @@ class Api:
         presets: PresetService,
         stats: StatsService,
         ui_settings: UiSettingsService,
+        db_update: UpdateCheckService,
     ) -> None:
+        self._db_update = db_update
         self._ui_settings = ui_settings
         self._stats = stats
         self._presets = presets
@@ -119,6 +122,23 @@ class Api:
         """Rebuild an older-schema puzzles.db from its own rows (no download). Returns the job ID."""
         return self._puzzle_db.start_upgrade()
 
+    # ---- update check (FR-2.5) -----------------------------------------------------------------
+    @bridge_call
+    def check_for_db_update(self, force: bool = False) -> str:
+        """Start the update check job (automatic at launch, or "Check for updates"). Returns the job ID."""
+        return self._db_update.start_check(force)
+
+    @bridge_call
+    def get_update_offer(self) -> dto.UpdateOffer | None:
+        o = self._db_update.current_offer()
+        if o is None:
+            return None
+        return dto.UpdateOffer(o.export_date, o.current_export_date, o.size, o.approx_count, o.approx_new)
+
+    @bridge_call
+    def dismiss_update(self, kind: Literal["not_now", "skip"]) -> None:
+        self._db_update.dismiss(kind)
+
     # ---- jobs -----------------------------------------------------------------------------------
     @bridge_call
     def get_job(self, job_id: str) -> Job:
@@ -144,11 +164,14 @@ class Api:
             coordinates=s.coordinates,
             color_scheme=s.color_scheme,
             sounds=dto.SoundSettings(snd.on, snd.volume, sound_set),
+            auto_check=s.auto_check,
         )
 
     @bridge_call
     def set_setting(
-        self, key: Literal["mixer.filters", "ui.coordinates", "ui.color_scheme", "ui.sounds"], value: Any
+        self,
+        key: Literal["mixer.filters", "ui.coordinates", "ui.color_scheme", "ui.sounds", "puzzle_db.auto_check"],
+        value: Any,
     ) -> None:
         self._ui_settings.set(key, value)
 

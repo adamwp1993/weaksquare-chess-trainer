@@ -81,6 +81,7 @@ class UiSettings:
     coordinates: bool  # letters and numbers around the board
     color_scheme: Literal["light", "dark", "auto"]  # FR-1.12; "auto" is Match system
     sounds: SoundSettings  # FR-1.13
+    auto_check: bool  # FR-2.5: check for a newer puzzle database once a day
 
 
 @dataclass(frozen=True)
@@ -197,6 +198,17 @@ class StatsReport:
     missing: int  # attempts on puzzles no longer in the database
 
 
+@dataclass(frozen=True)
+class UpdateOffer:
+    """FR-2.5: a newer Lichess puzzle export is available."""
+
+    export_date: str | None
+    current_export_date: str | None
+    size: int | None  # bytes to download
+    approx_count: int | None  # from the database.lichess.org page, which can lag the file
+    approx_new: int | None
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -220,4 +232,5 @@ EXPORTED: list[type] = [
     SessionStats,
     StatRow,
     StatsReport,
+    UpdateOffer,
 ]
