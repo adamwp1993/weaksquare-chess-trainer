@@ -214,5 +214,38 @@ Scope:
 
 ---
 
+## v2.0: Opening trainer
+**Goal:** learn openings with grounded explanations, build your own repertoire including your answers to the opponent's sidelines, and drill it with spaced repetition (REQUIREMENTS §18). It needs the engine (v0.4), the LLM guardrails (v0.7) and, for the explorer, Lichess sign-in (v0.3).
+
+Built in internal steps, like v0.1, each committed and ticked off in `plans/v2.0.md`. QA runs once, at the end.
+- **v2.0a Book and repertoire:** import the `chess-openings` book (FR-12.1); match lines by position; the repertoire tree and its migration (FR-12.4); a browse-and-pick screen; Learn mode's step-through with engine evals (FR-12.3, 12.6, without the LLM).
+- **v2.0b Explanations:** overviews and per-move Explain (FR-12.5, 12.6); the `opening_notes` cache and its migration; prefetch with the estimate and Confirm, plus Regenerate (FR-12.7); the optional explorer with caching (FR-12.2).
+- **v2.0c Deviations and practice:** "What if they play…?" with engine replies and stored branches (FR-12.8); Practice mode with per-position spaced repetition (FR-12.9, 12.10); opening stats (FR-12.11).
+- **Docs:** a User Guide chapter for the Opening trainer, including what it sends (FR-12.12).
+
+**Done when:**
+- Every book line passes python-chess validation at import, and transpositions map to the same position (test).
+- A test proves no move shown on the board or stored in the repertoire ever comes from LLM output.
+- Cache tests show a second request for the same position, move, provider and model makes no API call.
+- Prefetch skips stored items and their cost, and is blocked by the per-run cap and the monthly budget.
+- Each scope preset gives the right line and move counts, and Custom is clamped to its limits.
+- The estimate's cost comes from `llm_prices` (test with a changed price).
+- The warnings appear at the 25%-of-budget and 10-minute thresholds.
+- Split-into-runs keeps every run under the cap.
+- A cancelled prefetch keeps the finished items.
+- An illegal deviation is rejected before it reaches Stockfish.
+- A deviation branch is stored and then drilled in Practice.
+- Spaced-repetition scheduling tests use the injected clock.
+- The explorer is skipped cleanly when you're signed out or offline.
+- Recorded LLM and explorer fixtures are scrubbed.
+
+**Adam's manual test:**
+1. Pick the Italian Game as White → read the overview → step through the main line with Explain on a few moves.
+2. Open the prefetch dialog and switch between Light, Standard and Deep (the counts, cost and time update and read sensibly) → prefetch with Standard (confirm, then check the spend indicator against the estimate) → close and reopen, and check the notes load with no new spend.
+3. Enter 2 sidelines for Black with "What if they play…?" and check the engine replies and explanations make sense.
+4. Practice for 15 positions, including a deliberate mistake → come back the next day and check the due positions.
+
+---
+
 ## After v1.0 (parked ideas from review, not committed)
 Threat-scan habit trainer, "Is there a tactic?" mode, visualization mode, think-first lock and timers, conversion practice vs. Stockfish, Play from here, self-review-before-engine, "What if?" questions, opening trouble spots, adaptive difficulty, pattern-based SRS, daily session builder, confirm-move toggle, notes and pattern journal, CSV export, in-app Help panel that renders the User Guide, a packaged and code-signed installer if other people ask for one.
