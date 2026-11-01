@@ -6,6 +6,7 @@ import type { Outcome, PuzzleView, SessionStats } from "../api/types";
 import { AnswerPlayer, answerPositions, type AnswerPosition } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
 import { SessionBar } from "../components/SessionBar";
+import { sounds } from "../sound/player";
 import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
@@ -95,6 +96,7 @@ export function TrainerView({
         setFen(c.fen());
         setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
         setMovable(next.player_color);
+        sounds.play(next.opponent_sound); // before you've clicked anything (FR-1.13)
         setMessage({ color: "gray", text: `Your turn: find the best move for ${next.player_color}.` });
       }, OPPONENT_DELAY_MS);
     } catch (e) {
@@ -128,9 +130,11 @@ export function TrainerView({
     setMovable(null);
     try {
       const fb = await api.submitMove(sessionId, uci);
+      sounds.play(fb.move_sound);
       if (fb.outcome) {
         setOutcome(fb.outcome);
         refreshStats();
+        sounds.later(fb.outcome.win ? "solved" : "failed");
       }
       if (fb.kind !== "wrong" && fb.kind !== "illegal") setHintSquare(null);
       if (fb.kind === "correct" && fb.reply) {
@@ -142,6 +146,7 @@ export function TrainerView({
           setFen(after.fen());
           setLastMove([reply.slice(0, 2), reply.slice(2, 4)]);
           setMovable(view.player_color);
+          sounds.play(fb.reply_sound);
         }, REPLY_DELAY_MS);
       } else if (fb.kind === "solved") {
         chess.current = after;
@@ -172,6 +177,7 @@ export function TrainerView({
       if (help.outcome) {
         setOutcome(help.outcome);
         refreshStats();
+        sounds.play("failed");
       }
       const lost = help.outcome ? " This puzzle now counts as failed." : "";
       if (kind === "hint") {
@@ -184,7 +190,7 @@ export function TrainerView({
         setHintSquare(null);
         setMovable(null);
         setLineDone(true);
-        setAnswer({ positions: answerPositions(help.answer_fen, help.answer_moves), step: 0 });
+        setAnswer({ positions: answerPositions(help.answer_fen, help.answer_moves, help.answer_sounds), step: 0 });
         setMessage({ color: "gray", text: `The answer: step through it with Back and Forward.${lost}` });
       }
     } catch (e) {
@@ -201,7 +207,9 @@ export function TrainerView({
   const stepAnswer = (delta: number) => {
     if (!answer) return;
     const to = Math.min(Math.max(answer.step + delta, 0), answer.positions.length - 1);
-    if (to !== answer.step) setAnswer({ ...answer, step: to });
+    if (to === answer.step) return;
+    if (to > answer.step) sounds.play(answer.positions[to].sound);
+    setAnswer({ ...answer, step: to });
   };
   const next = () => {
     if (complete) onNewSession();
@@ -296,7 +304,7 @@ export function TrainerView({
             <AnswerPlayer
               positions={answer.positions}
               step={answer.step}
-              onStep={(to) => setAnswer({ ...answer, step: to })}
+              onStep={(to) => stepAnswer(to - answer.step)}
             />
           )}
           <Group gap="xs" grow data-testid="help-controls">

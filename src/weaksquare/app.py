@@ -21,7 +21,7 @@ from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
 from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
-from weaksquare.adapters.desktop import Desktop, show_fatal
+from weaksquare.adapters.desktop import Desktop, show_fatal, system_prefers_dark
 from weaksquare.adapters.files import PuzzleCsv, sha256_file
 from weaksquare.adapters.http import HttpClient
 from weaksquare.adapters.logging_setup import setup_logging
@@ -74,6 +74,16 @@ def front_end_url(dev_server: bool) -> str | None:
         return VITE_DEV_URL
     index = config.WEB_DIST / "index.html"
     return str(index) if index.is_file() else None
+
+
+# The page background of each scheme (Mantine's body colors), so the window never flashes the
+# other scheme while the front end loads (FR-1.12).
+WINDOW_BACKGROUND = {"light": "#FFFFFF", "dark": "#242424"}
+
+
+def window_background(scheme: str, system_dark: bool) -> str:
+    dark = scheme == "dark" or (scheme == "auto" and system_dark)
+    return WINDOW_BACKGROUND["dark" if dark else "light"]
 
 
 def fix_mime_types() -> None:
@@ -207,7 +217,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         ui_settings=services.ui_settings,
     )
 
-    window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))
+    scheme = services.ui_settings.get().color_scheme
+    window = webview.create_window(
+        title,
+        url,
+        js_api=api,
+        width=1280,
+        height=860,
+        min_size=(1000, 700),
+        background_color=window_background(scheme, system_prefers_dark()),
+    )
     if window is None:  # pragma: no cover - pywebview returns None only if creation failed
         raise RuntimeError("could not create the window")
     events.attach(window)

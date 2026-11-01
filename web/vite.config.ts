@@ -8,6 +8,7 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
+  "media-src 'self'", // the bundled move sounds (FR-1.13)
   "font-src 'self' data:",
   "connect-src 'self'",
   "object-src 'none'",

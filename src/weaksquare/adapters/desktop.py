@@ -1,4 +1,4 @@
-"""Small desktop integrations: open a folder in Explorer, pick a file."""
+"""Small desktop integrations: open a folder in Explorer, pick a file, read the system theme."""
 
 from __future__ import annotations
 
@@ -31,6 +31,22 @@ class Desktop:
             file_types=("Lichess puzzle export (*.zst;*.csv)", "All files (*.*)"),
         )
         return str(chosen[0]) if chosen else None
+
+
+def system_prefers_dark() -> bool:
+    """The Windows app theme (Settings → Personalization → Colors → app mode). False if unknown."""
+    if sys.platform != "win32":  # pragma: no cover - v1.1 adds the macOS and Linux equivalents
+        return False
+    import winreg
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+    except OSError:
+        return False
+    return value == 0
 
 
 def show_fatal(title: str, message: str) -> None:

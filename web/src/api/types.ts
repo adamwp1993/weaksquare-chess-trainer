@@ -92,9 +92,17 @@ export interface Preset {
   updated_at: string;
 }
 
+export interface SoundSettings {
+  on: boolean;
+  volume: number;
+  set: "sfx" | "piano" | "nes" | "futuristic";
+}
+
 export interface UiSettings {
   last_filters: FilterSpec | null;
   coordinates: boolean;
+  color_scheme: "light" | "dark" | "auto";
+  sounds: SoundSettings;
 }
 
 export interface SessionInfo {
@@ -111,6 +119,7 @@ export interface PuzzleView {
   opponent_move: string;
   player_color: "white" | "black";
   rating: number;
+  opponent_sound: "move" | "capture" | "check" | "checkmate" | "castle";
 }
 
 export interface ThemeLabel {
@@ -132,6 +141,8 @@ export interface MoveFeedback {
   reply: string | null;
   finished: boolean;
   outcome: Outcome | null;
+  move_sound: "move" | "capture" | "check" | "checkmate" | "castle" | null;
+  reply_sound: "move" | "capture" | "check" | "checkmate" | "castle" | null;
 }
 
 export interface HelpResponse {
@@ -140,6 +151,7 @@ export interface HelpResponse {
   answer_fen: string | null;
   answer_moves: string[];
   outcome: Outcome | null;
+  answer_sounds: ("move" | "capture" | "check" | "checkmate" | "castle")[];
 }
 
 export interface SessionStats {

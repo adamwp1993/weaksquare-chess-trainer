@@ -189,7 +189,30 @@ When you can't find the move, the **Hint** and **Show answer** buttons beside th
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 
-**Board coordinates:** press **C**, or choose **☰ → Hide board coordinates** / **Show board coordinates**. Your choice is saved.
+**Board coordinates:** press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved.
+
+## Appearance and sounds
+*Added in v0.2.*
+
+Choose **☰ → Settings…** to change how the app looks and sounds. Every change applies at once and is saved on this PC, so the app starts the same way next time.
+
+![The Settings dialog](img/settings.png)
+
+| Setting | What it does |
+|---|---|
+| **Appearance: Light / Dark / Match system** | The color scheme for every screen. **Light** is the default. **Match system** follows the Windows app mode (Settings → Personalization → Colors → *Choose your app mode*) and switches as soon as you change it, even with WeakSquare open. The board keeps its usual colors in every scheme. |
+| **Board coordinates** | The letters and numbers around the board (also **C**). |
+| **Move sounds** | On by default. Sounds for your moves and the opponent's (a move, a capture, a check, a mate), and for a solved or failed puzzle. Off is completely silent. |
+| **Volume** | 70% by default. |
+| **Sound set** | **Standard effects (sfx)** (the default), **Piano**, **8-bit (NES)** or **Futuristic**. **Play a sample** plays a capture in the chosen set. |
+
+![The trainer in Dark](img/trainer-dark.png)
+
+**Gotchas**
+- The app opens in your saved scheme straight away. If WeakSquare can't read the saved setting within a second and a half, it opens in Light and switches as soon as it can.
+- Castling plays the ordinary move sound, because none of the sets has a castling sound. In these sets, checkmate uses the check sound. A mate plays only that sound (not also a capture or a check), followed by the solved sound.
+- A new sound cuts off the one before, so fast moves never pile up.
+- The sounds are Lichess's sets by Enigmahack, licensed AGPL-3.0 like this app. They're bundled with the app, so nothing is downloaded when they play.
 
 ## Installing from source
 *Added in v0.1.*

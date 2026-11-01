@@ -1,20 +1,22 @@
 import { Button, Group, Text } from "@mantine/core";
 import { Chess } from "chess.js";
+import type { MoveSound } from "../sound/player";
 
 export interface AnswerPosition {
   fen: string;
   lastMove: [string, string] | null;
   san: string | null; // the move that led here
+  sound: MoveSound | null; // …and its sound (FR-1.13)
 }
 
 /** Every position of an answer line: the start, then one per move. */
-export function answerPositions(fen: string, moves: string[]): AnswerPosition[] {
+export function answerPositions(fen: string, moves: string[], sounds: MoveSound[] = []): AnswerPosition[] {
   const chess = new Chess(fen);
-  const out: AnswerPosition[] = [{ fen, lastMove: null, san: null }];
-  for (const uci of moves) {
+  const out: AnswerPosition[] = [{ fen, lastMove: null, san: null, sound: null }];
+  moves.forEach((uci, i) => {
     const m = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci[4] : undefined });
-    out.push({ fen: chess.fen(), lastMove: [uci.slice(0, 2), uci.slice(2, 4)], san: m.san });
-  }
+    out.push({ fen: chess.fen(), lastMove: [uci.slice(0, 2), uci.slice(2, 4)], san: m.san, sound: sounds[i] ?? null });
+  });
   return out;
 }
 

@@ -94,3 +94,47 @@ def test_session_runs_and_attempts_persist_across_restart(pw, with_puzzles) -> N
 
     run(None)
     run("0 solved, 1 failed")
+
+
+def test_dark_scheme_survives_relaunch(pw, with_puzzles) -> None:  # type: ignore[no-untyped-def]
+    """FR-1.12 Done when: the color scheme is saved through the bridge and applied on relaunch."""
+    from tests.smoke.conftest import attach
+
+    def scheme(page) -> str:  # type: ignore[no-untyped-def]
+        return page.evaluate("document.documentElement.getAttribute('data-mantine-color-scheme')")
+
+    app = launch_app(with_puzzles, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            assert scheme(page) == "light"
+            page.get_by_role("button", name="Menu").click()
+            page.get_by_role("menuitem", name="Settings…").click()
+            page.get_by_test_id("color-scheme").get_by_text("Dark", exact=True).click()
+            assert scheme(page) == "dark"
+            page.wait_for_timeout(300)  # the save is a bridge call
+    finally:
+        assert app.close() == 0
+
+    app = launch_app(with_puzzles, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").wait_for(timeout=30_000)
+            assert scheme(page) == "dark"  # from the first render on
+            assert page.evaluate("[localStorage.length, sessionStorage.length]") == [0, 0]
+    finally:
+        assert app.close() == 0
+
+
+def test_sounds_may_play_without_a_click(app_page) -> None:  # type: ignore[no-untyped-def]
+    """FR-1.13: the opponent's first move plays a sound before you've clicked anything, so WebView2's
+    autoplay policy must allow audio without a user gesture. Playwright's evaluate isn't a gesture."""
+    app_page.get_by_test_id("import-view").wait_for(timeout=30_000)  # no puzzle DB in this data folder
+    result = app_page.evaluate(
+        """async () => {
+            const a = new Audio('/sounds/sfx/Move.ogg');
+            a.volume = 0;
+            try { await a.play(); return 'played'; } catch (e) { return e.name; }
+        }"""
+    )
+    assert result == "played"

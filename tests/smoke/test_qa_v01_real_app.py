@@ -102,7 +102,11 @@ def test_main_flow_alternative_mate_wrong_move_persistence(pw, data_dir: Path) -
     app = launch_app(data_dir, free_port())
     try:
         with attach(pw, app) as page:
-            page.get_by_test_id("match-count").filter(has_text=re.compile(r"^1 ")).wait_for(timeout=30_000)
+            # v0.2: Exclude solved (on by default) leaves out the puzzle solved above…
+            page.get_by_test_id("match-count").filter(has_text=re.compile(r"^0 ")).wait_for(timeout=30_000)
+            page.get_by_test_id("more-filters").click()
+            page.get_by_test_id("exclude-solved").uncheck()  # …until you ask for it back
+            page.get_by_test_id("match-count").filter(has_text=re.compile(r"^1 ")).wait_for()
             assert page.get_by_test_id("themes-picker").inner_text().strip() == "1 selected"
             assert page.get_by_label("Minimum rating").input_value() == "563"
             page.get_by_role("button", name="Start").click()

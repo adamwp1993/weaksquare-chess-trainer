@@ -135,10 +135,21 @@ class Api:
     @bridge_call
     def get_settings(self) -> dto.UiSettings:
         s = self._ui_settings.get()
-        return dto.UiSettings(last_filters=s.last_filters, coordinates=s.coordinates)
+        snd = s.sounds
+        sound_set: Literal["sfx", "piano", "nes", "futuristic"] = (
+            snd.set if snd.set in ("piano", "nes", "futuristic") else "sfx"  # type: ignore[assignment]
+        )
+        return dto.UiSettings(
+            last_filters=s.last_filters,
+            coordinates=s.coordinates,
+            color_scheme=s.color_scheme,
+            sounds=dto.SoundSettings(snd.on, snd.volume, sound_set),
+        )
 
     @bridge_call
-    def set_setting(self, key: Literal["mixer.filters", "ui.coordinates"], value: Any) -> None:
+    def set_setting(
+        self, key: Literal["mixer.filters", "ui.coordinates", "ui.color_scheme", "ui.sounds"], value: Any
+    ) -> None:
         self._ui_settings.set(key, value)
 
     # ---- the mixer (FR-3.1–3.5) -----------------------------------------------------------------
@@ -198,7 +209,7 @@ class Api:
         if v is None:
             return None
         color: Literal["white", "black"] = "white" if v.player_color == "white" else "black"
-        return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating)
+        return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating, v.opponent_sound)
 
     @staticmethod
     def _outcome(o: Any) -> dto.Outcome | None:
@@ -217,14 +228,16 @@ class Api:
     def submit_move(self, session_id: int, uci: str) -> dto.MoveFeedback:
         r = self._sessions.submit_move(session_id, uci[:8])
         f = r.feedback
-        return dto.MoveFeedback(f.kind, f.reply, f.finished, self._outcome(r.outcome))
+        return dto.MoveFeedback(f.kind, f.reply, f.finished, self._outcome(r.outcome), f.move_sound, f.reply_sound)
 
     @bridge_call
     def request_help(self, session_id: int, kind: Literal["hint", "answer"]) -> dto.HelpResponse:
         """The stuck ladder (§7.2): Hint, then Show answer. Before the end, either is a loss."""
         r = self._sessions.request_help(session_id, kind)
         h = r.help
-        return dto.HelpResponse(h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome))
+        return dto.HelpResponse(
+            h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome), list(h.answer_sounds)
+        )
 
     # ---- stats (FR-9.1, 9.2) ---------------------------------------------------------------------
     @bridge_call

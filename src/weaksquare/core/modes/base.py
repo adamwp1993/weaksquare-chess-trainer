@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeVar
 
+from weaksquare.core.move_sounds import MoveSound
 from weaksquare.core.puzzle import Puzzle
 
 HelpUsed = Literal["none", "hint", "answer", "explain"]
@@ -33,6 +34,8 @@ class Feedback:
     reply: str | None  # the opponent's reply (UCI), played automatically
     finished: bool  # the whole line has been played
     attempt: AttemptResult | None  # set exactly once per puzzle, when the attempt is decided
+    move_sound: MoveSound | None = None  # your move (also a wrong one, before it's taken back)
+    reply_sound: MoveSound | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class HelpResult:
     answer_fen: str | None  # Show answer: the position the answer starts from…
     answer_moves: tuple[str, ...]  # …and every move from there (UCI, both sides)
     attempt: AttemptResult | None
+    answer_sounds: tuple[MoveSound, ...] = ()  # one per answer move
 
 
 S = TypeVar("S")

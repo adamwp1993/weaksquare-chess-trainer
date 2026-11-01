@@ -16,3 +16,12 @@ def test_no_browser_storage_in_web_src() -> None:
             if FORBIDDEN.search(line):
                 hits.append(f"{f.relative_to(WEB_SRC)}:{n}: {line.strip()}")
     assert hits == []
+
+
+def test_color_scheme_is_kept_through_the_bridge() -> None:
+    """FR-1.12: Mantine's default color-scheme manager uses localStorage. The provider must be given
+    the bridge-backed one, and Mantine's storage manager must never be imported."""
+    main = (WEB_SRC / "main.tsx").read_text(encoding="utf-8")
+    assert re.search(r"<MantineProvider[^>]*colorSchemeManager=\{bridgeColorSchemeManager\(", main)
+    for f in WEB_SRC.rglob("*.ts*"):
+        assert "localStorageColorSchemeManager" not in f.read_text(encoding="utf-8"), f

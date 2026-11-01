@@ -1,13 +1,15 @@
 import { ActionIcon, Alert, AppShell, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { FilterSpec, PuzzleDbStatus } from "./api/types";
+import type { FilterSpec, PuzzleDbStatus, SoundSettings } from "./api/types";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
 import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
+import { sounds as soundPlayer } from "./sound/player";
+import { SettingsModal } from "./views/SettingsModal";
 import { StatsView } from "./views/StatsView";
 import { TrainerView } from "./views/TrainerView";
 import { UpgradeView } from "./views/UpgradeView";
@@ -19,6 +21,8 @@ export function App() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [coordinates, setCoordinates] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sounds, setSounds] = useState<SoundSettings>({ on: false, volume: 70, set: "sfx" });
   const [updateOpen, setUpdateOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<PuzzleDbStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +41,7 @@ export function App() {
       (s) => {
         setSpec(s.last_filters ?? defaultFilters());
         setCoordinates(s.coordinates);
+        setSounds(s.sounds);
       },
       () => setSpec(defaultFilters()),
     );
@@ -57,6 +62,13 @@ export function App() {
   }, [coordinates]);
 
   useShortcuts({ c: toggleCoordinates, "?": () => setShortcutsOpen(true) });
+
+  // FR-1.13: the player follows the saved settings; off means silent and nothing loaded.
+  useEffect(() => soundPlayer.configure(sounds), [sounds]);
+  const changeSounds = useCallback((next: SoundSettings) => {
+    setSounds(next);
+    api.setSetting("ui.sounds", next).catch(() => undefined);
+  }, []);
 
   const start = async () => {
     if (!spec) return;
@@ -164,6 +176,7 @@ export function App() {
               <Menu.Item onClick={() => setStatsOpen(true)} disabled={!dbStatus?.installed}>
                 Stats
               </Menu.Item>
+              <Menu.Item onClick={() => setSettingsOpen(true)}>Settings…</Menu.Item>
               <Menu.Item onClick={toggleCoordinates} data-testid="menu-coordinates">
                 {coordinates ? "Hide board coordinates" : "Show board coordinates"}
               </Menu.Item>
@@ -178,6 +191,14 @@ export function App() {
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
       <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
       <ShortcutsHelp opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <SettingsModal
+        opened={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        coordinates={coordinates}
+        onCoordinates={toggleCoordinates}
+        sounds={sounds}
+        onSounds={changeSounds}
+      />
       <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
         <ImportView firstRun={false} runningJobId={dbStatus?.import_job_id ?? null} onDone={imported} />
       </Modal>

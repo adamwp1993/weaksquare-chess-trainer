@@ -118,3 +118,22 @@ def test_hint_and_answer(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_role("button", name="Forward").click()
     page.get_by_test_id("answer-step").filter(has_text="1/3").wait_for()
     shot(page, "answer")
+
+
+def test_settings_and_dark_mode(page) -> None:  # type: ignore[no-untyped-def]
+    """The Settings dialog, and the trainer in Dark (v0.2, FR-1.12, FR-1.13)."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Settings…").click()
+    page.get_by_test_id("settings").wait_for()
+    shot(page, "settings")
+
+    page.goto(page.base_url + "/?scheme=dark")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for()
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    shot(page, "trainer-dark")

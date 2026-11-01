@@ -19,6 +19,7 @@ import chess
 from weaksquare.core.chess_rules import is_acceptable, parse_move, start_position
 from weaksquare.core.errors import ConflictError, ValidationError
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult, HelpUsed
+from weaksquare.core.move_sounds import sound_for, sounds_for_line
 from weaksquare.core.puzzle import Puzzle
 
 
@@ -63,6 +64,7 @@ class StandardMode:
             return Feedback("illegal", None, False, None)
         expected = chess.Move.from_uci(state.puzzle.moves[state.next_index])
         first_move = state.next_index == 1
+        move_sound = sound_for(state.board, move)
 
         if not is_acceptable(state.board, move, expected):
             decided = None
@@ -71,7 +73,7 @@ class StandardMode:
             if not state.failed:
                 state.failed = True
                 decided = self._decide(state, win=False, now_ms=now_ms)
-            return Feedback("wrong", None, False, decided)
+            return Feedback("wrong", None, False, decided, move_sound)
 
         if first_move and state.first_move_correct is None:
             state.first_move_correct = True
@@ -82,12 +84,13 @@ class StandardMode:
         if state.next_index >= len(state.puzzle.moves) or state.board.is_checkmate():
             state.finished = True
             decided = None if state.attempt else self._decide(state, win=not state.failed, now_ms=now_ms)
-            return Feedback("solved", None, True, decided)
+            return Feedback("solved", None, True, decided, move_sound)
 
         reply = chess.Move.from_uci(state.puzzle.moves[state.next_index])
+        reply_sound = sound_for(state.board, reply)
         state.board.push(reply)
         state.next_index += 1
-        return Feedback("correct", reply.uci(), False, None)
+        return Feedback("correct", reply.uci(), False, None, move_sound, reply_sound)
 
     def on_help(self, state: StandardState, kind: HelpKind, now_ms: int) -> HelpResult:
         if kind == "hint":
@@ -102,7 +105,10 @@ class StandardMode:
         if kind != "answer":
             raise ValidationError("Help must be 'hint' or 'answer'.")
         if state.finished:  # free after the end (FR-5.4): replay the whole line from the start
-            return HelpResult("answer", None, state.start_fen, tuple(state.puzzle.moves[1:]), None)
+            line = tuple(state.puzzle.moves[1:])
+            return HelpResult(
+                "answer", None, state.start_fen, line, None, tuple(sounds_for_line(state.start_fen, line))
+            )
         if state.attempt is None and not state.hinted:
             raise ConflictError("Try a Hint first: Show answer unlocks after it.")
         decided = None if state.attempt else self._decide(state, win=False, now_ms=now_ms, help_used="answer")
@@ -110,7 +116,7 @@ class StandardMode:
         rest = tuple(state.puzzle.moves[state.next_index :])
         state.failed = True
         state.finished = True  # the answer ends the puzzle
-        return HelpResult("answer", None, fen, rest, decided)
+        return HelpResult("answer", None, fen, rest, decided, tuple(sounds_for_line(fen, rest)))
 
     def give_up(self, state: StandardState, now_ms: int) -> AttemptResult | None:
         if state.attempt is not None:

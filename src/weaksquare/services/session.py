@@ -20,6 +20,7 @@ from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.standard import StandardMode, StandardState
+from weaksquare.core.move_sounds import MoveSound, sounds_for_line
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
 
@@ -112,6 +113,7 @@ class PuzzleView:
     opponent_move: str  # played (animated) first
     player_color: str
     rating: int
+    opponent_sound: MoveSound  # FR-1.13: the opponent's first move plays a sound too
 
 
 @dataclass(frozen=True)
@@ -223,7 +225,8 @@ class SessionService:
                 s.served_ids.append(puzzle.ref.id)
                 s.current = _Current(state, self._clock.now().isoformat(timespec="seconds"))
                 return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, puzzle.moves[0],
-                                  "white" if state.board.turn else "black", puzzle.rating)  # fmt: skip
+                                  "white" if state.board.turn else "black", puzzle.rating,
+                                  sounds_for_line(puzzle.fen, puzzle.moves[:1])[0])  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
 
     def _follow_reimport(self, s: _Session) -> None:

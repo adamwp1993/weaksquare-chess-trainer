@@ -143,14 +143,24 @@ export class MockClient implements ApiClient {
   private nextJob = 1;
   private sessions = new Map<number, MockSession>();
   private nextSession = 1;
-  private settings: UiSettings = { last_filters: null, coordinates: true };
+  private settings: UiSettings = {
+    last_filters: null,
+    coordinates: true,
+    color_scheme: "light",
+    sounds: { on: true, volume: 70, set: "sfx" },
+  };
   private allTime = { solved: 41, failed: 17 };
   private presets = new Map<string, Preset>();
   private history = new Map<string, boolean[]>(); // puzzle id -> results here, oldest first
   readonly calls: string[] = [];
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
-    const scenario = new URLSearchParams(search).get("scenario");
+    const params = new URLSearchParams(search);
+    const scenario = params.get("scenario");
+    // ?scheme=dark|auto starts the mock in that saved scheme; ?sounds=off with sounds off.
+    const scheme = params.get("scheme");
+    if (scheme === "dark" || scheme === "auto") this.settings.color_scheme = scheme;
+    if (params.get("sounds") === "off") this.settings.sounds = { ...this.settings.sounds, on: false };
     this.status =
       scenario === "empty" ? { ...EMPTY } : scenario === "upgrade" ? { ...INSTALLED, needs_upgrade: true } : { ...INSTALLED };
     this.presets.set("Endgame drill", {
@@ -267,9 +277,11 @@ export class MockClient implements ApiClient {
   }
 
   async setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]) {
-    this.calls.push(`setting:${key}`);
+    this.calls.push(`setting:${key}=${JSON.stringify(value)}`);
     if (key === "mixer.filters") this.settings = { ...this.settings, last_filters: value as FilterSpec };
     if (key === "ui.coordinates") this.settings = { ...this.settings, coordinates: value as boolean };
+    if (key === "ui.color_scheme") this.settings = { ...this.settings, color_scheme: value as UiSettings["color_scheme"] };
+    if (key === "ui.sounds") this.settings = { ...this.settings, sounds: value as UiSettings["sounds"] };
   }
 
   async getThemeCatalog(): Promise<ThemeGroup[]> {
@@ -377,6 +389,7 @@ export class MockClient implements ApiClient {
       opponent_move: puzzle.moves[0],
       player_color: chess.turn() === "w" ? "white" : "black",
       rating: puzzle.rating,
+      opponent_sound: soundOf(puzzle.fen, puzzle.moves[0]),
     };
   }
 
@@ -384,7 +397,8 @@ export class MockClient implements ApiClient {
     const s = this.session(sessionId);
     const c = s.current;
     if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
-    if (c.finished) return { kind: "illegal", reply: null, finished: true, outcome: null };
+    const none = { move_sound: null, reply_sound: null };
+    if (c.finished) return { kind: "illegal", reply: null, finished: true, outcome: null, ...none };
     const expected = c.puzzle.moves[c.next];
     let ok = uci === expected;
     if (!ok) {
@@ -395,16 +409,18 @@ export class MockClient implements ApiClient {
         exp.move(uciToMove(expected));
         ok = exp.isCheckmate() && probe.isCheckmate();
       } catch {
-        return { kind: "illegal", reply: null, finished: false, outcome: null };
+        return { kind: "illegal", reply: null, finished: false, outcome: null, ...none };
       }
     }
+    const moveSound = soundOf(c.chess.fen(), uci);
     if (!ok) {
-      if (c.decided) return { kind: "wrong", reply: null, finished: false, outcome: null };
+      if (c.decided) return { kind: "wrong", reply: null, finished: false, outcome: null, move_sound: moveSound, reply_sound: null };
       c.decided = c.failed = true;
       s.failed++;
       this.allTime.failed++;
       this.record(c.puzzle, false);
-      return { kind: "wrong", reply: null, finished: false, outcome: this.outcome(c.puzzle, false) };
+      const outcome = this.outcome(c.puzzle, false);
+      return { kind: "wrong", reply: null, finished: false, outcome, move_sound: moveSound, reply_sound: null };
     }
     c.chess.move(uciToMove(uci));
     c.next++;
@@ -417,11 +433,12 @@ export class MockClient implements ApiClient {
         this.allTime.solved++;
         this.record(c.puzzle, true);
       }
-      return { kind: "solved", reply: null, finished: true, outcome };
+      return { kind: "solved", reply: null, finished: true, outcome, move_sound: moveSound, reply_sound: null };
     }
     const reply = c.puzzle.moves[c.next++];
+    const replySound = soundOf(c.chess.fen(), reply);
     c.chess.move(uciToMove(reply));
-    return { kind: "correct", reply, finished: false, outcome: null };
+    return { kind: "correct", reply, finished: false, outcome: null, move_sound: moveSound, reply_sound: replySound };
   }
 
   async requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse> {
@@ -441,13 +458,19 @@ export class MockClient implements ApiClient {
       if (c.finished) throw conflict("The puzzle is over: there's nothing left to hint.");
       const outcome = decide();
       c.hinted = true;
-      return { kind, hint_square: c.puzzle.moves[c.next].slice(0, 2), answer_fen: null, answer_moves: [], outcome };
+      const square = c.puzzle.moves[c.next].slice(0, 2);
+      return { kind, hint_square: square, answer_fen: null, answer_moves: [], outcome, answer_sounds: [] };
     }
-    if (c.finished) return { kind, hint_square: null, answer_fen: c.start, answer_moves: c.puzzle.moves.slice(1), outcome: null };
+    if (c.finished) {
+      const line = c.puzzle.moves.slice(1);
+      return { kind, hint_square: null, answer_fen: c.start, answer_moves: line, outcome: null, answer_sounds: lineSounds(c.start, line) };
+    }
     if (!c.decided && !c.hinted) throw conflict("Try a Hint first: Show answer unlocks after it.");
     const outcome = decide();
     c.finished = true;
-    return { kind, hint_square: null, answer_fen: c.chess.fen(), answer_moves: c.puzzle.moves.slice(c.next), outcome };
+    const rest = c.puzzle.moves.slice(c.next);
+    const fen = c.chess.fen();
+    return { kind, hint_square: null, answer_fen: fen, answer_moves: rest, outcome, answer_sounds: lineSounds(fen, rest) };
   }
 
   private outcome(p: MockPuzzle, win: boolean) {
@@ -536,6 +559,28 @@ function interleave(pools: MockPuzzle[][], spec: FilterSpec): MockPuzzle[] {
     out.sort((a, b) => group(a) - group(b));
   }
   return out;
+}
+
+// The mock's stand-in for core/move_sounds.py (the real classification is tested in Python).
+type Sound = "move" | "capture" | "check" | "checkmate" | "castle";
+
+function soundOf(fen: string, uci: string): Sound {
+  const c = new Chess(fen);
+  const m = c.move(uciToMove(uci));
+  if (c.isCheckmate()) return "checkmate";
+  if (c.inCheck()) return "check";
+  if (m.captured) return "capture";
+  if (m.isKingsideCastle() || m.isQueensideCastle()) return "castle";
+  return "move";
+}
+
+function lineSounds(fen: string, ucis: string[]): Sound[] {
+  const c = new Chess(fen);
+  return ucis.map((uci) => {
+    const s = soundOf(c.fen(), uci);
+    c.move(uciToMove(uci));
+    return s;
+  });
 }
 
 function uciToMove(uci: string) {

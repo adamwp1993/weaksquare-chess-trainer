@@ -21,3 +21,13 @@ def test_other_webview_args_are_fine() -> None:
 def test_dev_server_implies_dev() -> None:
     assert parse_args(["--dev-server"]).dev
     assert not parse_args([]).dev
+
+
+def test_window_background_follows_the_saved_scheme() -> None:
+    """FR-1.12: the window is painted in the saved scheme before the page loads (no flash)."""
+    from weaksquare.app import window_background
+
+    assert window_background("light", system_dark=True) == "#FFFFFF"
+    assert window_background("dark", system_dark=False) == "#242424"
+    assert window_background("auto", system_dark=True) == "#242424"
+    assert window_background("auto", system_dark=False) == "#FFFFFF"

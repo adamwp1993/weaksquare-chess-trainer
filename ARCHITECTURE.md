@@ -86,11 +86,13 @@ weaksquare-chess-trainer/
 │  └─ jobs/runner.py           # background jobs: queue, progress, cancel
 ├─ web/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
+│  ├─ public/sounds/           # bundled sound sets + CREDITS.md (v0.2)
 │  └─ src/
 │     ├─ api/                  # ApiClient interface + pywebviewClient + mockClient
 │     ├─ components/           # Board (chessground wrapper), ThemePicker, FilterControls, SessionBar, …
 │     ├─ views/                # Startup, Trainer, Settings, Stats, Library, Review, Coach, Progress
-│     └─ state/                # small hooks and defaults (useJob, defaultFilters); no business logic
+│     ├─ sound/                # the move-sound player (v0.2); which sound comes from core/move_sounds.py
+│     └─ state/                # small hooks and defaults (useJob, defaultFilters, shortcuts, colorScheme)
 ├─ tests/
 │  ├─ unit/                    # core/ — fast, no I/O
 │  ├─ integration/             # services + real SQLite (tmp) + fake clients
@@ -188,6 +190,17 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-01, v0.2: Dark mode without browser storage, AA contrast, move sounds from lila
+- Context: FR-1.12 and FR-1.13; decision 14 (no browser storage).
+- Decision:
+  - **Dark mode:** Mantine's default color-scheme manager uses localStorage, so `state/colorScheme.ts` provides one that keeps the scheme in memory and saves it through `set_setting("ui.color_scheme")`. `main.tsx` waits for `get_settings` (at most 1.5 s) before the first render, and `app.py` paints the window background in the saved scheme (`system_prefers_dark()` reads the Windows app mode for Match system), so nothing flashes. Match system is Mantine's `auto` (`prefers-color-scheme`, which WebView2 updates live). The plan's `?scheme=` start URL wasn't needed; the mock uses `?scheme=` only to start in a scheme for tests.
+  - **Contrast:** an e2e test checks every visible text node on every main screen in both schemes against WCAG AA. Mantine's defaults failed it, already in v0.1's light theme: dimmed grey 3.3:1, white on teal-6 buttons 2.6:1, teal light badges 4.3:1, green text 4.4:1. `main.tsx` sets `primaryShade: 9` and overrides those CSS variables.
+  - **Sounds:** `core/move_sounds.py` classifies each move (mate > check > capture > castle > move) and the bridge sends the kind with every move (`opponent_sound`, `move_sound`, `reply_sound`, `answer_sounds`), so the rule is unit-tested in Python. `web/src/sound/player.ts` creates `Audio` elements only while sounds are on, and a new sound stops the last. The files are lila's Enigmahack sets (AGPLv3+ in lila's `COPYING.md`), the six `.ogg` files each set needs, pinned to lila commit `9934f0a6`; lila's `Checkmate.ogg` is a git symlink to `Check.ogg`, so each set ships a copy of it. `web/public/sounds/CREDITS.md` lists every file with its SHA-256, and a contract test keeps it complete. The CSP gains `media-src 'self'`.
+  - **Autoplay:** a real-app smoke test shows WebView2 plays audio without a user gesture, so the planned `--autoplay-policy` switch wasn't added.
+  - The real-app smoke harness now stops with the build command when `web/dist` is older than `web/src` (a stale build had hidden the new Settings menu).
+- Alternatives: rendering at once and switching after the settings arrive (a visible flash); a JS move-sound classifier (no unit tests without a JS runner); shipping `.mp3` too (Chromium plays Ogg).
+- Consequences: a theme color change can fail the contrast test; fix it in `main.tsx`'s resolver.
 
 ### 2026-11-01, v0.2: `on_help`, Stats definitions, one UI-settings service
 - Context: §7.2 steps 1–2 without an engine; FR-9.1/9.2; and dark mode, sounds and coordinates all needing persisted UI settings.

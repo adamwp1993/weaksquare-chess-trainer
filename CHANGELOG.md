@@ -23,12 +23,15 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **Hint** circles the piece that moves next, and **Show answer** (unlocked by a Hint) steps through the rest of the solution with Back and Forward. Either one before the end fails the puzzle; after it, Show answer is free. [FR-5.2] [FR-5.4]
 - **Stats** (☰ → Stats): accuracy by theme, length and rating band, plus the "first move right, line wrong" rate. [FR-9.1] [FR-9.2]
 - **Keyboard shortcuts:** N or Enter for the next puzzle, H for Hint, A for Show answer, arrows to step through it, C for coordinates, ? for the list.
-- Show or hide the board coordinates (C, or the ☰ menu); your choice is saved.
+- Show or hide the board coordinates (C, the ☰ menu, or Settings); your choice is saved.
+- **Dark mode:** Light, Dark or Match system in ☰ → Settings…, applied at once and remembered; the app opens in your saved scheme. [FR-1.12]
+- **Move sounds:** moves, captures, checks, mates, and solved or failed puzzles, with an on/off switch, volume and four sound sets (sfx, piano, 8-bit, futuristic). [FR-1.13]
 - After a puzzle-database update, the finish message gives the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." [FR-2.5]
 
 ### Changed
 - Phase, goal and origin themes are chosen in the theme list's own groups, alongside the other themes. [FR-3.6]
 - The filter panel scrolls on its own, so the board stays in view, and the match count updates as you play.
+- Dimmed text, the green messages and the teal buttons are darker (lighter in Dark), so all text meets WCAG AA contrast.
 - The first time v0.2 starts, it upgrades your puzzle database for the new opening and quality filters. This rebuilds it from the copy you already have (no download, about 2 minutes, with a progress bar), and your attempts and settings aren't touched. [FR-2.3]
 
 ## [v0.1] - 2026-11-01

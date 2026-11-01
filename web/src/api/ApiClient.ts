@@ -13,6 +13,7 @@ import type {
   PuzzleView,
   SessionInfo,
   SessionStats,
+  SoundSettings,
   StatsReport,
   ThemeGroup,
   UiSettings,
@@ -36,6 +37,8 @@ export type BackendEvent = { name: "job"; payload: Job };
 export interface SettingValues {
   "mixer.filters": FilterSpec;
   "ui.coordinates": boolean;
+  "ui.color_scheme": "light" | "dark" | "auto";
+  "ui.sounds": SoundSettings;
 }
 
 export interface ApiClient {

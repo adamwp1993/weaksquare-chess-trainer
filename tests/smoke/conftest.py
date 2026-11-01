@@ -31,6 +31,17 @@ from weaksquare.adapters import instance_lock
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(scope="session", autouse=True)
+def front_end_is_built() -> None:
+    """The real app serves web/dist. Testing a build older than web/src tests old code, so stop with
+    the command to run instead (v0.2: a stale build hid the new Settings menu)."""
+    web = ROOT / "web"
+    index = web / "dist" / "index.html"
+    newest = max(p.stat().st_mtime for p in (web / "src").rglob("*") if p.is_file())
+    if not index.is_file() or index.stat().st_mtime < newest:
+        pytest.fail("web/dist is missing or older than web/src. Run: npm.cmd --prefix web run build", pytrace=False)
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

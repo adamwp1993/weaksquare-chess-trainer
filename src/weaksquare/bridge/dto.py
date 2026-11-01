@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from weaksquare.core.filters import FilterSpec, RatioBucket
+from weaksquare.core.move_sounds import MoveSound
 
 
 @dataclass(frozen=True)
@@ -68,9 +69,18 @@ class ThemeGroup:
 
 
 @dataclass(frozen=True)
+class SoundSettings:
+    on: bool
+    volume: int  # 0–100
+    set: Literal["sfx", "piano", "nes", "futuristic"]
+
+
+@dataclass(frozen=True)
 class UiSettings:
     last_filters: FilterSpec | None
     coordinates: bool  # letters and numbers around the board
+    color_scheme: Literal["light", "dark", "auto"]  # FR-1.12; "auto" is Match system
+    sounds: SoundSettings  # FR-1.13
 
 
 @dataclass(frozen=True)
@@ -112,6 +122,7 @@ class PuzzleView:
     opponent_move: str  # UCI, played (animated) first
     player_color: Literal["white", "black"]
     rating: int
+    opponent_sound: MoveSound  # FR-1.13
 
 
 @dataclass(frozen=True)
@@ -138,6 +149,8 @@ class MoveFeedback:
     reply: str | None  # the opponent's reply (UCI), to play on the board
     finished: bool  # the whole line has been played
     outcome: Outcome | None
+    move_sound: MoveSound | None  # FR-1.13: your move…
+    reply_sound: MoveSound | None  # …and the reply
 
 
 @dataclass(frozen=True)
@@ -149,6 +162,7 @@ class HelpResponse:
     answer_fen: str | None  # Show answer: where the answer starts…
     answer_moves: list[str]  # …and the moves from there (UCI, both sides)
     outcome: Outcome | None
+    answer_sounds: list[MoveSound]  # one per answer move
 
 
 @dataclass(frozen=True)
@@ -195,6 +209,7 @@ EXPORTED: list[type] = [
     OpeningOption,
     OpeningFamily,
     Preset,
+    SoundSettings,
     UiSettings,
     SessionInfo,
     PuzzleView,
