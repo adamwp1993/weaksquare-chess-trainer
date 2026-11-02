@@ -100,6 +100,8 @@ export interface ApiClient {
   submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;
   /** Hint, then Show answer (§7.2). Before the puzzle is decided, either one makes it a loss. */
   requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse>;
+  /** FR-5.12 Try again (not scored): replay the finished puzzle from its start; nothing is recorded. */
+  retryPuzzle(sessionId: number): Promise<void>;
   getSessionStats(sessionId: number): Promise<SessionStats>;
   /** The Stats page (FR-9.1, 9.2): every attempt you've made here. */
   getStats(): Promise<StatsReport>;

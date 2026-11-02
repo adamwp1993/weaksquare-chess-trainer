@@ -230,14 +230,15 @@ def test_engine_panel_and_analysis_board(page) -> None:  # type: ignore[no-untyp
 
 
 def test_refutation(page) -> None:  # type: ignore[no-untyped-def]
-    """v0.4 (§7.2 step 2): Show answer after a wrong move starts with why it fails."""
+    """v0.4 (§7.2 step 2): after a wrong move, "Why h6 fails" sits above the answer; Show me steps it."""
     _start(page)
     play(page, "h7h6", "black")
     page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
     page.get_by_test_id("answer-button").click()
-    page.get_by_test_id("answer-segment").filter(has_text="Why h6 fails").wait_for()
-    page.get_by_role("button", name="Forward").click()
-    page.get_by_role("button", name="Forward").click()
+    page.get_by_test_id("refutation-label").filter(has_text="Why h6 fails").wait_for()
+    page.get_by_test_id("refutation-show").click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
     page.mouse.move(1270, 890)
     shot(page, "refutation")
 
@@ -274,3 +275,18 @@ def test_show_me(page) -> None:  # type: ignore[no-untyped-def]
     preview.get_by_role("button", name="Forward").click()
     page.mouse.move(1270, 890)
     shot(page, "show-me")
+
+
+def test_try_again(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (FR-5.12): a practice run of a finished puzzle, after one correct move."""
+    _start(page)
+    play(page, "h7h6", "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("try-again").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn again").wait_for()
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    page.mouse.move(1270, 890)
+    shot(page, "try-again")

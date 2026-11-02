@@ -160,3 +160,22 @@ def test_refute_also_after_the_end() -> None:
     mode.on_move(s, "f1f7", 100)  # wrong
     mode.on_move(s, "f1f8", 200)  # then solves the line
     assert s.finished and mode.on_help(s, "answer", 300).refute is True
+
+
+def test_practice_run_never_decides_anything() -> None:
+    """FR-5.12 Try again: a wrong move, a hint, the answer and moving on decide nothing."""
+    s = mode.start_practice(LONG, 0)
+    assert s.practice and s.next_index == 1
+    wrong = mode.on_move(s, "f7f6", 100)
+    assert wrong.kind == "wrong" and wrong.attempt is None
+    assert mode.on_move(s, "f5g4", 200).kind == "correct"
+    assert mode.on_help(s, "hint", 300).attempt is None
+    answer = mode.on_help(s, "answer", 400)  # free, no Hint needed
+    assert answer.attempt is None and answer.answer_moves
+    assert mode.give_up(mode.start_practice(LONG, 0), 500) is None
+
+
+def test_practice_run_can_be_solved() -> None:
+    s = mode.start_practice(MATE1, 0)
+    fb = mode.on_move(s, "f1f8", 100)
+    assert fb.kind == "solved" and fb.finished and fb.attempt is None

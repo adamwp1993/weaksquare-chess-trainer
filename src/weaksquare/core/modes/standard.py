@@ -37,6 +37,7 @@ class StandardState:
     hinted: bool = False
     start_fen: str = ""  # after the opponent's first move: where you start solving
     first_wrong: tuple[str, str] | None = None  # (FEN before it, UCI): the move that lost the puzzle
+    practice: bool = False  # Try again (FR-5.12): `attempt` is a placeholder; nothing is ever recorded
 
 
 class StandardMode:
@@ -45,6 +46,16 @@ class StandardMode:
     def start(self, puzzle: Puzzle, now_ms: int) -> StandardState:
         board, _ = start_position(puzzle.fen, puzzle.moves)  # raises PuzzleDataError if the line is illegal
         return StandardState(puzzle=puzzle, board=board, next_index=1, started_ms=now_ms, start_fen=board.fen())
+
+    def start_practice(self, puzzle: Puzzle, now_ms: int) -> StandardState:
+        """FR-5.12 Try again (not scored): the same puzzle from the start, with the attempt already
+        decided, so nothing can be decided (or recorded) again; help is free, as after any end."""
+        state = self.start(puzzle, now_ms)
+        state.practice = True
+        state.attempt = AttemptResult(
+            win=False, first_move_correct=False, line_correct=False, help_used="none", time_ms=0
+        )
+        return state
 
     def _decide(self, state: StandardState, win: bool, now_ms: int, help_used: HelpUsed = "none") -> AttemptResult:
         result = AttemptResult(
@@ -75,7 +86,8 @@ class StandardMode:
                 state.first_move_correct = False
             if not state.failed:
                 state.failed = True
-                decided = self._decide(state, win=False, now_ms=now_ms)
+                if state.attempt is None:  # already decided by help, or a practice run (FR-5.12)
+                    decided = self._decide(state, win=False, now_ms=now_ms)
             return Feedback("wrong", None, False, decided, move_sound)
 
         if first_move and state.first_move_correct is None:

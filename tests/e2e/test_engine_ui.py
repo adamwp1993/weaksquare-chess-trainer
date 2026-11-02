@@ -74,24 +74,30 @@ def test_panel_appears_after_the_puzzle(page) -> None:  # type: ignore[no-untype
     assert re.search(r"(for you|level|You mate|mated)", first) and re.search(r"\d+\.", first)  # eval + SAN
 
 
-def test_refutation_comes_before_the_solution(page) -> None:  # type: ignore[no-untyped-def]
+def test_show_answer_is_the_solution_with_the_refutation_beside_it(page) -> None:  # type: ignore[no-untyped-def]
+    """Show answer always shows the correct solution; "Why h6 fails" sits above it with its own Show me
+    (Adam, v0.4 manual test: the answer used to start with the refutation)."""
     start(page)
     play(page, WRONG, "black")
     page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
     page.get_by_test_id("answer-button").click()
-    segment = page.get_by_test_id("answer-segment")
-    segment.filter(has_text="Why h6 fails").wait_for()
-    assert "for you" in segment.inner_text() or "mate" in segment.inner_text()
+    page.get_by_test_id("answer-segment").filter(has_text="The solution").wait_for()
     assert page.get_by_test_id("answer-step").inner_text() == "Start"
     page.get_by_role("button", name="Forward").click()
-    assert page.get_by_test_id("answer-step").inner_text().startswith("1/")
-    assert "h6" in page.get_by_test_id("answer-step").inner_text()  # your move comes first
-    for _ in range(12):
-        if "The solution" in segment.inner_text():
-            break
-        page.get_by_role("button", name="Forward").click()
-    assert "The solution" in segment.inner_text()
+    assert page.get_by_test_id("answer-step").inner_text().startswith("1/3: N")  # d5c3, the correct move
+    label = page.get_by_test_id("refutation-label")
+    label.filter(has_text="Why h6 fails").wait_for()
+    assert "for you" in label.inner_text() or "mate" in label.inner_text()
     page.get_by_test_id("engine-panel").wait_for()  # Show answer ended the puzzle: the panel is allowed now
+    board = page.get_by_test_id("board")
+    on_answer = board.get_attribute("data-fen")
+    page.get_by_test_id("refutation-show").click()
+    preview = page.get_by_test_id("line-preview")
+    preview.get_by_role("button", name="Forward").click()
+    assert "h6" in preview.get_by_test_id("answer-step").inner_text()  # your move, then Stockfish's reply
+    page.get_by_test_id("line-preview-done").click()
+    assert board.get_attribute("data-fen") == on_answer
+    page.get_by_test_id("answer-segment").filter(has_text="The solution").wait_for()
 
 
 def test_no_refutation_segment_without_a_wrong_move(page) -> None:  # type: ignore[no-untyped-def]
@@ -100,7 +106,7 @@ def test_no_refutation_segment_without_a_wrong_move(page) -> None:  # type: igno
     page.get_by_test_id("answer-button").click()
     page.get_by_test_id("answer-player").wait_for()
     page.wait_for_timeout(500)
-    assert page.get_by_test_id("answer-segment").count() == 0
+    assert page.get_by_test_id("refutation").count() == 0
 
 
 def test_analysis_board(page) -> None:  # type: ignore[no-untyped-def]
@@ -266,3 +272,73 @@ def test_show_me_on_the_analysis_board(page) -> None:  # type: ignore[no-untyped
     assert board.get_attribute("data-fen") == analysed
     page.get_by_test_id("analysis-controls").wait_for()
     assert page.get_by_test_id("analysis-moves").inner_text() == "Rb8"
+
+
+# ---- Adam's v0.4 manual-test requests: Show answer again, Back to the answer, Try again (FR-5.4, 5.12) ----
+
+
+def test_show_answer_reopens_from_the_analysis_board(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-5.4: after the end, Show answer stays clickable and goes back to the start of the answer,
+    closing the analysis board; the analysis board's Close says "Back to the answer"."""
+    start(page)
+    play(page, WRONG, "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("refutation-label").filter(has_text="Why h6 fails").wait_for()
+    page.get_by_role("button", name="Forward").click()
+    page.get_by_test_id("analyze-button").click()
+    page.get_by_test_id("analysis-close").filter(has_text="Back to the answer").wait_for()
+    assert page.get_by_test_id("answer-player").count() == 0
+    assert page.get_by_test_id("answer-button").is_enabled()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("answer-player").wait_for()
+    assert page.get_by_test_id("analysis-controls").count() == 0
+    page.get_by_test_id("answer-segment").filter(has_text="The solution").wait_for()
+    assert page.get_by_test_id("answer-step").inner_text() == "Start"
+    page.get_by_test_id("analyze-button").click()
+    page.get_by_test_id("analysis-close").click()  # Back to the answer
+    page.get_by_test_id("answer-player").wait_for()
+
+
+def counts(page) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+    """The session's Solved / Failed counts (the rating total changes when the mock's sync lands)."""
+    return (page.get_by_test_id("stat-solved").inner_text(), page.get_by_test_id("stat-failed").inner_text())
+
+
+def test_try_again_is_practice_and_records_nothing(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-5.12: Try again replays the puzzle from its start; the first result and the session stay."""
+    start(page)
+    play(page, WRONG, "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    assert page.get_by_test_id("try-again").count() == 0  # lost but still playing: not over yet
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("engine-panel").wait_for()
+    bar = counts(page)
+    page.get_by_test_id("try-again").click()
+    page.get_by_test_id("practice-badge").wait_for()
+    your_turn(page)
+    for testid in ("engine-panel", "engine-line", "answer-player", "analysis-controls", "try-again"):
+        assert page.get_by_test_id(testid).count() == 0, testid
+    play(page, WRONG, "black")
+    page.get_by_test_id("trainer-message").filter(has_text="practice, not scored").wait_for()
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    play(page, "c3d1", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="full line (practice").wait_for()
+    page.get_by_test_id("engine-panel").wait_for()  # over again: the engine is back
+    assert "Failed" in page.get_by_test_id("outcome").inner_text()  # the first result stays
+    assert counts(page) == bar  # nothing recorded
+    page.get_by_test_id("try-again").click()  # again, and this time clean
+    your_turn(page)
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    play(page, "c3d1", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Solved! (practice, not scored)").wait_for()
+    assert counts(page) == bar
+    page.get_by_test_id("next-button").click()
+    page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 2").wait_for()
+    assert page.get_by_test_id("practice-badge").count() == 0
+    page.wait_for_timeout(500)
+    assert "Failed 1" in page.get_by_test_id("session-bar").inner_text()  # the practice run added nothing

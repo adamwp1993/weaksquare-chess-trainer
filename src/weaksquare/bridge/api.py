@@ -303,6 +303,11 @@ class Api:
         )  # fmt: skip
 
     @bridge_call
+    def retry_puzzle(self, session_id: int) -> None:
+        """FR-5.12 Try again (not scored): replay the finished puzzle from its start; nothing is recorded."""
+        self._sessions.retry(session_id)
+
+    @bridge_call
     def get_session_stats(self, session_id: int) -> dto.SessionStats:
         s = self._sessions.stats(session_id)
         return dto.SessionStats(s.solved, s.failed, s.accuracy, s.played, s.queue_size, s.finished,

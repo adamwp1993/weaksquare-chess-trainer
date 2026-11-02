@@ -300,3 +300,41 @@ def test_engine_log_line_names_the_engine_in_use(services, paths, tmp_path) -> N
     assert engine_log_line(services.engine.status()) == f"Engine in use: Custom Fish 2 (your own engine) at {custom}"
     custom.unlink()
     assert engine_log_line(services.engine.status()).startswith("Engine in use: none (custom engine missing")
+
+
+# ---- FR-5.12 Try again (not scored) ------------------------------------------------------------
+
+
+def _attempts(services) -> list:  # type: ignore[no-untyped-def]
+    with services.db.session() as conn:
+        return conn.execute("SELECT puzzle_id, win, help_used, sync_status FROM attempts ORDER BY id").fetchall()
+
+
+def test_try_again_records_nothing(services, paths) -> None:  # type: ignore[no-untyped-def]
+    plant_managed_install(paths)
+    sid, view, moves = start(services)
+    with pytest.raises(ConflictError):
+        services.sessions.retry(sid)  # only once the puzzle is over
+    services.sessions.submit_move(sid, wrong_move(view, moves))
+    services.sessions.request_help(sid, "answer")  # finished: a loss, recorded once
+    before = [tuple(r) for r in _attempts(services)]
+    assert len(before) == 1 and before[0][1] == 0
+    stats_before = services.sessions.stats(sid)
+
+    services.sessions.retry(sid)
+    with pytest.raises(ConflictError):  # practising is solving: no engine until it's over (FR-7.3)
+        services.sessions.analyze(sid, start_fen(view))
+    r = services.sessions.submit_move(sid, wrong_move(view, moves))
+    assert r.feedback.kind == "wrong" and r.outcome is None
+    h = services.sessions.request_help(sid, "hint")
+    assert h.outcome is None
+    for uci in moves[1::2]:
+        r = services.sessions.submit_move(sid, uci)
+    assert r.feedback.kind == "solved" and r.outcome is None
+    assert services.sessions.analyze(sid, start_fen(view)).lines  # over again: the engine is back
+
+    services.sessions.retry(sid)  # practise again, then move on without finishing
+    services.sessions.next_puzzle(sid)
+    assert [tuple(r) for r in _attempts(services)] == before  # nothing new, the first result kept
+    after = services.sessions.stats(sid)
+    assert (after.solved, after.failed) == (stats_before.solved, stats_before.failed)

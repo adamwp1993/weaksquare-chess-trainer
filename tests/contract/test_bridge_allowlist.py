@@ -58,6 +58,7 @@ ALLOWLIST = {
     "clear_custom_engine",
     "get_refutation",
     "analyze_position",
+    "retry_puzzle",  # FR-5.12 Try again (not scored)
 }
 
 

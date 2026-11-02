@@ -49,11 +49,14 @@ export function AnalysisControls({
   onStep,
   onReset,
   onClose,
+  closeLabel = "Close",
 }: {
   state: AnalysisState;
   onStep: (step: number) => void;
   onReset: () => void;
   onClose: () => void;
+  /** "Back to the answer" when there's an answer to go back to (FR-5.4). */
+  closeLabel?: string;
 }) {
   const last = state.positions.length - 1;
   const moves = state.positions
@@ -102,7 +105,7 @@ export function AnalysisControls({
           onClick={onClose}
           data-testid="analysis-close"
         >
-          Close
+          {closeLabel}
         </Button>
       </Group>
     </Stack>

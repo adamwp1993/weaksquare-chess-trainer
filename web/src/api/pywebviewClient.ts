@@ -71,6 +71,10 @@ export class PywebviewClient implements ApiClient {
     return result.data;
   }
 
+  retryPuzzle(sessionId: number) {
+    return this.call<void>("retry_puzzle", sessionId);
+  }
+
   getEngineStatus() {
     return this.call<EngineStatus>("get_engine_status");
   }

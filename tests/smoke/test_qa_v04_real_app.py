@@ -125,9 +125,9 @@ def test_engine_flow_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Pat
                 assert not r["ok"] and r["error"]["code"] == "conflict", (call, r)
             shot(page, "after-wrong-move-no-engine")
 
-            # Show answer: the refutation first, then the panel
+            # Show answer: the solution, "why it fails" beside it, then the panel
             page.get_by_test_id("answer-button").click()
-            seg = page.get_by_test_id("answer-segment")
+            seg = page.get_by_test_id("refutation-label")  # beside the answer since the v0.4 manual test
             seg.filter(has_text="fails").wait_for(timeout=20_000)
             assert re.search(r"for you|mate|level", seg.inner_text()), seg.inner_text()
             page.get_by_test_id("engine-line").first.wait_for(timeout=20_000)

@@ -35,9 +35,12 @@ def test_qa_screenshots_of_every_v04_screen(page, scheme: str) -> None:  # type:
     play(page, WRONG, "black")
     page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
     page.get_by_test_id("answer-button").click()
-    page.get_by_test_id("answer-segment").filter(has_text="fails").wait_for()
-    page.get_by_role("button", name="Forward").click()
-    page.get_by_role("button", name="Forward").click()
+    page.get_by_test_id("refutation-label").filter(
+        has_text="fails"
+    ).wait_for()  # beside the answer since the v0.4 manual test
+    page.get_by_test_id("refutation-show").click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
     page.get_by_test_id("engine-line").first.wait_for()
     shot(page, f"{scheme}-refutation-step2")
 
@@ -177,7 +180,8 @@ def test_qa_analysis_board_underpromotion(page) -> None:  # type: ignore[no-unty
     after = chess.Board(board.get_attribute("data-fen"))
     assert after.piece_at(chess.A1) == chess.Piece(chess.KNIGHT, chess.BLACK)
     page.get_by_test_id("engine-line").first.wait_for()
-    page.get_by_role("button", name="Back").last.click()  # Back on the analysis controls
+    # exact: "Back to the answer" also matches "Back"
+    page.get_by_role("button", name="Back", exact=True).last.click()
     assert chess.Board(board.get_attribute("data-fen")).piece_at(chess.A2) is not None
     page.get_by_test_id("analysis-close").click()
     page.get_by_test_id("answer-player").wait_for()  # back to the answer

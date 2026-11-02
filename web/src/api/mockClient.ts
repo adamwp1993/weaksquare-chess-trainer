@@ -163,6 +163,7 @@ interface MockSession {
     hinted: boolean;
     finished: boolean;
     firstWrong: [string, string] | null; // (FEN before, UCI): what Show answer refutes (§7.2)
+    practice?: boolean; // Try again (FR-5.12): `decided` from the start, so nothing is recorded
   } | null;
   solved: number;
   failed: number;
@@ -864,6 +865,22 @@ export class MockClient implements ApiClient {
       puzzle_url: `https://lichess.org/training/${p.id}`,
       attempt_id: id,
       lichess: { ...info },
+    };
+  }
+
+  async retryPuzzle(sessionId: number) {
+    const s = this.session(sessionId);
+    const c = s.current;
+    if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    if (!c.finished) {
+      throw new ApiCallError({ code: "conflict", message: "Finish the puzzle first: Try again is for after it's over.", retryable: true });
+    }
+    const chess = new Chess(c.puzzle.fen);
+    chess.move(uciToMove(c.puzzle.moves[0]));
+    this.calls.push("retry");
+    s.current = {
+      puzzle: c.puzzle, chess, start: chess.fen(), next: 1, decided: true, failed: false, hinted: false,
+      finished: false, firstWrong: null, practice: true,
     };
   }
 

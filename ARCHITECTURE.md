@@ -210,6 +210,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-02, v0.4: Try again is a practice run that can't record (FR-5.12)
+- Context: Adam's manual test: after Show answer and the analysis board he wanted to retry the puzzle. Letting Reset clear the result was rejected, because the first result may already be on Lichess and stats must agree with it.
+- Decision: `StandardMode.start_practice` builds a fresh state for the same puzzle with `practice = True` and a placeholder `attempt`, so the mode never decides again (a wrong move no longer decides when an attempt exists; `give_up` returns nothing). `SessionService.retry` (only once the puzzle is finished) swaps it in, keeping the engine cache; `submit_move`, `request_help` and `next_puzzle` also skip recording for practice states (defence in depth). FR-7.3 still applies: the engine is refused until the practice run is finished. Bridge: `retry_puzzle`. The UI keeps the first result's panel and shows a *Practice: not scored* badge.
+- Alternatives: Reset un-records the attempt (rewrites history that Lichess may already have); a separate practice queue (that's Spaced repetition, v0.5).
+- Consequences: practice runs leave no trace in `attempts`, Stats or sync. v0.5's modes can reuse `start_practice` if they need an unscored replay.
+
 ### 2026-11-02, v0.4: QA fixes to the engine (v0.4-B1, B2, B5, B6, B8)
 - Context: `qa/QA-v0.4.md` round 1.
 - Decision:

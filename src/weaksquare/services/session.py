@@ -278,7 +278,7 @@ class SessionService:
         with s.lock:
             if s.current is not None:
                 result = self._mode.give_up(s.current.state, self._clock.monotonic_ms())
-                if result is not None:
+                if result is not None and not s.current.state.practice:
                     self._record(s, result)
                 s.current = None
             self._follow_reimport(s)
@@ -389,7 +389,8 @@ class SessionService:
             if s.current is None:
                 raise ValidationError("There's no puzzle in progress.")
             feedback = self._mode.on_move(s.current.state, uci, self._clock.monotonic_ms())
-            outcome = self._record(s, feedback.attempt) if feedback.attempt else None
+            practice = s.current.state.practice  # Try again: never recorded (FR-5.12)
+            outcome = self._record(s, feedback.attempt) if feedback.attempt and not practice else None
             return MoveResult(feedback, outcome)
 
     def request_help(self, session_id: int, kind: HelpKind) -> HelpOutcome:
@@ -399,7 +400,8 @@ class SessionService:
             if s.current is None:
                 raise ValidationError("There's no puzzle in progress.")
             result = self._mode.on_help(s.current.state, kind, self._clock.monotonic_ms())
-            outcome = self._record(s, result.attempt) if result.attempt else None
+            practice = s.current.state.practice
+            outcome = self._record(s, result.attempt) if result.attempt and not practice else None
             return HelpOutcome(result, outcome)
 
     # ---- engine after the puzzle (FR-7.2, 7.3, 7.7) -------------------------------------------------
@@ -489,6 +491,22 @@ class SessionService:
                 if s.current is cur:
                     cur.analyses[board.fen()] = result
         return result
+
+    def retry(self, session_id: int) -> None:
+        """FR-5.12 Try again (not scored): replay the current puzzle from its start, once it's over.
+        The recorded attempt is untouched and nothing is queued for Lichess."""
+        s = self._session(session_id)
+        with s.lock:
+            if s.current is None:
+                raise ValidationError("There's no puzzle in progress.")
+            if not s.current.state.finished:
+                raise ConflictError("Finish the puzzle first: Try again is for after it's over.")
+            puzzle = s.current.state.puzzle
+            s.current = _Current(
+                self._mode.start_practice(puzzle, self._clock.monotonic_ms()),
+                s.current.started_at,
+                analyses=s.current.analyses,  # same positions: the engine's answers still hold
+            )
 
     def stats(self, session_id: int) -> SessionStats:
         s = self._session(session_id)

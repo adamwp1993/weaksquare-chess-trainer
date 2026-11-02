@@ -273,6 +273,18 @@ When you can't find the move, the **Hint** and **Show answer** buttons beside th
 **How it's scored**
 - Using either button **before the puzzle is decided fails it** (like on Lichess), and your Stats record that you needed help. The result panel shows **Failed** and the themes straight away.
 - If the puzzle is already decided (a wrong move, or you finished the line), Show answer is free and doesn't need a Hint. After a solved puzzle it replays the whole solution from the start.
+- *Changed in v0.4:* once the puzzle is over, **Show answer** stays clickable. Click it again any time (for example after exploring on the analysis board) to go back to the start of the answer.
+
+### Try again (not scored)
+*Added in v0.4.*
+
+Once a puzzle is over, **Try again (not scored)** (or **R**) sets the board back to the puzzle's start so you can solve it again, with the usual right/wrong feedback and the opponent's replies. A **Practice: not scored** badge shows while you do.
+- Nothing is recorded: your Stats, the session bar and Lichess keep the result of your first try.
+- Hint and Show answer are free while practising.
+- Stockfish stays hidden until the practice run is over, just like the first time.
+- You can try again as often as you like. **Next puzzle** moves on as usual.
+
+![Trying a puzzle again, not scored](img/try-again.png)
 - After a wrong move you can open the answer directly. *Changed in v0.4:* it then starts by showing why your wrong move fails, using Stockfish (see [Stockfish](#stockfish-why-a-move-fails-evals-and-the-analysis-board)).
 
 ## Stockfish: why a move fails, evals and the analysis board
@@ -292,7 +304,7 @@ Setup installs it for you (see [Installing from source](#installing-from-source)
 Stockfish is stored in your data folder under `engines\sf_19`. Each data folder has its own copy.
 
 ### Why your move fails
-If you play a wrong move and then click **Show answer**, the answer starts with **Why *your move* fails**. It shows your move, then Stockfish's best reply line (up to 5 moves by both sides), with the evaluation. Step through it with **Forward ▶** and **◀ Back** (or **→** and **←**), then carry on into **The solution**.
+If you play a wrong move and then click **Show answer**, the board shows **the solution** as usual, and a line above it says **Why *your move* fails**, with Stockfish's evaluation (for example "Why h6 fails: −9.3 for you"). Click its **Show me** to step through your move and Stockfish's best reply (up to 5 moves by both sides) with **Forward ▶** and **◀ Back** (or **→** and **←**); **Done** puts the solution back. *Changed in v0.4 during testing:* the answer used to start with this line; now it always starts with the correct solution.
 
 ![Why your move fails](img/refutation.png)
 
@@ -319,7 +331,7 @@ Once the puzzle is over (you finished the line, or you used Show answer), the **
 | **You mate in 3** / **You're mated in 2** | A forced checkmate, in that many of the mating side's moves. |
 
 ### The analysis board
-Click **Analyze on the board** in the panel to play out your own ideas. You can move pieces for **either side** (legal moves only), and after each move Stockfish re-evaluates and draws an arrow for its best move. **◀ Back** and **Forward ▶** step through your moves, **Reset** goes back to the puzzle position, and **Close** returns to the puzzle. Nothing you do on the analysis board is scored or saved.
+Click **Analyze on the board** in the panel to play out your own ideas. You can move pieces for **either side** (legal moves only), and after each move Stockfish re-evaluates and draws an arrow for its best move. **◀ Back** and **Forward ▶** step through your moves, **Reset** goes back to the puzzle position, and **Close** returns to the puzzle. If you opened the answer first, the button reads **Back to the answer** and takes you back to it (so does **Show answer**). Nothing you do on the analysis board is scored or saved.
 
 ![The analysis board](img/analysis-board.png)
 
@@ -348,7 +360,8 @@ In **⚙ Settings → Engine**:
 |---|---|
 | **N** or **Enter** | Next puzzle (before the puzzle is decided, that's Skip, which counts as failed). On the session summary, a new session. |
 | **H** | Hint |
-| **A** | Show answer (once it's unlocked) |
+| **A** | Show answer (once it's unlocked; after the puzzle, back to the start of the answer) |
+| **R** | Try again (not scored), once the puzzle is over (v0.4) |
 | **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4) |
 | **C** | Show or hide the letters and numbers around the board |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |

@@ -51,6 +51,10 @@ export function TrainerView({
   const [movable, setMovable] = useState<"white" | "black" | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [lineDone, setLineDone] = useState(false);
+  // FR-5.12 Try again: a practice run of the finished puzzle. Nothing is recorded; the result shown
+  // stays the first attempt's. `practiceMiss` is whether this run had a wrong move or used help.
+  const [practice, setPractice] = useState(false);
+  const practiceMiss = useRef(false);
   const [message, setMessage] = useState<Message>(null);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +63,7 @@ export function TrainerView({
   const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number; segments: AnswerSegment[] } | null>(null);
   const [refutation, setRefutation] = useState<"loading" | "missing" | { error: string } | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
+  const [whyWrong, setWhyWrong] = useState<{ label: string; positions: AnswerPosition[] } | null>(null);
   // "Show me" (FR-7.7): an engine line stepped through on the board, over the position it came from.
   const [preview, setPreview] = useState<{ from: string; label: string; positions: AnswerPosition[]; step: number } | null>(null);
   const [bestMove, setBestMove] = useState<string | null>(null);
@@ -127,12 +132,14 @@ export function TrainerView({
     setOutcome(null);
     setRating(null);
     setLineDone(false);
+    setPractice(false);
     setMessage(null);
     setMovable(null);
     setHintSquare(null);
     setHinted(false);
     setAnswer(null);
     setRefutation(null);
+    setWhyWrong(null);
     setAnalysis(null);
     setPreview(null);
     setBestMove(null);
@@ -208,14 +215,26 @@ export function TrainerView({
       } else if (fb.kind === "solved") {
         chess.current = after;
         setLineDone(true);
-        const won = fb.outcome?.win ?? outcome?.win ?? false;
-        setMessage(won ? { color: "green", text: "Solved!" } : { color: "gray", text: "That's the full line." });
+        if (practice) {
+          setMessage(
+            practiceMiss.current
+              ? { color: "gray", text: "That's the full line (practice, not scored)." }
+              : { color: "green", text: "Solved! (practice, not scored)" },
+          );
+          if (!practiceMiss.current) sounds.later("solved");
+        } else {
+          const won = fb.outcome?.win ?? outcome?.win ?? false;
+          setMessage(won ? { color: "green", text: "Solved!" } : { color: "gray", text: "That's the full line." });
+        }
       } else {
         // Wrong (or illegal): take the move back. The attempt is already decided as a loss.
         setFen(before.fen());
         setLastMove(null);
         setMovable(view.player_color);
-        if (fb.kind === "wrong") {
+        if (fb.kind === "wrong" && practice) {
+          practiceMiss.current = true;
+          setMessage({ color: "red", text: "Not the move. Keep trying (practice, not scored)." });
+        } else if (fb.kind === "wrong") {
           setMessage({ color: "red", text: "Not the move. This puzzle counts as failed; keep trying or go to the next one." });
         }
       }
@@ -236,6 +255,7 @@ export function TrainerView({
         sounds.play("failed");
       }
       const lost = help.outcome ? " This puzzle now counts as failed." : "";
+      if (practice) practiceMiss.current = true;
       if (kind === "hint") {
         setHintSquare(help.hint_square);
         setHinted(true);
@@ -246,11 +266,12 @@ export function TrainerView({
         setHintSquare(null);
         setMovable(null);
         setLineDone(true);
-        setAnalysis(null); // the answer replaces the analysis board
+        setAnalysis(null); // the answer replaces the analysis board and any line being shown (FR-5.4)
+        setPreview(null);
         const solution = answerPositions(help.answer_fen, help.answer_moves, help.answer_sounds);
-        setAnswer({ positions: solution, step: 0, segments: [] });
+        setAnswer({ positions: solution, step: 0, segments: [{ label: "The solution", from: 0 }] });
         setMessage({ color: "gray", text: `The answer: step through it with Back and Forward.${lost}` });
-        if (help.refute) loadRefutation(solution);
+        if (help.refute && !whyWrong) loadRefutation();
       }
     } catch (e) {
       setError((e as Error).message);
@@ -260,25 +281,19 @@ export function TrainerView({
   };
 
   // §7.2 step 2: put Stockfish's answer to your wrong move in front of the solution once it arrives.
-  const loadRefutation = (solution: AnswerPosition[]) => {
+  // §7.2 step 2: Stockfish's answer to your wrong move. It sits above the answer with its own Show me;
+  // the answer itself is always the correct solution (Adam, v0.4 manual test).
+  const loadRefutation = () => {
     setRefutation("loading");
     const seq = puzzleSeq.current;
     api.getRefutation(sessionId).then(
       (r) => {
         if (seq !== puzzleSeq.current) return;
-        const refPositions = answerPositions(r.fen_before, [r.wrong_move, ...r.line]);
-        const wrongSan = refPositions[1]?.san ?? r.wrong_move;
+        const positions = answerPositions(r.fen_before, [r.wrong_move, ...r.line]);
+        const wrongSan = positions[1]?.san ?? r.wrong_move;
         const verdict = r.score ?? r.game_over ?? "";
-        const segments: AnswerSegment[] = [
-          { label: `Why ${wrongSan} fails${verdict ? `: ${verdict}` : ""}`, from: 0 },
-          { label: "The solution", from: refPositions.length },
-        ];
         setRefutation(null);
-        setAnswer((a) =>
-          a && a.positions === solution
-            ? { positions: [...refPositions, ...solution], segments, step: a.step === 0 ? 0 : a.step + refPositions.length }
-            : a,
-        );
+        setWhyWrong({ label: `Why ${wrongSan} fails${verdict ? `: ${verdict}` : ""}`, positions });
       },
       (e: Error) => {
         if (seq !== puzzleSeq.current) return;
@@ -306,7 +321,47 @@ export function TrainerView({
     setPreview({ ...linePreview, step: Math.min(Math.max(to, 0), linePreview.positions.length - 1) });
   };
   const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
-  const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
+  // After the end, Show answer stays available: it goes back to the start of the answer (FR-5.4).
+  const canAnswer = view !== null && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
+  const canRetry = view !== null && lineDone && !helpBusy && !busy;
+  const retry = async () => {
+    if (!view || !canRetry) return;
+    try {
+      await api.retryPuzzle(sessionId);
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
+    puzzleSeq.current += 1; // late engine replies belong to the run before
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    practiceMiss.current = false;
+    setPractice(true);
+    setLineDone(false);
+    setAnswer(null);
+    setRefutation(null);
+    setWhyWrong(null);
+    setAnalysis(null);
+    setPreview(null);
+    setBestMove(null);
+    setHintSquare(null);
+    setHinted(false);
+    setMovable(null);
+    const c = new Chess(view.fen);
+    setFen(view.fen);
+    setLastMove(null);
+    setMessage({ color: "gray", text: "Try again: practice, not scored." });
+    later(() => {
+      const opp = view.opponent_move;
+      c.move(uciMove(opp));
+      chess.current = c;
+      setFen(c.fen());
+      setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
+      setMovable(view.player_color);
+      sounds.play(view.opponent_sound);
+      setMessage({ color: "gray", text: `Your turn again: find the best move for ${view.player_color}. Not scored.` });
+    }, OPPONENT_DELAY_MS);
+  };
   const stepAnalysis = (to: number) => {
     if (!analysis) return;
     setAnalysis({ ...analysis, step: Math.min(Math.max(to, 0), analysis.positions.length - 1) });
@@ -336,6 +391,7 @@ export function TrainerView({
     Enter: next,
     h: () => canHint && requestHelp("hint"),
     a: () => canAnswer && requestHelp("answer"),
+    r: () => canRetry && retry(),
     ArrowLeft: () => stepAnswer(-1),
     ArrowRight: () => stepAnswer(1),
   });
@@ -390,6 +446,11 @@ export function TrainerView({
               {stats?.queue_size ? ` of ${stats.queue_size}` : ""} · rated {view.rating} · you play {view.player_color}
             </Text>
           )}
+          {practice && (
+            <Badge color="grape" variant="light" style={{ textTransform: "none" }} data-testid="practice-badge">
+              Practice: not scored
+            </Badge>
+          )}
           {view?.already_played && (
             <Badge color="gray" variant="light" style={{ textTransform: "none" }} data-testid="already-played">
               Already played on Lichess: rating unaffected
@@ -428,6 +489,24 @@ export function TrainerView({
               segments={answer.segments}
               onStep={(to) => stepAnswer(to - answer.step)}
             />
+          )}
+          {whyWrong && !linePreview && (
+            <Group gap={6} wrap="nowrap" justify="space-between" data-testid="refutation">
+              <Text size="sm" fw={600} data-testid="refutation-label">
+                {whyWrong.label}
+              </Text>
+              {boardFen && (
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  style={{ flexShrink: 0 }}
+                  onClick={() => setPreview({ from: boardFen, label: whyWrong.label, positions: whyWrong.positions, step: 0 })}
+                  data-testid="refutation-show"
+                >
+                  Show me
+                </Button>
+              )}
+            </Group>
           )}
           {refutation === "loading" && (
             <Text size="sm" c="dimmed" data-testid="refutation-loading">
@@ -469,6 +548,7 @@ export function TrainerView({
                   onStep={stepAnalysis}
                   onReset={() => setAnalysis(openAnalysis(startFen))}
                   onClose={() => setAnalysis(null)}
+                  closeLabel={answer ? "Back to the answer" : "Close"}
                 />
               ) : (
                 <AnalyzeButton onClick={() => setAnalysis(openAnalysis(boardFen))} />
@@ -490,6 +570,18 @@ export function TrainerView({
               Show answer
             </Button>
           </Group>
+          {lineDone && (
+            <Button
+              variant="light"
+              color="grape"
+              disabled={!canRetry}
+              onClick={retry}
+              title="Solve it again from the start. Not scored, nothing is sent to Lichess."
+              data-testid="try-again"
+            >
+              Try again (not scored)
+            </Button>
+          )}
           {!decided && !lineDone && (
             <Text size="xs" c="dimmed">
               Hint and Show answer count the puzzle as failed. Show answer unlocks after a Hint.
