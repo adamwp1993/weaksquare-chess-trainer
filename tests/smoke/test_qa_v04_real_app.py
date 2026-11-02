@@ -151,7 +151,9 @@ def test_engine_flow_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Pat
                 timeout=20_000,
             )
             arrow = board.get_attribute("data-arrows").split()[0]
-            assert chess.Move.from_uci(arrow) in chess.Board(board.get_attribute("data-fen")).legal_moves
+            # an arrow is from-to only (a promotion's piece isn't drawn): some legal move must match it
+            legal = chess.Board(board.get_attribute("data-fen")).legal_moves
+            assert any(m.uci()[:4] == arrow[:4] for m in legal), arrow
             shot(page, "analysis-board")
             page.get_by_test_id("analysis-close").click()
 

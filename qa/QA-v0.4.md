@@ -338,3 +338,65 @@ QA added no new tests. The builder's B8 and `CancelledError` regression tests, a
 
 ## For Adam's manual test (the round-1 list, plus round 2's)
 - Finish a puzzle and close the window **immediately**, a few times. `python.exe` should disappear from Task Manager, and the app should start again normally.
+
+---
+
+# Manual-test changes (rc2), 2026-11-02
+
+Branch `v0.4` at `290364d`, covering `e095f5d` (Show me) and `290364d` (Try again, Show answer re-opens, refutation beside the answer). Same rules: no product code changed by QA, no `-m live`, no credentials. `%LOCALAPPDATA%\WeakSquare` still doesn't exist. QA didn't switch branches; its only working-tree changes are under `tests/` and this report.
+
+## Verdict: **PASS**
+
+All four of Adam's changes work as REQUIREMENTS.md now describes (FR-7.7 Show me, FR-5.4 re-open, §7.2 step 2, FR-5.12). FR-7.3 holds during a practice run, including over the bridge in the real app. A practice run leaves `attempts` (the Lichess sync queue), the session stats and Stats exactly as they were. Standard-mode scoring is unchanged. All suites are green, and `docs/img` regenerates byte-identical. No new bugs.
+
+## Evidence by item
+
+| Item | Method | Result | Evidence |
+|---|---|---|---|
+| FR-5.12 practice records nothing (wrong move, correct move, hint, answer, solved run, Next mid-practice) | QA integration (bridge) + real app | PASS | `integration/test_qa_v04_rc2_practice.py::test_qa_practice_records_nothing_and_hides_the_engine`. Every `outcome` is `null`. The `attempts` rows (every column), `get_session_stats` and `get_stats` are identical before and after three practice runs and a Next mid-practice. `retry_puzzle` gives `conflict` before the end, and also when decided but not finished. Real app: `smoke/test_qa_v04_rc2_real_app.py::test_try_again_in_the_real_app`: user.db `attempts` unchanged across a practice run (wrong move, hint, Show answer) and a second run left by Next mid-practice; session stats and Stats unchanged; the chip still says "1 solve waiting"; 0 ERROR lines in the log |
+| FR-7.3 during a practice run | QA integration + real app over CDP + e2e | PASS | Bridge: `analyze_position` (start / panel / board) and `get_refutation` give `conflict` at the practice start, after a practice wrong move (lost but still playing) and after a hint. They're allowed again once the practice run ends with Show answer. Real app: the same three calls refused over `window.pywebview.api`, no panel, no "for you" on screen. Mock: `e2e/test_qa_v04_rc2_ui.py::test_qa_try_again_hides_the_engine_and_records_nothing` (no `analyze:` or `refutation` call during the practice run, no panel, line preview or refutation; the first result "Solved" and the Solved/Failed counts stay, also after Next) |
+| Standard-mode scoring (the wrong-move branch change) | QA integration + builder unit | PASS | `test_qa_standard_scoring_is_unchanged`: a clean solve is a win `(1,1,1,'none')`. Wrong, wrong, finish is one loss decided on the first wrong move `(0,0,0,'none')`, with no second outcome. Hint then wrong is decided once by the hint `(0,0,0,'hint')`. One attempt per puzzle. Builder: `unit/test_standard_mode.py::test_practice_run_never_decides_anything`, `::test_practice_run_can_be_solved`, and the pre-existing scoring tests. By code review, the only behaviour change is when `attempt` already exists, which outside practice means help was used and `failed` was already set |
+| Show me / re-open / Back to the answer / arrows | QA e2e + builder e2e | PASS | `test_qa_show_me_then_show_answer_returns_to_the_solution_start`: the answer at step 2, then Show me (the board doesn't move until you step), then → steps the line, not the answer, then **A** re-opens: the line closes and you're at the solution's "Start" position, where → steps the answer again. `test_qa_done_returns_to_the_answer_step`: the refutation's Show me, → ×3, ← ×9 clamps at Start, **Done** returns to answer step 1. `test_qa_show_me_on_the_analysis_board_then_back_to_the_answer`: Close reads "Back to the answer" with an answer and "Close" without one; no arrow while a line shows; Show answer closes both the board and the line. Builder: `test_show_me_steps_through_a_line_on_the_board` (read-only board, → steps), `test_show_me_on_the_analysis_board`, `test_show_answer_reopens_from_the_analysis_board`, `test_show_answer_is_the_solution_with_the_refutation_beside_it` |
+| Refutation beside the answer (§7.2 step 2) | e2e + real app | PASS | The answer starts with the correct move ("1/3: N…"). `refutation-label` "Why h6 fails: … for you". `refutation-show` steps through the wrong move and Stockfish's reply. Real app: `refutation-label` "Why … fails" with real sf_19 (`test_engine_flow_in_the_real_app`) |
+| **R** shortcut | e2e | PASS | **R** before the end does nothing (no retry call, no button). After the end it starts a practice run, even with a Show me line open (the line closes) |
+
+## Docs vs the app
+- **User Guide, *Why your move fails*:** matches. The board shows the solution, the label is above it with its Show me, and Done puts the solution back.
+- ***Show me*:** matches. The board is read-only, nothing moves until you step, ← and → work, Done returns, the panel keeps the underlying position's lines, and it works on the analysis board.
+- ***Try again (not scored)*:** matches. The button and **R** work, the badge shows, nothing is recorded, help is free and Stockfish stays hidden.
+- **Analysis board:** the "Back to the answer" label and its behaviour match.
+- **Shortcuts table:** A, R and ←/→ match `state/shortcuts.ts` and the app.
+- **CHANGELOG `[Unreleased]`** has all four changes.
+- **Screenshots:** `uv run pytest -m docs_screenshots` gives 17 passed, and `docs/img` is byte-identical (no git diff), including the new `show-me.png` and `try-again.png`.
+- `check_docs.py --strict`: 0 errors, 0 warnings.
+
+## Commands run
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **724 passed** (722 + 2 QA), exits on its own (134 s) |
+| `uv run pytest -m e2e` | **137 passed** (133 + 4 QA) |
+| `npm.cmd --prefix web run build`, `uv run pytest -m smoke` | **22 passed, 1 skipped** (opt-in download test). See the note below |
+| `uv run pytest -m engine` | **10 passed** |
+| `uv run pytest -m fulldb` | **59 passed, 1 xfailed** (known v0.2-B2) |
+| `uv run pytest -m docs_screenshots` | 17 passed, byte-identical |
+| ruff check, ruff format --check, mypy, tsc, ESLint, pre-commit (gitleaks, keyring-only), `check_docs --strict`, `uv lock --check` | all clean |
+
+**Scope and architecture:**
+- No dependency, lockfile or migration change.
+- `retry_puzzle` is in the bridge allowlist.
+- Practice state lives in `StandardState` (core, no I/O).
+- No browser storage and no raw HTML in `web/src`.
+
+## Test changes in this pass (tests/ only)
+- **New:** `tests/integration/test_qa_v04_rc2_practice.py` (2 tests), `tests/e2e/test_qa_v04_rc2_ui.py` (4 tests; screenshots in `tests/e2e/artifacts/qa-v04-rc2/`), `tests/smoke/test_qa_v04_rc2_real_app.py` (1 test).
+- **Fixed, QA's own test:** `tests/smoke/test_qa_v04_real_app.py::test_engine_flow_in_the_real_app` failed once in the first smoke run. The random puzzle led to an analysis-board position where the best move is a promotion. The board's arrow is from-to only (`e7e8`), and the test parsed it as a full UCI move. The product is right: `legalArrow` checks the full move before drawing. The test now checks that some legal move matches the arrow's squares. The builder's `e2e/test_engine_ui.py::test_analysis_board` has the same pattern, but it's safe there: the mock's fixed puzzle has no promotion.
+
+## Cosmetic notes (not bugs)
+- In the panel, the **Show me** button you clicked keeps its focus outline, so the buttons look uneven in `qa-v04-rc2/show-me-on-the-answer.png`.
+- After a Hint, the Hint button stays enabled. This predates v0.4 and is the same outside practice runs.
+
+## For Adam's manual test
+- Try again a few times on a real puzzle and check Lichess shows only the first solve.
+- Use Show me on a long engine line with the arrow keys.
+- Re-open Show answer after exploring on the analysis board.

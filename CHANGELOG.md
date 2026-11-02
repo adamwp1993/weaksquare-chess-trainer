@@ -12,7 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
-Candidates: v0.4-rc1 (2026-11-02)
+Candidates: v0.4-rc1 (2026-11-02), v0.4-rc2 (2026-11-02)
 
 ### Added
 - **Why your move fails:** after a wrong move, **Show answer** shows the solution with *Why your move fails* and Stockfish's evaluation above it; its **Show me** steps through your move and Stockfish's best reply (up to 5 moves). [FR-7.2]
