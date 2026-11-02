@@ -1,6 +1,6 @@
 [project]
 name = "weaksquare"
-version = "0.2.0"
+version = "0.3.0"
 description = "WeakSquare Chess Trainer: a Windows desktop app for chess tactics training on the Lichess puzzle database"
 readme = "README.md"
 license = "AGPL-3.0-or-later"

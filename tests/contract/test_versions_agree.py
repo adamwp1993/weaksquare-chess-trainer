@@ -22,4 +22,4 @@ def test_versions_agree() -> None:
 
 def test_version_matches_the_branch_being_built() -> None:
     """While v0.x is built, the app says 0.x.0 (v0.2-B7: v0.2 still said 0.1.0)."""
-    assert APP_VERSION == "0.2.0"
+    assert APP_VERSION == "0.3.0"

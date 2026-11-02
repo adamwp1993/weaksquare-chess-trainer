@@ -147,7 +147,7 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.6 | Phase / goal / origin | Covered by the theme picker groups | e.g. endgame, mate, crushing, master games |
 | FR-3.7 | Opening | Searchable multi-select from `OpeningTags` | e.g. Italian Game, Caro-Kann, London |
 | FR-3.8 | Quality | Min popularity, min plays | On by default at **popularity ≥ 50** (Lichess popularity runs from -100 to 100) and **≥ 100 plays**; both adjustable, and clearing a box turns that threshold off. Measured on the 2026-11-01 export: the defaults leave out 21.9% of puzzles (mostly the plays minimum); kept as is by Adam after seeing that number. The puzzles stay in the database; this only narrows the selection |
-| FR-3.9 | History | Checkboxes: exclude solved here / exclude played on Lichess / **only my misses** | Uses `attempts` and `lichess_history`. *Exclude solved here* (**on by default**) hides puzzles you've **won at least once** in this app; ones you only failed can still come up. *Only my misses* (off by default) keeps only puzzles whose **latest** attempt here was a loss, so a miss drops out once you solve it. |
+| FR-3.9 | History | Checkboxes: exclude solved here / exclude played on Lichess / **only my misses** | Uses `attempts` and `lichess_history`. *Exclude solved here* (**on by default**) hides puzzles you've **won at least once** in this app; ones you only failed can still come up. *Only my misses* (off by default) keeps only puzzles whose **latest** attempt here was a loss, so a miss drops out once you solve it. *Exclude played on Lichess* (**on by default**, decided at v0.3 planning) hides puzzles in your imported Lichess history (FR-6.17) and those you've synced from here, because Lichess never changes your rating for a puzzle you've already played; with no imported history it changes nothing. |
 | FR-3.10 | **Ratios** (optional) | Weighted buckets, e.g. 50% fork, 30% capture-the-defender, 20% one-move | Draws from each bucket by weight |
 | FR-3.11 | Order | Random / easy → hard / grouped by theme | |
 | FR-3.12 | Queue size | Fixed N or endless | |
@@ -251,10 +251,15 @@ Habit tags (FR-10.27) and themes describe **what** went wrong. Mistake reasons r
 Lichess weights rating changes by the reported `angle`, because a theme that's known in advance hints at the answer. `mix` gives full weight, and specific motifs give much less (e.g. a win on `fork` counts 20%). Report truthfully:
 - **FR-6.13** `angle = mix` **only when** the theme filter is **All** *and* the move-count filter is **All**.
 - **FR-6.14** Otherwise, `angle` is the **selected theme that this puzzle matched**. If several selected themes match, use the first one in a fixed priority order (motif themes before phase/goal themes).
+  - *(Decided at v0.3 planning.)* The priority order is: the Motifs, Advanced, Mates, Mate patterns and Special moves groups first, then Phases, Goals and Origin, then the length themes. With ratios, the selected themes are every group's themes, in group order.
+  - When the themes are **All** but the move-count filter isn't, the angle is the puzzle's **length theme** (`oneMove`, `short`, `long`, `veryLong` for 1, 2, 3 and 4+ moves), since that's what you knew in advance.
+  - Excluded themes, openings, rating, side, quality and history filters don't change the angle.
 - **FR-6.15** If the session **Rated** toggle is off, send `rated: false`.
 
 ### 8.4 Sync queue and history
 - **FR-6.16** Every finished attempt in a syncing mode goes into the sync queue. It syncs right away when signed in, otherwise on the next successful sign-in. Sync never blocks solving.
+  - *(Decided at v0.3 planning.)* Attempts recorded before v0.3 are **never** synced: they had no Rated flag or angle. They stay local and still count in Stats.
+  - A solve made while signed in as one Lichess account only ever syncs to that account. A solve made while signed out syncs to the next account that signs in.
 - **FR-6.16a** **Delivery is at-least-once.** If a batch times out after Lichess may have received it, the batch is resent. That's acceptable because Lichess only rates the first attempt at a puzzle; a resend records a replay. Never mark a batch synced without a success response.
 - **FR-6.17** On sign-in, import puzzle history from `GET /api/puzzle/activity` (ndjson, scope `puzzle:read`). Import incrementally using `since` set to the last import time. This feeds the "exclude played on Lichess" filter and the "already played" badge.
 
