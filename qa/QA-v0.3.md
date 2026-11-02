@@ -155,3 +155,70 @@ Each xfail is `strict=True`: the fix commit removes the marker and keeps the tes
 - `uv run python scripts/set_test_token.py`, then `uv run pytest -m live --record-lichess`: confirms `rounds[].ratingDiff`, `glicko.rating` and the activity shape, and replaces the hand-written fixtures. If the shapes differ, note that B1 decides what happens (offline loops / all solves "skipped").
 - Rated `mix` solves: +/− on each result, header and session total update; Wi-Fi off → "Will sync later"; reconnect drains; solves appear on Lichess; Stats trend; sign out → no `weaksquare` entry in Credential Manager.
 - Be aware: solves made while signed out (rated by default) are all sent, rated, to the first account that signs in (FR-6.16 as written). A long signed-out history means a large rated push on first sign-in.
+
+---
+
+# Round 2, 2026-11-02 (re-verification)
+
+Branch `v0.3` at `f009585` ("QA v0.3 round 1 fixes…"). Same hard rules as round 1: no `-m live`, no `set_test_token.py`, no keyring reads, no calls to lichess.org; no product code changed by QA. `%LOCALAPPDATA%\WeakSquare` still doesn't exist; dev `user.db`/`puzzles.db` mtimes unchanged (13:40/13:42).
+
+## Verdict: **PASS WITH ISSUES** (minor only)
+
+All seven round-1 bugs are fixed and verified. Round 2 found one new **minor** bug, **B8**: an edge case left in the B5 fix where a network-backoff timer scheduled earlier can end a later 429 wait early. At most one early request goes out per occurrence. The live test (`-m live`) is still for Adam to run.
+
+## Re-verification of round-1 bugs
+
+| Bug | Fix | Result | Evidence |
+|---|---|---|---|
+| B5 (major) 429 wait ignored | `SyncService._hold` ("rate" / "offline"): `kick()` sends nothing while a retry waits; `force=True` (sign-in) may cut a network backoff short, never a 429 wait | **FIXED** (edge case left: B8) | `test_qa_v03_edges.py::test_qa_no_request_during_the_429_wait` (now a regular test, passes); builder `::test_b5_a_sign_in_may_cut_a_network_backoff_short_but_never_a_429_wait`, `test_sync.py::test_429_waits_at_least_a_minute` (rewritten: held through both `kick()` and `kick(force=True)`, Retry-After 120 honoured) |
+| B1 unexpected 2xx = offline | `is_network_error` also requires `e.retryable` | **FIXED** | `::test_qa_unexpected_response_is_not_a_network_error` passes. Transport errors are still classified as network (`HttpError` defaults to `retryable=True`; `test_sync.py` offline/5xx tests pass) |
+| B2 no "Sign in again" on the main page | `expired-banner` with **Sign in again** (opens Settings → account) | **FIXED** | `test_qa_v03_ui.py::test_qa_expired_sign_in_says_sign_in_again_on_the_main_page` passes; builder `test_lichess_ui.py::test_b2_expired_banner_opens_the_sign_in`; screenshots `qa-v03/{light,dark}-main-expired-banner.png` (new QA test `test_qa_expired_banner_screenshot`), readable in both schemes |
+| B3 orphaned token | `_revoke_quietly(secret)` when `account()` or the secret store fails after the exchange | **FIXED** | `::test_qa_failed_sign_in_after_the_exchange_revokes_the_new_token` passes (`revoked == [token]`); the secret-store path revokes too (code read) |
+| B4 live test may resend | `post_json(..., retry=)`; `solve_batch` and the live test use `retry=False` | **FIXED** | builder `::test_b4_batches_are_sent_once_per_call` (1 request per call); diff of `tests/live/test_lichess_live.py` (not run, by rule) |
+| B6 User Guide wording | chip wording, the "Sign in as someone else" gotcha, the 429 sentence, and the expired banner documented | **FIXED** | `docs/USER_GUIDE.md` diff matches the app (chip text in the real-app screenshot, banner in the mock screenshot) |
+| B7 cosmetic | offline status line reworded; summary leaves out Lichess without a history; gear glyph rendered as text (`U+2699 U+FE0E`) | **FIXED** | builder `test_lichess_ui.py::test_b7_offline_startup_says_it_once`, `::test_b7_summary_mentions_lichess_only_with_a_history`; screenshot `qa-v03/light-startup-offline.png`: the gear is now a dark-teal text glyph |
+
+## New bug
+
+### v0.3-B8 (minor): a pending network-backoff timer ends a later 429 wait early
+- **Steps:**
+  1. A batch fails with a network error, which schedules a 30 s retry (or up to 10 min at later backoff steps).
+  2. Within that window, a sign-in or a successful reconnect check calls `kick(force=True)`. The batch succeeds, and `_apply` clears the offline hold.
+  3. A later batch gets a 429.
+- **Expected:** nothing is sent for at least 60 s, or for Retry-After (FR-6.10).
+- **Actual:** `_schedule_retry(delay, "rate")` sets `_hold = "rate"`, but `_retry_scheduled` is still True from step 1. So it returns without scheduling a 60 s timer. The old network timer then fires, possibly well under 60 s after the 429. It clears the hold and sends.
+- **Likely when:** this is the realistic "long offline session, then reconnect" case: the account recheck forces a drain of a large backlog, and the 429 comes after about 200 solves. Impact is limited: the early request gets another 429, and that one does schedule a proper 60 s wait. So at most one extra request goes out per occurrence. The inverse also happens: with a 10 min network timer pending, the app waits longer than it needs to.
+- **Evidence:** `tests/integration/test_qa_v03_edges.py::test_qa_429_after_a_forced_retry_still_waits_a_minute` (xfail strict). With `--runxfail`, it fails at `any(d >= 60 for d in scheduler.delays)`: only `[30]` is pending after the 429.
+- **Suggested direction (not applied):** a 429 should always schedule its own timer, or replace a shorter pending one. Alternatively, `_retry` could ignore a stale timer while `_hold == "rate"`.
+
+## Round 2 evidence: commands run
+
+| Command | Result |
+|---|---|
+| `npm.cmd --prefix web run build` | built |
+| `uv run pytest` | **572 passed, 1 xfailed** (B8), 204 deselected |
+| `uv run pytest -m e2e` | **108 passed** (builder's 108; the 2 QA banner-screenshot tests added afterwards also pass: `-k banner` 2 passed) |
+| `uv run pytest -m smoke` | **19 passed** |
+| `uv run pytest -m fulldb` | **59 passed, 1 xfailed** (known v0.2-B2), 508 s |
+| `uv run ruff check .` / `ruff format --check .` | All checks passed / 179 files already formatted |
+| `uv run mypy src` | no issues in 63 source files |
+| `npm.cmd --prefix web run typecheck` / `lint` | exit 0 / exit 0 |
+| `uv run pre-commit run --all-files` | gitleaks Passed; keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [v0.3] |
+| `uv run python scripts/gen_types.py` | no diff |
+| `uv run pytest -m docs_screenshots` | 11 passed, `docs/img` byte-identical to the committed (regenerated) set |
+| `uv lock --check` | up to date. The fix commit changes no dependency, lockfile or migration |
+
+**Scope, architecture and security:** the fix commit touches only `adapters/http.py`, `adapters/lichess.py`, `app.py` (wiring `force=True`), `services/account.py`, `services/sync.py`, three front-end files, the live test, docs and screenshots.
+- No new dependencies and no migration edits.
+- No browser storage (grep is clean).
+- The token is still absent from logs, events and replies: `::test_qa_token_never_in_logs_events_or_job_messages` passes.
+- `retry=False` is a per-call argument, not a client default.
+
+## Tests added in round 2
+- `tests/integration/test_qa_v03_edges.py::test_qa_429_after_a_forced_retry_still_waits_a_minute` (xfail strict, B8)
+- `tests/e2e/test_qa_v03_ui.py::test_qa_expired_banner_screenshot[light/dark]`
+
+## For Adam's manual test (unchanged from round 1, plus)
+- Same list as round 1: the real OAuth round trip, `set_test_token.py` followed by `-m live --record-lichess`, the ROADMAP flow, and Credential Manager after sign-out.
+- New: after an expired or revoked sign-in mid-session (revoke the token at lichess.org/account/security while the app is open), the yellow **Sign in again** banner should appear above the puzzles.

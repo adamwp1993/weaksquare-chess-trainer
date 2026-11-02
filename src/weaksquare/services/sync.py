@@ -158,6 +158,7 @@ class SyncService:
         self._state: SyncState = "idle"
         self._backoff_step = 0
         self._retry_scheduled = False
+        self._retry_generation = 0  # only the newest scheduled retry acts
         # Why a retry is waiting: "rate" after a 429 (nothing may be sent until it fires, FR-6.10),
         # "offline" after a network error or 5xx (a new sign-in or reconnect may try sooner).
         self._hold: str | None = None
@@ -241,20 +242,25 @@ class SyncService:
             self._job = self._d.runner.submit(JOB_KIND, self._run)
             return self._job
 
-    def _retry(self) -> None:
+    def _retry(self, generation: int) -> None:
         with self._lock:
+            if generation != self._retry_generation:
+                return  # replaced by a later retry (e.g. a 429's own wait): ignore (v0.3-B8)
             self._retry_scheduled = False
             self._hold = None
         self.kick()
 
     def _schedule_retry(self, delay_s: float, reason: str) -> None:
+        """A network backoff keeps an already waiting retry. A 429 always starts its own full wait,
+        so an older, shorter timer can never end it early (v0.3-B8)."""
         with self._lock:
-            if reason == "rate" or self._hold is None:
-                self._hold = reason
-            if self._retry_scheduled:
+            if self._retry_scheduled and reason != "rate":
                 return
+            self._hold = reason
             self._retry_scheduled = True
-        self._d.scheduler.call_later(delay_s, self._retry)
+            self._retry_generation += 1
+            generation = self._retry_generation
+        self._d.scheduler.call_later(delay_s, lambda: self._retry(generation))
 
     def _run(self, progress: ProgressFn, cancel: CancelToken) -> str:
         try:

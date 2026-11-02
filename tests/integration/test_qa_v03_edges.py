@@ -452,3 +452,28 @@ def test_b5_a_sign_in_may_cut_a_network_backoff_short_but_never_a_429_wait(w: Wi
     w.services.sync.kick(force=True)
     w.settle()
     assert len(w.lichess.batch_calls) == calls  # never during the 429 wait
+
+
+# Regression test for v0.3-B8 (fixed in QA round 2).
+def test_qa_429_after_a_forced_retry_still_waits_a_minute(w: Wired) -> None:
+    """Round 2. A network error schedules a 30 s retry; a sign-in (force) retries at once and works; a
+    429 then arrives while the 30 s timer is still pending. `_schedule_retry("rate")` sees a retry
+    already scheduled and adds no 60 s timer, so the old 30 s timer fires (at most 30 s after the
+    429), clears the hold and sends: the minute Lichess asked for is cut short (FR-6.10)."""
+    _check_in(w)
+    sid = data(w.api.start_session(OPEN, True))["session_id"]
+    w.lichess.batch_errors = [network_error()]
+    _solve_one(w.api, sid)
+    w.settle()
+    assert w.scheduler.delays == [30]
+    w.services.sync.kick(force=True)  # e.g. a sign-in; succeeds
+    w.settle()
+    w.lichess.batch_errors = [rate_limited()]
+    _solve_one(w.api, sid)  # the success cleared the offline hold, so this sends and gets the 429
+    w.settle()
+    assert data(w.api.get_sync_status())["state"] == "waiting"
+    calls = len(w.lichess.batch_calls)
+    assert any(d >= 60 for d in w.scheduler.delays), w.scheduler.delays  # a full-minute timer exists
+    w.scheduler.run_next()  # the old 30 s timer fires first
+    w.settle()
+    assert len(w.lichess.batch_calls) == calls, "a batch was sent before the 429 minute was up"

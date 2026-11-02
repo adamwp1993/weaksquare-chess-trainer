@@ -109,3 +109,11 @@ def test_qa_expired_sign_in_says_sign_in_again_on_the_main_page(page) -> None:  
     page.goto(page.base_url + "/?account=expired")
     page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
     page.get_by_text("Sign in again").first.wait_for(timeout=3000)
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_qa_expired_banner_screenshot(page, scheme: str) -> None:  # type: ignore[no-untyped-def]
+    """Round 2: the B2 banner on the main page, for the visual check."""
+    page.goto(page.base_url + f"/?scheme={scheme}&account=expired")
+    page.get_by_test_id("expired-banner").wait_for()
+    shot(page, f"{scheme}-main-expired-banner")
