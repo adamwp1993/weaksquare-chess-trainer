@@ -31,8 +31,8 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Regenerate the user-guide screenshots | `uv run pytest -m docs_screenshots` (writes `docs/img/*.png` from the mock client) |
 | Rebuild the app icon after changing `assets/icon/weaksquare.svg` | `uv run python scripts/make_icon.py` (commit the `.ico` with the SVG; `--check` tells you if they've drifted, and `uv run pytest -m e2e` runs that check) |
 | Re-record the update-check responses (needs the internet) | `uv run python tests/fixtures/tools/record_db_update.py` (writes scrubbed copies to `tests/fixtures/http/lichess_db/`; review the diff before committing) |
-| Store the live-test Lichess token (run it yourself, outside Claude Code) | TODO(v0.3) |
-| Live tests (opt-in) | TODO(v0.3) |
+| Store the live-test Lichess token (run it yourself, outside Claude Code) | Create a personal access token at https://lichess.org/account/oauth/token with only **puzzle:read** and **puzzle:write**, then run `uv run python scripts/set_test_token.py` in your own PowerShell window and paste it at the hidden prompt. It's stored in Windows Credential Manager as `weaksquare-test`, separate from the app's sign-in. `--delete` removes it. Never run this inside Claude Code. |
+| Live tests (opt-in) | `uv run pytest -m live` (you run it, never Claude Code). It reads the `weaksquare-test` token and sends exactly 3 solves to Lichess with `rated: false` (they appear in your puzzle history, unrated), then checks the response shapes. Add `--record-lichess` to rewrite `tests/fixtures/http/lichess/` from the real responses, scrubbed and anonymized. Review the diff before committing. Skips if there's no token. |
 | Build the Windows installer | TODO(v1.0) |
 
 ## Where things are
@@ -51,6 +51,7 @@ The layer rules and full repo tree are in ARCHITECTURE.md §1–2. Docs:
 - App data: `%LOCALAPPDATA%\WeakSquare` (from `config.py`), holding `puzzles.db`, `user.db` and, from v0.4, `engines\<tag>\stockfish.exe`.
 - Stockfish version: pinned in `src/weaksquare/engine_manifest.json`. To upgrade, change the tag, asset and SHA-256 there, add an ARCHITECTURE.md §7 entry, and re-run `scripts/fetch_stockfish.py`.
 - `WEAKSQUARE_DATA_DIR` overrides the data folder. Dev runs default to `%LOCALAPPDATA%\WeakSquare-dev` and tests use a temp folder, so your real history is never touched (REQUIREMENTS.md NFR-2).
+- The Lichess sign-in (v0.3) is in Windows Credential Manager, one entry per data folder: `weaksquare` for the real folder, `weaksquare-dev` for the dev folder, and `weaksquare-<hash>` for any other `WEAKSQUARE_DATA_DIR` (so smoke runs start signed out). Sign out in the app, or delete the entry under Control Panel → Credential Manager → Windows Credentials, to reset it. Tests never touch Credential Manager (only `-m live` reads `weaksquare-test`).
 - Backups of `user.db` taken before each migration: `<data folder>\backups\` (last 5 kept). Logs: `<data folder>\logs\`.
 - Other settings and environment variables:
   - `python -m weaksquare --dev` uses the dev data folder. `--dev-server` does the same and also loads the front end from the Vite dev server (http://localhost:5173) instead of `web/dist`.

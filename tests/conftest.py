@@ -78,6 +78,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="puzzles.db for -m fulldb (default: the dev data folder's, read-only)",
     )
+    parser.addoption(
+        "--record-lichess",
+        action="store_true",
+        default=False,
+        help="with -m live: write scrubbed, anonymized copies of the real responses to tests/fixtures/http/lichess",
+    )
 
 
 @pytest.fixture(scope="session")
