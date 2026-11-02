@@ -97,9 +97,10 @@ Scope:
 - Engine install (FR-7.5): `engine_manifest.json` pinned to `sf_19` with its SHA-256, `services/engine_install.py`, `scripts/fetch_stockfish.py`, a Stockfish step in `setup.py`, and the in-app *Stockfish isn't installed* banner with Install.
 - `EngineClient` with its interactive engine, position validation and crash recovery (FR-7.1, 7.6; ARCHITECTURE §3 decision 12); engine settings, including the custom engine path (FR-7.4, 7.5).
 - Refutation of wrong moves in Show answer; post-puzzle eval and top lines, never shown during a puzzle (FR-7.2, 7.3).
+- After the puzzle: the start-position eval, the eval and top lines that follow the board, and an **Analyze** board you can move pieces on with the engine (FR-7.7, added at v0.4 planning). Evals read from your side.
 
 **Done when:** engine integration tests (a known position gives the expected best move); no eval is visible while solving (Playwright check); installer tests against a local fake download: a hash mismatch refuses and leaves nothing behind, a zip with `..` paths is rejected, and a second run does nothing; an invalid position sent past validation causes one restart and a clean error, not a hang.
-**Adam's manual test:** compare the SHA-256 in `engine_manifest.json` with the digest GitHub shows next to the asset on the sf_19 release page → delete the `engines` folder under `%LOCALAPPDATA%\WeakSquare` → the app shows the Install banner → Install works → deliberately play wrong moves → refutations make sense; check engine CPU usage is sane.
+**Adam's manual test:** compare the SHA-256 in `engine_manifest.json` with the digest GitHub shows next to the asset on the sf_19 release page → delete the `engines` folder in the data folder you run (`%LOCALAPPDATA%\WeakSquare` or `WeakSquare-dev`) → the app shows the Install banner → Install works → deliberately play wrong moves → refutations make sense and evals read "for you" → after a puzzle, step through the answer with the engine panel and open Analyze to play moves on the board; check engine CPU usage is sane.
 
 ---
 

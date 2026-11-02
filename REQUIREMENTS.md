@@ -269,14 +269,14 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 
 ### 9.1 Stockfish
 - **FR-7.1** Native Windows x64 Stockfish, run by the backend over UCI using python-chess. Use the official **universal** build (`stockfish-windows-x86-64-universal.zip` from the `sf_19` GitHub release). It detects the CPU's instruction set by itself, so the app never picks between AVX2, BMI2 and other builds.
-- **FR-7.2** Uses: refuting wrong moves, checking that "safe" candidates in Danger spotting really are safe, MultiPV top lines (default 3), and evals.
-- **FR-7.3** **No eval bar or engine lines are visible while a puzzle is in progress.** They appear after the puzzle ends.
+- **FR-7.2** Uses: refuting wrong moves, checking that "safe" candidates in Danger spotting really are safe, MultiPV top lines (default 3), and evals. **Evals are shown from your side** (the side you played in the puzzle): "+3.2 for you", "−1.4 for you", "You mate in 3", "You're mated in 2" (Adam, v0.4 planning).
+- **FR-7.3** **No eval bar or engine lines are visible while a puzzle is in progress.** They appear after the puzzle ends: the line is complete, or Show answer was used. A puzzle you've already lost with a wrong move but are still playing through is still in progress. The backend enforces this: engine requests for a puzzle that isn't finished are refused.
 - **FR-7.4** Settings: think time (default 1 s), threads (default CPU cores − 1), hash (default 256 MB).
 - **FR-7.5** **Engine install.** The binary is gitignored, so an installer fetches it. One implementation, `services/engine_install.py`, is used by `scripts/fetch_stockfish.py`, `scripts/setup.py`, the in-app Install button and the v1.0 first-run wizard.
   - **Pinned, never "latest":** `engine_manifest.json` records the release tag, asset name, URL and SHA-256 (taken from the digest GitHub publishes for the asset). Assets are **keyed by OS and CPU architecture** (e.g. `windows-x86_64`) from the start. Through v1.0 only the Windows entry exists, and on any other platform the installer refuses with a clear message. v1.1 adds the macOS and Linux entries without changing the format. Upgrading Stockfish means editing the manifest, with an ARCHITECTURE.md §7 decision-log entry.
   - **Verify before extracting:** download over HTTPS through `adapters/http.py` to a temp file and check the SHA-256. On a mismatch, delete the file and stop with a clear error.
   - **Extract safely:** take only the expected `.exe`. Reject absolute paths and `..` entries.
-  - **Install location:** `%LOCALAPPDATA%\WeakSquare\engines\<tag>\stockfish.exe`, outside the repo. Install into a temp folder and rename it into place, so a failed install leaves nothing half-written.
+  - **Install location:** `<data folder>\engines\<tag>\stockfish.exe`, outside the repo: `%LOCALAPPDATA%\WeakSquare\engines\…` for the app, `WeakSquare-dev\engines\…` for dev runs, and a temp folder in tests (NFR-2; Adam, v0.4 planning). `fetch_stockfish.py` and `setup.py` take `--dev` like `fetch_puzzle_db.py`. Install into a temp folder and rename it into place, so a failed install leaves nothing half-written.
   - **Smoke test:** after installing, `uci` must answer `uciok` and a short search from the start position must return a legal move. If not, remove the install and report the error.
   - **Idempotent:** if the installed engine already matches the manifest, do nothing. `--force` reinstalls.
   - **In the app:** when no engine is installed, engine features show *Stockfish isn't installed* with an **Install** button. It runs the same installer as a background job with progress.
@@ -284,6 +284,10 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-7.6** **Stockfish 19 exits on invalid input.** An invalid FEN, an illegal move in a move list, or another malformed command makes it print `info string CRITICAL ERROR …` and terminate. So:
   - validate every position and move list with python-chess before sending it;
   - if the engine process dies anyway, `EngineClient` logs the CRITICAL ERROR line, restarts the engine once, and fails that one request with a clear error. It never hangs.
+- **FR-7.7** **After the puzzle (v0.4; Adam, v0.4 planning).** Once the puzzle ends, an engine panel shows:
+  - the eval of the puzzle's start position, pinned at the top;
+  - the eval and top 3 lines of whichever position is on the board, following you as you step through Show answer;
+  - an **Analyze** button that turns the board into a free **analysis board**: you move pieces for either side (legal moves only), and after each move the engine re-analyzes and shows the eval, the top 3 lines and an arrow for its best move. Back, Forward, Reset (to the puzzle position) and Close. Nothing on the analysis board is ever scored.
 
 ### 9.2 LLM "Explain"
 - **FR-8.1** Optional. The button only appears when a provider and key are configured. Providers: **Anthropic** and **OpenAI**, behind one interface (`explain(context) -> ExplainResult`).
