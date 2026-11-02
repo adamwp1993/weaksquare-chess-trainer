@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from weaksquare.adapters.http import HttpClient, HttpError, Unauthorized
+from weaksquare.adapters.http import HttpClient, HttpError, RateLimited, Unauthorized
 from weaksquare.core.lichess import (
     Account,
     ActivityEntry,
@@ -75,3 +75,11 @@ def is_network_error(e: BaseException) -> bool:
     if isinstance(e, HttpError):
         return e.status is None or e.status == 429 or e.status >= 500
     return isinstance(e, OSError)
+
+
+def is_rate_limited(e: BaseException) -> bool:
+    return isinstance(e, RateLimited)
+
+
+def retry_after(e: BaseException) -> float | None:
+    return e.retry_after_s if isinstance(e, RateLimited) else None
