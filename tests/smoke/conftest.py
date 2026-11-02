@@ -204,6 +204,10 @@ def attach(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
     wait_for(page_ready, 60, "the app page")
     assert page is not None
     page.wait_for_function("() => !!(window.pywebview && window.pywebview.api)", timeout=30_000)
+    # v0.3: the startup page comes first. A test launch has its own (empty) keyring entry, so it's
+    # signed out: continue without signing in.
+    page.get_by_test_id("startup-continue").click(timeout=30_000)
+    page.get_by_test_id("startup").wait_for(state="detached", timeout=10_000)
     try:
         yield page
     finally:

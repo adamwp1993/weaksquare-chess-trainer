@@ -69,9 +69,26 @@ def page(browser, mock_url: str):  # type: ignore[no-untyped-def]
     errors: list[str] = []
     p.on("pageerror", lambda e: errors.append(str(e)))
     p.base_url = mock_url  # type: ignore[attr-defined]
+    # v0.3: the startup page comes first at every launch. Every goto continues past it, unless the
+    # URL has `startup=show` (the tests of the startup page itself).
+    original_goto = p.goto
+
+    def goto(url: str, **kwargs):  # type: ignore[no-untyped-def]
+        response = original_goto(url, **kwargs)
+        if "startup=show" not in url:
+            continue_past_startup(p)
+        return response
+
+    p.goto = goto  # type: ignore[method-assign]
     yield p
     context.close()
     assert errors == [], f"page errors: {errors}"
+
+
+def continue_past_startup(page) -> None:  # type: ignore[no-untyped-def]
+    """Click the startup page's Continue button (Continue as <name> / without signing in)."""
+    page.get_by_test_id("startup-continue").click()
+    page.get_by_test_id("startup").wait_for(state="detached")
 
 
 def click_square(page, square: str, orientation: str) -> None:  # type: ignore[no-untyped-def]

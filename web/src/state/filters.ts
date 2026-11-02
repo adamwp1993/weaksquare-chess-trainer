@@ -1,7 +1,8 @@
 import type { FilterSpec } from "../api/types";
 
 // The defaults match core/filters.py FilterSpec(): every theme, the light quality filter
-// (popularity >= 50, >= 100 plays), puzzles you've solved here left out, a queue of 20.
+// (popularity >= 50, >= 100 plays), puzzles you've solved here or played on Lichess left out,
+// a queue of 20.
 export const DEFAULT_MIN_POPULARITY = 50;
 export const DEFAULT_MIN_PLAYS = 100;
 
@@ -20,7 +21,7 @@ export function defaultFilters(): FilterSpec {
     min_popularity: DEFAULT_MIN_POPULARITY,
     min_plays: DEFAULT_MIN_PLAYS,
     exclude_solved_here: true,
-    exclude_played_on_lichess: false,
+    exclude_played_on_lichess: true,
     only_my_misses: false,
     ratios: [],
     source: "lichess",

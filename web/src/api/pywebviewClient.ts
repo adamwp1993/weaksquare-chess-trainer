@@ -1,6 +1,8 @@
 // Real client: calls the Python `Api` through pywebview's js_api bridge.
 import { ApiCallError, type ApiClient, type BackendEvent, type SettingValues } from "./ApiClient";
 import type {
+  AccountStatus,
+  AttemptRating,
   BucketCounts,
   ApiError,
   AppInfo,
@@ -12,9 +14,11 @@ import type {
   Preset,
   PuzzleDbStatus,
   PuzzleView,
+  RatingHistory,
   SessionInfo,
   SessionStats,
   StatsReport,
+  SyncStatus,
   UpdateOffer,
   ThemeGroup,
   UiSettings,
@@ -144,8 +148,8 @@ export class PywebviewClient implements ApiClient {
     return this.call<void>("delete_preset", name);
   }
 
-  startSession(spec: FilterSpec) {
-    return this.call<SessionInfo>("start_session", spec);
+  startSession(spec: FilterSpec, rated: boolean) {
+    return this.call<SessionInfo>("start_session", spec, rated);
   }
 
   nextPuzzle(sessionId: number) {
@@ -166,6 +170,34 @@ export class PywebviewClient implements ApiClient {
 
   getStats() {
     return this.call<StatsReport>("get_stats");
+  }
+
+  getAccountStatus() {
+    return this.call<AccountStatus>("get_account_status");
+  }
+
+  startSignIn() {
+    return this.call<string>("start_sign_in");
+  }
+
+  cancelSignIn() {
+    return this.call<void>("cancel_sign_in");
+  }
+
+  signOut(forceLocal: boolean) {
+    return this.call<void>("sign_out", forceLocal);
+  }
+
+  getSyncStatus() {
+    return this.call<SyncStatus>("get_sync_status");
+  }
+
+  getAttemptRatings(attemptIds: number[]) {
+    return this.call<AttemptRating[]>("get_attempt_ratings", attemptIds);
+  }
+
+  getRatingHistory() {
+    return this.call<RatingHistory>("get_rating_history");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

@@ -105,6 +105,23 @@ def test_main_screens_readable(page, name: str) -> None:  # type: ignore[no-unty
 
 
 @pytest.mark.parametrize("name", ["light", "dark"])
+def test_startup_and_lichess_states_readable(page, name: str) -> None:  # type: ignore[no-untyped-def]
+    """v0.3: the startup page in each account state, and the offline sync chip."""
+    for account in ("signed_in", "signed_out", "offline", "expired"):
+        page.goto(page.base_url + f"/?startup=show&scheme={name}&account={account}")
+        page.get_by_test_id("startup").wait_for()
+        check(page, f"startup ({account})")
+    page.get_by_test_id("startup-continue").click()
+    page.goto(page.base_url + f"/?scheme={name}&account=offline")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    your_turn(page)
+    play(page, "g7g6", "black")
+    page.get_by_test_id("sync-chip").wait_for()
+    check(page, "offline outcome and sync chip")
+
+
+@pytest.mark.parametrize("name", ["light", "dark"])
 def test_first_run_importer_readable(page, name: str) -> None:  # type: ignore[no-untyped-def]
     go(page, name, "empty")
     page.get_by_test_id("import-view").wait_for()

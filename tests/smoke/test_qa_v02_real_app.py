@@ -49,6 +49,7 @@ def test_preset_hint_answer_stats_and_settings_survive_relaunch(pw, data_dir: Pa
             saved = page.evaluate("s => window.pywebview.api.save_preset('Combo night', s, false)", RATIO)
             assert saved["ok"], saved
             page.reload()
+            page.get_by_test_id("startup-continue").click(timeout=30_000)  # v0.3: the startup page again
             page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
             page.get_by_test_id("preset-select").click()
             page.get_by_role("option", name="Combo night").click()

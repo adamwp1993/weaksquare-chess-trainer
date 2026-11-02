@@ -4,15 +4,18 @@ Secrets (the Lichess token, later LLM keys) live only in Windows Credential Mana
 Callers fetch a secret per request and hand it straight to `adapters/http.py`; it never goes into a
 DTO, a log line or an exception message. Errors from keyring are re-raised without the value.
 
-Service names keep the real sign-in, dev runs and the live-test token apart:
-`weaksquare` (normal runs), `weaksquare-dev` (`--dev`), `weaksquare-test` (live tests, SR-13).
+Service names keep the real sign-in, dev runs and the live-test token apart: `weaksquare` (the real
+data folder), `weaksquare-dev` (the dev folder), `weaksquare-<hash>` (any other data folder) and
+`weaksquare-test` (the live-test token, SR-13).
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 import threading
+from pathlib import Path
 from typing import Protocol
 
 SERVICE_APP = "weaksquare"
@@ -39,8 +42,16 @@ class SecretStore(Protocol):
         ...
 
 
-def service_name(dev: bool) -> str:
-    return SERVICE_DEV if dev else SERVICE_APP
+def service_name(data_dir: Path, real_dir: Path, dev_dir: Path) -> str:
+    """A sign-in belongs to a data folder, like your history (NFR-2): the real folder uses
+    `weaksquare`, the dev folder `weaksquare-dev`, and any other folder (WEAKSQUARE_DATA_DIR, e.g.
+    the smoke tests' temp folders) gets its own entry, so it starts signed out."""
+    d = data_dir.resolve()
+    if d == real_dir.resolve():
+        return SERVICE_APP
+    if d == dev_dir.resolve():
+        return SERVICE_DEV
+    return f"{SERVICE_APP}-{hashlib.sha256(str(d).lower().encode()).hexdigest()[:12]}"
 
 
 def _check(secret: str) -> None:

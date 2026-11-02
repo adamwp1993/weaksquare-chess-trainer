@@ -46,9 +46,14 @@ def test_too_long_or_empty_is_refused_without_echoing_it() -> None:
         s.set(LICHESS, "")
 
 
-def test_dev_runs_use_their_own_entry() -> None:
-    assert service_name(dev=False) == SERVICE_APP
-    assert service_name(dev=True) == SERVICE_DEV != SERVICE_APP
+def test_each_data_folder_has_its_own_entry(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    real, dev = tmp_path / "WeakSquare", tmp_path / "WeakSquare-dev"
+    assert service_name(real, real, dev) == SERVICE_APP
+    assert service_name(dev, real, dev) == SERVICE_DEV
+    other = service_name(tmp_path / "smoke-1", real, dev)
+    assert other.startswith("weaksquare-") and other not in (SERVICE_APP, SERVICE_DEV)
+    assert other != service_name(tmp_path / "smoke-2", real, dev)
+    assert other == service_name(tmp_path / "SMOKE-1", real, dev)  # Windows paths ignore case
 
 
 @pytest.mark.parametrize("service", [SERVICE_APP, SERVICE_DEV])

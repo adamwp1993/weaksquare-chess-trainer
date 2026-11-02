@@ -1,6 +1,8 @@
 // The only way the UI talks to the backend (ARCHITECTURE §3 decision 8).
 // Two implementations: pywebviewClient (the real app) and mockClient (UI development, Playwright).
 import type {
+  AccountStatus,
+  AttemptRating,
   BucketCounts,
   ApiError,
   AppInfo,
@@ -12,10 +14,13 @@ import type {
   Preset,
   PuzzleDbStatus,
   PuzzleView,
+  RatingHistory,
   SessionInfo,
   SessionStats,
   SoundSettings,
   StatsReport,
+  SyncEvent,
+  SyncStatus,
   UpdateOffer,
   ThemeGroup,
   UiSettings,
@@ -33,7 +38,10 @@ export class ApiCallError extends Error {
   }
 }
 
-export type BackendEvent = { name: "job"; payload: Job };
+export type BackendEvent =
+  | { name: "job"; payload: Job }
+  | { name: "account"; payload: AccountStatus }
+  | { name: "sync"; payload: SyncEvent };
 
 /** The settings the UI may write, and the value each one takes (validated again in Python). */
 export interface SettingValues {
@@ -72,7 +80,8 @@ export interface ApiClient {
   savePreset(name: string, spec: FilterSpec, overwrite: boolean): Promise<Preset>;
   renamePreset(oldName: string, newName: string): Promise<void>;
   deletePreset(name: string): Promise<void>;
-  startSession(spec: FilterSpec): Promise<SessionInfo>;
+  /** rated: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false. */
+  startSession(spec: FilterSpec, rated: boolean): Promise<SessionInfo>;
   /** The next puzzle, or null when the session is complete. */
   nextPuzzle(sessionId: number): Promise<PuzzleView | null>;
   submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;
@@ -81,6 +90,18 @@ export interface ApiClient {
   getSessionStats(sessionId: number): Promise<SessionStats>;
   /** The Stats page (FR-9.1, 9.2): every attempt you've made here. */
   getStats(): Promise<StatsReport>;
-  /** Subscribe to pushed events (job progress). Returns an unsubscribe function. */
+  /** Your Lichess account (FR-1.1, 1.6). Never includes a token. */
+  getAccountStatus(): Promise<AccountStatus>;
+  /** Opens Lichess in your default browser; resolves with the sign-in job's ID. */
+  startSignIn(): Promise<string>;
+  cancelSignIn(): Promise<void>;
+  /** Revokes on Lichess, then removes it here (FR-6.6). forceLocal: remove it even if Lichess can't be reached. */
+  signOut(forceLocal: boolean): Promise<void>;
+  getSyncStatus(): Promise<SyncStatus>;
+  /** FR-6.11b: the rating change (or why there isn't one) for these attempts. */
+  getAttemptRatings(attemptIds: number[]): Promise<AttemptRating[]>;
+  /** FR-9.4: your Lichess puzzle rating over time, from sync responses. */
+  getRatingHistory(): Promise<RatingHistory>;
+  /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

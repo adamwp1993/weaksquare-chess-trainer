@@ -315,7 +315,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     desktop = Desktop(title)
     services = build_services(
         paths, clock, runner, rng,
-        secrets=KeyringSecretStore(service_name(args.dev)),  # dev runs never see your real sign-in
+        # A sign-in belongs to its data folder: dev and test runs never see your real one.
+        secrets=KeyringSecretStore(
+            service_name(paths.data_dir, config.default_data_dir(False), config.default_data_dir(True))
+        ),
         browser=desktop,
         emit=events.emit,
     )  # fmt: skip

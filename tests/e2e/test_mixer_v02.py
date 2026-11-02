@@ -10,7 +10,7 @@ import re
 
 import pytest
 
-from tests.e2e.conftest import play
+from tests.e2e.conftest import continue_past_startup, play
 from tests.e2e.test_qa_v01_ui import count_text, ready, your_turn
 
 pytestmark = pytest.mark.e2e
@@ -36,7 +36,8 @@ def pick_theme(page, test_id: str, search: str, name: str) -> None:  # type: ign
 def test_more_filters_summary_shows_the_defaults(page) -> None:  # type: ignore[no-untyped-def]
     ready(page)
     summary = page.get_by_test_id("more-summary").inner_text()
-    assert "popularity ≥ 50" in summary and "≥ 100 plays" in summary and "solved ones left out" in summary
+    assert "popularity ≥ 50" in summary and "≥ 100 plays" in summary
+    assert "solved or played on Lichess left out" in summary  # v0.3: Exclude played on Lichess is on by default
 
 
 def test_quality_thresholds_change_the_count_and_clear_to_off(page) -> None:  # type: ignore[no-untyped-def]
@@ -87,6 +88,9 @@ def test_solved_puzzle_is_left_out_by_default_and_back_when_unticked(page) -> No
     assert "rated 883" in page.get_by_test_id("puzzle-header").inner_text()  # 01RLM, not 001KR (563)
     open_more(page)
     page.get_by_test_id("exclude-solved").uncheck()
+    # v0.3: signed in, the solve synced to Lichess, so "Exclude played on Lichess" still hides it.
+    assert count_text(page) == matches(1)
+    page.get_by_test_id("exclude-played").uncheck()
     assert count_text(page) == matches(2)
 
 
@@ -230,6 +234,7 @@ def test_no_page_scrollbar_beside_the_filter_panel(browser, mock_url: str, size:
     page = ctx.new_page()
     try:
         page.goto(mock_url + "/")
+        continue_past_startup(page)
         page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
         overflow = page.evaluate("document.documentElement.scrollHeight - window.innerHeight")
         assert overflow <= 0, f"the page is {overflow}px taller than the window"

@@ -271,16 +271,29 @@ export function QualityControls({
   );
 }
 
-// FR-3.9 (Exclude played on Lichess arrives with the Lichess sign-in in v0.3).
+// FR-3.9: your history here, and on Lichess (imported at sign-in, FR-6.17).
 export function HistoryControls({
   excludeSolved,
   onlyMisses,
+  excludePlayed,
+  playedCount,
   onChange,
+  onPlayed,
 }: {
   excludeSolved: boolean;
   onlyMisses: boolean;
+  excludePlayed: boolean;
+  /** Puzzles known from your Lichess history; null while signed out with none imported. */
+  playedCount: number | null;
   onChange: (excludeSolved: boolean, onlyMisses: boolean) => void;
+  onPlayed: (on: boolean) => void;
 }) {
+  const playedNote =
+    playedCount === null
+      ? "Sign in with Lichess to use this."
+      : onlyMisses
+        ? "Not used while Only my misses is on."
+        : `${playedCount.toLocaleString("en-US")} puzzles in your Lichess history. Lichess doesn't rate a puzzle you've played.`;
   return (
     <Stack gap={6}>
       <Text size="sm" fw={500}>
@@ -302,6 +315,15 @@ export function HistoryControls({
         checked={onlyMisses}
         onChange={(e) => onChange(excludeSolved, e.currentTarget.checked)}
         data-testid="only-misses"
+      />
+      <Checkbox
+        size="xs"
+        label="Exclude played on Lichess"
+        description={playedNote}
+        checked={excludePlayed && !onlyMisses && playedCount !== null}
+        disabled={onlyMisses || playedCount === null}
+        onChange={(e) => onPlayed(e.currentTarget.checked)}
+        data-testid="exclude-played"
       />
     </Stack>
   );
