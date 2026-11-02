@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from weaksquare.adapters.http import HttpClient, HttpError
+from weaksquare.adapters.http import HttpClient, HttpError, Unauthorized
 from weaksquare.core.lichess import (
     Account,
     ActivityEntry,
@@ -60,3 +60,18 @@ class LichessHttp:
             entry = parse_activity(obj)
             if entry is not None:
                 yield entry
+
+
+def is_unauthorized(e: BaseException) -> bool:
+    """FR-6.4: the token is missing, expired or revoked."""
+    return isinstance(e, Unauthorized)
+
+
+def is_network_error(e: BaseException) -> bool:
+    """Lichess couldn't be reached or is having trouble (no response, 429 or 5xx): try again later.
+    Other HTTP errors (400, 403, 404…) are real refusals."""
+    if isinstance(e, Unauthorized):
+        return False
+    if isinstance(e, HttpError):
+        return e.status is None or e.status == 429 or e.status >= 500
+    return isinstance(e, OSError)
