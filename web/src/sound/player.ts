@@ -18,6 +18,12 @@ const FILES: Record<SoundEvent, string> = {
   failed: "Defeat",
 };
 
+// Per-set exceptions. sfx's Victory was too loud and long (1.9 s); Adam picked the set's own
+// GenericNotify (1.3 s) for "solved" during the v0.2 manual test.
+const SET_FILES: Partial<Record<SoundSettings["set"], Partial<Record<SoundEvent, string>>>> = {
+  sfx: { solved: "GenericNotify" },
+};
+
 /** A short pause so "solved" or "failed" follows the move sound instead of cutting it off at once. */
 export const RESULT_DELAY_MS = 250;
 
@@ -32,7 +38,8 @@ class SoundPlayer {
   }
 
   url(event: SoundEvent, set = this.settings.set): string {
-    return `${import.meta.env.BASE_URL}sounds/${set}/${FILES[event]}.ogg`;
+    const file = SET_FILES[set]?.[event] ?? FILES[event];
+    return `${import.meta.env.BASE_URL}sounds/${set}/${file}.ogg`;
   }
 
   play(event: SoundEvent | null | undefined) {

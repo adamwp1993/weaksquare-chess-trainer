@@ -59,7 +59,7 @@ def test_sounds_play_for_every_move_and_the_result(page) -> None:  # type: ignor
         "/sounds/sfx/Capture.ogg",  # Nxc3
         "/sounds/sfx/Capture.ogg",  # Rxb5 (the reply)
         "/sounds/sfx/Capture.ogg",  # Nxd1
-        "/sounds/sfx/Victory.ogg",  # solved
+        "/sounds/sfx/GenericNotify.ogg",  # solved (sfx's own Victory was too loud: Adam, v0.2 manual test)
     ]
 
 

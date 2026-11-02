@@ -12,6 +12,8 @@ ROW = re.compile(r"^\| `(?P<file>[^`]+)` \| (?P<author>[^|]+) \| (?P<license>[^|
 AGPL_COMPATIBLE = {"AGPL-3.0-or-later", "GPL-3.0-or-later", "CC0-1.0", "MIT", "BSD-2-Clause", "Apache-2.0"}
 SETS = {"sfx", "piano", "nes", "futuristic"}
 EVENTS = {"Move", "Capture", "Check", "Checkmate", "Victory", "Defeat"}
+# The file each set plays for "solved", where it isn't Victory (web/src/sound/player.ts SET_FILES).
+SOLVED = {"sfx": "GenericNotify"}
 
 
 def credits() -> dict[str, re.Match[str]]:
@@ -38,7 +40,7 @@ def test_licenses_are_agpl_compatible_and_hashes_match() -> None:
 def test_every_set_has_every_event_and_files_are_ogg() -> None:
     for s in SETS:
         for e in EVENTS:
-            f = SOUNDS / s / f"{e}.ogg"
+            f = SOUNDS / s / f"{SOLVED.get(s, e) if e == 'Victory' else e}.ogg"
             assert f.is_file(), f
             assert f.read_bytes()[:4] == b"OggS", f"{f} isn't an Ogg file (a git symlink placeholder?)"
 
@@ -47,3 +49,10 @@ def test_the_ui_offers_exactly_the_bundled_sets() -> None:
     from weaksquare.services.ui_settings import SOUND_SETS
 
     assert set(SOUND_SETS) == SETS == {p.name for p in SOUNDS.iterdir() if p.is_dir()}
+
+
+def test_the_player_maps_sfx_solved_to_generic_notify() -> None:
+    """Adam's v0.2 manual-test change: sfx's "solved" sound is GenericNotify, not the louder Victory."""
+    player = (SOUNDS.parents[1] / "src" / "sound" / "player.ts").read_text(encoding="utf-8")
+    assert 'sfx: { solved: "GenericNotify" }' in player
+    assert not (SOUNDS / "sfx" / "Victory.ogg").exists()
