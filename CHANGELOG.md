@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.3-rc1 (2026-11-02)
 
 ### Added
 - **Sign in with Lichess** from the new startup page or the gear settings. Lichess opens in your own browser, so your password manager and two-factor sign-in work. The sign-in is kept in Windows Credential Manager, never in a file. With a sign-in Lichess accepts, the startup page is a single **Continue as *your name*** button. [FR-1.1] [FR-1.5] [FR-1.6] [FR-6.1] [FR-6.1a] [FR-6.5]

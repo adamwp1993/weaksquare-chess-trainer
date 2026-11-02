@@ -222,3 +222,25 @@ All seven round-1 bugs are fixed and verified. Round 2 found one new **minor** b
 ## For Adam's manual test (unchanged from round 1, plus)
 - Same list as round 1: the real OAuth round trip, `set_test_token.py` followed by `-m live --record-lichess`, the ROADMAP flow, and Credential Manager after sign-out.
 - New: after an expired or revoked sign-in mid-session (revoke the token at lichess.org/account/security while the app is open), the yellow **Sign in again** banner should appear above the puzzles.
+
+## Round 2 follow-up, 2026-11-02 (B8 re-verification at `5243f7f`)
+
+**B8 is FIXED:** `test_qa_429_after_a_forced_retry_still_waits_a_minute` passes. `tests/integration/test_sync.py` gives 13 passed. `uv run pytest` gives **574 passed, 1 xfailed** (B9), with two new QA tests.
+
+I reviewed the generation-number change. A new QA test, `test_qa_two_429s_in_a_row_each_wait_their_own_time`, passes:
+- With two 429s in a row, each waits its own time (60 s, then Retry-After 90).
+- A forced kick during a rate hold sends nothing.
+- A solve during the second wait sends nothing.
+
+The review found one new **minor** regression, **v0.3-B9**: the B8 fix drops the offline hold when a stale network timer is pending.
+- **Steps:**
+  1. A network error schedules a 30 s retry, and new solves are held.
+  2. A forced kick succeeds, so `_apply` clears the hold while the old timer is still pending.
+  3. The next batch fails with a network error again.
+- **What goes wrong:** `_schedule_retry(…, "offline")` now returns early because `_retry_scheduled` is True, and it does so *before* setting `_hold`. At `f009585` it set the hold when it was empty. So the hold stays `None`, and every new solve sends a request immediately until the old timer fires. This only happens during a network backoff, never during a 429 wait. The impact is extra requests to an unreachable or struggling server.
+- **Evidence:** `test_qa_network_backoff_after_a_forced_success_still_holds_new_solves`.
+  - It is xfail strict at `5243f7f`, failing with `assert 4 == 3`.
+  - It passes against `f009585`, which I checked in a temporary worktree that has since been removed.
+- **Suggested fix:** in `_schedule_retry`, set `_hold = "offline"` when it is `None` before the early return.
+
+**Verdict unchanged: PASS WITH ISSUES** (B9 is minor).

@@ -477,3 +477,45 @@ def test_qa_429_after_a_forced_retry_still_waits_a_minute(w: Wired) -> None:
     w.scheduler.run_next()  # the old 30 s timer fires first
     w.settle()
     assert len(w.lichess.batch_calls) == calls, "a batch was sent before the 429 minute was up"
+
+
+# Regression test for v0.3-B9 (fixed in QA round 2 follow-up).
+def test_qa_network_backoff_after_a_forced_success_still_holds_new_solves(w: Wired) -> None:
+    """Round 2 follow-up (B8 review). Network error (30 s timer, hold); a forced kick succeeds (hold
+    cleared, the old timer still pending); the next batch fails with a network error again. New solves
+    must wait for a retry instead of each sending a request (the B5 behavior for network backoff)."""
+    _check_in(w)
+    sid = data(w.api.start_session(OPEN, True))["session_id"]
+    w.lichess.batch_errors = [network_error()]
+    _solve_one(w.api, sid)
+    w.settle()
+    w.services.sync.kick(force=True)  # e.g. a reconnect check; succeeds
+    w.settle()
+    w.lichess.batch_errors = [network_error()]
+    _solve_one(w.api, sid)  # fails: offline again
+    w.settle()
+    calls = len(w.lichess.batch_calls)
+    _solve_one(w.api, sid)
+    w.settle()
+    assert len(w.lichess.batch_calls) == calls, "a new solve sent a request during the network backoff"
+
+
+def test_qa_two_429s_in_a_row_each_wait_their_own_time(w: Wired) -> None:
+    _check_in(w)
+    sid = data(w.api.start_session(OPEN, True))["session_id"]
+    w.lichess.batch_errors = [rate_limited(), rate_limited(90)]
+    _solve_one(w.api, sid)
+    w.settle()
+    assert w.scheduler.delays == [60]
+    w.services.sync.kick(force=True)
+    w.settle()
+    assert len(w.lichess.batch_calls) == 1  # a forced kick never cuts a 429 wait
+    w.scheduler.run_next()  # minute up: second 429 with Retry-After 90
+    w.settle()
+    assert len(w.lichess.batch_calls) == 2 and w.scheduler.delays == [90]
+    _solve_one(w.api, sid)
+    w.settle()
+    assert len(w.lichess.batch_calls) == 2
+    w.scheduler.run_next()
+    w.settle()
+    assert data(w.api.get_sync_status())["pending"] == 0

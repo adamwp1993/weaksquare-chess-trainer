@@ -255,6 +255,8 @@ class SyncService:
         so an older, shorter timer can never end it early (v0.3-B8)."""
         with self._lock:
             if self._retry_scheduled and reason != "rate":
+                if self._hold is None:
+                    self._hold = reason  # keep holding new solves until that retry (v0.3-B9)
                 return
             self._hold = reason
             self._retry_scheduled = True
