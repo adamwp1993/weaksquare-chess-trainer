@@ -41,8 +41,9 @@ markers = [
     "smoke: real-app smoke test (launches the pywebview window, attaches over CDP)",
     "docs_screenshots: regenerates the user-guide screenshots in docs/img",
     "live: talks to real external services (opt-in)",
+    "engine: runs the real Stockfish (skipped when it isn't installed)",
 ]
-addopts = "-m 'not fulldb and not e2e and not smoke and not docs_screenshots and not live' -p no:cacheprovider"
+addopts = "-m 'not fulldb and not e2e and not smoke and not docs_screenshots and not live and not engine' -p no:cacheprovider"
 
 [dependency-groups]
 dev = [

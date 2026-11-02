@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import mimetypes
 import os
+import platform
 import random
 import secrets as secrets_module
 import sys
@@ -31,7 +33,7 @@ from weaksquare.adapters.desktop import (
     show_fatal,
     system_prefers_dark,
 )
-from weaksquare.adapters.files import PuzzleCsv, sha256_file
+from weaksquare.adapters.files import PuzzleCsv, extract_member, rename_with_retry, sha256_file, zip_names
 from weaksquare.adapters.http import HttpClient
 from weaksquare.adapters.lichess import (
     LichessHttp,
@@ -44,15 +46,19 @@ from weaksquare.adapters.logging_setup import setup_logging
 from weaksquare.adapters.oauth_loopback import LoopbackCancelled, LoopbackListener, LoopbackTimeout
 from weaksquare.adapters.scheduler import TimerScheduler
 from weaksquare.adapters.secret_store import KeyringSecretStore, MemorySecretStore, SecretStore, service_name
+from weaksquare.adapters.stockfish import StockfishEngine, probe_engine
 from weaksquare.adapters.system_clock import SystemClock, make_rng
 from weaksquare.bridge import dto
 from weaksquare.bridge.api import Api, attempt_rating
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
+from weaksquare.core.engine import EngineClient, EngineProbe, parse_manifest, platform_key
 from weaksquare.core.lichess import LichessClient
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.db_update import UpdateCheckService, Urls
+from weaksquare.services.engine import EngineService
+from weaksquare.services.engine_install import EngineInstaller, InstallDeps
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
@@ -120,6 +126,28 @@ def fix_mime_types() -> None:
     mimetypes.add_type("image/svg+xml", ".svg")
 
 
+def build_engine_installer(
+    paths: config.Paths, http: HttpClient | None, clock: Clock, probe: EngineProbe = probe_engine
+) -> EngineInstaller:
+    """The one Stockfish installer (FR-7.5), shared by the app, fetch_stockfish.py and setup.py."""
+    manifest = parse_manifest(json.loads(config.ENGINE_MANIFEST.read_text(encoding="utf-8")))
+    return EngineInstaller(
+        InstallDeps(
+            http=http,
+            manifest=manifest,
+            platform=platform_key(platform.system(), platform.machine()),
+            engines_dir=paths.engines_dir,
+            downloads_dir=paths.downloads_dir,
+            sha256=sha256_file,
+            zip_names=zip_names,
+            extract=extract_member,
+            probe=probe,
+            clock=clock,
+            rename=rename_with_retry,
+        )
+    )
+
+
 @dataclass
 class Services:
     db: Database
@@ -135,8 +163,10 @@ class Services:
     sync: SyncService
     history: HistoryService
     scheduler: Any
+    engine: EngineService
 
     def close(self) -> None:
+        self.engine.close()  # NFR-6: stop the engine process
         close = getattr(self.scheduler, "close", None)
         if close:
             close()
@@ -157,6 +187,9 @@ def build_services(
     browser: Any = None,
     make_listener: Callable[..., Any] | None = None,
     emit: Callable[[str, Any], None] = lambda name, payload: None,
+    make_engine: Callable[[str, int, int], EngineClient] | None = None,
+    engine_probe: EngineProbe | None = None,
+    cpu_count: int | None = None,
 ) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
 
@@ -244,7 +277,17 @@ def build_services(
         sync.kick(force=True)  # a fresh sign-in may cut a network backoff short (never a 429 wait)
 
     account.on_signed_in(after_sign_in)
-    sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields)
+    probe = engine_probe or probe_engine
+    engine = EngineService(
+        build_engine_installer(paths, http, clock, probe),
+        SettingsRepo(db),
+        runner,
+        make_engine or (lambda path, threads, hash_mb: StockfishEngine(path, threads, hash_mb)),
+        probe,
+        cpu_count or os.cpu_count() or 1,
+    )
+    sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields,
+                              engine=engine)  # fmt: skip
     presets = PresetService(PresetsRepo(db), clock)
     stats = StatsService(StatsRepo(db), attempts, sync_repo)
     db_update = UpdateCheckService(
@@ -265,6 +308,7 @@ def build_services(
         sync=sync,
         history=history,
         scheduler=scheduler,
+        engine=engine,
     )
 
 
@@ -289,8 +333,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     import webview  # imported late: a second launch exits without loading the GUI stack
 
-    file_handler = setup_logging(paths.logs_dir, config.APP_VERSION)
     clock = SystemClock()
+    try:  # NFR-4: the banner names the engine; a custom engine is logged when it starts
+        stockfish = build_engine_installer(paths, None, clock).describe()
+    except Exception:
+        stockfish = "unknown"
+    file_handler = setup_logging(paths.logs_dir, config.APP_VERSION, stockfish=stockfish)
     rng = make_rng()
     log.info("Data folder: %s (dev=%s)", paths.data_dir, args.dev)
 
@@ -338,6 +386,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         account=services.account,
         sync=services.sync,
         history=services.history,
+        engine=services.engine,
     )
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
 

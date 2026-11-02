@@ -14,9 +14,9 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 
 | Task | Command |
 |---|---|
-| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py`. Creates Start-menu and desktop shortcuts with the app icon: add `--no-desktop-shortcut` for the Start menu only, or `--no-shortcut` for neither. Safe to re-run (the shortcuts are replaced, never duplicated). |
+| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py` (also installs Stockfish; `--skip-engine` skips it, `--dev` puts the puzzles and Stockfish in the dev data folder). Creates Start-menu and desktop shortcuts with the app icon: add `--no-desktop-shortcut` for the Start menu only, or `--no-shortcut` for neither. Safe to re-run (the shortcuts are replaced, never duplicated). |
 | Download and import the puzzle database | `uv run python scripts/fetch_puzzle_db.py --dev` (dev data folder; drop `--dev` for the real one). `--file PATH` imports a `lichess_db_puzzle.csv.zst` you already have. Close the app first. |
-| Install or repair Stockfish (`scripts/fetch_stockfish.py`) | TODO(v0.4) |
+| Install or repair Stockfish (`scripts/fetch_stockfish.py`) | `uv run python scripts/fetch_stockfish.py --dev` (dev data folder's `engines\sf_19`; drop `--dev` for the real one). Downloads the release pinned in `src/weaksquare/engine_manifest.json`, checks its SHA-256 before unzipping, extracts only the `.exe`, self-tests it and swaps it into place. Running it again does nothing if the install matches; `--force` reinstalls (close the app first). `python scripts/setup.py` runs it too; `--skip-engine` skips that step. |
 | Run the app (dev data folder) | `npm.cmd --prefix web run build` once, then `uv run python -m weaksquare --dev`. The Start-menu shortcut runs the app without `--dev`. |
 | Dev mode (hot-reloading front end) | `npm.cmd --prefix web run dev`, then in a second window `uv run python -m weaksquare --dev-server`. For the UI alone in a browser with fixed data: `npm.cmd --prefix web run dev -- --mode mock`, then open http://127.0.0.1:5173 |
 | Unit, integration and contract tests | `uv run pytest` |
@@ -25,6 +25,7 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Lint and format | `uv run ruff check .` and `uv run ruff format --check .` (drop `--check` to reformat) |
 | Type checks (`mypy`, `tsc --noEmit`, ESLint) | `uv run mypy src`, `npm.cmd --prefix web run typecheck` and `npm.cmd --prefix web run lint` |
 | Full-DB tests (needs the imported puzzle DB) | `uv run pytest -m fulldb`. Reads the dev data folder's `puzzles.db` read-only; add `--fulldb-path PATH` to use another one. Skips if there isn't one. |
+| Real-Stockfish tests | `uv run pytest -m engine`. Uses the dev data folder's managed install (run `uv run python scripts/fetch_stockfish.py --dev` first), read-only; add `--engine-path PATH` to test another `.exe`. Skips if there's none. The normal suite covers the same crash, timeout and restart handling with a fake UCI engine (`tests/fakes/uci_engine.py`), so it needs no binary. |
 | All pre-commit checks | `uv run pre-commit run --all-files` |
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
 | Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |
@@ -48,8 +49,9 @@ The layer rules and full repo tree are in ARCHITECTURE.md §1–2. Docs:
 | `REQUIREMENTS.md` | behavior | when a behavior decision changes |
 
 ## Data and configuration
-- App data: `%LOCALAPPDATA%\WeakSquare` (from `config.py`), holding `puzzles.db`, `user.db` and, from v0.4, `engines\<tag>\stockfish.exe`.
-- Stockfish version: pinned in `src/weaksquare/engine_manifest.json`. To upgrade, change the tag, asset and SHA-256 there, add an ARCHITECTURE.md §7 entry, and re-run `scripts/fetch_stockfish.py`.
+- App data: `%LOCALAPPDATA%\WeakSquare` (from `config.py`), holding `puzzles.db`, `user.db` and, from v0.4, `engines\<tag>\stockfish.exe` with its `install.json` (the tag, the asset and exe SHA-256, the engine name). Each data folder has its own engine, so dev runs need `uv run python scripts/fetch_stockfish.py --dev` once (or the Install button in a dev run).
+- Stockfish version: pinned in `src/weaksquare/engine_manifest.json`. To upgrade, change the tag, the asset `name`, `url`, `size`, `sha256` (GitHub's published digest: the release page shows it next to the asset, or `https://api.github.com/repos/official-stockfish/Stockfish/releases/tags/<tag>` has it as `digest`) and `exe_member` (the `.exe`'s path inside the zip), add an ARCHITECTURE.md §7 entry, then run `uv run python scripts/fetch_stockfish.py --dev` and `uv run pytest -m engine`. Installs of the old tag stay in their own `engines\<old tag>` folder until you delete them.
+- Engine settings (think time, threads, hash, a custom engine path) live in `user.db`'s `settings` table under `engine.*` keys.
 - `WEAKSQUARE_DATA_DIR` overrides the data folder. Dev runs default to `%LOCALAPPDATA%\WeakSquare-dev` and tests use a temp folder, so your real history is never touched (REQUIREMENTS.md NFR-2).
 - The Lichess sign-in (v0.3) is in Windows Credential Manager, one entry per data folder: `weaksquare` for the real folder, `weaksquare-dev` for the dev folder, and `weaksquare-<hash>` for any other `WEAKSQUARE_DATA_DIR` (so smoke runs start signed out). Sign out in the app, or delete the entry under Control Panel → Credential Manager → Windows Credentials, to reset it. Tests never touch Credential Manager (only `-m live` reads `weaksquare-test`).
 - Backups of `user.db` taken before each migration: `<data folder>\backups\` (last 5 kept). Logs: `<data folder>\logs\`.
@@ -78,6 +80,7 @@ Levels and when each runs: ARCHITECTURE.md §6. Rules:
 - HTTP fixtures are scrubbed when recorded, and a test fails if one contains a secret pattern. Placeholders: `lip_FAKE…`, `sk-ant-FAKE…`.
 - Fixtures are anonymized: no real usernames, game IDs or URLs (SR-12a).
 - Full-DB tests are marked `fulldb` and skip when the full puzzle DB isn't imported.
+- Real-Stockfish tests are marked `engine` and skip when there's no install. Everything else uses `tests/fakes/engine.py` (in process) or `tests/fakes/uci_engine.py` (a real UCI subprocess that, like Stockfish 19, exits on an invalid position), so `build_services` in tests never starts a real engine.
 - Live tests are opt-in (`-m live`) and use a separate `weaksquare-test` token (REQUIREMENTS.md SR-13). Contributors use their own Lichess account and token.
 
 ## How-to recipes

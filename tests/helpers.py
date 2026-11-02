@@ -27,8 +27,9 @@ class FakeDesktop(Desktop):
 
 
 def fake_service_kwargs(lichess: object | None = None) -> dict:
-    """Fakes for everything that would reach Lichess, Credential Manager or a timer thread."""
+    """Fakes for everything that would reach Lichess, Credential Manager, a timer thread or an engine."""
     from tests.fakes.desktop import FakeBrowser, FakeScheduler
+    from tests.fakes.engine import FakeEngine, fake_probe
     from tests.fakes.lichess import FakeLichess
     from weaksquare.adapters.secret_store import MemorySecretStore
 
@@ -37,6 +38,9 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
         "lichess": lichess or FakeLichess(),
         "scheduler": FakeScheduler(),
         "browser": FakeBrowser(),
+        "make_engine": FakeEngine,  # never a real process: tests that want one build it themselves
+        "engine_probe": fake_probe,
+        "cpu_count": 8,
     }
 
 
@@ -66,6 +70,7 @@ def build_api(
         account=services.account,
         sync=services.sync,
         history=services.history,
+        engine=services.engine,
     )
 
 

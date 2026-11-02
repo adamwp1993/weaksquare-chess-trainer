@@ -132,3 +132,31 @@ def test_answer_records_answer_when_it_decides() -> None:
     s.hinted = True  # e.g. a hint on an earlier visit that was decided elsewhere
     ans = mode.on_help(s, "answer", 10)
     assert ans.attempt is not None and ans.attempt.help_used == "answer" and not ans.attempt.win
+
+
+def test_first_wrong_move_is_kept_for_the_refutation() -> None:
+    """§7.2 step 2: the move that lost the puzzle (and the position before it) is what gets refuted."""
+    s = mode.start(LONG, 0)
+    mode.on_move(s, "f5g4", 100)
+    before = s.board.fen()
+    mode.on_move(s, "f7f6", 200)
+    mode.on_move(s, "f7f5", 300)  # a second wrong move doesn't replace the first
+    assert s.first_wrong == (before, "f7f6")
+    answer = mode.on_help(s, "answer", 400)
+    assert answer.refute is True
+
+
+def test_no_refutation_without_a_wrong_move() -> None:
+    s = mode.start(LONG, 0)
+    mode.on_help(s, "hint", 100)
+    assert mode.on_help(s, "answer", 200).refute is False
+    s2 = mode.start(MATE1, 0)
+    mode.on_move(s2, "f1f8", 100)
+    assert s2.first_wrong is None and mode.on_help(s2, "answer", 200).refute is False
+
+
+def test_refute_also_after_the_end() -> None:
+    s = mode.start(MATE1, 0)
+    mode.on_move(s, "f1f7", 100)  # wrong
+    mode.on_move(s, "f1f8", 200)  # then solves the line
+    assert s.finished and mode.on_help(s, "answer", 300).refute is True

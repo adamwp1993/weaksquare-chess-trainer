@@ -167,6 +167,7 @@ export interface HelpResponse {
   answer_moves: string[];
   outcome: Outcome | null;
   answer_sounds: ("move" | "capture" | "check" | "checkmate" | "castle")[];
+  refute: boolean;
 }
 
 export interface SessionStats {
@@ -241,4 +242,44 @@ export interface SessionChange {
 export interface RatingHistory {
   points: RatingPoint[];
   sessions: SessionChange[];
+}
+
+export interface EngineStatus {
+  state: "ready" | "not_installed" | "unsupported_platform" | "custom_invalid";
+  source: "managed" | "custom" | null;
+  name: string | null;
+  path: string | null;
+  tag: string;
+  install_job_id: string | null;
+  message: string | null;
+}
+
+export interface EngineSettings {
+  think_s: number;
+  threads: number;
+  hash_mb: number;
+  custom_path: string | null;
+  max_threads: number;
+}
+
+export interface EngineLine {
+  score: string;
+  cp: number | null;
+  mate: number | null;
+  pv: string[];
+}
+
+export interface Analysis {
+  fen: string;
+  lines: EngineLine[];
+  game_over: string | null;
+  superseded: boolean;
+}
+
+export interface Refutation {
+  fen_before: string;
+  wrong_move: string;
+  line: string[];
+  score: string | null;
+  game_over: string | null;
 }

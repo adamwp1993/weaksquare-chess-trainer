@@ -48,6 +48,16 @@ ALLOWLIST = {
     "get_sync_status",
     "get_attempt_ratings",
     "get_rating_history",
+    # v0.4: Stockfish (engine output only after a puzzle ends, FR-7.3)
+    "get_engine_status",
+    "start_engine_install",
+    "get_engine_settings",
+    "set_engine_settings",
+    "choose_engine_file",
+    "start_custom_engine_check",
+    "clear_custom_engine",
+    "get_refutation",
+    "analyze_position",
 }
 
 

@@ -212,7 +212,7 @@ class EngineClient(Protocol):
 class EngineProbe(Protocol):
     """FR-7.5 smoke test: `uci` → `uciok`, and a short search from the start returns a legal move."""
 
-    def __call__(self, exe_path: str) -> EngineInfo: ...
+    def __call__(self, path: str, /) -> EngineInfo: ...
 
 
 def _relative(cp: int | None, mate: int | None, player: Color) -> tuple[int | None, int | None]:

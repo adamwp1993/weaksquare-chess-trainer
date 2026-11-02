@@ -13,6 +13,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **Stockfish 19 installs with setup:** `scripts/setup.py` now downloads the official Stockfish 19 build from GitHub (about 80 MB), checks it against a pinned SHA-256 before unpacking it, tests it and installs it into your data folder. `scripts/fetch_stockfish.py` installs or repairs it on its own, and running it again does nothing when the engine is already fine (`--force` reinstalls). [FR-7.1] [FR-7.5]
+
 ## [v0.3] - 2026-11-02
 Candidates: v0.3-rc1 (2026-11-02)
 

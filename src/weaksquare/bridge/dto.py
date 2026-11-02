@@ -187,6 +187,7 @@ class HelpResponse:
     answer_moves: list[str]  # …and the moves from there (UCI, both sides)
     outcome: Outcome | None
     answer_sounds: list[MoveSound]  # one per answer move
+    refute: bool  # a wrong move was played: ask get_refutation for the engine's answer to it (§7.2)
 
 
 @dataclass(frozen=True)
@@ -285,6 +286,56 @@ class RatingHistory:
     sessions: list[SessionChange]
 
 
+# ---- engine (v0.4: FR-7.1–7.7) -------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EngineStatus:
+    state: Literal["ready", "not_installed", "unsupported_platform", "custom_invalid"]
+    source: Literal["managed", "custom"] | None
+    name: str | None  # e.g. "Stockfish 19"
+    path: str | None  # the exe in use (About, NFR-7)
+    tag: str  # the pinned release, e.g. sf_19
+    install_job_id: str | None  # an install in progress
+    message: str | None
+
+
+@dataclass(frozen=True)
+class EngineSettings:
+    think_s: float  # FR-7.4: 0.2–10 s, default 1
+    threads: int  # 1–max_threads, default CPU cores − 1
+    hash_mb: int  # 16–2048, default 256
+    custom_path: str | None  # FR-7.5 advanced: your own engine's .exe
+    max_threads: int
+
+
+@dataclass(frozen=True)
+class EngineLine:
+    score: str  # from your side (FR-7.2): "+3.2 for you", "You mate in 3"
+    cp: int | None  # centipawns from your side
+    mate: int | None  # moves to mate from your side (negative: you're mated)
+    pv: list[str]  # UCI, legal from the position
+
+
+@dataclass(frozen=True)
+class Analysis:
+    fen: str
+    lines: list[EngineLine]  # up to 3 (MultiPV, FR-7.2)
+    game_over: str | None  # the position is over: no engine lines
+    superseded: bool  # a newer request for the same view replaced this one: ignore it
+
+
+@dataclass(frozen=True)
+class Refutation:
+    """§7.2 step 2: Stockfish's answer to the move that lost the puzzle."""
+
+    fen_before: str
+    wrong_move: str  # UCI
+    line: list[str]  # the best reply line after it, 3–5 plies (UCI)
+    score: str | None  # from your side
+    game_over: str | None
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -317,4 +368,9 @@ EXPORTED: list[type] = [
     RatingPoint,
     SessionChange,
     RatingHistory,
+    EngineStatus,
+    EngineSettings,
+    EngineLine,
+    Analysis,
+    Refutation,
 ]

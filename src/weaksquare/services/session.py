@@ -11,11 +11,14 @@ import random
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
+
+import chess
 
 from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
-from weaksquare.core.errors import NotFoundError, StaleKeyError, ValidationError
+from weaksquare.core.engine import EngineNotInstalled, refutation_plies, validate_fen, validate_line
+from weaksquare.core.errors import ConflictError, NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.standard import StandardMode, StandardState
@@ -23,6 +26,7 @@ from weaksquare.core.move_sounds import MoveSound, sounds_for_line
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
 from weaksquare.core.scoring import angle_for
+from weaksquare.services.engine import Analysis, EngineService
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +91,27 @@ class SyncHooks(Protocol):
     def session_change(self, session_id: int) -> int | None: ...
 
 
+@dataclass(frozen=True)
+class Refutation:
+    """§7.2 step 2: why your move failed: the engine's best reply line (3–5 plies) and the eval."""
+
+    fen_before: str  # the position you played the wrong move in
+    wrong_move: str  # UCI
+    line: tuple[str, ...]  # the reply line after it (UCI)
+    score: str | None  # from your side (FR-7.2); None when the game ended
+    game_over: str | None = None
+
+
+AnalysisPurpose = Literal["start", "panel", "board"]
+PURPOSES = ("start", "panel", "board")
+
+
 @dataclass
 class _Current:
     state: StandardState
     started_at: str
+    refutation: Refutation | None = None
+    analyses: dict[str, Analysis] = field(default_factory=dict)  # by FEN, for this puzzle
 
 
 @dataclass
@@ -183,11 +204,13 @@ class SessionService:
         rng: random.Random,
         sync: SyncHooks | None = None,
         queue_fields: Any = None,
+        engine: EngineService | None = None,
     ) -> None:
         """`sync` queues every decided attempt for Lichess (v0.3); without it attempts stay local.
         `queue_fields` builds the repo's SyncFields (passed in so services don't import adapters)."""
         self._sync = sync
         self._queue_fields = queue_fields
+        self._engine = engine
         self._puzzles = puzzles
         self._attempts = attempts
         self._sessions_repo = sessions
@@ -372,6 +395,72 @@ class SessionService:
             result = self._mode.on_help(s.current.state, kind, self._clock.monotonic_ms())
             outcome = self._record(s, result.attempt) if result.attempt else None
             return HelpOutcome(result, outcome)
+
+    # ---- engine after the puzzle (FR-7.2, 7.3, 7.7) -------------------------------------------------
+
+    def _finished(self, s: _Session) -> _Current:
+        """FR-7.3: engine output only once the puzzle is over (line complete, or Show answer used).
+        A puzzle lost to a wrong move that you're still playing through is still in progress."""
+        if s.current is None:
+            raise ValidationError("There's no puzzle in progress.")
+        if not s.current.state.finished:
+            raise ConflictError("The engine is available once the puzzle is over.")
+        return s.current
+
+    def _engine_or_raise(self) -> EngineService:
+        if self._engine is None:
+            raise EngineNotInstalled("Stockfish isn't installed.")
+        return self._engine
+
+    @staticmethod
+    def _player(cur: _Current) -> Any:
+        return "white" if chess.Board(cur.state.start_fen).turn == chess.WHITE else "black"
+
+    def get_refutation(self, session_id: int) -> Refutation:
+        """The engine's answer to the move that lost this puzzle (Show answer, §7.2 step 2)."""
+        s = self._session(session_id)
+        with s.lock:
+            cur = self._finished(s)
+            if cur.refutation is not None:
+                return cur.refutation
+            wrong = cur.state.first_wrong
+            player = self._player(cur)
+        if wrong is None:
+            raise NotFoundError("There's no wrong move to refute in this puzzle.")
+        fen_before, uci = wrong
+        board = validate_line(fen_before, [uci])  # FR-7.6: validated before the engine sees it
+        analysis = self._engine_or_raise().analyse(board, player, multipv=1)
+        if analysis.lines:
+            first = analysis.lines[0]
+            result = Refutation(fen_before, uci, refutation_plies(first.pv), first.score)
+        else:
+            result = Refutation(fen_before, uci, (), None, analysis.game_over)
+        with s.lock:
+            if s.current is cur:
+                cur.refutation = result
+        return result
+
+    def analyze(self, session_id: int, fen: Any, purpose: Any = "panel") -> Analysis:
+        """Eval and top lines for a position, only after the puzzle is over (FR-7.3, FR-7.7). The
+        analysis board sends any legal position; it's validated here first (FR-7.6)."""
+        if purpose not in PURPOSES:
+            raise ValidationError("Unknown analysis purpose.")
+        board = validate_fen(fen)
+        s = self._session(session_id)
+        with s.lock:
+            cur = self._finished(s)
+            cached = cur.analyses.get(board.fen())
+            player = self._player(cur)
+        if cached is not None:
+            return cached
+        engine = self._engine_or_raise()
+        key = (session_id, purpose)
+        result = engine.analyse(board, player, key=key, gen=engine.ticket(key))
+        if not result.superseded:
+            with s.lock:
+                if s.current is cur:
+                    cur.analyses[board.fen()] = result
+        return result
 
     def stats(self, session_id: int) -> SessionStats:
         s = self._session(session_id)

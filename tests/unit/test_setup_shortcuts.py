@@ -110,3 +110,30 @@ def test_help_describes_the_whole_download() -> None:
     assert out.returncode == 0
     for words in ("entire Lichess puzzle database", "300 MB", "6 million", "1.5 GB", "--no-desktop-shortcut"):
         assert words in out.stdout, words
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        ((), ["uv", "run", "python", "scripts/fetch_stockfish.py"]),
+        (("--dev",), ["uv", "run", "python", "scripts/fetch_stockfish.py", "--dev"]),
+        (("--skip-engine",), None),
+    ],
+)
+def test_the_stockfish_step(
+    monkeypatch: pytest.MonkeyPatch, flags: tuple[str, ...], expected: list[str] | None
+) -> None:
+    """FR-7.5: setup.py installs Stockfish through fetch_stockfish.py (the shared installer), with --dev
+    passed through; --skip-engine skips it."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(setup_script, "run", lambda cmd, **kw: calls.append(cmd))
+    args = argparse.Namespace(skip_engine="--skip-engine" in flags, dev="--dev" in flags)
+    setup_script.install_engine(["uv"], args)
+    assert calls == ([expected] if expected else [])
+
+
+def test_help_mentions_stockfish() -> None:
+    import subprocess
+
+    out = subprocess.run([sys.executable, str(ROOT / "scripts" / "setup.py"), "--help"], capture_output=True, text=True)
+    assert "--skip-engine" in out.stdout and "Stockfish 19" in out.stdout
