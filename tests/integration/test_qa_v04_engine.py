@@ -248,8 +248,8 @@ import chess
 sys.path.insert(0, {src!r})
 import weaksquare.adapters.stockfish as sf
 from weaksquare.core.engine import EngineError
-sf.TIMEOUT_S = 1.0
-engine = sf.StockfishEngine([sys.executable, {fake!r}, "hang"])
+sf.TIMEOUT_S = {timeout_s}
+engine = sf.StockfishEngine([sys.executable, {fake!r}, {mode!r}])
 errors = []
 def search():
     try:
@@ -258,6 +258,10 @@ def search():
         errors.append(e.code)
 t = threading.Thread(target=search)
 t.start()
+if {wait_for_start}:  # close only once the process is up (round 2: the start-up itself was B8)
+    deadline = time.monotonic() + 20
+    while engine._engine is None and time.monotonic() < deadline:
+        time.sleep(0.02)
 time.sleep({wait})
 started = time.monotonic()
 engine.close()
@@ -266,10 +270,14 @@ print("CLOSE_S", round(time.monotonic() - started, 2), "ERRORS", errors, "LEFT",
 """
 
 
-def _run_child(wait: float) -> tuple[str, bool]:
+def _run_child(
+    wait: float, *, mode: str = "hang", timeout_s: float = 1.0, wait_for_start: bool = True
+) -> tuple[str, bool]:
     """(stdout, exited): the child's output, and whether the process exited within 30 s."""
     src = str(Path(__file__).resolve().parents[2] / "src")
-    code = _CHILD.format(src=src, fake=str(FAKE_UCI), wait=wait)
+    code = _CHILD.format(
+        src=src, fake=str(FAKE_UCI), wait=wait, mode=mode, timeout_s=timeout_s, wait_for_start=wait_for_start
+    )
     try:
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30)
         return r.stdout, r.returncode == 0
@@ -328,3 +336,12 @@ def test_qa_refutation_is_at_least_3_plies_when_the_game_goes_on(paths, clock, f
     for uci in r["line"]:
         after.push_uci(uci)
     assert len(r["line"]) >= 3 or after.is_game_over(), r["line"]
+
+
+def test_qa_process_exits_when_closed_while_the_engine_starts() -> None:
+    """NFR-6: the window closes while the first search is still starting the engine (~0.35 s for sf_19).
+    close() must leave nothing running, and the process must exit. Regression for v0.4-B8."""
+    out, exited = _run_child(wait=0.0, mode="normal", timeout_s=10.0, wait_for_start=False)
+    assert "CLOSE_S" in out, out
+    assert out.strip().endswith("LEFT True"), out  # nothing assigned after close()
+    assert exited, "the process didn't exit within 30 s of close()"

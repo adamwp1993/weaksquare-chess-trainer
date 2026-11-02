@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import collections
+import concurrent.futures
 import contextlib
 import logging
 import subprocess
@@ -168,11 +169,24 @@ class StockfishEngine:
         log.info("engine started: %s (pid %s)", self._info.name, _pid(engine))
         return engine
 
+    def _adopt(self, engine: chess.engine.SimpleEngine) -> chess.engine.SimpleEngine:
+        """Store a newly started process, unless close() ran meanwhile (v0.4-B8: closing while the
+        engine was starting left it running, so Python couldn't exit). close() sets _closed before it
+        reads _engine, so checking again after storing means one side always stops the process."""
+        if not self._closed:
+            self._engine = engine
+            if not self._closed:
+                return engine
+            self._engine = None
+        _close(engine)
+        raise EngineError("The engine has been stopped.", code="engine_stopped")
+
     def _ensure(self) -> chess.engine.SimpleEngine:
         if self._closed:
             raise EngineError("The engine has been stopped.", code="engine_stopped")
         if self._engine is None:
-            self._engine = self._start()
+            self._adopt(self._start())
+        assert self._engine is not None
         return self._engine
 
     def _restart_after(self, reason: str) -> None:
@@ -180,11 +194,14 @@ class StockfishEngine:
         (the next request tries again); it never loops."""
         _close(self._engine)
         self._engine = None
+        if self._closed:
+            return
         try:
-            self._engine = self._start()
+            self._adopt(self._start())
             log.info("engine restarted after %s", reason)
-        except EngineError:
-            log.warning("engine restart after %s failed", reason)
+        except EngineError as e:
+            if e.code != "engine_stopped":
+                log.warning("engine restart after %s failed", reason)
 
     def info(self) -> EngineInfo:
         with self._lock:
@@ -213,8 +230,8 @@ class StockfishEngine:
                     multipv=multipv,
                     info=chess.engine.INFO_SCORE | chess.engine.INFO_PV,
                 )
-            except (chess.engine.EngineError, TimeoutError) as e:
-                self._handle_failure(e, pid, think_s)
+            except (chess.engine.EngineError, TimeoutError, concurrent.futures.CancelledError) as e:
+                self._handle_failure(e, pid, think_s)  # a kill mid-search can surface as CancelledError
         lines = [line for line in (_line(i) for i in infos) if line is not None]
         if not lines:
             raise EngineError("Stockfish returned no analysis.")
@@ -224,7 +241,7 @@ class StockfishEngine:
         """A search failed: report it as a clean EngineError, restarting the engine once (FR-7.6)."""
         if self._closed:  # close() killed it on purpose (v0.4-B5): no restart, no error log
             raise EngineError("The engine has been stopped.", code="engine_stopped") from None
-        if isinstance(e, chess.engine.EngineTerminatedError):
+        if isinstance(e, chess.engine.EngineTerminatedError | concurrent.futures.CancelledError):
             critical = _critical_line(pid)
             if critical:
                 log.error("engine terminated: %s", critical)

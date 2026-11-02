@@ -219,3 +219,75 @@ Each strict xfail is the regression test for its bug: the fix removes the marker
 - Check a few refutations **as a chess player**: QA only checks legality, length and wording.
 - Try a custom engine through the real **Use my own engine…** file dialog: a real Stockfish build, then a non-engine `.exe`. The native dialog can't be driven over CDP. QA tested the same probe through the bridge with `sort.exe`.
 - After the B1 fix: confirm closing the app always ends `python.exe` (Task Manager), including right after an engine error.
+
+---
+
+# Round 2, 2026-11-02 (re-verification)
+
+Branch `v0.4` at `b59e503` ("QA v0.4 round 1 … fix all seven"). Same rules as round 1: no product code changed by QA, no `-m live`, no credentials, no Lichess calls. `%LOCALAPPDATA%\WeakSquare` still doesn't exist; the dev folder is unchanged.
+
+## Verdict: **FAIL** (one new major bug)
+
+All seven round-1 bugs are fixed and verified. Round 2 found **v0.4-B8**: the B1/B5 fixes leave one gap. If the window closes while the engine is still **starting** (about 0.35 s for sf_19, on the first search of a run or the first after an engine or settings change), the engine process survives `close()` and Python never exits. That's the same outcome as B1: `python.exe` stays, holding `weaksquare.lock`. The likelihood is low, but the impact is the one B1 was rated major for, and the fix is small.
+
+## Re-verification of round-1 bugs
+
+| Bug | Fix | Result | Evidence |
+|---|---|---|---|
+| B1 (major) process can't exit after a timeout | `_release_thread` resolves python-chess's stuck `returncode` future 1 s after `_close` | **FIXED** | `uv run pytest` now exits by itself (summary at 168 s, process gone at 169 s; round 1 hung). `test_qa_process_exits_after_an_engine_timeout` passes. **Real app, real timeout:** new QA smoke `test_qa_v04_r2_timeout_real_app.py::test_app_exits_after_an_engine_timeout`. A custom UCI engine (C#, compiled at test time with Windows' `csc.exe`) passes the self-test but hangs on any puzzle position. The app showed "didn't answer in time" after ~11 s and logged "engine timed out" / "engine restarted after a timeout". After WM_CLOSE it **exited in 4.2 s**, the app's `python.exe` was gone, the lock could be re-acquired, and no engine process was left |
+| B4 (major) `--engine-path PATH` | Developer Guide writes `--engine-path=PATH` / `--fulldb-path=PATH`; guard test | **FIXED** | As written now: `uv run pytest -m engine "--engine-path=<temp copy of sf_19>"` gives 10 passed. `--fulldb-path=<dev puzzles.db>` collects 60 tests. `unit/test_fetch_stockfish_script.py` gives 3 passed. I agree a root conftest can't fix the space form |
+| B2 (minor) 2-ply refutation | `_extend_refutation` asks again from the end of a short pv (≤ 2 more calls) | **FIXED** | `test_qa_refutation_is_at_least_3_plies_when_the_game_goes_on` passes (deterministic 2-ply engine). Real sf_19 `test_qa_refutations_are_3_to_5_plies_unless_the_game_ends`: 4/4 runs pass (round 1: 1 of 4 failed) |
+| B3 (minor) stale refutation after Next | `puzzleSeq` counter in TrainerView | **FIXED** | `test_qa_refutation_error_after_next_is_not_shown_on_the_next_puzzle` passes (in the 129 e2e) |
+| B5 (minor) close waits for the search | `close()` kills a busy engine; the search fails with `engine_stopped`; `EngineService.close` doesn't take the lock | **FIXED** | `test_qa_close_during_a_real_search`: `close()` during a 5 s real search took **0.00 s** (round 1: 4.5 s), and the pid is gone. Real app: exit in 4.0 s while a 5 s search ran. That's the same as an idle close (4.2 s above, mostly WebView2 teardown). **I agree** with the builder's edit of `test_qa_close_during_a_hung_search_returns_within_the_bound` (`engine_stopped`, < 1 s): a deliberate stop shouldn't restart or log an error. Round 2 also made that test wait until the process is up before closing. Under load it had failed with `engine_start_failed`, because closing during start-up is B8 |
+| B6 (minor) banner ignores a custom engine | `Engine in use: …` logged after start-up; About shows "Your custom engine can't be found" | **FIXED** | Real-app log line 4: `Engine in use: Stockfish 19 (managed, sf_19) at C:\…\engines\sf_19\stockfish.exe`. QA now asserts this in `test_engine_flow_in_the_real_app`. Builder tests `test_engine_log_line_names_the_engine_in_use` (custom included) and `test_about_shows_a_missing_custom_engine` pass |
+| B7 (minor) rejected value stays in the box | inputs remount after a refused save | **FIXED** | builder e2e `test_a_refused_setting_snaps_back` passes |
+
+## New bug
+
+### v0.4-B8 (major, low likelihood): closing while the engine is starting leaves it running; the process never exits
+- **Steps:** finish a puzzle (the panel fires its first engine request, which starts Stockfish lazily), then close the window within ~0.35 s. The same window opens after a settings change that restarts the engine, a custom engine switch, or a reinstall.
+- **Expected:** NFR-6. Nothing keeps running after `close()`, and the process exits.
+- **Actual:** `StockfishEngine.close()` sets `_closed`, and finds `_engine is None` because `_start()` hasn't returned yet. So it returns at once. The bridge thread then finishes `_start()`, assigns `self._engine` (`_ensure` checks `_closed` only *before* starting) and runs the search. That leaves a live engine whose python-chess thread isn't a daemon. Python waits for it at exit and the process never ends, with the lock held, exactly like B1. The B1 workaround doesn't apply, because `_close` is never called on that engine.
+- **Evidence:**
+  - Scratch script with real sf_19, closing 0.0 / 0.02 / 0.05 / 0.1 / 0.2 s after the first `analyse`. Every time: `result [('e2e4',)] engine left True`, and the process was killed by `timeout 20` (rc 124). Measured start-up time: 0.34–0.36 s (Hash 16 and 256).
+  - `tests/integration/test_qa_v04_engine.py::test_qa_process_exits_when_closed_while_the_engine_starts` (xfail strict, child Python, fake UCI engine). With `--runxfail`: `CLOSE_S 0.28 ERRORS [] LEFT False`.
+- **Suggested direction (not applied):** after `_start()` in `_ensure`, if `_closed` is set, `_close()` the new engine and raise `engine_stopped`. Or make `close()` and the start agree under a small separate lock.
+- **Related, harmless:** a request queued behind the killed search at shutdown fails with `RuntimeError: database is closed`, which the bridge logs as "bridge analyze_position crashed" after the window is gone. Nothing leaks, because the DB is closed before it can start an engine. It's only noise in the log.
+
+## The `test_enter_after_mouse_clicks_is_next_in_the_real_app` failure: a test race, not a product bug
+- **Where it fails:** the coordinator's run and QA round 1 both failed at `assert page.get_by_test_id("stat-failed").inner_text() == "1"` (`'0' == '1'`). That line runs right after waiting for "Puzzle 2 of".
+- **Cause, in `TrainerView.load`:** `api.nextPuzzle()` returns, then `refreshStats()` *starts* another bridge call, and `setView(next)` renders at once. The header's "Puzzle 2" comes from the new view, but its "of N" comes from the **previous** `stats`, which already had `queue_size`. So the header matches while the session bar still shows the old Failed count for one bridge round trip. The skip *is* recorded (inside `next_puzzle`), and the bar updates a few ms later. The test read it once instead of waiting.
+- **Product impact:** none beyond a one-round-trip lag of the counters, which predates v0.4. The opponent's first-move animation isn't involved: Enter is handled before the next puzzle loads.
+- **Fix (test only, QA's own v0.2 file):** both reads now wait (`wait_for_function` on `stat-failed`, 10 s). It then passed 5/5 alone and in the full smoke run.
+
+## Round 2 evidence: commands run
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **717 passed, 1 xfailed** (B8), 240 deselected. Summary at 168 s, and the process **exited on its own** at 169 s. (An earlier round-2 run before QA's test edit: 716 passed, 1 failed, the start-up race above, also exited by itself) |
+| `uv run pytest -m e2e` | **129 passed** (337 s) |
+| `uv run pytest -m engine` | **10 passed**; `--engine-path=PATH` 10 passed |
+| `npm.cmd --prefix web run build`, `uv run pytest -m smoke` | **21 passed, 1 skipped** (the opt-in download test) in 208 s, including the new real-app timeout test |
+| `uv run pytest -m fulldb` | **59 passed, 1 xfailed** (known v0.2-B2), 496 s, nothing running in parallel |
+| `uv run ruff check .` / `ruff format --check .` | clean / 204 files formatted |
+| `uv run mypy src` | no issues in 67 source files |
+| `npm.cmd --prefix web run typecheck` / `lint` | clean / clean |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [v0.4] |
+| `uv run pytest -m docs_screenshots` | 15 passed, `docs/img` byte-identical |
+| `uv lock --check` | up to date. The fix commit changes no dependency, lockfile or migration |
+
+**Scope, architecture and security:**
+- The fix touches `adapters/stockfish.py`, `app.py` (log line), `services/engine.py`, `services/session.py`, four front-end files, the Developer Guide and ARCHITECTURE §7 (new entry for B1/B2/B5/B6, including the python-chess workaround and when to remove it).
+- No new dependency and no browser storage.
+- `_extend_refutation` reuses `EngineService.analyse`, so every position is still validated, and pv prefixes are still kept legal.
+
+## Tests added or changed in round 2 (all under `tests/`)
+- New: `tests/smoke/test_qa_v04_r2_timeout_real_app.py::test_app_exits_after_an_engine_timeout`. It's the real-app regression test for B1 and skips if `csc.exe` is missing.
+- New: `tests/integration/test_qa_v04_engine.py::test_qa_process_exits_when_closed_while_the_engine_starts` (xfail strict, B8).
+- Changed: `test_qa_close_during_a_hung_search_returns_within_the_bound` now waits for the engine to be up before closing. The `_run_child` helper got `mode` / `timeout_s` / `wait_for_start` parameters.
+- Changed: `tests/smoke/test_qa_v04_real_app.py` now asserts the B6 `Engine in use:` line.
+- Changed: `tests/smoke/test_qa_v02_real_app.py::test_enter_after_mouse_clicks_is_next_in_the_real_app` now waits for the session bar instead of reading it once.
+
+## For Adam's manual test (round-1 list still applies)
+After the B8 fix, finish a puzzle and close the window **immediately**, a few times. `python.exe` should disappear from Task Manager, and the app should start again normally.

@@ -198,6 +198,7 @@ def test_engine_flow_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Pat
     first = log.splitlines()[0]
     assert "Stockfish: Stockfish 19 (sf_19, managed)" in first, first
     assert "engine started: Stockfish 19" in log
+    assert "Engine in use: Stockfish 19 (managed, sf_19) at " in log  # round 2: v0.4-B6
     assert "chess.engine" not in log and "<< " not in log and ">> " not in log  # no UCI DEBUG flood
     assert " ERROR " not in log, [x for x in log.splitlines() if " ERROR " in x]
 

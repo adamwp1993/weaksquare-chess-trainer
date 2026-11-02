@@ -154,13 +154,19 @@ def test_enter_after_mouse_clicks_is_next_in_the_real_app(pw, data_dir: Path) ->
             page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for(timeout=15_000)
             page.keyboard.press("Enter")  # focus is still on Start: this is Skip (counts as failed)
             page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 2 of").wait_for(timeout=15_000)
-            assert page.get_by_test_id("stat-failed").inner_text() == "1"
+            # the session bar refreshes one bridge call after the new puzzle shows (QA v0.4 r2: the
+            # header can render with the previous stats for a moment, so wait, don't read at once)
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=stat-failed]').innerText === '1'", timeout=10_000
+            )
             page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for(timeout=15_000)
             page.get_by_test_id("hint-button").click()
             page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
             page.keyboard.press("Enter")
             page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 3 of").wait_for(timeout=15_000)
-            assert page.get_by_test_id("stat-failed").inner_text() == "2"
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=stat-failed]').innerText === '2'", timeout=10_000
+            )
         assert app.close() == 0
     finally:
         if app.process.poll() is None:

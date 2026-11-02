@@ -139,3 +139,29 @@ def test_close_during_a_search_is_immediate_and_quiet(caplog) -> None:  # type: 
     t.join(10)
     assert not t.is_alive() and errors == ["engine_stopped"]
     assert not any("restarted" in r.getMessage() or r.levelno >= logging.ERROR for r in caplog.records)
+
+
+def test_a_cancelled_search_is_handled(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.4 round 2): a process killed at a particular moment surfaces from python-chess as
+    concurrent.futures.CancelledError. After close() it's the quiet engine_stopped; otherwise a crash
+    (one restart, a clean error), never an unhandled exception."""
+    import concurrent.futures
+
+    e = StockfishEngine(cmd())
+    try:
+        e.analyse(chess.Board(), 0.05, 1)
+        real = e._engine
+
+        def cancelled(*args, **kwargs):  # type: ignore[no-untyped-def]
+            raise concurrent.futures.CancelledError()
+
+        monkeypatch.setattr(real, "analyse", cancelled)
+        with pytest.raises(EngineError) as err:
+            e.analyse(chess.Board(), 0.05, 1)
+        assert err.value.code == "engine_crashed" and e._engine is not real  # restarted
+        e._closed = True  # as if close() killed it mid-search
+        with pytest.raises(EngineError) as err2:
+            e._handle_failure(concurrent.futures.CancelledError(), None, 0.05)
+        assert err2.value.code == "engine_stopped"
+    finally:
+        e.close()
