@@ -13,6 +13,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.2] - 2026-11-01
+Candidates: v0.2-rc1 (2026-11-01)
+
 ### Added
 - **Mix by ratio:** give theme groups a share of the session, e.g. 50% forks, 30% pins or skewers, 20% one-movers. Each group shows its own count, and the mix holds to within one puzzle. [FR-3.10]
 - **Opening filter:** choose opening families or individual variations, with search. [FR-3.7]

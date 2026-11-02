@@ -2,7 +2,7 @@
 
 A Windows desktop app for chess tactics training on the Lichess puzzle database. Mix any combination of themes, ratings and puzzle lengths, solve on a board, sync solves to your Lichess account, get unstuck with Stockfish and optional AI explanations, and track whether the gaps in your play are actually closing.
 
-**Status:** in development. v0.1, the puzzle mixer (import the database, choose any mix of puzzles, solve them offline), is released (2026-11-01). v0.2 (mixer complete + basics) is next. Built version by version per [ROADMAP.md](ROADMAP.md). See [CHANGELOG.md](CHANGELOG.md) for what each version added.
+**Status:** in development. v0.2, the complete puzzle mixer (ratios, openings, quality and history filters, presets, Hint and Show answer, Stats, dark mode, move sounds and an update check for the puzzle database), is released (2026-11-01). v0.3 (Lichess account + sync) is next. Built version by version per [ROADMAP.md](ROADMAP.md). See [CHANGELOG.md](CHANGELOG.md) for what each version added.
 
 ## Getting started
 The app runs from source on Windows 10 or 11. You need Git, Python 3.12 and Node.js LTS. Then:
