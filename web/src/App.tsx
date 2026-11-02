@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, AppShell, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
+import { ActionIcon, Alert, AppShell, Button, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
@@ -171,6 +171,20 @@ export function App() {
   else
     main = (
       <Grid gap="lg">
+        {account?.state === "expired" && (
+          <Grid.Col span={12}>
+            <Alert color="yellow" data-testid="expired-banner">
+              <Group justify="space-between">
+                <Text size="sm">
+                  Your Lichess sign-in has expired or was revoked. Your solves are kept here and sync after you sign in.
+                </Text>
+                <Button size="xs" onClick={() => setSettingsOpen(true)} data-testid="sign-in-again">
+                  Sign in again
+                </Button>
+              </Group>
+            </Alert>
+          </Grid.Col>
+        )}
         {offer && (
           <Grid.Col span={12}>
             <UpdateBanner offer={offer} onUpdate={updateNow} onNotNow={() => dismiss("not_now")} onSkip={() => dismiss("skip")} />
@@ -225,7 +239,7 @@ export function App() {
           <Group gap="sm">
           {started && <LichessStatus account={account} sync={sync} />}
           <ActionIcon variant="subtle" size="lg" aria-label="Settings" onClick={() => setSettingsOpen(true)} data-testid="gear">
-            ⚙
+            {"\u2699\uFE0E"}
           </ActionIcon>
           <Menu position="bottom-end" width={240}>
             <Menu.Target>

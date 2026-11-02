@@ -114,7 +114,7 @@ def test_qa_401_is_unauthorized_and_not_retried() -> None:
     http.close()
 
 
-@pytest.mark.xfail(strict=True, reason="v0.3-B1: a 2xx with an unexpected body is classified as a network error")
+# Regression test for v0.3-B1 (fixed in QA round 1).
 def test_qa_unexpected_response_is_not_a_network_error() -> None:
     http, _ = _http(lambda r: httpx.Response(200, json=["not", "an", "object"]))
     lc = LichessHttp(http)
@@ -357,7 +357,7 @@ def test_qa_offline_then_reconnect_drains_the_queue(w: Wired) -> None:
     assert data(w.api.get_session_stats(sid))["rating_change"] == sum(r["diff"] for r in rs)
 
 
-@pytest.mark.xfail(strict=True, reason="v0.3-B3: a token obtained during a failed sign-in is never revoked")
+# Regression test for v0.3-B3 (fixed in QA round 1).
 def test_qa_failed_sign_in_after_the_exchange_revokes_the_new_token(w: Wired) -> None:
     """The code exchange succeeds, then GET /api/account fails (network drop). The new token isn't
     stored, so nothing can ever revoke it: it stays valid on Lichess for about a year (SR-15, FR-6.6)."""
@@ -399,7 +399,7 @@ def test_qa_post_json_resends_on_5xx() -> None:
     http.close()
 
 
-@pytest.mark.xfail(strict=True, reason="v0.3-B5: a solve during the 429 wait sends a request at once")
+# Regression test for v0.3-B5 (fixed in QA round 1).
 def test_qa_no_request_during_the_429_wait(w: Wired) -> None:
     """FR-6.10 / Lichess API rule: after a 429, wait a full minute before the next request. A solve
     recorded during that minute must not send a batch before the scheduled retry."""
@@ -415,3 +415,40 @@ def test_qa_no_request_during_the_429_wait(w: Wired) -> None:
     w.scheduler.run_next()  # the minute is up
     w.settle()
     assert data(w.api.get_sync_status())["pending"] == 0
+
+
+def test_b4_batches_are_sent_once_per_call() -> None:
+    """Regression for v0.3-B4: a batch POST is never resent inside the HTTP client (the live test sends
+    its 3 solves exactly once; the sync service does its own backoff)."""
+    http, seen = _http(lambda r: httpx.Response(503))
+    with pytest.raises(HttpError):
+        http.post_json("https://lichess.org/api/puzzle/batch/mix", {"solutions": []}, token=FAKE_TOKEN, retry=False)
+    assert len(seen) == 1
+    with pytest.raises(HttpError):
+        LichessHttp(http).solve_batch(FAKE_TOKEN, "mix", [Solution("00008", False, False)])
+    assert len(seen) == 2
+    http.close()
+
+
+def test_b5_a_sign_in_may_cut_a_network_backoff_short_but_never_a_429_wait(w: Wired) -> None:
+    """Regression for v0.3-B5: during a network backoff a new solve waits, but a sign-in (force) may
+    retry at once; after a 429 even that waits for the scheduled retry."""
+    _check_in(w)
+    sid = data(w.api.start_session(OPEN, True))["session_id"]
+    w.lichess.batch_errors = [network_error()]
+    _solve_one(w.api, sid)
+    w.settle()
+    assert len(w.lichess.batch_calls) == 1
+    _solve_one(w.api, sid)
+    w.settle()
+    assert len(w.lichess.batch_calls) == 1  # held for the backoff
+    w.services.sync.kick(force=True)
+    w.settle()
+    assert len(w.lichess.batch_calls) == 2 and data(w.api.get_sync_status())["pending"] == 0
+    w.lichess.batch_errors = [rate_limited()]
+    _solve_one(w.api, sid)
+    w.settle()
+    calls = len(w.lichess.batch_calls)
+    w.services.sync.kick(force=True)
+    w.settle()
+    assert len(w.lichess.batch_calls) == calls  # never during the 429 wait

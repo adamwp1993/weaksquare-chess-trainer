@@ -176,8 +176,16 @@ class HttpClient:
     def get_json(self, url: str, *, token: str | None = None, params: dict[str, Any] | None = None) -> Any:
         return self.request_json("GET", url, token=token, params=params)
 
-    def post_json(self, url: str, body: Any, *, token: str | None = None, params: dict[str, Any] | None = None) -> Any:
-        return self.request_json("POST", url, token=token, params=params, json_body=body)
+    def post_json(
+        self,
+        url: str,
+        body: Any,
+        *,
+        token: str | None = None,
+        params: dict[str, Any] | None = None,
+        retry: bool = True,
+    ) -> Any:
+        return self.request_json("POST", url, token=token, params=params, json_body=body, retry=retry)
 
     def post_form(self, url: str, form: dict[str, str], *, retry: bool = False) -> Any:
         return self.request_json("POST", url, form=form, retry=retry)

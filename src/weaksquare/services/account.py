@@ -278,10 +278,13 @@ class AccountService:
             raise JobFailed(e.code, e.message, retryable=True) from None
         progress(None, "Finishing sign-in…")
         old = self.token()
+        secret: str | None = None
         try:
             secret = self._d.lichess.exchange_code(token_form(code=code, verifier=verifier, redirect_uri=redirect))
             account = self._d.lichess.account(secret)
         except Exception as e:
+            if secret is not None:
+                self._revoke_quietly(secret)  # never leave a valid token behind that nothing holds (v0.3-B3)
             if self._d.is_network_error(e):
                 raise JobFailed(
                     "offline", "Sign-in failed: Lichess couldn't be reached. Check your connection."
@@ -292,6 +295,7 @@ class AccountService:
             self._d.secrets.set(SECRET_ACCOUNT, secret)
         except Exception as e:
             log.error("sign-in: couldn't store the token (%s)", type(e).__name__)
+            self._revoke_quietly(secret)
             raise JobFailed("secret_store", "Sign-in failed: Windows Credential Manager refused the token.") from None
         if old and old != secret:
             self._revoke_quietly(old)  # signing in again replaces the old token

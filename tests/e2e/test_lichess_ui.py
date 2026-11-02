@@ -173,3 +173,28 @@ def test_rating_trend_empty_when_signed_out(page) -> None:  # type: ignore[no-un
     page.goto(page.base_url + "/?account=signed_out")
     open_stats(page)
     page.get_by_test_id("rating-trend-empty").wait_for()
+
+
+def test_b7_summary_mentions_lichess_only_with_a_history(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression for v0.3-B7: signed out with no Lichess history, the summary doesn't mention Lichess."""
+    page.goto(page.base_url + "/?account=signed_out")
+    summary = page.get_by_test_id("more-summary").inner_text()
+    assert "Lichess" not in summary and "solved ones left out" in summary
+    page.goto(page.base_url + "/")
+    assert "solved or played on Lichess left out" in page.get_by_test_id("more-summary").inner_text()
+
+
+def test_b7_offline_startup_says_it_once(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression for v0.3-B7: the status line and the offline notice no longer repeat each other."""
+    open_startup(page, "&account=offline")
+    status = page.get_by_test_id("startup-status").inner_text()
+    notice = page.get_by_test_id("startup-offline").inner_text()
+    assert "Signed in as your_name" in status and "sync" not in status
+    assert "sync" in notice
+
+
+def test_b2_expired_banner_opens_the_sign_in(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression for v0.3-B2: the main page's Sign in again opens the account settings."""
+    page.goto(page.base_url + "/?account=expired")
+    page.get_by_test_id("sign-in-again").click()
+    page.get_by_test_id("settings").get_by_test_id("sign-in").wait_for()

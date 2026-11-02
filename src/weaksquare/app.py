@@ -241,7 +241,7 @@ def build_services(
 
     def after_sign_in() -> None:
         history.start_import()
-        sync.kick()
+        sync.kick(force=True)  # a fresh sign-in may cut a network backoff short (never a 429 wait)
 
     account.on_signed_in(after_sign_in)
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields)

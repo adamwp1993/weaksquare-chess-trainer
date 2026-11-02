@@ -47,7 +47,11 @@ class LichessHttp:
         if not valid_angle(angle):
             raise ValueError("invalid angle")
         data = self._http.post_json(
-            f"{self._base}/api/puzzle/batch/{angle}", batch_body(solutions), token=token, params={"nb": 0}
+            f"{self._base}/api/puzzle/batch/{angle}",
+            batch_body(solutions),
+            token=token,
+            params={"nb": 0},
+            retry=False,  # the sync service backs off itself; never resend a batch here (v0.3-B4)
         )
         try:
             return parse_batch(data)
@@ -73,7 +77,9 @@ def is_network_error(e: BaseException) -> bool:
     if isinstance(e, Unauthorized):
         return False
     if isinstance(e, HttpError):
-        return e.status is None or e.status == 429 or e.status >= 500
+        # A response we couldn't use (retryable=False, e.g. an unexpected body) isn't a network
+        # problem: retrying it forever would never help (v0.3-B1).
+        return e.retryable and (e.status is None or e.status == 429 or e.status >= 500)
     return isinstance(e, OSError)
 
 

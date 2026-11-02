@@ -16,7 +16,7 @@ export function accountLine(account: AccountStatus | null): string {
     case "checking":
       return `Checking your Lichess sign-in${account.username ? ` (${account.username})` : ""}…`;
     case "offline":
-      return `Lichess can't be reached right now. Your sign-in (${account.username}) is kept; solves will sync later.`;
+      return `Signed in as ${account.username}, but Lichess can't be reached right now.`;
     case "expired":
       return "Your Lichess sign-in has expired or was revoked. Sign in again.";
     default:

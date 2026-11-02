@@ -81,7 +81,7 @@ The app opens on a startup page every time.
 - **First time, or signed out:** the page says *Not signed in*. Click **Sign in with Lichess**, or **Continue without signing in**.
 - **Signed in:** one button, **Continue as *your name***. **Show all options** reveals **Sign out** and **Sign in as someone else**.
 - **Lichess can't be reached** (for example, no internet): your sign-in is kept and the button says **Continue offline as *your name***. Your solves are saved here and sync later.
-- **Your sign-in expired or was revoked** (Lichess sign-ins last about a year): the page says so and asks you to sign in again.
+- **Your sign-in expired or was revoked** (Lichess sign-ins last about a year): the page says so and asks you to sign in again. If it happens while you're training, a banner with **Sign in again** appears above your puzzles; your solves wait until you do.
 
 ### Signing in
 1. Click **Sign in with Lichess**. Lichess opens **in your usual web browser**, not inside WeakSquare, so your password manager and two-factor sign-in work as normal.
@@ -117,10 +117,10 @@ The **Rated** switch above **Start** applies to the session you start. It's on e
 
 ### Syncing and offline mode
 - Solves sync right away when you're signed in, and syncing never slows down solving.
-- Offline, or before you sign in, solves wait on this PC. The top bar says **Offline: 3 solves waiting to sync**. They're sent automatically when Lichess can be reached again, or when you next sign in. Nothing is lost if you close the app.
+- Offline, or before you sign in, solves wait on this PC. The top bar says **Offline: 3 solves waiting to sync** (or **Not signed in: 3 solves waiting to sync**). They're sent automatically when Lichess can be reached again, or when you next sign in. Nothing is lost if you close the app.
 - A solve made while signed in to one Lichess account only ever goes to that account. Solves made while signed out go to the next account you sign in with.
 - Puzzles you played before v0.3 aren't sent to Lichess. They were recorded before the app knew whether they were rated or which theme you chose them by, and they still count in your Stats.
-- If Lichess asks the app to slow down (it allows about 200 solves an hour), the app waits and tries again.
+- If Lichess asks the app to slow down (it allows about 200 solves an hour), the app waits at least a minute before sending anything again, even if you keep solving. The top bar shows how many solves are waiting.
 
 ### Excluding puzzles you've played on Lichess
 When you sign in, the app reads which puzzles you've played on Lichess, then only the new ones each time. **More filters → Your history → Exclude played on Lichess** (on by default) leaves those puzzles out, along with every puzzle you've synced from here, because Lichess wouldn't rate them again. Untick it to get them back. While you're signed out with no history read yet, it's greyed out.
@@ -131,6 +131,7 @@ Open the gear (**⚙**, top right) and choose **Sign out** under **Lichess accou
 If Lichess can't be reached, the app asks before removing anything. **Remove from this PC anyway** deletes it here; cancel it yourself later at lichess.org/account/security (*Sessions*/*API access tokens*).
 
 **Gotchas**
+- **Sign in as someone else** uses whichever account your browser is signed in to on lichess.org. To switch accounts, sign out of lichess.org in your browser first (or sign in there as the other account).
 - After signing in, if the browser tab doesn't close itself, just close it.
 - The app may not come back in front of the browser on its own (Windows sometimes blocks that). Click it in the taskbar.
 - Your sign-in is stored in Windows Credential Manager under **weaksquare** (Control Panel → Credential Manager → Windows Credentials).

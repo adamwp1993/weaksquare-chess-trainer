@@ -158,6 +158,9 @@ class SyncService:
         self._state: SyncState = "idle"
         self._backoff_step = 0
         self._retry_scheduled = False
+        # Why a retry is waiting: "rate" after a 429 (nothing may be sent until it fires, FR-6.10),
+        # "offline" after a network error or 5xx (a new sign-in or reconnect may try sooner).
+        self._hold: str | None = None
 
     # ---- status ---------------------------------------------------------------------------------
     def status(self) -> SyncStatus:
@@ -216,9 +219,18 @@ class SyncService:
             log.exception("couldn't start the sync")
 
     # ---- the queue ------------------------------------------------------------------------------
-    def kick(self) -> str | None:
-        """Drain the queue now if there's an account to sync to. Never blocks (FR-6.16)."""
+    def kick(self, force: bool = False) -> str | None:
+        """Drain the queue now if there's an account to sync to. Never blocks (FR-6.16).
+
+        While a backoff retry is waiting, a new solve doesn't send anything: it joins the queue for
+        that retry (v0.3-B5). `force` (a sign-in, or Lichess reachable again) may cut a network
+        backoff short, but never the wait after a 429."""
         if self._d.account.account_id() is None or not self._d.account.token():
+            self._notify(SyncUpdate(self.status()))
+            return None
+        with self._lock:
+            held = self._hold == "rate" or (self._hold == "offline" and not force)
+        if held:
             self._notify(SyncUpdate(self.status()))
             return None
         with self._lock:
@@ -232,10 +244,13 @@ class SyncService:
     def _retry(self) -> None:
         with self._lock:
             self._retry_scheduled = False
+            self._hold = None
         self.kick()
 
-    def _schedule_retry(self, delay_s: float) -> None:
+    def _schedule_retry(self, delay_s: float, reason: str) -> None:
         with self._lock:
+            if reason == "rate" or self._hold is None:
+                self._hold = reason
             if self._retry_scheduled:
                 return
             self._retry_scheduled = True
@@ -294,14 +309,14 @@ class SyncService:
             delay = max(RATE_LIMIT_MIN_S, after or 0)
             log.info("sync: rate-limited by Lichess, waiting %ss", delay)
             self._set("waiting")
-            self._schedule_retry(delay)
+            self._schedule_retry(delay, "rate")
             return "rate limited"
         if self._d.is_network_error(e):
             delay = BACKOFF_S[min(self._backoff_step, len(BACKOFF_S) - 1)]
             self._backoff_step += 1
             log.info("sync: Lichess unreachable (%s), retrying in %ss", type(e).__name__, delay)
             self._set("offline")
-            self._schedule_retry(delay)
+            self._schedule_retry(delay, "offline")
             return "offline"
         ids = [r.attempt_id for r in batch]
         log.warning("sync: Lichess refused a batch of %d (%s); marked failed", len(ids), e)
@@ -311,6 +326,9 @@ class SyncService:
 
     def _apply(self, batch: list, result: BatchResult) -> None:
         self._backoff_step = 0
+        with self._lock:
+            if self._hold == "offline":
+                self._hold = None  # reachable again; the pending timer finds nothing to do
         now = self._now()
         rounds = {r.id: r for r in result.rounds}
         synced = [r for r in batch if r.puzzle_id in rounds]

@@ -51,7 +51,10 @@ def raw():  # type: ignore[no-untyped-def]
         body = {"solutions": [{"id": pid, "win": i % 2 == 0, "rated": False} for i, pid in enumerate(ids)]}
         assert len(body["solutions"]) <= MAX_SOLVES and not any(s["rated"] for s in body["solutions"])
         account = http.get_json("https://lichess.org/api/account", token=token)
-        batch = http.post_json("https://lichess.org/api/puzzle/batch/mix", body, token=token, params={"nb": 0})
+        # retry=False: one run never sends the 3 solves more than once (SR-13, v0.3-B4).
+        batch = http.post_json(
+            "https://lichess.org/api/puzzle/batch/mix", body, token=token, params={"nb": 0}, retry=False
+        )
         activity = []
         for obj in http.stream_ndjson("https://lichess.org/api/puzzle/activity", token=token, params={"max": 3}):
             activity.append(obj)

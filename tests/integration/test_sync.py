@@ -198,18 +198,23 @@ def test_5xx_counts_as_offline(h: Harness) -> None:
 
 
 def test_429_waits_at_least_a_minute(h: Harness) -> None:
-    """FR-6.10."""
-    h.lichess.batch_errors = [rate_limited(None)]
+    """FR-6.10: at least 60 s, or Lichess's Retry-After if longer; nothing is sent meanwhile (v0.3-B5)."""
+    h.lichess.batch_errors = [rate_limited(None), rate_limited(120)]
     h.add("P1")
     h.sync()
     assert h.svc.status().state == "waiting"
     assert h.scheduler.delays == [60]
-    h2_errors = [rate_limited(120)]
-    h.lichess.batch_errors = h2_errors
-    h.scheduler.pending.clear()
-    h.svc._retry_scheduled = False
-    h.sync()
+    h.add("P2")
+    assert h.svc.kick() is None and h.svc.kick(force=True) is None  # held until the retry
+    assert len(h.lichess.batch_calls) == 1
+    h.scheduler.run_next()  # the minute is up: Lichess says 429 again, with Retry-After 120
+    for j in h.runner.active():
+        h.runner.wait(j.id, 5)
     assert h.scheduler.delays == [120]
+    h.scheduler.run_next()
+    for j in h.runner.active():
+        h.runner.wait(j.id, 5)
+    assert h.svc.status().pending == 0
 
 
 def test_401_marks_the_account_expired_and_keeps_the_queue(h: Harness) -> None:

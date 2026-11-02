@@ -35,17 +35,18 @@ const COUNT_DEBOUNCE_MS = 250;
 const PANEL_MAX_HEIGHT = "calc(100vh - 56px - 2 * var(--mantine-spacing-md) - 2px)";
 
 // A one-line summary of the "More filters" section, so its defaults are never invisible.
-function moreSummary(spec: FilterSpec): string {
+function moreSummary(spec: FilterSpec, lichess: boolean): string {
   const parts: string[] = [];
   if (spec.openings.length) parts.push(`${spec.openings.length} opening${spec.openings.length === 1 ? "" : "s"}`);
   const q: string[] = [];
   if (spec.min_popularity !== null) q.push(`popularity ≥ ${spec.min_popularity}`);
   if (spec.min_plays !== null) q.push(`≥ ${spec.min_plays.toLocaleString("en-US")} plays`);
   parts.push(q.length ? q.join(", ") : "no quality filter");
+  const played = lichess && spec.exclude_played_on_lichess;
   if (spec.only_my_misses) parts.push("only my misses");
-  else if (spec.exclude_solved_here && spec.exclude_played_on_lichess) parts.push("solved or played on Lichess left out");
+  else if (spec.exclude_solved_here && played) parts.push("solved or played on Lichess left out");
   else if (spec.exclude_solved_here) parts.push("solved ones left out");
-  else if (spec.exclude_played_on_lichess) parts.push("played on Lichess left out");
+  else if (played) parts.push("played on Lichess left out");
   return parts.join(" · ");
 }
 
@@ -196,7 +197,7 @@ export function MixerView({
                 More filters
               </Text>
               <Text size="xs" c="dimmed" data-testid="more-summary">
-                {moreSummary(spec)}
+                {moreSummary(spec, playedCount !== null)}
               </Text>
             </Accordion.Control>
             <Accordion.Panel>

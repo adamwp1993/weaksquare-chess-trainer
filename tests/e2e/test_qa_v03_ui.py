@@ -102,7 +102,7 @@ def test_qa_double_click_sign_in_starts_one_wait(page) -> None:  # type: ignore[
     assert page.get_by_test_id("sign-in-failed").count() == 0
 
 
-@pytest.mark.xfail(strict=True, reason="v0.3-B2: an expired sign-in shows no 'Sign in again' on the main page (FR-6.4)")
+# Regression test for v0.3-B2 (fixed in QA round 1).
 def test_qa_expired_sign_in_says_sign_in_again_on_the_main_page(page) -> None:  # type: ignore[no-untyped-def]
     """FR-6.4: on a 401 the token is discarded and the app shows "Sign in again". A 401 can arrive
     mid-session (sync, history import); the main page must say so without opening the gear."""
