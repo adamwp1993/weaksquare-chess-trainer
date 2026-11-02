@@ -259,7 +259,7 @@ def test_bridge_rejects_bad_arguments_without_crashing(services, paths, clock) -
         lambda: api.open_folder("C:/Windows"),
         lambda: api.get_job(None),
         lambda: api.start_puzzle_import("x" * 2000),
-        lambda: api.set_setting("mixer.filters", {"exclude_played_on_lichess": True}),
+        lambda: api.set_setting("mixer.filters", {"source": "my"}),
     ]
     for call in bad_calls:
         r = call()

@@ -231,7 +231,7 @@ def test_preset_with_invalid_filters_is_refused_over_the_bridge(paths, clock, se
     api = build_api(paths, clock)
     bad = {**FilterSpec().to_json(), "min_popularity": 500}
     assert api.save_preset("Bad", bad)["error"]["code"] == "invalid_argument"
-    assert api.save_preset("Lichess", {**FilterSpec().to_json(), "exclude_played_on_lichess": True})["ok"] is False
+    assert api.save_preset("Mine", {**FilterSpec().to_json(), "source": "my"})["ok"] is False
     assert api.list_presets()["data"] == []
 
 
