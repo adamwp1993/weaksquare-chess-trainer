@@ -2,12 +2,17 @@ import { Alert, Anchor, Badge, Button, Group, Paper, Stack, Text, Title } from "
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { ApiCallError } from "../api/ApiClient";
 import type { AttemptRating, Outcome, PuzzleView, SessionStats } from "../api/types";
-import { AnswerPlayer, answerPositions, type AnswerPosition } from "../components/AnswerPlayer";
+import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
+import { AnswerPlayer, answerPositions, type AnswerPosition, type AnswerSegment } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
+import { EngineInstallBanner } from "../components/EngineInstallBanner";
+import { AnalyzeButton, EnginePanel } from "../components/EnginePanel";
 import { RatingChange } from "../components/LichessStatus";
 import { SessionBar } from "../components/SessionBar";
 import { sounds } from "../sound/player";
+import { legalArrow, useEngineStatus } from "../state/engine";
 import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
@@ -25,6 +30,8 @@ function uciMove(uci: string) {
 // can keep going to finish the line, or move on. When stuck (§7.2): Hint circles the piece that
 // moves next, then Show answer steps through the rest of the line. Before the end, either one is a
 // loss (FR-5.2); after it, Show answer is free (FR-5.4) and replays the whole line.
+// Stockfish (v0.4): after a wrong move, Show answer starts with the engine's refutation of it (§7.2).
+// Once the puzzle is over, the engine panel and the analysis board appear (FR-7.2, 7.7); never before (FR-7.3).
 export function TrainerView({
   sessionId,
   onNewSession,
@@ -49,7 +56,11 @@ export function TrainerView({
   const [error, setError] = useState<string | null>(null);
   const [hintSquare, setHintSquare] = useState<string | null>(null);
   const [hinted, setHinted] = useState(false);
-  const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number } | null>(null);
+  const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number; segments: AnswerSegment[] } | null>(null);
+  const [refutation, setRefutation] = useState<"loading" | "missing" | { error: string } | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
+  const [bestMove, setBestMove] = useState<string | null>(null);
+  const [engine, refreshEngine] = useEngineStatus();
   const [helpBusy, setHelpBusy] = useState(false);
   const [rating, setRating] = useState<AttemptRating | null>(null);
   const chess = useRef<Chess | null>(null);
@@ -117,6 +128,9 @@ export function TrainerView({
     setHintSquare(null);
     setHinted(false);
     setAnswer(null);
+    setRefutation(null);
+    setAnalysis(null);
+    setBestMove(null);
     try {
       const next = await api.nextPuzzle(sessionId);
       refreshStats();
@@ -227,8 +241,11 @@ export function TrainerView({
         setHintSquare(null);
         setMovable(null);
         setLineDone(true);
-        setAnswer({ positions: answerPositions(help.answer_fen, help.answer_moves, help.answer_sounds), step: 0 });
+        setAnalysis(null); // the answer replaces the analysis board
+        const solution = answerPositions(help.answer_fen, help.answer_moves, help.answer_sounds);
+        setAnswer({ positions: solution, step: 0, segments: [] });
         setMessage({ color: "gray", text: `The answer: step through it with Back and Forward.${lost}` });
+        if (help.refute) loadRefutation(solution);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -237,11 +254,53 @@ export function TrainerView({
     }
   };
 
+  // §7.2 step 2: put Stockfish's answer to your wrong move in front of the solution once it arrives.
+  const loadRefutation = (solution: AnswerPosition[]) => {
+    setRefutation("loading");
+    api.getRefutation(sessionId).then(
+      (r) => {
+        const refPositions = answerPositions(r.fen_before, [r.wrong_move, ...r.line]);
+        const wrongSan = refPositions[1]?.san ?? r.wrong_move;
+        const verdict = r.score ?? r.game_over ?? "";
+        const segments: AnswerSegment[] = [
+          { label: `Why ${wrongSan} fails${verdict ? `: ${verdict}` : ""}`, from: 0 },
+          { label: "The solution", from: refPositions.length },
+        ];
+        setRefutation(null);
+        setAnswer((a) =>
+          a && a.positions === solution
+            ? { positions: [...refPositions, ...solution], segments, step: a.step === 0 ? 0 : a.step + refPositions.length }
+            : a,
+        );
+      },
+      (e: Error) => {
+        if (e instanceof ApiCallError && e.code === "engine_not_installed") {
+          refreshEngine();
+          setRefutation("missing");
+        } else setRefutation({ error: e.message });
+      },
+    );
+  };
+
   const decided = outcome !== null;
   const shown = answer ? answer.positions[answer.step] : null;
+  const analysisPos = analysis ? analysis.positions[analysis.step] : null;
+  const boardFen = analysisPos ? analysisPos.fen : shown ? shown.fen : fen;
+  const startFen = view ? (() => { const c = new Chess(view.fen); c.move(uciMove(view.opponent_move)); return c.fen(); })() : null;
+  const arrow = analysisPos ? legalArrow(analysisPos.fen, bestMove ?? undefined) : null;
   const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
   const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
+  const stepAnalysis = (to: number) => {
+    if (!analysis) return;
+    setAnalysis({ ...analysis, step: Math.min(Math.max(to, 0), analysis.positions.length - 1) });
+  };
+  const onAnalysisMove = (uci: string) => {
+    if (!analysis) return;
+    const next = analysisMove(analysis, uci);
+    setAnalysis(next ? next : { ...analysis }); // an illegal move snaps back
+  };
   const stepAnswer = (delta: number) => {
+    if (analysis) return stepAnalysis(analysis.step + delta);
     if (!answer) return;
     const to = Math.min(Math.max(answer.step + delta, 0), answer.positions.length - 1);
     if (to === answer.step) return;
@@ -295,13 +354,14 @@ export function TrainerView({
         <div style={{ flex: "1 1 560px", minWidth: 320 }}>
           {fen && view && (
             <Board
-              fen={shown ? shown.fen : fen}
+              fen={boardFen ?? fen}
               orientation={view.player_color}
-              movable={shown ? null : movable}
-              lastMove={shown ? shown.lastMove : lastMove}
-              onMove={onMove}
-              hintSquare={hintSquare}
+              movable={analysisPos ? "both" : shown ? null : movable}
+              lastMove={analysisPos ? analysisPos.lastMove : shown ? shown.lastMove : lastMove}
+              onMove={analysisPos ? onAnalysisMove : onMove}
+              hintSquare={analysisPos ? null : hintSquare}
               coordinates={coordinates}
+              arrows={arrow ? [arrow] : undefined}
             />
           )}
         </div>
@@ -343,12 +403,46 @@ export function TrainerView({
               </Stack>
             </Paper>
           )}
-          {answer && (
+          {answer && !analysis && (
             <AnswerPlayer
               positions={answer.positions}
               step={answer.step}
+              segments={answer.segments}
               onStep={(to) => stepAnswer(to - answer.step)}
             />
+          )}
+          {refutation === "loading" && (
+            <Text size="sm" c="dimmed" data-testid="refutation-loading">
+              Stockfish is checking your move…
+            </Text>
+          )}
+          {refutation === "missing" && engine && <EngineInstallBanner status={engine} onChanged={refreshEngine} />}
+          {refutation && typeof refutation === "object" && (
+            <Text size="xs" c="red" data-testid="refutation-error">
+              {refutation.error}
+            </Text>
+          )}
+          {lineDone && view && startFen && boardFen && refutation !== "missing" && (
+            <EnginePanel
+              sessionId={sessionId}
+              startFen={startFen}
+              fen={boardFen}
+              purpose={analysis ? "board" : "panel"}
+              status={engine}
+              onStatusChanged={refreshEngine}
+              onBestMove={setBestMove}
+            >
+              {analysis ? (
+                <AnalysisControls
+                  state={analysis}
+                  onStep={stepAnalysis}
+                  onReset={() => setAnalysis(openAnalysis(startFen))}
+                  onClose={() => setAnalysis(null)}
+                />
+              ) : (
+                <AnalyzeButton onClick={() => setAnalysis(openAnalysis(boardFen))} />
+              )}
+            </EnginePanel>
           )}
           <Group gap="xs" grow data-testid="help-controls">
             <Button variant="light" color="gray" disabled={!canHint} onClick={() => requestHelp("hint")} data-testid="hint-button">

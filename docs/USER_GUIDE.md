@@ -40,6 +40,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your solves:** for each puzzle you finish, the app sends its ID, whether you solved it, whether it's rated, and the theme you chose it by (the *angle*, for example `mix` or `fork`). Nothing else about your session is sent.
     - **Your puzzle history:** the puzzles you've played on Lichess are read once, then only new ones.
     - **Signing out** tells Lichess to cancel your sign-in.
+  - **Stockfish download** (v0.4): installing Stockfish (from setup, `fetch_stockfish.py` or the **Install Stockfish** button) downloads one file, the official Stockfish 19 Windows build, from github.com. Nothing about you is sent. The engine itself runs entirely on your PC and never uses the internet.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
 ## Getting started: the puzzle database
@@ -272,7 +273,69 @@ When you can't find the move, the **Hint** and **Show answer** buttons beside th
 **How it's scored**
 - Using either button **before the puzzle is decided fails it** (like on Lichess), and your Stats record that you needed help. The result panel shows **Failed** and the themes straight away.
 - If the puzzle is already decided (a wrong move, or you finished the line), Show answer is free and doesn't need a Hint. After a solved puzzle it replays the whole solution from the start.
-- After a wrong move you can open the answer directly. In v0.4, Show answer will also explain why your wrong move fails, using the Stockfish engine.
+- After a wrong move you can open the answer directly. *Changed in v0.4:* it then starts by showing why your wrong move fails, using Stockfish (see [Stockfish](#stockfish-why-a-move-fails-evals-and-the-analysis-board)).
+
+## Stockfish: why a move fails, evals and the analysis board
+*Added in v0.4.*
+
+WeakSquare uses **Stockfish 19**, the free chess engine, running on your PC. It's there to help you learn from a puzzle **after** you've tried it: it never shows an evaluation, a line or a hint while a puzzle is in progress.
+
+### Installing Stockfish
+Setup installs it for you (see [Installing from source](#installing-from-source)). If it isn't installed, the places that use it show **Stockfish isn't installed** with an **Install Stockfish** button:
+
+![Stockfish isn't installed](img/engine-install.png)
+
+1. Click **Install Stockfish**. The app downloads the official Stockfish 19 build from GitHub (about 80 MB) and shows its progress.
+2. Before using the file, the app checks it against a fingerprint (SHA-256) recorded in the app, so a damaged or altered download is refused and deleted. It then runs a short self-test.
+3. When it's done, the engine panel appears. You don't need to restart.
+
+Stockfish is stored in your data folder under `engines\sf_19`. Each data folder has its own copy.
+
+### Why your move fails
+If you play a wrong move and then click **Show answer**, the answer starts with **Why *your move* fails**. It shows your move, then Stockfish's best reply line (up to 5 moves by both sides), with the evaluation. Step through it with **Forward ▶** and **◀ Back** (or **→** and **←**), then carry on into **The solution**.
+
+![Why your move fails](img/refutation.png)
+
+If you made several wrong moves, the first one is shown: that's the one that cost you the puzzle. If you didn't play a wrong move, Show answer goes straight to the solution.
+
+### The engine panel
+Once the puzzle is over (you finished the line, or you used Show answer), the **Stockfish** panel appears beside the board:
+- **Puzzle start:** the evaluation of the position you had to solve, kept at the top.
+- **This position:** the evaluation and Stockfish's **top 3 lines** for whatever is on the board. It follows you as you step through the answer.
+
+![The engine panel after a puzzle](img/engine-panel.png)
+
+**Reading the evaluation.** Evaluations are always from **your side** (the side you played in the puzzle):
+
+| You see | It means |
+|---|---|
+| **+3.2 for you** | You're ahead by about three pawns' worth. |
+| **−1.4 for you** | You're behind by about one and a half pawns. |
+| **0.0 (level)** | Neither side is better. |
+| **You mate in 3** / **You're mated in 2** | A forced checkmate, in that many of the mating side's moves. |
+
+### The analysis board
+Click **Analyze on the board** in the panel to play out your own ideas. You can move pieces for **either side** (legal moves only), and after each move Stockfish re-evaluates and draws an arrow for its best move. **◀ Back** and **Forward ▶** step through your moves, **Reset** goes back to the puzzle position, and **Close** returns to the puzzle. Nothing you do on the analysis board is scored or saved.
+
+![The analysis board](img/analysis-board.png)
+
+### Engine settings
+In **⚙ Settings → Engine**:
+
+| Setting | What it does |
+|---|---|
+| **Think time (s)** | How long Stockfish thinks about each position. 1 second by default, from 0.2 to 10. Longer is a little stronger and keeps the CPU busy for longer. |
+| **Threads** | How many processor cores it may use. By default all but one, so the app stays responsive. |
+| **Hash (MB)** | Memory for the engine's working tables. 256 MB by default, from 16 to 2048. |
+| **Use my own engine…** | Pick another UCI engine's `.exe` (for example a Stockfish build you prefer). It's used only if it passes the same self-test. **Use the managed Stockfish** switches back. |
+| **Reinstall** | Downloads and checks the pinned Stockfish again. |
+
+![Settings, Engine](img/settings-engine.png)
+
+**Gotchas**
+- Stockfish only thinks when you look at a position after a puzzle (about one think time per position), so it doesn't use the CPU while you solve. Stepping quickly through a line asks about the newest position only.
+- If Stockfish ever stops unexpectedly, the app restarts it and says so. Try again.
+- If your own engine can't be found any more (the file was moved or deleted), the app says so and offers **Use the managed Stockfish**.
 
 ## Keyboard shortcuts
 *Added in v0.2.*
@@ -282,7 +345,7 @@ When you can't find the move, the **Hint** and **Show answer** buttons beside th
 | **N** or **Enter** | Next puzzle (before the puzzle is decided, that's Skip, which counts as failed). On the session summary, a new session. |
 | **H** | Hint |
 | **A** | Show answer (once it's unlocked) |
-| **←** / **→** | Step back / forward through the answer |
+| **←** / **→** | Step back / forward through the answer, or through your moves on the analysis board (v0.4) |
 | **C** | Show or hide the letters and numbers around the board |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
 
@@ -293,7 +356,7 @@ Shortcuts do nothing while you're typing in a box or a dialog is open, and a key
 ## Appearance and sounds
 *Added in v0.2.*
 
-Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change how the app looks and sounds. *Changed in v0.3:* the same dialog starts with **Lichess account**, where you sign in or out (see [Signing in with Lichess](#signing-in-with-lichess-syncing-solves-offline-mode)). Every change applies at once and is saved on this PC, so the app starts the same way next time.
+Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change how the app looks and sounds. *Changed in v0.4:* it also has an **Engine** section (see [Engine settings](#engine-settings)). *Changed in v0.3:* the same dialog starts with **Lichess account**, where you sign in or out (see [Signing in with Lichess](#signing-in-with-lichess-syncing-solves-offline-mode)). Every change applies at once and is saved on this PC, so the app starts the same way next time.
 
 ![The Settings dialog](img/settings.png)
 
@@ -324,7 +387,7 @@ WeakSquare runs from its source code; there's no installer to download. You need
    cd weaksquare-chess-trainer
    python scripts/setup.py
    ```
-2. Setup takes a few minutes. It installs everything into the project folder, builds the app, downloads and imports the puzzle database (see *Getting started*), and adds **WeakSquare Chess Trainer** to your Start menu and your desktop. To skip the puzzle download, add `--skip-puzzle-db`; the app then offers it on first run.
+2. Setup takes a few minutes. It installs everything into the project folder, builds the app, downloads and imports the puzzle database (see *Getting started*), installs Stockfish (*Added in v0.4*; add `--skip-engine` to install it from the app later), and adds **WeakSquare Chess Trainer** to your Start menu and your desktop. To skip the puzzle download, add `--skip-puzzle-db`; the app then offers it on first run.
 3. Start the app from the Start menu or the desktop.
 
 Both shortcuts, the window and its taskbar button show the WeakSquare icon: four board squares with a black queen. `--no-desktop-shortcut` skips the desktop one, and `--no-shortcut` skips both. If your Desktop is in OneDrive, the shortcut goes there, where Windows shows it.
@@ -338,7 +401,7 @@ Both shortcuts, the window and its taskbar button show the WeakSquare icon: four
 - A shortcut you pinned to the taskbar yourself, before v0.2, keeps its old icon. Unpin it and pin the app again.
 
 ## The About screen
-*Added in v0.1.*
+*Added in v0.1. Changed in v0.4: the Stockfish row.*
 
 Open the menu (**☰**, top right) and choose **About** to see:
 
@@ -351,4 +414,5 @@ Open the menu (**☰**, top right) and choose **About** to see:
 | **Data folder** | Where your puzzles, attempts and settings live. **Open** shows it in File Explorer. |
 | **Logs folder** | Log files that help diagnose problems. **Open** shows it in File Explorer. Sign-in tokens and keys are removed before anything is written. |
 | **Puzzle database** | How many puzzles are imported, and the date of the Lichess export they came from. |
+| **Stockfish** | *Added in v0.4.* The engine in use (Stockfish 19, or your own) and where its program file is, or that it isn't installed. |
 | **License** and **Source code** | The app is open source under AGPL-3.0-or-later. The link opens the code in your browser. |

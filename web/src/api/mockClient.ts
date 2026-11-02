@@ -8,12 +8,19 @@
 // `?signin=fail` makes Sign in fail, `?revoke=offline` makes Sign out unable to reach Lichess, and
 // `?sync=slow` holds every solve at "Syncing…" until the test calls `window.__mockSyncNow()`, and
 // `?played=1` puts the second mock puzzle in your Lichess history (the "already played" badge).
+// Stockfish (v0.4): `?engine=missing` starts with no engine installed (the Install banner),
+// `?engine=custom` with your own engine set, and `?engine=slow` makes every analysis take 1.5 s.
 import { Chess } from "chess.js";
-import type { ApiClient, BackendEvent, SettingValues } from "./ApiClient";
+import type { AnalysisPurpose, ApiClient, BackendEvent, EngineSettingsChange, SettingValues } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
+import { mockAnalysis } from "./mockEngine";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
   AccountStatus,
+  Analysis,
+  EngineSettings,
+  EngineStatus,
+  Refutation,
   AttemptRating,
   BucketCounts,
   AppInfo,
@@ -136,6 +143,8 @@ const RATING_POINTS: [string, number, number][] = [
   ["2026-10-28T21:00:00", 1813, 4], ["2026-10-28T21:33:00", 1826, 4], ["2026-10-31T17:20:00", 1834, 5],
 ]; // prettier-ignore
 const MOCK_USER = "your_name";
+const MANAGED_PATH = "C:\\Users\\you\\AppData\\Local\\WeakSquare\\engines\\sf_19\\stockfish.exe";
+const CUSTOM_PATH = "C:\\Engines\\my-stockfish.exe";
 
 interface MockSession {
   spec: FilterSpec;
@@ -152,6 +161,7 @@ interface MockSession {
     failed: boolean;
     hinted: boolean;
     finished: boolean;
+    firstWrong: [string, string] | null; // (FEN before, UCI): what Show answer refutes (§7.2)
   } | null;
   solved: number;
   failed: number;
@@ -183,6 +193,18 @@ export class MockClient implements ApiClient {
   private nextAttempt = 1;
   private points: [string, number, number][] = [...RATING_POINTS];
   private slowSync = false;
+  private engine: EngineStatus = {
+    state: "ready",
+    source: "managed",
+    name: "Stockfish 19",
+    path: MANAGED_PATH,
+    tag: "sf_19",
+    install_job_id: null,
+    message: null,
+  };
+  private engineSettings: EngineSettings = { think_s: 1, threads: 7, hash_mb: 256, custom_path: null, max_threads: 8 };
+  private engineDelay = 250;
+  private latest = new Map<string, number>(); // latest-wins per purpose, like the backend
   private signInFails = false;
   private revokeOffline = false;
   readonly calls: string[] = [];
@@ -202,6 +224,15 @@ export class MockClient implements ApiClient {
     this.slowSync = params.get("sync") === "slow";
     this.signInFails = params.get("signin") === "fail";
     this.revokeOffline = params.get("revoke") === "offline";
+    const engine = params.get("engine");
+    if (engine === "missing") {
+      this.engine = { ...this.engine, state: "not_installed", source: null, name: null, path: null, message: "Stockfish isn't installed." };
+    }
+    if (engine === "custom") {
+      this.engine = { ...this.engine, source: "custom", name: "Stockfish 18", path: CUSTOM_PATH };
+      this.engineSettings = { ...this.engineSettings, custom_path: CUSTOM_PATH };
+    }
+    if (engine === "slow") this.engineDelay = 1500;
     if (typeof window !== "undefined") {
       (window as unknown as { __mockSyncNow: () => void }).__mockSyncNow = () => this.drain();
     }
@@ -363,9 +394,150 @@ export class MockClient implements ApiClient {
     this.listeners.forEach((l) => l({ name: "job", payload: job }));
   }
 
+  // ---- Stockfish (v0.4) -----------------------------------------------------------------------
+  async getEngineStatus() {
+    return { ...this.engine };
+  }
+
+  async startEngineInstall(force: boolean) {
+    if (this.engine.install_job_id) {
+      throw new ApiCallError({ code: "conflict", message: "Stockfish is already being installed.", retryable: true });
+    }
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`engineInstall:${force}`);
+    this.engine = { ...this.engine, install_job_id: id };
+    const kind = "stockfish_install";
+    const steps: [number, string][] = [
+      [0.2, "Downloading Stockfish… 16 MB"],
+      [0.6, "Downloading Stockfish… 48 MB"],
+      [0.88, "Verifying the download…"],
+      [0.95, "Testing Stockfish…"],
+    ];
+    this.emit({ id, kind, state: "running", progress: 0, message: "Downloading Stockfish…", error_code: null });
+    steps.forEach(([progress, message], i) => {
+      setTimeout(() => {
+        if (this.jobs.get(id)?.state !== "running") return;
+        this.emit({ id, kind, state: "running", progress, message, error_code: null });
+      }, 150 * (i + 1));
+    });
+    setTimeout(
+      () => {
+        if (this.jobs.get(id)?.state !== "running") return;
+        this.engine = {
+          ...this.engine,
+          state: "ready",
+          source: "managed",
+          name: "Stockfish 19",
+          path: MANAGED_PATH,
+          install_job_id: null,
+          message: null,
+        };
+        this.emit({ id, kind, state: "done", progress: 1, message: "Stockfish is installed.", error_code: null });
+      },
+      150 * (steps.length + 1),
+    );
+    return id;
+  }
+
+  async getEngineSettings() {
+    return { ...this.engineSettings };
+  }
+
+  async setEngineSettings(change: EngineSettingsChange) {
+    const bad = (message: string) => new ApiCallError({ code: "invalid_argument", message, retryable: false });
+    const { think_s, threads, hash_mb } = change;
+    if (think_s !== undefined && !(think_s >= 0.2 && think_s <= 10)) throw bad("Think time must be between 0.2 and 10 seconds.");
+    const max = this.engineSettings.max_threads;
+    if (threads !== undefined && !(Number.isInteger(threads) && threads >= 1 && threads <= max)) {
+      throw bad(`Threads must be a whole number from 1 to ${max}.`);
+    }
+    if (hash_mb !== undefined && !(Number.isInteger(hash_mb) && hash_mb >= 16 && hash_mb <= 2048)) {
+      throw bad("Hash must be a whole number of MB from 16 to 2048.");
+    }
+    this.engineSettings = { ...this.engineSettings, ...change };
+    this.calls.push(`engineSettings:${JSON.stringify(change)}`);
+    return { ...this.engineSettings };
+  }
+
+  async chooseEngineFile() {
+    return CUSTOM_PATH;
+  }
+
+  async startCustomEngineCheck(path: string) {
+    const id = `job-${this.nextJob++}`;
+    const kind = "engine_check";
+    this.emit({ id, kind, state: "running", progress: null, message: "Testing the engine…", error_code: null });
+    setTimeout(() => {
+      if (path.toLowerCase().includes("broken")) {
+        const message = "That engine didn't pass the test, so it wasn't saved. (no uciok)";
+        this.emit({ id, kind, state: "failed", progress: null, message, error_code: "smoke_test_failed" });
+        return;
+      }
+      this.engine = { ...this.engine, state: "ready", source: "custom", name: "Stockfish 18", path, message: null };
+      this.engineSettings = { ...this.engineSettings, custom_path: path };
+      this.emit({ id, kind, state: "done", progress: 1, message: "Using Stockfish 18.", error_code: null });
+    }, 300);
+    return id;
+  }
+
+  async clearCustomEngine() {
+    this.engineSettings = { ...this.engineSettings, custom_path: null };
+    this.engine = { ...this.engine, state: "ready", source: "managed", name: "Stockfish 19", path: MANAGED_PATH, message: null };
+  }
+
+  /** FR-7.3: the mock refuses engine output during a puzzle, exactly like the backend. */
+  private finishedPuzzle(sessionId: number) {
+    const c = this.session(sessionId).current;
+    if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    if (!c.finished) {
+      throw new ApiCallError({ code: "conflict", message: "The engine is available once the puzzle is over.", retryable: true });
+    }
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Stockfish isn't installed.", retryable: false });
+    }
+    return c;
+  }
+
+  private think() {
+    return new Promise((resolve) => setTimeout(resolve, this.engineDelay));
+  }
+
+  async getRefutation(sessionId: number): Promise<Refutation> {
+    const c = this.finishedPuzzle(sessionId);
+    if (!c.firstWrong) {
+      throw new ApiCallError({ code: "not_found", message: "There's no wrong move to refute in this puzzle.", retryable: false });
+    }
+    const [fenBefore, wrong] = c.firstWrong;
+    const player = new Chess(c.start).turn() === "w" ? "white" : "black";
+    const after = new Chess(fenBefore);
+    after.move(uciToMove(wrong));
+    this.calls.push("refutation");
+    await this.think();
+    const a = mockAnalysis(after.fen(), player, 1);
+    const first = a.lines[0];
+    return {
+      fen_before: fenBefore,
+      wrong_move: wrong,
+      line: first ? first.pv.slice(0, 5) : [],
+      score: first?.score ?? null,
+      game_over: a.game_over,
+    };
+  }
+
+  async analyzePosition(sessionId: number, fen: string, purpose: AnalysisPurpose): Promise<Analysis> {
+    const c = this.finishedPuzzle(sessionId);
+    const player = new Chess(c.start).turn() === "w" ? "white" : "black";
+    const gen = (this.latest.get(purpose) ?? 0) + 1;
+    this.latest.set(purpose, gen);
+    this.calls.push(`analyze:${purpose}`);
+    await this.think();
+    if (this.latest.get(purpose) !== gen) return { fen, lines: [], game_over: null, superseded: true };
+    return mockAnalysis(fen, player);
+  }
+
   async getAppInfo(): Promise<AppInfo> {
     return {
-      version: "0.3.0",
+      version: "0.4.0",
       data_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare",
       logs_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare\\logs",
       dev_mode: false,
@@ -577,7 +749,10 @@ export class MockClient implements ApiClient {
     const puzzle = s.queue[s.served++];
     const chess = new Chess(puzzle.fen);
     chess.move(uciToMove(puzzle.moves[0]));
-    s.current = { puzzle, chess, start: chess.fen(), next: 1, decided: false, failed: false, hinted: false, finished: false };
+    s.current = {
+      puzzle, chess, start: chess.fen(), next: 1, decided: false, failed: false, hinted: false, finished: false,
+      firstWrong: null,
+    };
     return {
       number: s.served,
       puzzle_id: puzzle.id,
@@ -611,6 +786,7 @@ export class MockClient implements ApiClient {
     }
     const moveSound = soundOf(c.chess.fen(), uci);
     if (!ok) {
+      c.firstWrong ??= [c.chess.fen(), uci];
       if (c.decided) return { kind: "wrong", reply: null, finished: false, outcome: null, move_sound: moveSound, reply_sound: null };
       c.decided = c.failed = true;
       s.failed++;
@@ -656,18 +832,19 @@ export class MockClient implements ApiClient {
       const outcome = decide();
       c.hinted = true;
       const square = c.puzzle.moves[c.next].slice(0, 2);
-      return { kind, hint_square: square, answer_fen: null, answer_moves: [], outcome, answer_sounds: [] };
+      return { kind, hint_square: square, answer_fen: null, answer_moves: [], outcome, answer_sounds: [], refute: false };
     }
     if (c.finished) {
       const line = c.puzzle.moves.slice(1);
-      return { kind, hint_square: null, answer_fen: c.start, answer_moves: line, outcome: null, answer_sounds: lineSounds(c.start, line) };
+      const sounds = lineSounds(c.start, line);
+      return { kind, hint_square: null, answer_fen: c.start, answer_moves: line, outcome: null, answer_sounds: sounds, refute: c.firstWrong !== null };
     }
     if (!c.decided && !c.hinted) throw conflict("Try a Hint first: Show answer unlocks after it.");
     const outcome = decide();
     c.finished = true;
     const rest = c.puzzle.moves.slice(c.next);
     const fen = c.chess.fen();
-    return { kind, hint_square: null, answer_fen: fen, answer_moves: rest, outcome, answer_sounds: lineSounds(fen, rest) };
+    return { kind, hint_square: null, answer_fen: fen, answer_moves: rest, outcome, answer_sounds: lineSounds(fen, rest), refute: c.firstWrong !== null };
   }
 
   private outcome(p: MockPuzzle, win: boolean, s: MockSession) {

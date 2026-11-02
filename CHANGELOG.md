@@ -14,6 +14,11 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 ## [Unreleased]
 
 ### Added
+- **Why your move fails:** after a wrong move, **Show answer** first plays your move and Stockfish's best reply line (up to 5 moves) with the evaluation, then the solution. [FR-7.2]
+- **Stockfish after each puzzle:** once a puzzle is over, a panel shows the evaluation of the starting position and the top 3 lines for whatever is on the board, following you through the answer. Evaluations read from your side, e.g. "+3.2 for you". Nothing from the engine is ever shown while you're solving. [FR-7.2] [FR-7.3] [FR-7.7]
+- **Analysis board:** **Analyze on the board** lets you move pieces for either side after a puzzle, with Stockfish's evaluation, top lines and a best-move arrow after each move. Nothing there is scored. [FR-7.7]
+- **Install Stockfish from the app:** where the engine would appear and it isn't installed, *Stockfish isn't installed* offers **Install Stockfish**, with progress. [FR-7.5]
+- **Settings → Engine:** think time, threads and hash, **Use my own engine…** (any UCI engine that passes a self-test) and **Reinstall**. About shows the engine in use and where it is. [FR-7.4] [FR-7.5] [NFR-7]
 - **Stockfish 19 installs with setup:** `scripts/setup.py` now downloads the official Stockfish 19 build from GitHub (about 80 MB), checks it against a pinned SHA-256 before unpacking it, tests it and installs it into your data folder. `scripts/fetch_stockfish.py` installs or repairs it on its own, and running it again does nothing when the engine is already fine (`--force` reinstalls). [FR-7.1] [FR-7.5]
 
 ## [v0.3] - 2026-11-02

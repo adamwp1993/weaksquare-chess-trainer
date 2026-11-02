@@ -2,6 +2,10 @@
 // Two implementations: pywebviewClient (the real app) and mockClient (UI development, Playwright).
 import type {
   AccountStatus,
+  Analysis,
+  EngineSettings,
+  EngineStatus,
+  Refutation,
   AttemptRating,
   BucketCounts,
   ApiError,
@@ -50,6 +54,15 @@ export interface SettingValues {
   "ui.color_scheme": "light" | "dark" | "auto";
   "ui.sounds": SoundSettings;
   "puzzle_db.auto_check": boolean;
+}
+
+/** Which view asked: a newer request for the same purpose supersedes an older one. */
+export type AnalysisPurpose = "start" | "panel" | "board";
+
+export interface EngineSettingsChange {
+  think_s?: number;
+  threads?: number;
+  hash_mb?: number;
 }
 
 export interface ApiClient {
@@ -102,6 +115,23 @@ export interface ApiClient {
   getAttemptRatings(attemptIds: number[]): Promise<AttemptRating[]>;
   /** FR-9.4: your Lichess puzzle rating over time, from sync responses. */
   getRatingHistory(): Promise<RatingHistory>;
+  // ---- Stockfish (v0.4) -----------------------------------------------------------------------
+  /** Installed? Which engine, where (About, NFR-7)? An install in progress? */
+  getEngineStatus(): Promise<EngineStatus>;
+  /** FR-7.5: install the pinned Stockfish as a background job (force: reinstall). Returns the job ID. */
+  startEngineInstall(force: boolean): Promise<string>;
+  getEngineSettings(): Promise<EngineSettings>;
+  /** FR-7.4: change any of think time, threads and hash (validated again in Python). */
+  setEngineSettings(change: EngineSettingsChange): Promise<EngineSettings>;
+  /** Native picker for your own engine's .exe; null if cancelled. */
+  chooseEngineFile(): Promise<string | null>;
+  /** Test your own engine and use it if it passes (FR-7.5 advanced). Returns the job ID. */
+  startCustomEngineCheck(path: string): Promise<string>;
+  clearCustomEngine(): Promise<void>;
+  /** §7.2 step 2: the engine's answer to the move that lost the puzzle. Only once the puzzle is over. */
+  getRefutation(sessionId: number): Promise<Refutation>;
+  /** FR-7.2, 7.7: eval and top lines, only once the puzzle is over (the backend refuses earlier, FR-7.3). */
+  analyzePosition(sessionId: number, fen: string, purpose: AnalysisPurpose): Promise<Analysis>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }
