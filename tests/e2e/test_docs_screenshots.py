@@ -261,3 +261,16 @@ def test_settings_engine(page) -> None:  # type: ignore[no-untyped-def]
     section.scroll_into_view_if_needed()
     page.mouse.move(1270, 890)
     shot(page, "settings-engine")
+
+
+def test_show_me(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (FR-7.7): stepping through one of Stockfish's lines with Show me."""
+    _start(page)
+    _solve(page)
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.get_by_test_id("show-line").first.click()
+    preview = page.get_by_test_id("line-preview")
+    preview.get_by_role("button", name="Forward").click()
+    preview.get_by_role("button", name="Forward").click()
+    page.mouse.move(1270, 890)
+    shot(page, "show-me")

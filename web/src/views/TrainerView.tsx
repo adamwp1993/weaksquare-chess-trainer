@@ -12,7 +12,7 @@ import { AnalyzeButton, EnginePanel } from "../components/EnginePanel";
 import { RatingChange } from "../components/LichessStatus";
 import { SessionBar } from "../components/SessionBar";
 import { sounds } from "../sound/player";
-import { legalArrow, useEngineStatus } from "../state/engine";
+import { legalArrow, pvToSan, useEngineStatus } from "../state/engine";
 import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
@@ -59,6 +59,8 @@ export function TrainerView({
   const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number; segments: AnswerSegment[] } | null>(null);
   const [refutation, setRefutation] = useState<"loading" | "missing" | { error: string } | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
+  // "Show me" (FR-7.7): an engine line stepped through on the board, over the position it came from.
+  const [preview, setPreview] = useState<{ from: string; label: string; positions: AnswerPosition[]; step: number } | null>(null);
   const [bestMove, setBestMove] = useState<string | null>(null);
   const [engine, refreshEngine] = useEngineStatus();
   const [helpBusy, setHelpBusy] = useState(false);
@@ -132,6 +134,7 @@ export function TrainerView({
     setAnswer(null);
     setRefutation(null);
     setAnalysis(null);
+    setPreview(null);
     setBestMove(null);
     try {
       const next = await api.nextPuzzle(sessionId);
@@ -292,7 +295,16 @@ export function TrainerView({
   const analysisPos = analysis ? analysis.positions[analysis.step] : null;
   const boardFen = analysisPos ? analysisPos.fen : shown ? shown.fen : fen;
   const startFen = view ? (() => { const c = new Chess(view.fen); c.move(uciMove(view.opponent_move)); return c.fen(); })() : null;
-  const arrow = analysisPos ? legalArrow(analysisPos.fen, bestMove ?? undefined) : null;
+  // A preview belongs to the position it was opened on: moving on (answer, analysis board) ends it.
+  const linePreview = preview && preview.from === boardFen ? preview : null;
+  const previewPos = linePreview ? linePreview.positions[linePreview.step] : null;
+  const arrow = analysisPos && !previewPos ? legalArrow(analysisPos.fen, bestMove ?? undefined) : null;
+  const showLine = (from: string, pv: string[]) =>
+    setPreview({ from, label: `Showing: ${pvToSan(from, pv, pv.length)}`, positions: answerPositions(from, pv), step: 0 });
+  const stepPreview = (to: number) => {
+    if (!linePreview) return;
+    setPreview({ ...linePreview, step: Math.min(Math.max(to, 0), linePreview.positions.length - 1) });
+  };
   const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
   const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
   const stepAnalysis = (to: number) => {
@@ -305,6 +317,7 @@ export function TrainerView({
     setAnalysis(next ? next : { ...analysis }); // an illegal move snaps back
   };
   const stepAnswer = (delta: number) => {
+    if (linePreview) return stepPreview(linePreview.step + delta);
     if (analysis) return stepAnalysis(analysis.step + delta);
     if (!answer) return;
     const to = Math.min(Math.max(answer.step + delta, 0), answer.positions.length - 1);
@@ -359,10 +372,10 @@ export function TrainerView({
         <div style={{ flex: "1 1 560px", minWidth: 320 }}>
           {fen && view && (
             <Board
-              fen={boardFen ?? fen}
+              fen={previewPos ? previewPos.fen : (boardFen ?? fen)}
               orientation={view.player_color}
-              movable={analysisPos ? "both" : shown ? null : movable}
-              lastMove={analysisPos ? analysisPos.lastMove : shown ? shown.lastMove : lastMove}
+              movable={previewPos ? null : analysisPos ? "both" : shown ? null : movable}
+              lastMove={previewPos ? previewPos.lastMove : analysisPos ? analysisPos.lastMove : shown ? shown.lastMove : lastMove}
               onMove={analysisPos ? onAnalysisMove : onMove}
               hintSquare={analysisPos ? null : hintSquare}
               coordinates={coordinates}
@@ -408,7 +421,7 @@ export function TrainerView({
               </Stack>
             </Paper>
           )}
-          {answer && !analysis && (
+          {answer && !analysis && !linePreview && (
             <AnswerPlayer
               positions={answer.positions}
               step={answer.step}
@@ -436,8 +449,21 @@ export function TrainerView({
               status={engine}
               onStatusChanged={refreshEngine}
               onBestMove={setBestMove}
+              onShowLine={showLine}
             >
-              {analysis ? (
+              {linePreview ? (
+                <Stack gap={4} data-testid="line-preview">
+                  <AnswerPlayer
+                    positions={linePreview.positions}
+                    step={linePreview.step}
+                    segments={[{ label: linePreview.label, from: 0 }]}
+                    onStep={stepPreview}
+                  />
+                  <Button size="xs" variant="light" color="gray" onClick={() => setPreview(null)} data-testid="line-preview-done">
+                    Done
+                  </Button>
+                </Stack>
+              ) : analysis ? (
                 <AnalysisControls
                   state={analysis}
                   onStep={stepAnalysis}

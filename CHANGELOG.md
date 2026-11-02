@@ -17,6 +17,7 @@ Candidates: v0.4-rc1 (2026-11-02)
 ### Added
 - **Why your move fails:** after a wrong move, **Show answer** first plays your move and Stockfish's best reply line (up to 5 moves) with the evaluation, then the solution. [FR-7.2]
 - **Stockfish after each puzzle:** once a puzzle is over, a panel shows the evaluation of the starting position and the top 3 lines for whatever is on the board, following you through the answer. Evaluations read from your side, e.g. "+3.2 for you". Nothing from the engine is ever shown while you're solving. [FR-7.2] [FR-7.3] [FR-7.7]
+- **Show me:** each of Stockfish's lines has a **Show me** button that puts the line on the board for you to step through with Back / Forward; **Done** returns. [FR-7.7]
 - **Analysis board:** **Analyze on the board** lets you move pieces for either side after a puzzle, with Stockfish's evaluation, top lines and a best-move arrow after each move. Nothing there is scored. [FR-7.7]
 - **Install Stockfish from the app:** where the engine would appear and it isn't installed, *Stockfish isn't installed* offers **Install Stockfish**, with progress. [FR-7.5]
 - **Settings → Engine:** think time, threads and hash, **Use my own engine…** (any UCI engine that passes a self-test) and **Reinstall**. About shows the engine in use and where it is. [FR-7.4] [FR-7.5] [NFR-7]

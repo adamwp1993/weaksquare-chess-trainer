@@ -208,3 +208,61 @@ def test_about_shows_a_missing_custom_engine(page) -> None:  # type: ignore[no-u
     page.get_by_role("button", name="Menu").click()
     page.get_by_role("menuitem", name="About").click()
     page.get_by_test_id("about-engine").filter(has_text="can't be found").wait_for()
+
+
+def test_show_me_steps_through_a_line_on_the_board(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-7.7 "Show me" (added during v0.4's manual test): each engine line can be stepped through on the
+    board, read-only, starting at the position it came from; Done returns to that position."""
+    start(page)
+    solve(page)
+    page.get_by_test_id("engine-line").first.wait_for()
+    board = page.get_by_test_id("board")
+    before = board.get_attribute("data-fen")
+    first_line = page.get_by_test_id("engine-line").first.inner_text()
+    page.get_by_test_id("show-line").first.click()
+    preview = page.get_by_test_id("line-preview")
+    preview.wait_for()
+    assert preview.get_by_test_id("answer-segment").inner_text().startswith("Showing: ")
+    first_san = first_line.split(". ", 1)[1].split()[0]  # "+1.2 for you 28. Rb8 …" -> "Rb8"
+    assert first_san in preview.get_by_test_id("answer-segment").inner_text()
+    assert preview.get_by_test_id("answer-step").inner_text() == "Start"
+    assert board.get_attribute("data-fen") == before  # nothing moves until you step
+    preview.get_by_role("button", name="Forward").click()
+    assert preview.get_by_test_id("answer-step").inner_text().startswith("1/")
+    assert first_san in preview.get_by_test_id("answer-step").inner_text()
+    after_one = board.get_attribute("data-fen")
+    assert after_one != before
+    move = chess.Move.from_uci(next(iter(chess.Board(after_one).legal_moves)).uci())
+    play(page, move.uci(), "black")  # the board is read-only while showing a line
+    page.wait_for_timeout(300)
+    assert board.get_attribute("data-fen") == after_one
+    page.keyboard.press("ArrowRight")  # → steps the line too
+    assert preview.get_by_test_id("answer-step").inner_text().startswith("2/")
+    page.keyboard.press("ArrowLeft")
+    page.keyboard.press("ArrowLeft")
+    assert preview.get_by_test_id("answer-step").inner_text() == "Start"
+    page.get_by_test_id("line-preview-done").click()
+    assert page.get_by_test_id("line-preview").count() == 0
+    assert board.get_attribute("data-fen") == before
+    assert page.get_by_test_id("engine-line").first.inner_text() == first_line  # the panel didn't change
+
+
+def test_show_me_on_the_analysis_board(page) -> None:  # type: ignore[no-untyped-def]
+    """Show me also works on the analysis board; Done returns to your analysis position, where you can
+    keep moving."""
+    start(page)
+    solve(page)
+    page.get_by_test_id("analyze-button").click()
+    board = page.get_by_test_id("board")
+    play(page, "b5b8", "black")  # Rb8 on the analysis board
+    page.get_by_test_id("analysis-moves").filter(has_text="Rb8").wait_for()
+    analysed = board.get_attribute("data-fen")
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.get_by_test_id("show-line").first.click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
+    assert board.get_attribute("data-fen") != analysed
+    assert board.get_attribute("data-arrows") == ""  # no best-move arrow over a line being shown
+    page.get_by_test_id("line-preview-done").click()
+    assert board.get_attribute("data-fen") == analysed
+    page.get_by_test_id("analysis-controls").wait_for()
+    assert page.get_by_test_id("analysis-moves").inner_text() == "Rb8"

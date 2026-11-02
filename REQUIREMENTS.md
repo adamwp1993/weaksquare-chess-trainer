@@ -178,7 +178,8 @@ All six modes ship in version 1. The user picks one per session from a selector 
 - **FR-5.1** A **win** means the full line was solved with no wrong move and **no help used**. This matches Lichess's definition.
 - **FR-5.2** **Any help before completion counts as a loss:** Hint, Show answer or Explain.
 - **FR-5.3** A wrong move is a loss. The puzzle then continues so you can see the solution, with nothing more to lose.
-- **FR-5.4** After a puzzle ends (win or loss), Show answer and Explain are free.
+- **FR-5.4** After a puzzle ends (win or loss), Show answer and Explain are free. Show answer stays available after the end: clicking it again closes the analysis board and any line being shown, and goes back to the start of the answer (the refutation first, when there is one). On the analysis board, **Close** reads **Back to the answer** when there's an answer to go back to. (Adam, v0.4 manual test.)
+- **FR-5.12** **Try again (not scored):** after a puzzle ends, **Try again** resets the board to the puzzle's start and lets you solve it again with the usual feedback and replies. It's practice: nothing is recorded, nothing is sent to Lichess, and the result shown for the puzzle stays the one from your first attempt. Hint and Show answer are free while practising. The engine stays hidden until the practice run ends, as in any puzzle (FR-7.3). (Adam, v0.4 manual test; chosen over letting Reset clear the result, because the first result may already be on Lichess.)
 - **FR-5.5** Record per attempt: `first_move_correct`, `line_correct`, `help_used` (none / hint / answer / explain), and `time_ms`.
 
 ### 7.2 Stuck ladder (each step unlocks the next)
@@ -288,6 +289,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - the eval of the puzzle's start position, pinned at the top;
   - the eval and top 3 lines of whichever position is on the board, following you as you step through Show answer;
   - an **Analyze** button that turns the board into a free **analysis board**: you move pieces for either side (legal moves only), and after each move the engine re-analyzes and shows the eval, the top 3 lines and an arrow for its best move. Back, Forward, Reset (to the puzzle position) and Close. Nothing on the analysis board is ever scored.
+  - **Show me** next to each engine line (in the panel and on the analysis board): the line goes on the board at its starting position, read-only, and you step through it yourself with Back / Forward (or ← / →); nothing moves until you do. **Done** returns to the position you were on. (Adam, during the v0.4 manual test.)
 
 ### 9.2 LLM "Explain"
 - **FR-8.1** Optional. The button only appears when a provider and key are configured. Providers: **Anthropic** and **OpenAI**, behind one interface (`explain(context) -> ExplainResult`).

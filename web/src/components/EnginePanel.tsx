@@ -27,6 +27,7 @@ export function EnginePanel({
   status,
   onStatusChanged,
   onBestMove,
+  onShowLine,
   children,
 }: {
   sessionId: number;
@@ -37,6 +38,8 @@ export function EnginePanel({
   onStatusChanged: () => void;
   /** The current position's best move (UCI), for the analysis board's arrow. */
   onBestMove?: (uci: string | null) => void;
+  /** "Show me" (FR-7.7): step through this line on the board, from `fen`. */
+  onShowLine?: (fen: string, pv: string[]) => void;
   children?: React.ReactNode;
 }) {
   const ready = status?.state === "ready";
@@ -138,14 +141,27 @@ export function EnginePanel({
         ) : (
           <Stack gap={4} data-testid="engine-lines">
             {shown.lines.map((line, i) => (
-              <Text key={i} size="sm" data-testid="engine-line">
-                <Text span fw={700}>
-                  {line.score}
-                </Text>{" "}
-                <Text span c="dimmed">
-                  {pvToSan(shown.fen, line.pv)}
+              <Group key={i} gap={6} wrap="nowrap" align="flex-start" justify="space-between">
+                <Text size="sm" data-testid="engine-line">
+                  <Text span fw={700}>
+                    {line.score}
+                  </Text>{" "}
+                  <Text span c="dimmed">
+                    {pvToSan(shown.fen, line.pv)}
+                  </Text>
                 </Text>
-              </Text>
+                {onShowLine && line.pv.length > 0 && (
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    style={{ flexShrink: 0 }}
+                    onClick={() => onShowLine(shown.fen, line.pv)}
+                    data-testid="show-line"
+                  >
+                    Show me
+                  </Button>
+                )}
+              </Group>
             ))}
           </Stack>
         )}

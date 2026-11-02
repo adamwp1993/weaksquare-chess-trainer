@@ -305,6 +305,10 @@ Once the puzzle is over (you finished the line, or you used Show answer), the **
 
 ![The engine panel after a puzzle](img/engine-panel.png)
 
+**Show me:** each line has a **Show me** button. It puts that line on the board and you step through it yourself: **Forward ▶** plays the next move, **◀ Back** takes it back (or use **→** and **←**). Nothing moves until you step, and you can't move pieces while a line is showing. **Done** puts the board back where you were. The panel keeps showing the lines for that position meanwhile. It works on the analysis board too.
+
+![Stepping through one of Stockfish's lines](img/show-me.png)
+
 **Reading the evaluation.** Evaluations are always from **your side** (the side you played in the puzzle):
 
 | You see | It means |
@@ -345,7 +349,7 @@ In **⚙ Settings → Engine**:
 | **N** or **Enter** | Next puzzle (before the puzzle is decided, that's Skip, which counts as failed). On the session summary, a new session. |
 | **H** | Hint |
 | **A** | Show answer (once it's unlocked) |
-| **←** / **→** | Step back / forward through the answer, or through your moves on the analysis board (v0.4) |
+| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4) |
 | **C** | Show or hide the letters and numbers around the board |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
 
