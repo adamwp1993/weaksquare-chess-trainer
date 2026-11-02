@@ -291,3 +291,50 @@ All seven round-1 bugs are fixed and verified. Round 2 found **v0.4-B8**: the B1
 
 ## For Adam's manual test (round-1 list still applies)
 After the B8 fix, finish a puzzle and close the window **immediately**, a few times. `python.exe` should disappear from Task Manager, and the app should start again normally.
+
+---
+
+# Round 3, 2026-11-02 (re-verification)
+
+Branch `v0.4` at `c9255f8`. The only product change is `src/weaksquare/adapters/stockfish.py`. Same rules as before: no product code changed by QA, no `-m live`, no credentials, no Lichess calls. `%LOCALAPPDATA%\WeakSquare` still doesn't exist.
+
+## Verdict: **PASS WITH ISSUES** (no open bugs; one unnumbered log-noise note)
+
+B8 is fixed. Nothing it could affect regressed: start-up, timeout/restart, close during a search, crash recovery and the real-app exit. Every suite is green. All eight numbered bugs (B1–B8) are closed. The remaining "issue" is the shutdown log noise below, which I don't number.
+
+## B8 re-verification
+
+| Check | Result |
+|---|---|
+| `test_qa_process_exits_when_closed_while_the_engine_starts` (now a plain test) | **passes 10/10**, together with `test_qa_process_exits_after_an_engine_timeout`, `test_qa_close_during_a_hung_search_returns_within_the_bound` and the adapter's close test (`-k "exits or close_during"`, 4 passed × 10) |
+| Real sf_19: close 0, 0.05, 0.15, 0.25, 0.33, 0.36, 0.40, 0.42, 0.45, 0.5, 0.6, 0.8 s after the first `analyse`, each in a fresh process (QA's scratch `startrace.py`, the same script that reproduced B8 in round 2) | every run gives `engine_stopped`, `engine left False`, **rc 0** (process exited, 1.2–1.7 s total), no traceback. At 1.0 s the search had finished (`e2e4`), with clean exit. No `stockfish.exe` left afterwards |
+| The restart path: fake hung engine (`TIMEOUT_S` 1 s, think 0.3 s), close at 1.0–2.0 s, around the timeout and the one restart | every run has **rc 0** and `engine left False`. Before the timeout: `engine_stopped`. After it: `engine_timeout`, and the restart either isn't started (`_restart_after` returns when closed) or `_adopt` stops it. No leftover `uci_engine.py` processes. stderr still shows python-chess's own `InvalidStateError` traceback on the timeout path; that's the known upstream bug the B1 workaround covers, and it's harmless |
+| `CancelledError` handling | `test_stockfish_adapter.py::test_a_cancelled_search_is_handled` passes. After close it's the quiet `engine_stopped`; otherwise it's `engine_crashed` with one restart, never an unhandled exception |
+| Code review of `_adopt` / `close()` ordering | `close()` sets `_closed` before swapping out `_engine`. `_adopt` checks `_closed` before storing and again after. Every interleaving ends with exactly one side stopping the process. A double `_close` is harmless: python-chess guards `close()` with `_shutdown`, and `_release_thread` only resolves a pending future |
+| Real app | `smoke/test_qa_v04_r2_timeout_real_app.py` (B1, real timeout → exit, lock released) and `test_engine_flow_in_the_real_app` (close mid-search, no engine left, clean log with `Engine in use:`) both pass in the smoke run |
+
+## Round 3 evidence: commands run
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **719 passed**, 240 deselected. Summary at 136 s, **exited on its own** at 138 s |
+| `uv run pytest -m engine` | **10 passed** |
+| `npm.cmd --prefix web run build`, `uv run pytest -m smoke` | **21 passed, 1 skipped** (opt-in download test) in 183 s. `test_enter_after_mouse_clicks_is_next_in_the_real_app` passed |
+| `uv run pytest -m e2e` | **129 passed** (front end unchanged since round 2) |
+| `uv run pytest -m fulldb` | **59 passed, 1 xfailed** (known v0.2-B2) |
+| `uv run ruff check .` / `ruff format --check .` / `uv run mypy src` | clean / 204 formatted / no issues in 67 files |
+| `npm.cmd --prefix web run typecheck` / `lint` | clean / clean |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [v0.4] |
+| `uv lock --check` | up to date. No dependency, lockfile, migration, docs or front-end change in this commit, apart from the ARCHITECTURE §7 entry, which now covers B8 |
+
+## The shutdown "database is closed" log noise (unnumbered note)
+- **When:** a bridge request queued behind the search that `close()` kills fails with `RuntimeError: database is closed`. The bridge logs it as `bridge analyze_position crashed` with a traceback at ERROR level, after the window is gone.
+- **Impact:** nothing leaks, nothing is user-visible, and it needs a close mid-search with a second request queued.
+- **Why it isn't a numbered bug:** it breaks no requirement. It's still worth a small tidy-up later, because a spurious ERROR traceback in `weaksquare.log` could mislead someone reading a bug report. For example, `EngineService.analyse` could answer `engine_stopped` once the service is closed, instead of reaching the closed DB.
+
+## Tests in round 3
+QA added no new tests. The builder's B8 and `CancelledError` regression tests, and QA's round-2 tests, are committed in `c9255f8`.
+
+## For Adam's manual test (the round-1 list, plus round 2's)
+- Finish a puzzle and close the window **immediately**, a few times. `python.exe` should disappear from Task Manager, and the app should start again normally.
