@@ -11,7 +11,7 @@ import random
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
@@ -22,6 +22,7 @@ from weaksquare.core.modes.standard import StandardMode, StandardState
 from weaksquare.core.move_sounds import MoveSound, sounds_for_line
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
+from weaksquare.core.scoring import angle_for
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class Attempts(Protocol):
         finished_at: str,
         result: AttemptResult,
         puzzle_rating: int | None = None,
+        sync: Any = None,
     ) -> int: ...
 
     def session_tally(self, session_id: int) -> object: ...
@@ -69,6 +71,20 @@ class Attempts(Protocol):
 
 class Sessions(Protocol):
     def create(self, started_at: str, mode: str, filters: dict, queue_size: int | None) -> int: ...
+
+
+class SyncHooks(Protocol):
+    """The Lichess sync queue, as the session sees it (v0.3; services/sync.py)."""
+
+    def fields_for(self, puzzle_id: str) -> Any: ...  # QueueFields(account, already_played)
+
+    def played_before(self, puzzle_id: str) -> bool: ...
+
+    def recorded(self) -> None: ...
+
+    def attempt_ratings(self, attempt_ids: list[int]) -> list: ...  # list[RatingInfo]
+
+    def session_change(self, session_id: int) -> int | None: ...
 
 
 @dataclass
@@ -83,6 +99,7 @@ class _Session:
     spec: FilterSpec
     match_count: int
     db_version: int
+    rated: bool = True  # FR-1.9: the session's Rated toggle
     queue: deque[int] = field(default_factory=deque)
     served_keys: set[int] = field(default_factory=set)
     served_ids: list[str] = field(default_factory=list)
@@ -117,6 +134,7 @@ class PuzzleView:
     player_color: str
     rating: int
     opponent_sound: MoveSound  # FR-1.13: the opponent's first move plays a sound too
+    already_played: bool = False  # Lichess has seen it from you: rating unaffected (badge)
 
 
 @dataclass(frozen=True)
@@ -126,6 +144,8 @@ class Outcome:
     themes: list[str]
     solution: list[str]
     rating: int
+    attempt_id: int = 0
+    lichess: Any = None  # RatingInfo: the Lichess rating change, or why there isn't one (FR-6.11b)
 
 
 @dataclass(frozen=True)
@@ -150,12 +170,24 @@ class SessionStats:
     finished: bool
     all_time_solved: int
     all_time_failed: int
+    rating_change: int | None = None  # FR-6.11c: the sum of the changes Lichess returned
 
 
 class SessionService:
     def __init__(
-        self, puzzles: PuzzleSource, attempts: Attempts, sessions: Sessions, clock: Clock, rng: random.Random
+        self,
+        puzzles: PuzzleSource,
+        attempts: Attempts,
+        sessions: Sessions,
+        clock: Clock,
+        rng: random.Random,
+        sync: SyncHooks | None = None,
+        queue_fields: Any = None,
     ) -> None:
+        """`sync` queues every decided attempt for Lichess (v0.3); without it attempts stay local.
+        `queue_fields` builds the repo's SyncFields (passed in so services don't import adapters)."""
+        self._sync = sync
+        self._queue_fields = queue_fields
         self._puzzles = puzzles
         self._attempts = attempts
         self._sessions_repo = sessions
@@ -165,7 +197,7 @@ class SessionService:
         self._mode = StandardMode()
         self._sessions: dict[int, _Session] = {}
 
-    def start(self, spec: FilterSpec) -> SessionInfo:
+    def start(self, spec: FilterSpec, rated: bool = True) -> SessionInfo:
         buckets = [spec.bucket(i) for i in range(len(spec.ratios))]
         if buckets:
             count, bucket_counts = self._puzzles.count_with_buckets(spec)
@@ -175,7 +207,7 @@ class SessionService:
             raise ValidationError("No puzzles match these filters. Widen them and try again.")
         sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), self._mode.name,
                                          spec.to_json(), spec.queue_size)  # fmt: skip
-        session = _Session(sid, spec, count, self._puzzles.version())
+        session = _Session(sid, spec, count, self._puzzles.version(), rated)
         if buckets:
             # An empty group is left out and the others share its slots (renormalized).
             session.buckets = buckets
@@ -194,9 +226,21 @@ class SessionService:
     def _record(self, s: _Session, result: AttemptResult) -> Outcome:
         assert s.current is not None
         p = s.current.state.puzzle
-        self._attempts.append(p.ref, s.id, self._mode.name, s.current.started_at,
-                              self._clock.now().isoformat(timespec="seconds"), result, p.rating)  # fmt: skip
-        return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating)
+        sync_fields = None
+        if self._sync is not None and self._queue_fields is not None and p.ref.source == "lichess":
+            q = self._sync.fields_for(p.ref.id)
+            sync_fields = self._queue_fields(status="pending", rated=s.rated,
+                                             angle=angle_for(s.spec, p.themes, p.length),
+                                             account=q.account, already_played=q.already_played)  # fmt: skip
+        aid = self._attempts.append(p.ref, s.id, self._mode.name, s.current.started_at,
+                                    self._clock.now().isoformat(timespec="seconds"), result, p.rating,
+                                    sync_fields)  # fmt: skip
+        info = None
+        if sync_fields is not None and self._sync is not None:
+            found = self._sync.attempt_ratings([aid])
+            info = found[0] if found else None
+            self._sync.recorded()
+        return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating, aid, info)
 
     def next_puzzle(self, session_id: int) -> PuzzleView | None:
         """The next puzzle, or None when the session is complete. Moving on from an undecided
@@ -233,9 +277,10 @@ class SessionService:
                 s.served += 1
                 s.served_ids.append(puzzle.ref.id)
                 s.current = _Current(state, self._clock.now().isoformat(timespec="seconds"))
+                played = self._sync.played_before(puzzle.ref.id) if self._sync is not None else False
                 return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, puzzle.moves[0],
                                   "white" if state.board.turn else "black", puzzle.rating,
-                                  sounds_for_line(puzzle.fen, puzzle.moves[:1])[0])  # fmt: skip
+                                  sounds_for_line(puzzle.fen, puzzle.moves[:1])[0], played)  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
 
     def _follow_reimport(self, s: _Session) -> None:
@@ -344,4 +389,5 @@ class SessionService:
             finished=finished,
             all_time_solved=a.solved,  # type: ignore[attr-defined]
             all_time_failed=a.failed,  # type: ignore[attr-defined]
+            rating_change=self._sync.session_change(session_id) if self._sync is not None else None,
         )

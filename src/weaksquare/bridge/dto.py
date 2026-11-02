@@ -132,12 +132,25 @@ class PuzzleView:
     player_color: Literal["white", "black"]
     rating: int
     opponent_sound: MoveSound  # FR-1.13
+    already_played: bool  # Lichess has seen this puzzle from you: rating unaffected (badge)
 
 
 @dataclass(frozen=True)
 class ThemeLabel:
     key: str
     name: str
+
+
+RatingStatus = Literal["syncing", "offline", "unrated", "already_played", "not_rated", "done"]
+
+
+@dataclass(frozen=True)
+class AttemptRating:
+    """FR-6.11b: an attempt's Lichess rating change, or why there isn't one. `diff` only with "done"."""
+
+    attempt_id: int
+    status: RatingStatus
+    diff: int | None
 
 
 @dataclass(frozen=True)
@@ -150,6 +163,8 @@ class Outcome:
     themes: list[ThemeLabel]
     solution: list[str]  # UCI, from the player's first move
     puzzle_url: str
+    attempt_id: int
+    lichess: AttemptRating | None  # None when the attempt isn't synced (not a Lichess puzzle)
 
 
 @dataclass(frozen=True)
@@ -184,6 +199,7 @@ class SessionStats:
     finished: bool
     all_time_solved: int
     all_time_failed: int
+    rating_change: int | None  # FR-6.11c: summed only from changes Lichess returned
 
 
 @dataclass(frozen=True)
@@ -217,6 +233,58 @@ class UpdateOffer:
     approx_new: int | None
 
 
+@dataclass(frozen=True)
+class AccountStatus:
+    """Your Lichess account (FR-1.1, 1.6, 6.11a). Never a token (SR-1). `rating` only when signed in,
+    and only as Lichess reported it."""
+
+    state: Literal["signed_out", "checking", "signed_in", "offline", "expired"]
+    username: str | None
+    rating: int | None
+    provisional: bool
+
+
+@dataclass(frozen=True)
+class SyncStatus:
+    """The sync queue (FR-1.7, 6.16): `pending` solves waiting; `history_count` puzzles known from
+    your Lichess history (FR-6.17)."""
+
+    state: Literal["idle", "syncing", "offline", "waiting", "signed_out"]
+    pending: int
+    history_count: int
+
+
+@dataclass(frozen=True)
+class SyncEvent:
+    """Pushed as the `sync` event whenever the queue or an attempt's rating info changes."""
+
+    status: SyncStatus
+    attempts: list[AttemptRating]
+
+
+@dataclass(frozen=True)
+class RatingPoint:
+    at: str  # ISO time of the attempt that carried the new rating
+    rating: int
+    session_id: int | None
+
+
+@dataclass(frozen=True)
+class SessionChange:
+    session_id: int
+    started_at: str
+    change: int
+    solves: int
+
+
+@dataclass(frozen=True)
+class RatingHistory:
+    """FR-9.4: your Lichess puzzle rating over time (from sync responses), and the change per session."""
+
+    points: list[RatingPoint]
+    sessions: list[SessionChange]
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -235,6 +303,7 @@ EXPORTED: list[type] = [
     SessionInfo,
     PuzzleView,
     ThemeLabel,
+    AttemptRating,
     Outcome,
     MoveFeedback,
     HelpResponse,
@@ -242,4 +311,10 @@ EXPORTED: list[type] = [
     StatRow,
     StatsReport,
     UpdateOffer,
+    AccountStatus,
+    SyncStatus,
+    SyncEvent,
+    RatingPoint,
+    SessionChange,
+    RatingHistory,
 ]

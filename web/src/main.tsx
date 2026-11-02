@@ -1,4 +1,5 @@
 import "@mantine/core/styles.css";
+import "@mantine/charts/styles.css";
 import { MantineProvider, createTheme, type CSSVariablesResolver, type MantineColorScheme } from "@mantine/core";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -28,6 +29,7 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
     "--mantine-color-teal-light-color": "#066649", // light badges (themes): 6:1 on their pale teal
     "--mantine-primary-color-light-color": "#066649",
     "--mantine-color-green-text": "#2b7a3b", // "Correct" / "Solved": 5.3:1 (Mantine's is 4.4:1)
+    "--mantine-color-yellow-light-color": "#7a4a00", // the sync chip (v0.3): 6.7:1 on its pale yellow
   },
   dark: {
     "--mantine-color-dimmed": "#a3a3a3", // 6.0:1 on the dark background

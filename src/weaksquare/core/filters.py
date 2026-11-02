@@ -2,7 +2,8 @@
 
 The whole §5 schema is defined in one place, because presets, the Coach and the angle rule all share it.
 v0.1 implemented themes (ANY/ALL), excluded themes, rating, move count, side, random order and queue
-size; v0.2 adds openings, quality, the history filters, ratios and the other orders. Fields for later
+size; v0.2 adds openings, quality, the history filters, ratios and the other orders; v0.3 adds
+"exclude played on Lichess". Fields for later
 versions are part of the schema but must keep their defaults: `validate()` rejects them with
 `unsupported_in_this_version` instead of silently ignoring them.
 """
@@ -69,8 +70,9 @@ class FilterSpec:
     exclude_solved_here: bool = True  # FR-3.9: hide puzzles you've won at least once here
     only_my_misses: bool = False  # FR-3.9: only puzzles whose latest attempt here was a loss
     ratios: tuple[RatioBucket, ...] = ()  # FR-3.10: replaces `themes` when set
+    # --- v0.3 ---------------------------------------------------------------------------
+    exclude_played_on_lichess: bool = True  # FR-3.9: hide puzzles in your Lichess history (on by default)
     # --- later versions (schema only; must stay at the defaults) -------------------------
-    exclude_played_on_lichess: bool = False  # FR-3.9 (v0.3)
     source: Source = "lichess"  # FR-3.15 (v0.8)
 
     @property
@@ -85,6 +87,11 @@ class FilterSpec:
     def excludes_solved(self) -> bool:
         """Only my misses wins over Exclude solved: a puzzle you won once and missed since is a miss."""
         return self.exclude_solved_here and not self.only_my_misses
+
+    @property
+    def excludes_played(self) -> bool:
+        """Only my misses wins here too: a miss is a replay, and you've usually synced it to Lichess."""
+        return self.exclude_played_on_lichess and not self.only_my_misses
 
     def bucket(self, index: int) -> FilterSpec:
         """The pool of ratio bucket `index`: these filters, with the bucket's themes (ANY) as the themes."""
@@ -147,7 +154,6 @@ class FilterSpec:
             raise ValidationError(f"The minimum number of plays must be between 0 and {MAX_MIN_PLAYS:,}.")
         self._validate_ratios()
         later = {
-            "exclude_played_on_lichess": self.exclude_played_on_lichess,
             "source": self.source != "lichess",
         }
         used = [k for k, v in later.items() if v]
@@ -217,7 +223,7 @@ def _coerce(key: str, value: Any) -> Any:
     raise ValidationError(f"unknown filter field: {key}")  # pragma: no cover
 
 
-SAVED_FILTERS_VERSION = 2
+SAVED_FILTERS_VERSION = 3
 
 
 def upgrade_saved(data: Any, version: int) -> Any:
@@ -234,4 +240,6 @@ def upgrade_saved(data: Any, version: int) -> Any:
         if out.get("min_plays") is None:
             out["min_plays"] = DEFAULT_MIN_PLAYS
         out["exclude_solved_here"] = True
+    if version < 3:
+        out["exclude_played_on_lichess"] = True  # v0.3 planning: on by default
     return out

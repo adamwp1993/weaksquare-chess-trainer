@@ -1,7 +1,7 @@
 {
   "name": "weaksquare-web",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -12,12 +12,15 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@mantine/charts": "^9.7.4",
     "@mantine/core": "^9.7.4",
     "@mantine/hooks": "^9.7.4",
     "chess.js": "^1.4.0",
     "chessground": "^9.2.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-is": "^19.3.1",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

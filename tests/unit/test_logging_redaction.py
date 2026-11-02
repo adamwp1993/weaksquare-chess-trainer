@@ -23,6 +23,14 @@ def test_redacts_known_patterns() -> None:
     assert "state=1" in out
 
 
+def test_redacts_json_token_fields() -> None:
+    body = '{"token_type": "Bearer", "access_token": "opaque-value-123", "code_verifier": "v-456"}'
+    out = redact(body)
+    assert "opaque-value-123" not in out
+    assert "v-456" not in out
+    assert '"token_type": "Bearer"' in out
+
+
 def test_filter_redacts_args_and_tracebacks(tmp_path: Path) -> None:
     logger = logging.getLogger("redaction-test")
     logger.propagate = False

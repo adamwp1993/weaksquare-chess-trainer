@@ -60,13 +60,14 @@ def services(paths: config.Paths, clock: FixedClock, rng: random.Random, fixture
     """Fully wired services on a temp data folder with the fixture puzzles imported."""
     import shutil
 
+    from tests.helpers import fake_service_kwargs
     from weaksquare.adapters.db.migrate import migrate
     from weaksquare.app import build_services
     from weaksquare.jobs.runner import JobRunner
 
     shutil.copyfile(fixture_puzzles_db, paths.puzzles_db)
     migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock)
-    s = build_services(paths, clock, JobRunner(), rng)
+    s = build_services(paths, clock, JobRunner(), rng, **fake_service_kwargs())
     yield s
     s.close()
 
@@ -76,6 +77,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--fulldb-path",
         default=None,
         help="puzzles.db for -m fulldb (default: the dev data folder's, read-only)",
+    )
+    parser.addoption(
+        "--record-lichess",
+        action="store_true",
+        default=False,
+        help="with -m live: write scrubbed, anonymized copies of the real responses to tests/fixtures/http/lichess",
     )
 
 

@@ -259,7 +259,7 @@ def test_bridge_rejects_bad_arguments_without_crashing(services, paths, clock) -
         lambda: api.open_folder("C:/Windows"),
         lambda: api.get_job(None),
         lambda: api.start_puzzle_import("x" * 2000),
-        lambda: api.set_setting("mixer.filters", {"exclude_played_on_lichess": True}),
+        lambda: api.set_setting("mixer.filters", {"source": "my"}),
     ]
     for call in bad_calls:
         r = call()
@@ -274,7 +274,9 @@ def test_rng_used_for_queue_is_the_injected_one(services, paths, clock, fixture_
     from weaksquare.jobs.runner import JobRunner
 
     def ids(seed: int) -> list[str]:
-        s = build_services(paths, clock, JobRunner(), random.Random(seed))
+        from tests.helpers import fake_service_kwargs
+
+        s = build_services(paths, clock, JobRunner(), random.Random(seed), **fake_service_kwargs())
         sid = s.sessions.start(FilterSpec(queue_size=None)).session_id
         out = [s.sessions.next_puzzle(sid).puzzle_id for _ in range(60)]
         s.close()

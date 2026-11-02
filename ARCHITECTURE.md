@@ -62,7 +62,9 @@ weaksquare-chess-trainer/
 │  │  ├─ move_sounds.py        # which sound a move makes (v0.2)
 │  │  ├─ stats.py              # Stats grouping: theme, length, rating band (v0.2)
 │  │  ├─ db_update.py          # newer-export rules, puzzle-count parsing (v0.2)
-│  │  ├─ scoring.py            # win/loss, help → loss, angle selection
+│  │  ├─ scoring.py            # angle selection (v0.3), the result panel's rating status
+│  │  ├─ oauth.py              # PKCE challenge, authorize URL, callback check (v0.3)
+│  │  ├─ lichess.py            # LichessClient protocol, result types, response parsers (v0.3)
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
@@ -71,6 +73,8 @@ weaksquare-chess-trainer/
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
 │  │                           #   v0.2: presets.py, stats.py, ui_settings.py, db_update.py (update check job)
+│  │                           #   v0.3: account.py (sign-in, launch check, sign-out), sync.py (the queue),
+│  │                           #         lichess_history.py (history import)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -86,7 +90,9 @@ weaksquare-chess-trainer/
 │  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
 │  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
 │  │  ├─ stockfish.py          # EngineClient impl (python-chess UCI)  (v0.4)
-│  │  ├─ lichess.py            # (v0.3)   chesscom.py (v0.8)
+│  │  ├─ lichess.py            # LichessHttp (v0.3)   chesscom.py (v0.8)
+│  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
+│  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  └─ llm/                  # LLMProvider protocol, anthropic.py, openai.py (v0.7)
 │  └─ jobs/runner.py           # background jobs: queue, progress, cancel
 ├─ web/
@@ -104,11 +110,14 @@ weaksquare-chess-trainer/
 │  ├─ e2e/                     # Playwright against web/ with mockClient
 │  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
 │  ├─ fulldb/                  # opt-in timings against the full puzzle DB
+│  ├─ live/                    # opt-in, Adam only: Lichess with the weaksquare-test token (v0.3)
+│  ├─ fakes/                   # fake Lichess client, listener, browser, scheduler (v0.3)
 │  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/);
 │                              #   tools/ holds the dev-only generator and recorder scripts
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
                                #   (thin CLIs over services, download + hash check), check_docs.py,
-                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts), make_icon.py (v0.2)
+                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts), make_icon.py (v0.2),
+                               #   set_test_token.py (v0.3; Adam runs it, never Claude Code)
 ```
 
 `services/` and later `adapters/` modules are created **in the version that first needs them**. The tree shows the end state.
@@ -196,6 +205,30 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-01, v0.3: `@mantine/charts` + `recharts` for the rating trend
+- Context: FR-9.4 needs a line chart on Stats; Adam chose a library over a hand-written SVG at planning (more charts follow with the Coach and Progress pages).
+- Decision: npm runtime dependencies **`@mantine/charts`** (MIT, the same 9.7.x as `@mantine/core`), **`recharts`** (MIT) and its peer **`react-is`** (MIT, the same version as React), all checked on npm. `components/RatingTrend.tsx` draws a single series: a 2px line with 4px dots, the crosshair tooltip, horizontal grid only, and no legend (the title names it). The per-session table is its table view. The line color is checked with the dataviz palette validator against each surface: teal-9 `#087f5b` in Light, teal-8 `#0ca678` in Dark. Points are only `attempts.rating_after`, the glicko rating Lichess returned.
+- Alternatives: a hand-written SVG chart (no dependency, but no tooltip or axes for free).
+- Consequences: the bundle grows by 115 kB gzipped (218 → 333 kB; it loads from disk, so start-up is barely affected). Recharts renders inline SVG with inline styles, which the CSP already allows for Mantine. `npm audit --omit=dev` reports nothing.
+
+### 2026-11-01, v0.3: Lichess sign-in, the sync queue, the history import and the angle rule
+- Context: FR-6.1–6.17, FR-1.6/1.7, and Adam's v0.3 planning decisions (REQUIREMENTS.md FR-3.9, 6.14, 6.16).
+- Decision:
+  - **Shapes:** `core/lichess.py` holds the `LichessClient` protocol, its result types and defensive parsers. `adapters/lichess.py` (`LichessHttp`) is the httpx client. `tests/fakes/lichess.py` is the fake, which loads its defaults from `tests/fixtures/http/lichess/`. `http.py` gains JSON, form, delete and ndjson calls. Each takes a per-request `token`, never a client default. It also gains `Unauthorized` (401) and `RateLimited` (429, not retried in the client).
+  - **Sign-in:** `core/oauth.py` provides the PKCE challenge, the authorize URL and the callback check. The verifier and state come from `secrets.token_urlsafe`, never the seeded rng. `adapters/oauth_loopback.py` is a stdlib `http.server` on `127.0.0.1:0` that takes exactly one `/callback`; other paths get a 404 without consuming it. It shuts down after the callback, after 5 minutes or on cancel, and never logs the query. `AccountService` runs the sign-in as a job and checks a stored token at launch: a 401 means expired (the token is deleted), a network error means offline, with rechecks after 30 s, then up to 10 min. Sign-out revokes the token first; when Lichess can't be reached, *Remove from this PC anyway* is needed. Signing in again revokes the previous token. Retries go through an injected scheduler (`adapters/scheduler.py`).
+  - **The queue is the attempts log** (decision 4). user.db `0003` adds nullable `rated`, `angle`, `sync_status`, `sync_account`, `already_played`, `rating_diff`, `rating_after` and `synced_at`, and marks every older attempt `local` (never synced). A solve is queued for the account that was signed in when you made it. A solve made while signed out goes to the next account that signs in. `SyncService` drains the queue in a single `lichess_sync` job, grouped by angle, at most 99 per request and one solution per puzzle per request, since Lichess answers per puzzle id. A batch is marked synced only on a 2xx. Ids Lichess didn't return are marked `skipped`, and any other refusal marks the batch `failed`. Network errors and 5xx back off from 30 s to 10 min, and a 429 waits at least 60 s or `Retry-After`. While a retry waits, new solves only join the queue and send nothing (QA v0.3-B5). A sign-in may cut a network backoff short, but nothing cuts a 429 wait. A 429 always starts its own full wait, and only the newest scheduled retry acts, so an older network-backoff timer can't end it early (v0.3-B8). A network failure while a retry is already pending still holds new solves until it fires (v0.3-B9). Batches are never resent inside the HTTP client (`retry=False`), and a response Lichess sent that can't be parsed counts as a refusal, not as offline (v0.3-B1, B4). A token obtained during a sign-in that then fails is revoked (v0.3-B3). The response's `glicko.rating` is stored as `rating_after` on the batch's last attempt and sent to the header. That's the only source of the rating besides `GET /api/account`.
+  - **History:** `lichess_history(puzzle_id, played_at, win)` is a cache for the signed-in account. It's filled by the `lichess_history_import` job (`since` is saved only after a complete stream) and by every synced solve, and cleared when another account signs in.
+  - **Exclude played on Lichess** (on by default; saved filters get it once, `SAVED_FILTERS_VERSION` 3) joins v0.2's subtraction: the count without the hiding filters, minus the matching IDs in `SOLVED_IDS UNION PLAYED_IDS`. Only my misses overrides it, as it overrides Exclude solved. Presets saved in v0.2 keep the `false` they were saved with: presets are never changed silently. On the full DB with 20,000 history IDs, the default count takes 363 ms.
+  - **Angle** (`core/scoring.py`): `mix` only when themes, move count and ratios are all unset. Otherwise the selected theme the puzzle matched (motif-like groups, then phases/goals/origin, then lengths, and selection order within a tier), or the length theme when only the move count was narrowed.
+- Alternatives: a separate `sync_queue` table (a second copy of the log); one request per solve (a ~200 solves/hour rate limit makes batching matter after a long offline session); keyring-backed tests (they would touch real credentials).
+- Consequences: the response shapes are from the API spec until Adam's live run records real ones (`tests/fixtures/http/lichess/README.md` says which). If a real response differs, only the parsers change.
+
+### 2026-11-01, v0.3: `keyring` and the secret store
+- Context: FR-6.5 and SR-1/SR-7: the Lichess token lives only in Windows Credential Manager.
+- Decision: Python runtime dependency **`keyring`** (MIT; checked on PyPI; on Windows it pulls in `pywin32-ctypes` and `jaraco.*`). `adapters/secret_store.py` is the only importer and provides the `SecretStore` protocol, `KeyringSecretStore` and `MemorySecretStore`. That last one is what tests use, and the default for scripts that need no secret. Each data folder has its own entry: `weaksquare` for the real folder, `weaksquare-dev` for the dev folder and `weaksquare-<hash of the path>` for any other `WEAKSQUARE_DATA_DIR` (so smoke-test launches start signed out and never call Lichess with a stored sign-in). The live-test token uses `weaksquare-test` (SR-13). Under pytest, `KeyringSecretStore` refuses anything but `weaksquare-test`. Secrets are at most 1,200 characters: Credential Manager holds 2,560 bytes and keyring writes UTF-16, which is still well over FR-6.7's 512. keyring errors are re-raised as `SecretStoreError` with the error type only. The log redaction also covers JSON `"access_token": "…"` fields.
+- Alternatives: calling `CredWrite` through ctypes (more code, and v1.1's macOS/Linux port would need keyring's backends anyway).
+- Consequences: any code running as your Windows user can read the token (SR-15, accepted). Sign-out revokes it on Lichess.
 
 ### 2026-11-01, v0.2: Fast counts with Exclude solved and ratios (found by the full-DB self-check)
 - Context: with v0.2's defaults, the full-DB count took 4 s. `p.id NOT IN (solved ids)` needs `id`, which the covering index doesn't hold, so SQLite read every table row. A ratio mix also counted each group in its own scan, and its live match count ignored the groups' themes (counting the whole database).

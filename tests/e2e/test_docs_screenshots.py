@@ -169,3 +169,30 @@ def test_update_banner(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("update-banner").wait_for()
     page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
     shot(page, "update-banner")
+
+
+def test_startup(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.3: the startup page, signed out (the first thing a new user sees)."""
+    page.goto(page.base_url + "/?startup=show&account=signed_out")
+    page.get_by_test_id("startup").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "startup")
+
+
+def test_rating_change(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.3: a solved, rated puzzle with Lichess's +8, the header rating and the session total."""
+    from tests.e2e.test_mixer_v02 import pick_theme
+    from tests.e2e.test_qa_v01_ui import your_turn
+
+    page.goto(page.base_url + "/?sync=slow")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    pick_theme(page, "themes-picker", "mate in 1", "Mate in 1")
+    page.get_by_role("button", name="Start").click()
+    your_turn(page)
+    play(page, "f1f8", "white")
+    page.get_by_test_id("outcome").filter(has_text="Solved").wait_for()
+    page.evaluate("window.__mockSyncNow()")
+    page.get_by_test_id("rating-change").filter(has_text="+8").wait_for()
+    page.get_by_test_id("session-rating").filter(has_text="+8 this session").wait_for()
+    panel_top(page)
+    shot(page, "rating-change")

@@ -4,11 +4,17 @@
 // Scenarios via the page URL: `?scenario=empty` starts with no puzzle database imported, and
 // `?scenario=upgrade` with a v0.1 database that needs the local upgrade, and `?scenario=update`
 // with a newer puzzle export to offer (FR-2.5).
+// Lichess (v0.3): `?account=signed_out|offline|expired` (default: signed in as "your_name"),
+// `?signin=fail` makes Sign in fail, `?revoke=offline` makes Sign out unable to reach Lichess, and
+// `?sync=slow` holds every solve at "Syncing…" until the test calls `window.__mockSyncNow()`, and
+// `?played=1` puts the second mock puzzle in your Lichess history (the "already played" badge).
 import { Chess } from "chess.js";
 import type { ApiClient, BackendEvent, SettingValues } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
+  AccountStatus,
+  AttemptRating,
   BucketCounts,
   AppInfo,
   FilterSpec,
@@ -19,10 +25,12 @@ import type {
   Preset,
   PuzzleDbStatus,
   PuzzleView,
+  RatingHistory,
   SessionInfo,
   SessionStats,
   StatRow,
   StatsReport,
+  SyncStatus,
   UpdateOffer,
   ThemeGroup,
   UiSettings,
@@ -121,8 +129,18 @@ function bucketSpec(spec: FilterSpec, i: number): FilterSpec {
   return { ...spec, themes: spec.ratios[i].themes, match: "any", ratios: [] };
 }
 
+// The mock's Lichess rating history (FR-9.4): fixed points, so the Stats chart is stable.
+const RATING_POINTS: [string, number, number][] = [
+  ["2026-10-20T19:05:00", 1772, 1], ["2026-10-20T19:31:00", 1788, 1], ["2026-10-22T20:10:00", 1781, 2],
+  ["2026-10-22T20:40:00", 1799, 2], ["2026-10-25T18:15:00", 1806, 3], ["2026-10-25T18:52:00", 1795, 3],
+  ["2026-10-28T21:00:00", 1813, 4], ["2026-10-28T21:33:00", 1826, 4], ["2026-10-31T17:20:00", 1834, 5],
+]; // prettier-ignore
+const MOCK_USER = "your_name";
+
 interface MockSession {
   spec: FilterSpec;
+  rated: boolean;
+  attempts: number[];
   queue: MockPuzzle[];
   served: number;
   current: {
@@ -157,6 +175,16 @@ export class MockClient implements ApiClient {
   private presets = new Map<string, Preset>();
   private offer: UpdateOffer | null = null;
   private history = new Map<string, boolean[]>(); // puzzle id -> results here, oldest first
+  private account: AccountStatus = { state: "signed_in", username: MOCK_USER, rating: 1834, provisional: false };
+  private lichessHistory = new Set<string>(); // puzzles "played on Lichess"
+  private ratings = new Map<number, AttemptRating>();
+  private attemptPuzzle = new Map<number, { id: string; win: boolean; rated: boolean }>();
+  private queuedPuzzles = new Set<string>(); // sent or waiting: Lichess will have seen these
+  private nextAttempt = 1;
+  private points: [string, number, number][] = [...RATING_POINTS];
+  private slowSync = false;
+  private signInFails = false;
+  private revokeOffline = false;
   readonly calls: string[] = [];
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
@@ -166,6 +194,17 @@ export class MockClient implements ApiClient {
     const scheme = params.get("scheme");
     if (scheme === "dark" || scheme === "auto") this.settings.color_scheme = scheme;
     if (params.get("sounds") === "off") this.settings.sounds = { ...this.settings.sounds, on: false };
+    const account = params.get("account");
+    if (account === "signed_out") this.account = { state: "signed_out", username: null, rating: null, provisional: false };
+    if (account === "offline") this.account = { state: "offline", username: MOCK_USER, rating: null, provisional: false };
+    if (account === "expired") this.account = { state: "expired", username: MOCK_USER, rating: null, provisional: false };
+    if (params.get("played") === "1") this.lichessHistory.add(MOCK_PUZZLES[1].id);
+    this.slowSync = params.get("sync") === "slow";
+    this.signInFails = params.get("signin") === "fail";
+    this.revokeOffline = params.get("revoke") === "offline";
+    if (typeof window !== "undefined") {
+      (window as unknown as { __mockSyncNow: () => void }).__mockSyncNow = () => this.drain();
+    }
     this.status =
       scenario === "empty" ? { ...EMPTY } : scenario === "upgrade" ? { ...INSTALLED, needs_upgrade: true } : { ...INSTALLED };
     if (scenario === "update") {
@@ -188,8 +227,127 @@ export class MockClient implements ApiClient {
   private matchesHistory(p: MockPuzzle, spec: FilterSpec) {
     const h = this.history.get(p.id) ?? [];
     if (spec.only_my_misses) return h.length > 0 && !h[h.length - 1];
+    if (spec.exclude_played_on_lichess && this.lichessHistory.has(p.id)) return false;
     if (spec.exclude_solved_here) return !h.includes(true);
     return true;
+  }
+
+  // ---- Lichess (v0.3) -----------------------------------------------------------------------
+  private pushAccount() {
+    const payload = { ...this.account };
+    this.listeners.forEach((l) => l({ name: "account", payload }));
+  }
+
+  private syncStatusNow(): SyncStatus {
+    const pending = [...this.ratings.values()].filter((r) => r.status === "syncing" || r.status === "offline").length;
+    const state = this.account.state === "signed_in" ? "idle" : this.account.state === "offline" ? "offline" : "signed_out";
+    return { state, pending, history_count: this.account.state === "signed_out" ? 0 : this.lichessHistory.size + 1244 };
+  }
+
+  private pushSync(attempts: AttemptRating[]) {
+    const payload = { status: this.syncStatusNow(), attempts };
+    this.listeners.forEach((l) => l({ name: "sync", payload }));
+  }
+
+  /** Queue one attempt (FR-6.16) and say what the result panel shows right away. */
+  private queue(p: MockPuzzle, win: boolean, rated: boolean, s: MockSession): { id: number; info: AttemptRating } {
+    const id = this.nextAttempt++;
+    s.attempts.push(id);
+    const played = this.lichessHistory.has(p.id) || this.queuedPuzzles.has(p.id);
+    const online = this.account.state === "signed_in";
+    const status: AttemptRating["status"] = !rated ? "unrated" : played ? "already_played" : online ? "syncing" : "offline";
+    const info: AttemptRating = { attempt_id: id, status, diff: null };
+    this.ratings.set(id, info);
+    this.attemptPuzzle.set(id, { id: p.id, win, rated: rated && !played });
+    this.queuedPuzzles.add(p.id);
+    if (online && !this.slowSync) setTimeout(() => this.drain(), 400);
+    return { id, info };
+  }
+
+  /** The mock's sync: Lichess "returns" +8 for a win and -12 for a loss (rated, first attempts only). */
+  private drain() {
+    if (this.account.state !== "signed_in") return;
+    const changed: AttemptRating[] = [];
+    for (const [id, r] of this.ratings) {
+      if (r.status !== "syncing" && r.status !== "offline") continue;
+      const a = this.attemptPuzzle.get(id)!;
+      const diff = a.rated ? (a.win ? 8 : -12) : 0;
+      const next: AttemptRating = diff ? { attempt_id: id, status: "done", diff } : { attempt_id: id, status: "not_rated", diff: null };
+      this.ratings.set(id, next);
+      this.lichessHistory.add(a.id); // like the app: a synced solve counts as played on Lichess
+      changed.push(next);
+      if (diff && this.account.rating !== null) {
+        const rating = this.account.rating + diff;
+        this.account = { ...this.account, rating };
+        this.points.push([`2026-11-01T12:${String(10 + this.points.length).padStart(2, "0")}:00`, rating, 6]);
+      }
+    }
+    if (changed.length) {
+      this.pushSync(changed);
+      this.pushAccount();
+    }
+  }
+
+  async getAccountStatus() {
+    return { ...this.account };
+  }
+
+  async startSignIn() {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push("signIn");
+    this.emit({ id, kind: "lichess_sign_in", state: "running", progress: null, message: "Waiting for you to approve in your browser…", error_code: null });
+    setTimeout(() => {
+      if (this.jobs.get(id)?.state !== "running") return;
+      if (this.signInFails) {
+        this.emit({ id, kind: "lichess_sign_in", state: "failed", progress: null, message: "Sign-in failed: Lichess refused the request. Try again.", error_code: "sign_in_failed" });
+        return;
+      }
+      this.account = { state: "signed_in", username: MOCK_USER, rating: 1834, provisional: false };
+      this.pushAccount();
+      this.emit({ id, kind: "lichess_sign_in", state: "done", progress: 1, message: `Signed in as ${MOCK_USER}`, error_code: null });
+      this.drain();
+    }, 600);
+    return id;
+  }
+
+  async cancelSignIn() {
+    const running = [...this.jobs.values()].find((j) => j.kind === "lichess_sign_in" && j.state === "running");
+    if (running) this.emit({ ...running, state: "cancelled", message: "Cancelled" });
+  }
+
+  async signOut(forceLocal: boolean) {
+    this.calls.push(`signOut:${forceLocal}`);
+    if (this.revokeOffline && !forceLocal) {
+      throw new ApiCallError({ code: "revoke_failed", message: "Lichess couldn't be reached, so the sign-in wasn't revoked there.", retryable: true });
+    }
+    this.account = { state: "signed_out", username: null, rating: null, provisional: false };
+    this.pushAccount();
+    this.pushSync([]);
+  }
+
+  async getSyncStatus() {
+    return this.syncStatusNow();
+  }
+
+  async getAttemptRatings(attemptIds: number[]) {
+    return attemptIds.flatMap((id) => {
+      const r = this.ratings.get(id);
+      return r ? [{ ...r }] : [];
+    });
+  }
+
+  async getRatingHistory(): Promise<RatingHistory> {
+    if (this.account.state === "signed_out" && this.points.length === RATING_POINTS.length) {
+      return { points: [], sessions: [] };
+    }
+    const points = this.points.map(([at, rating, session_id]) => ({ at, rating, session_id }));
+    const sessions = [1, 2, 3, 4, 5, 6].flatMap((sid) => {
+      const mine = points.filter((p) => p.session_id === sid);
+      if (mine.length === 0) return [];
+      const before = points[points.indexOf(mine[0]) - 1]?.rating ?? 1764;
+      return [{ session_id: sid, started_at: mine[0].at, change: mine[mine.length - 1].rating - before, solves: mine.length * 4 }];
+    });
+    return { points, sessions };
   }
 
   private pool(spec: FilterSpec) {
@@ -207,7 +365,7 @@ export class MockClient implements ApiClient {
 
   async getAppInfo(): Promise<AppInfo> {
     return {
-      version: "0.2.0",
+      version: "0.3.0",
       data_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare",
       logs_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare\\logs",
       dev_mode: false,
@@ -382,7 +540,7 @@ export class MockClient implements ApiClient {
     }
   }
 
-  async startSession(spec: FilterSpec): Promise<SessionInfo> {
+  async startSession(spec: FilterSpec, rated: boolean = true): Promise<SessionInfo> {
     validate(spec);
     const pools = spec.ratios.length > 0 ? spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i))) : [this.pool(spec)];
     const queue = interleave(pools, spec);
@@ -394,7 +552,7 @@ export class MockClient implements ApiClient {
       });
     }
     const id = this.nextSession++;
-    this.sessions.set(id, { spec, queue, served: 0, current: null, solved: 0, failed: 0 });
+    this.sessions.set(id, { spec, rated, attempts: [], queue, served: 0, current: null, solved: 0, failed: 0 });
     const empty = spec.ratios.length > 0 ? pools.flatMap((p, i) => (p.length === 0 ? [i] : [])) : [];
     return { session_id: id, match_count: queue.length * SCALE, queue_size: spec.queue_size, empty_buckets: empty };
   }
@@ -411,6 +569,7 @@ export class MockClient implements ApiClient {
       s.failed++;
       this.allTime.failed++;
       this.record(s.current.puzzle, false);
+      this.queue(s.current.puzzle, false, s.rated, s);
     }
     s.current = null;
     const limit = s.spec.queue_size ?? Infinity;
@@ -427,6 +586,7 @@ export class MockClient implements ApiClient {
       player_color: chess.turn() === "w" ? "white" : "black",
       rating: puzzle.rating,
       opponent_sound: soundOf(puzzle.fen, puzzle.moves[0]),
+      already_played: this.lichessHistory.has(puzzle.id),
     };
   }
 
@@ -456,14 +616,14 @@ export class MockClient implements ApiClient {
       s.failed++;
       this.allTime.failed++;
       this.record(c.puzzle, false);
-      const outcome = this.outcome(c.puzzle, false);
+      const outcome = this.outcome(c.puzzle, false, s);
       return { kind: "wrong", reply: null, finished: false, outcome, move_sound: moveSound, reply_sound: null };
     }
     c.chess.move(uciToMove(uci));
     c.next++;
     if (c.next >= c.puzzle.moves.length || c.chess.isCheckmate()) {
       c.finished = true;
-      const outcome = c.decided ? null : this.outcome(c.puzzle, true);
+      const outcome = c.decided ? null : this.outcome(c.puzzle, true, s);
       if (!c.decided) {
         c.decided = true;
         s.solved++;
@@ -489,7 +649,7 @@ export class MockClient implements ApiClient {
       s.failed++;
       this.allTime.failed++;
       this.record(c.puzzle, false);
-      return this.outcome(c.puzzle, false);
+      return this.outcome(c.puzzle, false, s);
     };
     if (kind === "hint") {
       if (c.finished) throw conflict("The puzzle is over: there's nothing left to hint.");
@@ -510,7 +670,8 @@ export class MockClient implements ApiClient {
     return { kind, hint_square: null, answer_fen: fen, answer_moves: rest, outcome, answer_sounds: lineSounds(fen, rest) };
   }
 
-  private outcome(p: MockPuzzle, win: boolean) {
+  private outcome(p: MockPuzzle, win: boolean, s: MockSession) {
+    const { id, info } = this.queue(p, win, s.rated, s);
     return {
       win,
       puzzle_id: p.id,
@@ -518,6 +679,8 @@ export class MockClient implements ApiClient {
       themes: p.themes.map((key) => ({ key, name: NAMES.get(key) ?? key })),
       solution: p.moves.slice(1),
       puzzle_url: `https://lichess.org/training/${p.id}`,
+      attempt_id: id,
+      lichess: { ...info },
     };
   }
 
@@ -534,7 +697,16 @@ export class MockClient implements ApiClient {
       finished: played >= limit,
       all_time_solved: this.allTime.solved,
       all_time_failed: this.allTime.failed,
+      rating_change: this.sessionChange(s),
     };
+  }
+
+  private sessionChange(s: MockSession): number | null {
+    const diffs = s.attempts.flatMap((id) => {
+      const r = this.ratings.get(id);
+      return r?.status === "done" && r.diff !== null ? [r.diff] : [];
+    });
+    return diffs.length ? diffs.reduce((a, b) => a + b, 0) : null;
   }
 
   async getStats(): Promise<StatsReport> {

@@ -2,15 +2,17 @@ import { Alert, Anchor, Badge, Button, Group, Paper, Stack, Text, Title } from "
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { Outcome, PuzzleView, SessionStats } from "../api/types";
+import type { AttemptRating, Outcome, PuzzleView, SessionStats } from "../api/types";
 import { AnswerPlayer, answerPositions, type AnswerPosition } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
+import { RatingChange } from "../components/LichessStatus";
 import { SessionBar } from "../components/SessionBar";
 import { sounds } from "../sound/player";
 import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
 const REPLY_DELAY_MS = 300;
+const RATING_POLL_MS = 2000; // while a solve shows "Syncing…" (pushed sync events normally win)
 
 type Message = { color: "green" | "red" | "gray"; text: string } | null;
 
@@ -49,6 +51,7 @@ export function TrainerView({
   const [hinted, setHinted] = useState(false);
   const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number } | null>(null);
   const [helpBusy, setHelpBusy] = useState(false);
+  const [rating, setRating] = useState<AttemptRating | null>(null);
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
@@ -65,6 +68,41 @@ export function TrainerView({
     onHistoryChange?.();
   }, [sessionId, onHistoryChange]);
 
+  const decide = useCallback(
+    (o: Outcome) => {
+      setOutcome(o);
+      setRating(o.lichess);
+      refreshStats();
+    },
+    [refreshStats],
+  );
+
+  // FR-6.11b: the change fills in when Lichess replies (pushed), or offline once the queue drains.
+  const attemptId = outcome?.attempt_id ?? null;
+  useEffect(() => {
+    if (attemptId === null) return;
+    const unsubscribe = api.onEvent((event) => {
+      if (event.name !== "sync") return;
+      const mine = event.payload.attempts.find((a) => a.attempt_id === attemptId);
+      if (mine) {
+        setRating(mine);
+        api.getSessionStats(sessionId).then(setStats, () => undefined);
+      }
+    });
+    return unsubscribe;
+  }, [attemptId, sessionId]);
+  const waitingForLichess = rating?.status === "syncing" || rating?.status === "offline";
+  useEffect(() => {
+    if (attemptId === null || !waitingForLichess) return;
+    const timer = setInterval(() => {
+      api.getAttemptRatings([attemptId]).then((r) => {
+        if (r[0]) setRating(r[0]);
+        if (r[0]?.status === "done") api.getSessionStats(sessionId).then(setStats, () => undefined);
+      }, () => undefined);
+    }, RATING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [attemptId, waitingForLichess, sessionId]);
+
   const load = useCallback(async () => {
     if (loading.current) return;
     loading.current = true;
@@ -72,6 +110,7 @@ export function TrainerView({
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setOutcome(null);
+    setRating(null);
     setLineDone(false);
     setMessage(null);
     setMovable(null);
@@ -132,8 +171,7 @@ export function TrainerView({
       const fb = await api.submitMove(sessionId, uci);
       sounds.play(fb.move_sound);
       if (fb.outcome) {
-        setOutcome(fb.outcome);
-        refreshStats();
+        decide(fb.outcome);
         sounds.later(fb.outcome.win ? "solved" : "failed");
       }
       if (fb.kind !== "wrong" && fb.kind !== "illegal") setHintSquare(null);
@@ -175,8 +213,7 @@ export function TrainerView({
     try {
       const help = await api.requestHelp(sessionId, kind);
       if (help.outcome) {
-        setOutcome(help.outcome);
-        refreshStats();
+        decide(help.outcome);
         sounds.play("failed");
       }
       const lost = help.outcome ? " This puzzle now counts as failed." : "";
@@ -275,6 +312,11 @@ export function TrainerView({
               {stats?.queue_size ? ` of ${stats.queue_size}` : ""} · rated {view.rating} · you play {view.player_color}
             </Text>
           )}
+          {view?.already_played && (
+            <Badge color="gray" variant="light" style={{ textTransform: "none" }} data-testid="already-played">
+              Already played on Lichess: rating unaffected
+            </Badge>
+          )}
           {message && (
             <Text c={message.color === "gray" ? undefined : message.color} fw={500} data-testid="trainer-message">
               {message.text}
@@ -294,6 +336,7 @@ export function TrainerView({
                     </Badge>
                   ))}
                 </Group>
+                <RatingChange info={rating} />
                 <Anchor size="sm" href={outcome.puzzle_url} target="_blank" rel="noreferrer">
                   Open this puzzle on Lichess
                 </Anchor>

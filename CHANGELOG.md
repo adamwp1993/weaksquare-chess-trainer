@@ -13,6 +13,22 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.3] - 2026-11-02
+Candidates: v0.3-rc1 (2026-11-02)
+
+### Added
+- **Sign in with Lichess** from the new startup page or the gear settings. Lichess opens in your own browser, so your password manager and two-factor sign-in work. The sign-in is kept in Windows Credential Manager, never in a file. With a sign-in Lichess accepts, the startup page is a single **Continue as *your name*** button. [FR-1.1] [FR-1.5] [FR-1.6] [FR-6.1] [FR-6.1a] [FR-6.5]
+- **Solves sync to Lichess** as you play, with an honest angle (`mix` only when themes and move count are All). Offline or signed out, they wait and sync later, and the top bar says how many are waiting. [FR-1.7] [FR-6.8] [FR-6.13] [FR-6.14] [FR-6.16]
+- **Your Lichess puzzle rating** in the top bar, the **+/−** change on each puzzle's result (or why there isn't one), and the session's total in the session bar. All of them come straight from Lichess. [FR-6.11a] [FR-6.11b] [FR-6.11c]
+- **Rated** switch for the session: off sends your solves as unrated. [FR-1.9] [FR-6.15]
+- **Exclude played on Lichess** (on by default): your Lichess puzzle history is read when you sign in, and those puzzles are left out. A puzzle you've already played there shows *Already played on Lichess: rating unaffected*. [FR-3.9] [FR-6.17]
+- **Sign out** cancels your sign-in on Lichess as well as removing it from this PC. If Lichess can't be reached, the app asks first. [FR-6.6]
+- A **gear** icon opens Settings, now with your Lichess account at the top. [FR-1.8]
+- **Rating trend** on Stats: a chart of your Lichess puzzle rating over time and the change in each session, from what Lichess returned. [FR-9.4] [FR-6.11d]
+
+### Changed
+- Puzzles you played before this version stay on this PC and aren't sent to Lichess.
+
 ## [v0.2] - 2026-11-01
 Candidates: v0.2-rc1 (2026-11-01)
 

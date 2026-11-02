@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -32,6 +33,18 @@ class HttpError(Exception):
         super().__init__(message)
         self.status = status
         self.retryable = retryable
+
+
+class Unauthorized(HttpError):
+    """HTTP 401: the token is missing, expired or revoked (FR-6.4)."""
+
+
+class RateLimited(HttpError):
+    """HTTP 429. JSON calls don't retry it here: the caller waits (Lichess asks for a minute)."""
+
+    def __init__(self, message: str, *, retry_after_s: float | None = None) -> None:
+        super().__init__(message, status=429, retryable=True)
+        self.retry_after_s = retry_after_s
 
 
 class DownloadCancelled(Exception):
@@ -83,17 +96,20 @@ class HttpClient:
     def close(self) -> None:
         self._client.close()
 
-    def _with_retry[T](self, what: str, fn: Callable[[], T]) -> T:
+    def _with_retry[T](
+        self, what: str, fn: Callable[[], T], *, retries: int | None = None, retry_429: bool = True
+    ) -> T:
         delay = self._backoff_s
-        for attempt in range(self._retries + 1):
+        retries = self._retries if retries is None else retries
+        for attempt in range(retries + 1):
             try:
                 return fn()
             except HttpError as e:
-                if not e.retryable or attempt == self._retries:
+                if not e.retryable or attempt == retries or (isinstance(e, RateLimited) and not retry_429):
                     raise
                 log.info("%s failed (%s), retrying in %.1fs", what, e.status, delay)
             except httpx.TransportError as e:
-                if attempt == self._retries:
+                if attempt == retries:
                     raise HttpError(f"Network error while fetching {what}: {type(e).__name__}") from None
                 log.info("%s network error (%s), retrying in %.1fs", what, type(e).__name__, delay)
             self._sleep(delay)
@@ -102,6 +118,11 @@ class HttpClient:
 
     @staticmethod
     def _check(response: httpx.Response, url: str) -> None:
+        if response.status_code == 401:
+            raise Unauthorized(f"{url} returned HTTP 401", status=401, retryable=False)
+        if response.status_code == 429:
+            after = response.headers.get("retry-after", "")
+            raise RateLimited(f"{url} returned HTTP 429", retry_after_s=float(after) if after.isdigit() else None)
         if response.status_code >= 400:
             raise HttpError(
                 f"{url} returned HTTP {response.status_code}",
@@ -116,6 +137,84 @@ class HttpClient:
             return r.text
 
         return self._with_retry(url, go)
+
+    # ---- JSON APIs (Lichess) --------------------------------------------------------------------
+    # `token` becomes a per-request Authorization header; it's never a client default, never in a URL,
+    # and never in an error message (SR-7). 429 is not retried here (the caller backs off).
+    @staticmethod
+    def _auth(token: str | None) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
+    def request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        token: str | None = None,
+        params: dict[str, Any] | None = None,
+        json_body: Any = None,
+        form: dict[str, str] | None = None,
+        retry: bool = True,
+    ) -> Any:
+        """One JSON request. Returns the parsed body, or None for an empty one."""
+
+        def go() -> Any:
+            r = self._client.request(
+                method, url, headers={"Accept": "application/json", **self._auth(token)},
+                params=params, json=json_body, data=form,
+            )  # fmt: skip
+            self._check(r, url)
+            if not r.content.strip():
+                return None
+            try:
+                return r.json()
+            except ValueError:
+                raise HttpError(f"{url} returned a response that isn't JSON", status=r.status_code) from None
+
+        return self._with_retry(url, go, retries=None if retry else 0, retry_429=False)
+
+    def get_json(self, url: str, *, token: str | None = None, params: dict[str, Any] | None = None) -> Any:
+        return self.request_json("GET", url, token=token, params=params)
+
+    def post_json(
+        self,
+        url: str,
+        body: Any,
+        *,
+        token: str | None = None,
+        params: dict[str, Any] | None = None,
+        retry: bool = True,
+    ) -> Any:
+        return self.request_json("POST", url, token=token, params=params, json_body=body, retry=retry)
+
+    def post_form(self, url: str, form: dict[str, str], *, retry: bool = False) -> Any:
+        return self.request_json("POST", url, form=form, retry=retry)
+
+    def delete(self, url: str, *, token: str | None = None) -> None:
+        self.request_json("DELETE", url, token=token, retry=False)
+
+    def stream_ndjson(
+        self, url: str, *, token: str | None = None, params: dict[str, Any] | None = None
+    ) -> Iterator[dict[str, Any]]:
+        """Newline-delimited JSON, one object at a time (no retry: the caller restarts from its
+        last checkpoint). Blank and malformed lines are skipped."""
+        headers = {"Accept": "application/x-ndjson", **self._auth(token)}
+        try:
+            with self._client.stream("GET", url, headers=headers, params=params) as r:
+                self._check(r, url)
+                for line in r.iter_lines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except ValueError:
+                        log.warning("%s: skipped a line that isn't JSON", url)
+                        continue
+                    if isinstance(obj, dict):
+                        yield obj
+        except httpx.TransportError as e:
+            raise HttpError(f"Network error while fetching {url}: {type(e).__name__}") from None
 
     def last_modified(self, url: str) -> str | None:
         """The Last-Modified date (YYYY-MM-DD) of `url`, from a HEAD request."""

@@ -52,8 +52,8 @@ def test_invalid_input_rejected(data: object) -> None:
 @pytest.mark.parametrize(
     "data",
     [
-        {"exclude_played_on_lichess": True},  # v0.3
         {"source": "my"},  # v0.8
+        {"source": "both"},  # v0.8
     ],
 )
 def test_later_version_fields_rejected_not_ignored(data: dict) -> None:

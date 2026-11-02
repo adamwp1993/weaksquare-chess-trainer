@@ -22,17 +22,27 @@ from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.account import AccountService
 from weaksquare.services.db_update import UpdateCheckService
+from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
+from weaksquare.services.sync import RatingInfo, SyncService
 from weaksquare.services.ui_settings import UiSettingsService
 
 log = logging.getLogger("weaksquare.frontend")
 
 FRONTEND_ERRORS_PER_MINUTE = 20
+MAX_RATING_IDS = 200
+
+
+def attempt_rating(r: RatingInfo | None) -> dto.AttemptRating | None:
+    if r is None:
+        return None
+    return dto.AttemptRating(r.attempt_id, r.status, r.diff if r.status == "done" else None)
 
 
 class Api:
@@ -51,7 +61,13 @@ class Api:
         stats: StatsService,
         ui_settings: UiSettingsService,
         db_update: UpdateCheckService,
+        account: AccountService,
+        sync: SyncService,
+        history: HistoryService,
     ) -> None:
+        self._account = account
+        self._sync = sync
+        self._history = history
         self._db_update = db_update
         self._ui_settings = ui_settings
         self._stats = stats
@@ -223,8 +239,9 @@ class Api:
 
     # ---- sessions (FR-3.11, 3.12, 3.14, FR-4.1, FR-5.1, 5.3) -----------------------------------
     @bridge_call
-    def start_session(self, spec: dict) -> dto.SessionInfo:
-        info = self._sessions.start(FilterSpec.from_json(spec))
+    def start_session(self, spec: dict, rated: bool = True) -> dto.SessionInfo:
+        """`rated`: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false."""
+        info = self._sessions.start(FilterSpec.from_json(spec), rated)
         return dto.SessionInfo(info.session_id, info.match_count, info.queue_size, info.empty_buckets)
 
     @bridge_call
@@ -233,7 +250,9 @@ class Api:
         if v is None:
             return None
         color: Literal["white", "black"] = "white" if v.player_color == "white" else "black"
-        return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating, v.opponent_sound)
+        return dto.PuzzleView(
+            v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating, v.opponent_sound, v.already_played
+        )
 
     @staticmethod
     def _outcome(o: Any) -> dto.Outcome | None:
@@ -246,6 +265,8 @@ class Api:
             themes=[dto.ThemeLabel(t, display_name(t)) for t in o.themes],
             solution=o.solution,
             puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
+            attempt_id=o.attempt_id,
+            lichess=attempt_rating(o.lichess),
         )
 
     @bridge_call
@@ -280,4 +301,47 @@ class Api:
     def get_session_stats(self, session_id: int) -> dto.SessionStats:
         s = self._sessions.stats(session_id)
         return dto.SessionStats(s.solved, s.failed, s.accuracy, s.played, s.queue_size, s.finished,
-                                s.all_time_solved, s.all_time_failed)  # fmt: skip
+                                s.all_time_solved, s.all_time_failed, s.rating_change)  # fmt: skip
+
+    # ---- Lichess account and sync (FR-1.1, 1.6, 1.7, FR-6.1–6.17, FR-9.4) ------------------------
+    # Nothing here ever returns a token (SR-1); the token stays inside the services.
+    @bridge_call
+    def get_account_status(self) -> dto.AccountStatus:
+        s = self._account.status()
+        return dto.AccountStatus(s.state, s.username, s.rating, s.provisional)
+
+    @bridge_call
+    def start_sign_in(self) -> str:
+        """Opens Lichess in your default browser and waits for the callback. Returns the job ID."""
+        return self._account.start_sign_in()
+
+    @bridge_call
+    def cancel_sign_in(self) -> None:
+        self._account.cancel_sign_in()
+
+    @bridge_call
+    def sign_out(self, force_local: bool = False) -> None:
+        """Revoke on Lichess, then delete the local copy (FR-6.6). `force_local` removes it from this PC
+        even when Lichess can't be reached."""
+        self._account.sign_out(force_local)
+
+    @bridge_call
+    def get_sync_status(self) -> dto.SyncStatus:
+        s = self._sync.status()
+        return dto.SyncStatus(s.state, s.pending, self._history.count())
+
+    @bridge_call
+    def get_attempt_ratings(self, attempt_ids: list) -> list[dto.AttemptRating]:
+        if len(attempt_ids) > MAX_RATING_IDS or not all(
+            isinstance(i, int) and not isinstance(i, bool) and i > 0 for i in attempt_ids
+        ):
+            raise ValidationError(f"attempt_ids must be up to {MAX_RATING_IDS} positive whole numbers")
+        return [r for r in (attempt_rating(x) for x in self._sync.attempt_ratings(attempt_ids)) if r is not None]
+
+    @bridge_call
+    def get_rating_history(self) -> dto.RatingHistory:
+        h = self._stats.rating_history()
+        return dto.RatingHistory(
+            [dto.RatingPoint(p.at, p.rating, p.session_id) for p in h.points],
+            [dto.SessionChange(c.session_id, c.started_at, c.change, c.solves) for c in h.sessions],
+        )

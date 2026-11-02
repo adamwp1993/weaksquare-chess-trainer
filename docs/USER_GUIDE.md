@@ -30,10 +30,16 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - `puzzles.db` is the imported Lichess puzzle database. It's large but rebuildable: re-importing replaces it.
   - `user.db` holds everything you create: your attempts, presets and settings, and from later versions your games and analysis. Back up this file to keep your history.
   - Before an update changes `user.db`, the app saves a copy in the `backups` folder next to it and keeps the last five.
-- **Sign-ins and API keys** are never written to files. From v0.3, your Lichess sign-in, and from v0.7 any AI provider key, are stored in **Windows Credential Manager**. Signing out removes them.
+- **Sign-ins and API keys** are never written to files. Your Lichess sign-in (from v0.3), and from v0.7 any AI provider key, are stored in **Windows Credential Manager**. Signing out removes them. Each data folder has its own entry, so a test or development copy of the app never sees your real sign-in.
 - **Nothing leaves your PC** unless you use a feature that needs the internet. Those features are listed in their own sections, along with what they send.
   - **Puzzle database download** (v0.1): requests the public puzzle file and its checksum list from database.lichess.org. Nothing else is sent.
   - **Update check** (v0.2): at most once a day, and when you click **Check for updates**, the app makes three plain requests to database.lichess.org: the checksum list (`sha256sums.txt`), the puzzle file's date and size (a `HEAD` request, which doesn't download it) and the front page, for the approximate puzzle count. Nothing about you or your training is sent. Turn it off in **☰ → Settings…**.
+  - **Lichess sign-in and sync** (v0.3), only while you're signed in. See [Signing in with Lichess](#signing-in-with-lichess-syncing-solves-offline-mode) for when each happens. All of it goes to lichess.org over HTTPS:
+    - **Signing in** opens lichess.org in your browser. The app then exchanges a one-time code for your sign-in.
+    - **Your account:** your username and puzzle rating are read at start-up and after signing in.
+    - **Your solves:** for each puzzle you finish, the app sends its ID, whether you solved it, whether it's rated, and the theme you chose it by (the *angle*, for example `mix` or `fork`). Nothing else about your session is sent.
+    - **Your puzzle history:** the puzzles you've played on Lichess are read once, then only new ones.
+    - **Signing out** tells Lichess to cancel your sign-in.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
 ## Getting started: the puzzle database
@@ -62,6 +68,74 @@ If setup already imported it, the app opens straight to your puzzles. Otherwise 
 - Importing never touches your attempts or settings.
 - **What it sends:** the download is a plain file request to database.lichess.org. Nothing about you or your training is sent.
 
+## Signing in with Lichess, syncing solves, offline mode
+*Added in v0.3.*
+
+Signing in is optional. When you're signed in, every puzzle you finish is also recorded on your Lichess account, your Lichess puzzle rating is shown in the app, and you can leave out puzzles you've already played on Lichess.
+
+### The startup page
+The app opens on a startup page every time.
+
+![The startup page](img/startup.png)
+
+- **First time, or signed out:** the page says *Not signed in*. Click **Sign in with Lichess**, or **Continue without signing in**.
+- **Signed in:** one button, **Continue as *your name***. **Show all options** reveals **Sign out** and **Sign in as someone else**.
+- **Lichess can't be reached** (for example, no internet): your sign-in is kept and the button says **Continue offline as *your name***. Your solves are saved here and sync later.
+- **Your sign-in expired or was revoked** (Lichess sign-ins last about a year): the page says so and asks you to sign in again. If it happens while you're training, a banner with **Sign in again** appears above your puzzles; your solves wait until you do.
+
+### Signing in
+1. Click **Sign in with Lichess**. Lichess opens **in your usual web browser**, not inside WeakSquare, so your password manager and two-factor sign-in work as normal.
+2. Sign in to Lichess if you aren't already, and approve WeakSquare. It asks only to read and record your puzzle activity (`puzzle:read` and `puzzle:write`).
+3. The browser says *"Signed in. You can close this tab and return to WeakSquare."* The app comes back to the front and shows **Signed in as *your name***.
+
+While you're in the browser, the app shows *Waiting for you in your browser…* with **Cancel**. After 5 minutes it stops waiting and you can try again. If it fails, the reason is shown (for example *Sign-in failed: Lichess refused the request*). You can always continue without signing in.
+
+### Your puzzle rating
+While you're signed in, the top bar shows **Puzzle rating 1834**, with a **?** after it while Lichess still calls your rating provisional. The number always comes from Lichess. The app never calculates or estimates it, so it matches lichess.org.
+
+After each puzzle, the result panel shows its **Lichess rating** change, e.g. **+8** in green or **−12** in red, usually within a second or two. Until Lichess replies it says **Syncing…**. When there's no number, it says why:
+- **Will sync later:** you're offline or not signed in. The number fills in once the solve has synced.
+- **Unrated (Rated is off):** you switched off **Rated** for this session (below).
+- **Already played: rating unaffected:** you've played this puzzle on Lichess before, and Lichess only rates your first try.
+- **Not rated by Lichess:** Lichess returned no change.
+
+A puzzle you've already played on Lichess also shows the badge **Already played on Lichess: rating unaffected** while you solve it.
+
+The session bar adds **+34 this session**, the total of the changes Lichess returned this session. The rating trend over time is on the Stats page.
+
+![A solved puzzle with its rating change](img/rating-change.png)
+
+**Why do themed sessions move my rating so little?** Lichess weighs a solve by what you knew in advance. If you choose only forks, you know a fork is coming, so a win counts for about a fifth of a normal one. WeakSquare reports this honestly as the *angle*:
+- It's `mix` only when the themes are **All**, the number of moves is **All** and you're not using ratios.
+- Otherwise it's the theme you chose that the puzzle has. Motifs (fork, pin…) come before phases and goals (endgame, crushing…).
+- If you narrowed only the number of moves, it's the length (one-move, short, long or very long).
+
+Excluded themes, openings, rating, side and quality don't change it.
+
+### Rated
+The **Rated** switch above **Start** applies to the session you start. It's on every time you open the app. Switch it off to practise without risking your rating: your solves are still recorded on Lichess, as unrated.
+
+### Syncing and offline mode
+- Solves sync right away when you're signed in, and syncing never slows down solving.
+- Offline, or before you sign in, solves wait on this PC. The top bar says **Offline: 3 solves waiting to sync** (or **Not signed in: 3 solves waiting to sync**). They're sent automatically when Lichess can be reached again, or when you next sign in. Nothing is lost if you close the app.
+- A solve made while signed in to one Lichess account only ever goes to that account. Solves made while signed out go to the next account you sign in with.
+- Puzzles you played before v0.3 aren't sent to Lichess. They were recorded before the app knew whether they were rated or which theme you chose them by, and they still count in your Stats.
+- If Lichess asks the app to slow down (it allows about 200 solves an hour), the app waits at least a minute before sending anything again, even if you keep solving. The top bar shows how many solves are waiting.
+
+### Excluding puzzles you've played on Lichess
+When you sign in, the app reads which puzzles you've played on Lichess, then only the new ones each time. **More filters → Your history → Exclude played on Lichess** (on by default) leaves those puzzles out, along with every puzzle you've synced from here, because Lichess wouldn't rate them again. Untick it to get them back. While you're signed out with no history read yet, it's greyed out.
+
+### Signing out
+Open the gear (**⚙**, top right) and choose **Sign out** under **Lichess account**. The app cancels your sign-in on Lichess, then removes it from Windows Credential Manager. Solves still waiting to sync stay waiting.
+
+If Lichess can't be reached, the app asks before removing anything. **Remove from this PC anyway** deletes it here; cancel it yourself later at lichess.org/account/security (*Sessions*/*API access tokens*).
+
+**Gotchas**
+- **Sign in as someone else** uses whichever account your browser is signed in to on lichess.org. To switch accounts, sign out of lichess.org in your browser first (or sign in there as the other account).
+- After signing in, if the browser tab doesn't close itself, just close it.
+- The app may not come back in front of the browser on its own (Windows sometimes blocks that). Click it in the taskbar.
+- Your sign-in is stored in Windows Credential Manager under **weaksquare** (Control Panel → Credential Manager → Windows Credentials).
+
 ## Keeping the puzzle database up to date
 *Added in v0.2.*
 
@@ -85,7 +159,7 @@ The banner's puzzle count comes from the database.lichess.org page, which can la
 - See [Your data and privacy](#your-data-and-privacy) for exactly what the check sends.
 
 ## Choosing your puzzles
-*Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets.*
+*Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets. Changed in v0.3: Exclude played on Lichess, and Rated.*
 
 The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match. The panel scrolls on its own, so the board stays in view.
 
@@ -94,7 +168,8 @@ The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The
 3. Narrow it down with **Exclude themes**, **Rating**, **Number of moves** and **You play**.
 4. Open **More filters** for openings, quality and your history. Its summary line shows what's on, even while it's closed.
 5. Choose the **Order**, then how many **Puzzles** you want, or switch on **Endless**.
-6. Press **Start**.
+6. Leave **Rated** on to count the session toward your Lichess puzzle rating (see [Rated](#rated)).
+7. Press **Start**.
 
 ![The filter panel with Fork, ALL, rating 1100–1700 and 2-move puzzles](img/mixer.png)
 
@@ -111,7 +186,7 @@ The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The
 | **Mix by ratio** | Replaces **Themes** with groups, each with a share of the session, e.g. 50% Fork, 30% Pin or Skewer, 20% One-move. A group matches *any* of its themes. Each group shows how many puzzles it has, and the shares must add up to 100% (**Total** turns red until they do). **Add group** re-splits the shares evenly; **Even split** does that for the groups you have. Every other filter applies to all groups. Switching ratios off brings back the themes you had before. |
 | **More filters → Openings** | Puzzles from the openings you choose. Type to search. Each opening family is listed with its variations; choosing **(any variation)** takes the whole family. Only puzzles that start before move 20 have an opening, so choosing one leaves out the rest. |
 | **More filters → Quality** | **Min popularity** (Lichess players' votes, from -100 to 100) and **Min plays**. They're on by default at 50 and 100, which leaves out puzzles players rated poorly or that few have played. Change either number, or empty a box and press **Enter** to turn it off. |
-| **More filters → Your history** | **Exclude solved here** (on by default) leaves out puzzles you've solved at least once in this app; ones you've only failed can still come up. **Only my misses** gives you only puzzles whose last attempt here was a fail, so a puzzle drops out once you solve it. While it's on, Exclude solved isn't needed and is greyed out. |
+| **More filters → Your history** | **Exclude solved here** (on by default) leaves out puzzles you've solved at least once in this app; ones you've only failed can still come up. **Exclude played on Lichess** (on by default, *added in v0.3*) leaves out puzzles in your Lichess history, which Lichess wouldn't rate again; it needs a Lichess sign-in. **Only my misses** gives you only puzzles whose last attempt here was a fail, so a puzzle drops out once you solve it. While it's on, the other two aren't needed and are greyed out. |
 | **Order** | **Random**; **Easy → hard** (lowest rating first); or **By theme**, which serves all the puzzles of your first chosen theme, then the next (with ratios: group by group). |
 
 No puzzle repeats within a session. Your filters are remembered the next time you open the app, and the count updates as you play, because solved puzzles drop out.
@@ -121,7 +196,7 @@ No puzzle repeats within a session. Your filters are remembered the next time yo
 **Gotchas**
 - If the count says **0 puzzles match**, Start is disabled. Widen a filter. A common cause is ALL with two themes that never appear together, such as One-move and Very long.
 - Themes are hidden while you solve (see below), so choosing a single theme tells you the idea in advance. Mix several themes for a real test.
-- **Exclude solved here is on by default.** If a puzzle you want to repeat doesn't come up, untick it under **More filters → Your history**.
+- **Exclude solved here and Exclude played on Lichess are on by default.** If a puzzle you want to repeat doesn't come up, untick them under **More filters → Your history**. When you're signed in, a puzzle you solve here also syncs to Lichess, so you need to untick both to see it again.
 - With ratios, a group with no matching puzzles says **No puzzles: left out**. If you start anyway, a note says so and the other groups share its slots. If a group runs out during the session, the others fill in for it.
 - **Easy → hard** and **By theme** sort the whole session when it has a fixed size. With **Endless** they sort each block of 50 puzzles, which the panel points out.
 - The filters you used in v0.1 get the new defaults (quality on, Exclude solved on) once, the first time v0.2 opens. After that, your choices are kept.
@@ -145,7 +220,7 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Stats
-*Added in v0.2.*
+*Added in v0.2. Changed in v0.3: the Lichess rating trend.*
 
 Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
 
@@ -154,6 +229,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 - **Puzzles played** and **Accuracy**: a puzzle counts as solved only with no wrong move and no help.
 - **First move right, line wrong**: of the puzzles where your first move was right, how often the rest of the line went wrong. Spotting the idea but miscalculating the follow-up shows up here, so a falling number means your calculation is improving.
 - **By theme**, **By length** (how many moves you make) and **By rating** (200-point bands, using the puzzle's rating when you played it) break the same numbers down. A puzzle with several themes counts once under each.
+- **Lichess puzzle rating** (*added in v0.3*): your rating over time, one point each time Lichess reported a new rating for your synced solves, and a table of the change in each session (newest first). Hover over the line to see a point's rating. It's empty until you sign in with Lichess and sync rated puzzles. The numbers are exactly what Lichess returned.
 
 **Gotchas**
 - If a database update removes a puzzle you played, your attempt still counts in the totals and by rating, but not by theme or length. A note under the tables says how many.
@@ -165,7 +241,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 1. The board turns to your side and the opponent's move plays first. Then it's your turn: find the best move.
 2. Drag a piece, or click it and then its destination. When a pawn promotes, choose the piece.
 3. If your move is right, the opponent's reply plays automatically. Keep going until the line is complete.
-4. When the puzzle ends, the result panel shows whether you **Solved** or **Failed** it, and reveals its **themes**. **Open this puzzle on Lichess** shows it on the Lichess website.
+4. When the puzzle ends, the result panel shows whether you **Solved** or **Failed** it, and reveals its **themes**. When you're signed in, it also shows the **Lichess rating** change (see [Your puzzle rating](#your-puzzle-rating)). **Open this puzzle on Lichess** shows it on the Lichess website.
 5. Press **Next puzzle**.
 
 ![The trainer, waiting for your move](img/trainer.png)
@@ -177,7 +253,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 - Pressing **Skip (counts as failed)** before you've finished also records a failed attempt.
 - Using **Hint** or **Show answer** before the puzzle is decided fails it too (see below). After it's decided, Show answer is free.
 
-**The session bar** at the top shows this session's **Solved**, **Failed**, **Accuracy** and **Played**. On the right, **All time** counts every attempt you've ever made; your attempts are saved as you go, so they survive closing the app. When a fixed-length session ends, you get a summary and a **New session** button.
+**The session bar** at the top shows this session's **Solved**, **Failed**, **Accuracy** and **Played**, and once you're signed in to Lichess, the rating change this session (e.g. **+34 this session**). On the right, **All time** counts every attempt you've ever made; your attempts are saved as you go, so they survive closing the app. When a fixed-length session ends, you get a summary and a **New session** button.
 
 ![A solved puzzle with its themes revealed](img/solved.png)
 
@@ -217,7 +293,7 @@ Shortcuts do nothing while you're typing in a box or a dialog is open, and a key
 ## Appearance and sounds
 *Added in v0.2.*
 
-Choose **☰ → Settings…** to change how the app looks and sounds. Every change applies at once and is saved on this PC, so the app starts the same way next time.
+Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change how the app looks and sounds. *Changed in v0.3:* the same dialog starts with **Lichess account**, where you sign in or out (see [Signing in with Lichess](#signing-in-with-lichess-syncing-solves-offline-mode)). Every change applies at once and is saved on this PC, so the app starts the same way next time.
 
 ![The Settings dialog](img/settings.png)
 

@@ -36,6 +36,25 @@ MISSED_IDS = (
     "SELECT a.puzzle_id FROM attempts a WHERE a.puzzle_source = 'lichess' AND a.win = 0"
     " AND a.id = (SELECT MAX(b.id) FROM attempts b WHERE b.puzzle_source = 'lichess' AND b.puzzle_id = a.puzzle_id)"
 )
+# FR-3.9 (v0.3): your Lichess puzzle history, plus what this app has synced (the sync adds those).
+PLAYED_IDS = "SELECT h.puzzle_id FROM lichess_history h"
+
+
+def hidden_ids_sql(spec: FilterSpec) -> str | None:
+    """The IDs the history filters hide (solved here and/or played on Lichess), as one subquery, or
+    None. Counting and small-pool sampling subtract these instead of testing `id NOT IN (...)` per row:
+    `id` isn't in the covering index, so a per-row test reads the whole table (4 s instead of 0.3 s)."""
+    parts = []
+    if spec.excludes_solved:
+        parts.append(SOLVED_IDS)
+    if spec.excludes_played:
+        parts.append(PLAYED_IDS)
+    return " UNION ".join(parts) if parts else None
+
+
+def unhidden(spec: FilterSpec) -> FilterSpec:
+    """The same filters without the hiding history filters (only my misses is kept)."""
+    return dataclasses.replace(spec, exclude_solved_here=False, exclude_played_on_lichess=False)
 
 
 def _masks(themes: Sequence[str], bits: dict[str, int]) -> tuple[list[int], list[str]]:
@@ -123,8 +142,9 @@ def build_where(spec: FilterSpec, bits: dict[str, int], openings: dict[str, int]
 
     if spec.only_my_misses:
         parts.append(f"p.id IN ({MISSED_IDS})")
-    elif spec.excludes_solved:
-        parts.append(f"p.id NOT IN ({SOLVED_IDS})")
+    hidden = hidden_ids_sql(spec)
+    if hidden:
+        parts.append(f"p.id NOT IN ({hidden})")
 
     return Where(" AND ".join(parts), tuple(params))
 
@@ -183,17 +203,17 @@ class LichessDbSource:
         select = ", ".join(["COUNT(*)"] + [f"SUM({c[0]})" for c in conds])
         select_params = [p for c in conds for p in c[1]]
         plain = dataclasses.replace(spec, themes=(), match="any", ratios=())
-        base_spec = dataclasses.replace(plain, exclude_solved_here=False) if spec.excludes_solved else plain
-        base = self.where(base_spec)
+        hidden = hidden_ids_sql(spec)
+        base = self.where(unhidden(plain))
         with self._db.session() as conn:
             row = conn.execute(
                 f"SELECT {select} FROM pz.puzzles p WHERE {base.sql} AND {union_sql}",
                 (*select_params, *base.params, *union_params),
             )
             totals = [int(x or 0) for x in row.fetchone()]
-            if spec.excludes_solved:
+            if hidden:
                 row = conn.execute(
-                    f"SELECT {select} FROM pz.puzzles p WHERE p.id IN ({SOLVED_IDS}) AND {base.sql} AND {union_sql}",
+                    f"SELECT {select} FROM pz.puzzles p WHERE p.id IN ({hidden}) AND {base.sql} AND {union_sql}",
                     (*select_params, *base.params, *union_params),
                 )
                 totals = [t - int(x or 0) for t, x in zip(totals, row.fetchone(), strict=True)]
@@ -203,24 +223,25 @@ class LichessDbSource:
         """With ratios, the union of the groups (see count_with_buckets). Exclude solved (on by default) is counted by subtraction: `id NOT IN (…)` would make SQLite
         read every row of the table, because `id` isn't in the covering index (4 s instead of 0.3 s on
         the full export). So count without it, then subtract the solved puzzles that match, which the
-        unique `id` index finds directly."""
+        unique `id` index finds directly. Exclude played on Lichess (v0.3) joins the same subtraction."""
         if spec.ratios:
             return self.count_with_buckets(spec)[0]
+        hidden = hidden_ids_sql(spec)
         with self._db.session() as conn:
-            if spec.excludes_solved:
-                base = self.where(dataclasses.replace(spec, exclude_solved_here=False))
+            if hidden:
+                base = self.where(unhidden(spec))
                 total = conn.execute(f"SELECT COUNT(*) FROM pz.puzzles p WHERE {base.sql}", base.params).fetchone()[0]
-                solved = conn.execute(
-                    f"SELECT COUNT(*) FROM pz.puzzles p WHERE p.id IN ({SOLVED_IDS}) AND {base.sql}", base.params
+                gone = conn.execute(
+                    f"SELECT COUNT(*) FROM pz.puzzles p WHERE p.id IN ({hidden}) AND {base.sql}", base.params
                 ).fetchone()[0]
-                return int(total) - int(solved)
+                return int(total) - int(gone)
             where = self.where(spec)
             return int(conn.execute(f"SELECT COUNT(*) FROM pz.puzzles p WHERE {where.sql}", where.params).fetchone()[0])
 
-    def _solved_keys(self, conn: sqlite3.Connection, spec: FilterSpec) -> set[int]:
-        """Keys of the solved puzzles that would otherwise match (for sampling, like count)."""
-        base = self.where(dataclasses.replace(spec, exclude_solved_here=False))
-        rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE p.id IN ({SOLVED_IDS}) AND {base.sql}", base.params)
+    def _hidden_keys(self, conn: sqlite3.Connection, spec: FilterSpec, hidden: str) -> set[int]:
+        """Keys of the hidden puzzles that would otherwise match (for sampling, like count)."""
+        base = self.where(unhidden(spec))
+        rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE p.id IN ({hidden}) AND {base.sql}", base.params)
         return {r[0] for r in rows}
 
     def sample_keys(
@@ -232,10 +253,11 @@ class LichessDbSource:
         where = self.where(spec)
         with self._db.session() as conn:
             if match_count <= SMALL_POOL:
-                if spec.excludes_solved:  # the covering index, minus the solved keys (see count)
-                    base = self.where(dataclasses.replace(spec, exclude_solved_here=False))
+                hidden = hidden_ids_sql(spec)
+                if hidden:  # the covering index, minus the hidden keys (see count)
+                    base = self.where(unhidden(spec))
                     rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE {base.sql}", base.params)
-                    skip = set(exclude) | self._solved_keys(conn, spec)
+                    skip = set(exclude) | self._hidden_keys(conn, spec, hidden)
                 else:
                     rows = conn.execute(f"SELECT p.n FROM pz.puzzles p WHERE {where.sql}", where.params)
                     skip = set(exclude)

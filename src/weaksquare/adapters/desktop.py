@@ -9,8 +9,9 @@ from typing import Any
 
 
 class Desktop:
-    def __init__(self) -> None:
+    def __init__(self, title: str = "") -> None:
         self._window: Any = None
+        self._title = title
 
     def attach(self, window: Any) -> None:
         self._window = window
@@ -21,6 +22,31 @@ class Desktop:
             os.startfile(path)  # type: ignore[attr-defined]
         else:  # pragma: no cover
             raise OSError("opening folders is only supported on Windows")
+
+    def open_in_browser(self, url: str) -> None:
+        """FR-6.1a: the default system browser, never the app window (password managers and 2FA work)."""
+        import webbrowser
+
+        if not url.startswith("https://"):
+            raise ValueError("only https URLs are opened in the browser")
+        webbrowser.open(url, new=2)
+
+    def bring_to_front(self) -> None:
+        """After the sign-in callback, bring the app back in front of the browser (FR-6.1a).
+        Windows refuses a plain SetForegroundWindow from a background app, so the window is made
+        topmost for a moment as well."""
+        import contextlib
+
+        from weaksquare.adapters.instance_lock import bring_existing_to_front
+
+        window = self._window
+        if window is not None:
+            with contextlib.suppress(Exception):
+                window.restore()
+                window.on_top = True
+                window.on_top = False
+        if self._title:
+            bring_existing_to_front(self._title)
 
     def choose_puzzle_file(self) -> str | None:
         """Native Open dialog for a Lichess puzzle export. None if cancelled."""

@@ -1,0 +1,8 @@
+{
+  "puzzles": [],
+  "glicko": { "rating": 1829.4, "deviation": 61.8, "provisional": false },
+  "rounds": [
+    { "id": "001KR", "win": true, "ratingDiff": 8 },
+    { "id": "008o6", "win": false, "ratingDiff": -13 }
+  ]
+}

@@ -35,15 +35,18 @@ const COUNT_DEBOUNCE_MS = 250;
 const PANEL_MAX_HEIGHT = "calc(100vh - 56px - 2 * var(--mantine-spacing-md) - 2px)";
 
 // A one-line summary of the "More filters" section, so its defaults are never invisible.
-function moreSummary(spec: FilterSpec): string {
+function moreSummary(spec: FilterSpec, lichess: boolean): string {
   const parts: string[] = [];
   if (spec.openings.length) parts.push(`${spec.openings.length} opening${spec.openings.length === 1 ? "" : "s"}`);
   const q: string[] = [];
   if (spec.min_popularity !== null) q.push(`popularity ≥ ${spec.min_popularity}`);
   if (spec.min_plays !== null) q.push(`≥ ${spec.min_plays.toLocaleString("en-US")} plays`);
   parts.push(q.length ? q.join(", ") : "no quality filter");
+  const played = lichess && spec.exclude_played_on_lichess;
   if (spec.only_my_misses) parts.push("only my misses");
+  else if (spec.exclude_solved_here && played) parts.push("solved or played on Lichess left out");
   else if (spec.exclude_solved_here) parts.push("solved ones left out");
+  else if (played) parts.push("played on Lichess left out");
   return parts.join(" · ");
 }
 
@@ -56,7 +59,14 @@ export function MixerView({
   onStart,
   starting,
   historyVersion = 0,
+  rated,
+  onRated,
+  playedCount,
 }: {
+  /** FR-1.9: the next session's Rated toggle (on at each launch, never saved). */
+  rated: boolean;
+  onRated: (on: boolean) => void;
+  playedCount: number | null;
   spec: FilterSpec;
   onChange: (spec: FilterSpec) => void;
   dbStatus: PuzzleDbStatus;
@@ -106,7 +116,7 @@ export function MixerView({
       );
     }, COUNT_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [spec, dbStatus.imported_at, historyVersion]);
+  }, [spec, dbStatus.imported_at, historyVersion, playedCount]);
 
   const set = (patch: Partial<FilterSpec>) => onChange({ ...spec, ...patch });
   const bounds: [number, number] = [dbStatus.rating_min ?? 400, dbStatus.rating_max ?? 3400];
@@ -187,7 +197,7 @@ export function MixerView({
                 More filters
               </Text>
               <Text size="xs" c="dimmed" data-testid="more-summary">
-                {moreSummary(spec)}
+                {moreSummary(spec, playedCount !== null)}
               </Text>
             </Accordion.Control>
             <Accordion.Panel>
@@ -201,7 +211,10 @@ export function MixerView({
                 <HistoryControls
                   excludeSolved={spec.exclude_solved_here}
                   onlyMisses={spec.only_my_misses}
+                  excludePlayed={spec.exclude_played_on_lichess}
+                  playedCount={playedCount}
                   onChange={(exclude_solved_here, only_my_misses) => set({ exclude_solved_here, only_my_misses })}
+                  onPlayed={(exclude_played_on_lichess) => set({ exclude_played_on_lichess })}
                 />
               </Stack>
             </Accordion.Panel>
@@ -226,6 +239,13 @@ export function MixerView({
           </Group>
         </Group>
         <QueueControls value={spec.queue_size} onChange={(queue_size) => set({ queue_size })} />
+        <Switch
+          label="Rated"
+          description={rated ? "Solves count toward your Lichess puzzle rating." : "Solves sync to Lichess as unrated."}
+          checked={rated}
+          onChange={(e) => onRated(e.currentTarget.checked)}
+          data-testid="rated-switch"
+        />
         <Button onClick={onStart} loading={starting} disabled={count === 0 || countError !== null} data-testid="start">
           Start
         </Button>

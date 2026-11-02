@@ -11,7 +11,8 @@ import {
   Title,
   useMantineColorScheme,
 } from "@mantine/core";
-import type { SoundSettings } from "../api/types";
+import type { AccountStatus, SoundSettings } from "../api/types";
+import { AccountPanel } from "../components/AccountPanel";
 import { sounds as player } from "../sound/player";
 
 const SETS: { value: SoundSettings["set"]; label: string }[] = [
@@ -21,8 +22,8 @@ const SETS: { value: SoundSettings["set"]; label: string }[] = [
   { value: "futuristic", label: "Futuristic" },
 ];
 
-// FR-1.12 and FR-1.13: appearance and sounds, saved in user.db through the bridge and applied at once.
-// (The gear settings of FR-1.8 arrive with the Lichess sign-in; these move there then.)
+// The gear settings (FR-1.8): your Lichess account, appearance (FR-1.12) and sounds (FR-1.13), saved in
+// user.db through the bridge and applied at once. The same dialog opens from the gear and from ☰.
 export function SettingsModal({
   opened,
   onClose,
@@ -32,7 +33,11 @@ export function SettingsModal({
   onSounds,
   autoCheck,
   onAutoCheck,
+  account,
+  onAccountChanged,
 }: {
+  account: AccountStatus | null;
+  onAccountChanged: () => void;
   opened: boolean;
   onClose: () => void;
   coordinates: boolean;
@@ -47,6 +52,10 @@ export function SettingsModal({
   return (
     <Modal opened={opened} onClose={onClose} title="Settings" size="md">
       <Stack gap="lg" data-testid="settings">
+        <Stack gap="xs">
+          <Title order={5}>Lichess account</Title>
+          <AccountPanel account={account} onChanged={onAccountChanged} />
+        </Stack>
         <Stack gap="xs">
           <Title order={5}>Appearance</Title>
           <SegmentedControl

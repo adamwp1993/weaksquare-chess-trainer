@@ -12,6 +12,17 @@ from weaksquare.core.puzzle import PuzzleRef
 
 
 @dataclass(frozen=True)
+class SyncFields:
+    """How an attempt enters the Lichess sync queue (v0.3, FR-6.13–6.16)."""
+
+    status: str = "local"  # 'pending' to sync it
+    rated: bool | None = None
+    angle: str | None = None
+    account: str | None = None  # the Lichess user signed in when it was solved
+    already_played: bool | None = None
+
+
+@dataclass(frozen=True)
 class Tally:
     solved: int
     failed: int
@@ -60,14 +71,22 @@ class AttemptsRepo:
         finished_at: str,
         result: AttemptResult,
         puzzle_rating: int | None = None,
+        sync: SyncFields | None = None,
     ) -> int:
+        """Append one decided attempt. `sync` (v0.3) queues it for Lichess; without it the attempt
+        stays local (sync_status 'local')."""
+        sync = sync or SyncFields()
         with self._db.session() as conn:
             cur = conn.execute(
                 "INSERT INTO attempts (puzzle_source, puzzle_id, session_id, mode, started_at, finished_at, win,"
-                " help_used, first_move_correct, line_correct, time_ms, puzzle_rating)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " help_used, first_move_correct, line_correct, time_ms, puzzle_rating,"
+                " rated, angle, sync_status, sync_account, already_played)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ref.source, ref.id, session_id, mode, started_at, finished_at, int(result.win), result.help_used,
-                 int(result.first_move_correct), int(result.line_correct), result.time_ms, puzzle_rating),
+                 int(result.first_move_correct), int(result.line_correct), result.time_ms, puzzle_rating,
+                 None if sync.rated is None else int(sync.rated), sync.angle, sync.status,
+                 sync.account.lower() if sync.account else None,
+                 None if sync.already_played is None else int(sync.already_played)),
             )  # fmt: skip
             return int(cur.lastrowid or 0)
 
