@@ -146,7 +146,7 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.5 | Side to move | White / Black / Either | Player color |
 | FR-3.6 | Phase / goal / origin | Covered by the theme picker groups | e.g. endgame, mate, crushing, master games |
 | FR-3.7 | Opening | Searchable multi-select from `OpeningTags` | e.g. Italian Game, Caro-Kann, London |
-| FR-3.8 | Quality | Min popularity, min plays | On by default at **popularity ≥ 50** (Lichess popularity runs from -100 to 100) and **≥ 100 plays**; both adjustable, and clearing a box turns that threshold off |
+| FR-3.8 | Quality | Min popularity, min plays | On by default at **popularity ≥ 50** (Lichess popularity runs from -100 to 100) and **≥ 100 plays**; both adjustable, and clearing a box turns that threshold off. Measured on the 2026-11-01 export: the defaults leave out 21.9% of puzzles (mostly the plays minimum); kept as is by Adam after seeing that number. The puzzles stay in the database; this only narrows the selection |
 | FR-3.9 | History | Checkboxes: exclude solved here / exclude played on Lichess / **only my misses** | Uses `attempts` and `lichess_history`. *Exclude solved here* (**on by default**) hides puzzles you've **won at least once** in this app; ones you only failed can still come up. *Only my misses* (off by default) keeps only puzzles whose **latest** attempt here was a loss, so a miss drops out once you solve it. |
 | FR-3.10 | **Ratios** (optional) | Weighted buckets, e.g. 50% fork, 30% capture-the-defender, 20% one-move | Draws from each bucket by weight |
 | FR-3.11 | Order | Random / easy → hard / grouped by theme | |
