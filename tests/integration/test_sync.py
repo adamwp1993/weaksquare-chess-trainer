@@ -51,6 +51,9 @@ class FakeAccount:
     def note_reachable(self) -> None:
         self.reachable += 1
 
+    def is_signed_in(self) -> bool:
+        return self.id is not None
+
 
 class Harness:
     def __init__(self, tmp_path: Path, clock: FixedClock, lichess: FakeLichess | None = None) -> None:

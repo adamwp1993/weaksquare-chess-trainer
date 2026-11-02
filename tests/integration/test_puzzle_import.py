@@ -41,7 +41,9 @@ def make(paths: Paths, clock: FixedClock, runner: JobRunner, http: object | None
     from weaksquare.config import MIGRATIONS_DIR
 
     migrate(paths.user_db, MIGRATIONS_DIR / "user", clock)
-    return build_services(paths, clock, runner, random.Random(5), http=http)  # type: ignore[arg-type]
+    from tests.helpers import fake_service_kwargs
+
+    return build_services(paths, clock, runner, random.Random(5), http=http, **fake_service_kwargs())  # type: ignore[arg-type]
 
 
 def run_import(services: Services, runner: JobRunner, local: Path | None = None) -> str:

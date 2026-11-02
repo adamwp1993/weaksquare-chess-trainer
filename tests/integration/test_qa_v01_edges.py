@@ -274,7 +274,9 @@ def test_rng_used_for_queue_is_the_injected_one(services, paths, clock, fixture_
     from weaksquare.jobs.runner import JobRunner
 
     def ids(seed: int) -> list[str]:
-        s = build_services(paths, clock, JobRunner(), random.Random(seed))
+        from tests.helpers import fake_service_kwargs
+
+        s = build_services(paths, clock, JobRunner(), random.Random(seed), **fake_service_kwargs())
         sid = s.sessions.start(FilterSpec(queue_size=None)).session_id
         out = [s.sessions.next_puzzle(sid).puzzle_id for _ in range(60)]
         s.close()

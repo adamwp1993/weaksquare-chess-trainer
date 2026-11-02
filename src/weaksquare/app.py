@@ -7,20 +7,23 @@ import logging
 import mimetypes
 import os
 import random
+import secrets as secrets_module
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from weaksquare import config
 from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
-from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
+from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo, SyncFields
 from weaksquare.adapters.desktop import (
     Desktop,
     set_app_user_model_id,
@@ -30,18 +33,33 @@ from weaksquare.adapters.desktop import (
 )
 from weaksquare.adapters.files import PuzzleCsv, sha256_file
 from weaksquare.adapters.http import HttpClient
+from weaksquare.adapters.lichess import (
+    LichessHttp,
+    is_network_error,
+    is_rate_limited,
+    is_unauthorized,
+    retry_after,
+)
 from weaksquare.adapters.logging_setup import setup_logging
+from weaksquare.adapters.oauth_loopback import LoopbackCancelled, LoopbackListener, LoopbackTimeout
+from weaksquare.adapters.scheduler import TimerScheduler
+from weaksquare.adapters.secret_store import KeyringSecretStore, MemorySecretStore, SecretStore, service_name
 from weaksquare.adapters.system_clock import SystemClock, make_rng
-from weaksquare.bridge.api import Api
+from weaksquare.bridge import dto
+from weaksquare.bridge.api import Api, attempt_rating
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
+from weaksquare.core.lichess import LichessClient
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.db_update import UpdateCheckService, Urls
+from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
+from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
 from weaksquare.services.ui_settings import UiSettingsService
 
 log = logging.getLogger("weaksquare")
@@ -113,18 +131,43 @@ class Services:
     stats: StatsService
     ui_settings: UiSettingsService
     db_update: UpdateCheckService
+    account: AccountService
+    sync: SyncService
+    history: HistoryService
+    scheduler: Any
 
     def close(self) -> None:
+        close = getattr(self.scheduler, "close", None)
+        if close:
+            close()
         self.http.close()
         self.db.close_all()
 
 
 def build_services(
-    paths: config.Paths, clock: Clock, runner: JobRunner, rng: random.Random, http: HttpClient | None = None
+    paths: config.Paths,
+    clock: Clock,
+    runner: JobRunner,
+    rng: random.Random,
+    http: HttpClient | None = None,
+    *,
+    secrets: SecretStore | None = None,
+    lichess: LichessClient | None = None,
+    scheduler: Any = None,
+    browser: Any = None,
+    make_listener: Callable[..., Any] | None = None,
+    emit: Callable[[str, Any], None] = lambda name, payload: None,
 ) -> Services:
-    """Wire the concrete adapters into the services. Also used by the scripts/ CLIs."""
+    """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
+
+    `secrets` defaults to an in-memory store, so only `main()` (which passes the keyring store) ever
+    touches Windows Credential Manager; scripts and tests never do."""
     db = Database(paths.user_db, paths.puzzles_db)
     http = http or HttpClient()
+    secrets = secrets or MemorySecretStore()
+    lichess = lichess or LichessHttp(http)
+    scheduler = scheduler or TimerScheduler()
+    browser = browser or Desktop()
     meta = PuzzleMetaRepo(db)
     puzzle_db = PuzzleDbService(
         ImportDeps(
@@ -150,9 +193,60 @@ def build_services(
     attempts = AttemptsRepo(db)
     mixer = MixerService(puzzles)
     ui_settings = UiSettingsService(SettingsRepo(db))
-    sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
+    sync_repo = SyncRepo(db)
+    history_repo = LichessHistoryRepo(db)
+
+    def account_changed(st: AccountStatus) -> None:
+        emit("account", dto.AccountStatus(st.state, st.username, st.rating, st.provisional))
+
+    account = AccountService(
+        AccountDeps(
+            lichess=lichess,
+            secrets=secrets,
+            settings=SettingsRepo(db),
+            runner=runner,
+            make_listener=make_listener or (lambda accept: LoopbackListener(accept)),
+            listener_errors=ListenerErrors(LoopbackTimeout, LoopbackCancelled),
+            browser=browser,
+            scheduler=scheduler,
+            new_secret=lambda: secrets_module.token_urlsafe(48),
+            is_network_error=is_network_error,
+            is_unauthorized=is_unauthorized,
+        ),
+        notify=account_changed,
+    )
+
+    def sync_changed(u: SyncUpdate) -> None:
+        status = dto.SyncStatus(u.status.state, u.status.pending, history_repo.count())
+        emit("sync", dto.SyncEvent(status, [r for r in (attempt_rating(a) for a in u.attempts) if r is not None]))
+
+    sync = SyncService(
+        SyncDeps(
+            repo=sync_repo,
+            history=history_repo,
+            account=account,
+            lichess=lichess,
+            runner=runner,
+            scheduler=scheduler,
+            clock=clock,
+            is_network_error=is_network_error,
+            is_unauthorized=is_unauthorized,
+            retry_after=retry_after,
+            is_rate_limited=is_rate_limited,
+        ),
+        notify=sync_changed,
+    )
+    history = HistoryService(account, lichess, history_repo, SettingsRepo(db), runner,
+                             is_network_error, is_unauthorized, on_done=sync.announce)  # fmt: skip
+
+    def after_sign_in() -> None:
+        history.start_import()
+        sync.kick()
+
+    account.on_signed_in(after_sign_in)
+    sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields)
     presets = PresetService(PresetsRepo(db), clock)
-    stats = StatsService(StatsRepo(db), attempts)
+    stats = StatsService(StatsRepo(db), attempts, sync_repo)
     db_update = UpdateCheckService(
         http, clock, SettingsRepo(db), meta.read, runner,
         Urls(file=config.PUZZLE_DB_URL, sums=config.PUZZLE_SUMS_URL, page=config.PUZZLE_PAGE_URL),
@@ -167,6 +261,10 @@ def build_services(
         stats=stats,
         ui_settings=ui_settings,
         db_update=db_update,
+        account=account,
+        sync=sync,
+        history=history,
+        scheduler=scheduler,
     )
 
 
@@ -214,8 +312,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     events = EventSink()
     runner = JobRunner(events)
-    services = build_services(paths, clock, runner, rng)
-    desktop = Desktop()
+    desktop = Desktop(title)
+    services = build_services(
+        paths, clock, runner, rng,
+        secrets=KeyringSecretStore(service_name(args.dev)),  # dev runs never see your real sign-in
+        browser=desktop,
+        emit=events.emit,
+    )  # fmt: skip
     api = Api(
         paths=paths,
         desktop=desktop,
@@ -229,7 +332,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         stats=services.stats,
         ui_settings=services.ui_settings,
         db_update=services.db_update,
+        account=services.account,
+        sync=services.sync,
+        history=services.history,
     )
+    services.account.check()  # FR-1.6: validate a stored sign-in in the background
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's

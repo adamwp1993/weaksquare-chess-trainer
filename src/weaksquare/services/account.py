@@ -141,6 +141,10 @@ class AccountService:
                     self._rating, self._provisional = None, False
         self._notify(self.status())
 
+    def is_signed_in(self) -> bool:
+        with self._lock:
+            return self._state == "signed_in"
+
     def token(self) -> str | None:
         return self._d.secrets.get(SECRET_ACCOUNT)
 

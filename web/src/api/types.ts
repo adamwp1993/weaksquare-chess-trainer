@@ -126,11 +126,18 @@ export interface PuzzleView {
   player_color: "white" | "black";
   rating: number;
   opponent_sound: "move" | "capture" | "check" | "checkmate" | "castle";
+  already_played: boolean;
 }
 
 export interface ThemeLabel {
   key: string;
   name: string;
+}
+
+export interface AttemptRating {
+  attempt_id: number;
+  status: "syncing" | "offline" | "unrated" | "already_played" | "not_rated" | "done";
+  diff: number | null;
 }
 
 export interface Outcome {
@@ -140,6 +147,8 @@ export interface Outcome {
   themes: ThemeLabel[];
   solution: string[];
   puzzle_url: string;
+  attempt_id: number;
+  lichess: AttemptRating | null;
 }
 
 export interface MoveFeedback {
@@ -169,6 +178,7 @@ export interface SessionStats {
   finished: boolean;
   all_time_solved: number;
   all_time_failed: number;
+  rating_change: number | null;
 }
 
 export interface StatRow {
@@ -195,4 +205,40 @@ export interface UpdateOffer {
   size: number | null;
   approx_count: number | null;
   approx_new: number | null;
+}
+
+export interface AccountStatus {
+  state: "signed_out" | "checking" | "signed_in" | "offline" | "expired";
+  username: string | null;
+  rating: number | null;
+  provisional: boolean;
+}
+
+export interface SyncStatus {
+  state: "idle" | "syncing" | "offline" | "waiting" | "signed_out";
+  pending: number;
+  history_count: number;
+}
+
+export interface SyncEvent {
+  status: SyncStatus;
+  attempts: AttemptRating[];
+}
+
+export interface RatingPoint {
+  at: string;
+  rating: number;
+  session_id: number | null;
+}
+
+export interface SessionChange {
+  session_id: number;
+  started_at: string;
+  change: number;
+  solves: number;
+}
+
+export interface RatingHistory {
+  points: RatingPoint[];
+  sessions: SessionChange[];
 }

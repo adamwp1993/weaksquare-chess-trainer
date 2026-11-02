@@ -40,6 +40,14 @@ ALLOWLIST = {
     "request_help",
     "get_session_stats",
     "get_stats",
+    # v0.3: Lichess account and sync (never returns a token, SR-1)
+    "get_account_status",
+    "start_sign_in",
+    "cancel_sign_in",
+    "sign_out",
+    "get_sync_status",
+    "get_attempt_ratings",
+    "get_rating_history",
 }
 
 

@@ -18,6 +18,8 @@ Excluded themes, openings, rating, side, quality and history filters don't chang
 
 from __future__ import annotations
 
+from typing import Literal
+
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import info
 
@@ -64,3 +66,30 @@ def angle_for(spec: FilterSpec, puzzle_themes: tuple[str, ...] | list[str], leng
         return min(matched, key=lambda t: (_TIER.get(info(t).group, 0), order[t]))
     # Only the move count was narrowed (or, with odd data, no selected theme matched).
     return length_theme(length)
+
+
+RatingStatus = Literal["syncing", "offline", "unrated", "already_played", "not_rated", "done"]
+
+
+def rating_status(
+    *,
+    rated: bool | None,
+    already_played: bool | None,
+    sync_status: str | None,
+    rating_diff: int | None,
+    online: bool,
+) -> RatingStatus:
+    """What the result panel says about one attempt's rating change (FR-6.11b).
+
+    A change Lichess returned is always shown. Otherwise it says why there's no number: Rated was
+    off, Lichess had already seen the puzzle from you, or Lichess returned 0 or nothing. While the
+    solve waits in the queue it's *Syncing…* when Lichess is reachable, else *Will sync later*."""
+    if sync_status == "synced" and rating_diff:
+        return "done"
+    if rated is False:
+        return "unrated"
+    if already_played:
+        return "already_played"
+    if sync_status == "pending":
+        return "syncing" if online else "offline"
+    return "not_rated"

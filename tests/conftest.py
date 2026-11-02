@@ -60,13 +60,14 @@ def services(paths: config.Paths, clock: FixedClock, rng: random.Random, fixture
     """Fully wired services on a temp data folder with the fixture puzzles imported."""
     import shutil
 
+    from tests.helpers import fake_service_kwargs
     from weaksquare.adapters.db.migrate import migrate
     from weaksquare.app import build_services
     from weaksquare.jobs.runner import JobRunner
 
     shutil.copyfile(fixture_puzzles_db, paths.puzzles_db)
     migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock)
-    s = build_services(paths, clock, JobRunner(), rng)
+    s = build_services(paths, clock, JobRunner(), rng, **fake_service_kwargs())
     yield s
     s.close()
 

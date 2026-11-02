@@ -90,7 +90,9 @@ def test_same_seed_same_queue(services, paths, clock, fixture_puzzles_db) -> Non
     from weaksquare.jobs.runner import JobRunner
 
     def queue(seed: int) -> list[str]:
-        s = build_services(paths, clock, JobRunner(), random.Random(seed))
+        from tests.helpers import fake_service_kwargs
+
+        s = build_services(paths, clock, JobRunner(), random.Random(seed), **fake_service_kwargs())
         sid = s.sessions.start(FilterSpec(queue_size=10)).session_id
         out = [s.sessions.next_puzzle(sid).puzzle_id for _ in range(10)]
         s.close()

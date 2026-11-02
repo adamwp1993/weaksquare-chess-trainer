@@ -26,9 +26,30 @@ class FakeDesktop(Desktop):
         self.opened.append(path)
 
 
-def build_api(paths: Paths, clock: FixedClock, desktop: Desktop | None = None, http: object | None = None) -> Api:
+def fake_service_kwargs(lichess: object | None = None) -> dict:
+    """Fakes for everything that would reach Lichess, Credential Manager or a timer thread."""
+    from tests.fakes.desktop import FakeBrowser, FakeScheduler
+    from tests.fakes.lichess import FakeLichess
+    from weaksquare.adapters.secret_store import MemorySecretStore
+
+    return {
+        "secrets": MemorySecretStore(),
+        "lichess": lichess or FakeLichess(),
+        "scheduler": FakeScheduler(),
+        "browser": FakeBrowser(),
+    }
+
+
+def build_api(
+    paths: Paths,
+    clock: FixedClock,
+    desktop: Desktop | None = None,
+    http: object | None = None,
+    lichess: object | None = None,
+) -> Api:
     runner = JobRunner()
-    services = build_services(paths, clock, runner, random.Random(1234), http=http)  # type: ignore[arg-type]
+    services = build_services(paths, clock, runner, random.Random(1234), http=http,  # type: ignore[arg-type]
+                              **fake_service_kwargs(lichess))  # fmt: skip
     return Api(
         paths=paths,
         desktop=desktop or FakeDesktop(),
@@ -42,6 +63,9 @@ def build_api(paths: Paths, clock: FixedClock, desktop: Desktop | None = None, h
         stats=services.stats,
         ui_settings=services.ui_settings,
         db_update=services.db_update,
+        account=services.account,
+        sync=services.sync,
+        history=services.history,
     )
 
 

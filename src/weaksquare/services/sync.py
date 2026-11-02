@@ -20,6 +20,7 @@ from typing import Literal, Protocol
 
 from weaksquare.core.clock import Clock
 from weaksquare.core.lichess import MAX_BATCH, BatchResult, LichessClient, Solution
+from weaksquare.core.scoring import RatingStatus, rating_status
 from weaksquare.jobs.runner import CancelToken, JobRunner, ProgressFn
 
 log = logging.getLogger(__name__)
@@ -60,6 +61,10 @@ class Repo(Protocol):
 
     def attempts(self, attempt_ids: list[int]) -> list: ...  # list[AttemptSyncRow]
 
+    def played_before(self, puzzle_id: str) -> bool: ...
+
+    def session_change(self, session_id: int) -> int | None: ...
+
 
 class History(Protocol):
     def add(self, rows: list[tuple[str, str | None, bool | None]]) -> int: ...
@@ -76,6 +81,8 @@ class Account(Protocol):
 
     def note_reachable(self) -> None: ...
 
+    def is_signed_in(self) -> bool: ...
+
 
 class Scheduler(Protocol):
     def call_later(self, delay_s: float, fn: Callable[[], None]) -> None: ...
@@ -88,9 +95,26 @@ class SyncStatus:
 
 
 @dataclass(frozen=True)
+class RatingInfo:
+    """One attempt's rating change as the result panel shows it (FR-6.11b)."""
+
+    attempt_id: int
+    status: RatingStatus
+    diff: int | None
+
+
+@dataclass(frozen=True)
 class SyncUpdate:
     status: SyncStatus
-    attempts: list = field(default_factory=list)  # AttemptSyncRow for attempts that changed
+    attempts: list[RatingInfo] = field(default_factory=list)  # attempts whose rating info changed
+
+
+@dataclass(frozen=True)
+class QueueFields:
+    """How a new attempt enters the queue (FR-6.16, FR-4.6 badge)."""
+
+    account: str | None
+    already_played: bool
 
 
 @dataclass(frozen=True)
@@ -149,8 +173,47 @@ class SyncService:
             self._state = state
         self._notify(SyncUpdate(self.status(), changed or []))
 
-    def attempt_ratings(self, attempt_ids: list[int]) -> list:
-        return self._d.repo.attempts(attempt_ids)
+    def _online(self) -> bool:
+        with self._lock:
+            state = self._state
+        return self._d.account.is_signed_in() and state not in ("offline", "waiting")
+
+    def _infos(self, rows: list) -> list[RatingInfo]:
+        online = self._online()
+        return [
+            RatingInfo(
+                r.attempt_id,
+                rating_status(rated=r.rated, already_played=r.already_played, sync_status=r.sync_status,
+                              rating_diff=r.rating_diff, online=online),
+                r.rating_diff,
+            )
+            for r in rows
+        ]  # fmt: skip
+
+    def attempt_ratings(self, attempt_ids: list[int]) -> list[RatingInfo]:
+        return self._infos(self._d.repo.attempts(attempt_ids))
+
+    # ---- hooks for the session (v0.3) -------------------------------------------------------------
+    def played_before(self, puzzle_id: str) -> bool:
+        return self._d.repo.played_before(puzzle_id)
+
+    def fields_for(self, puzzle_id: str) -> QueueFields:
+        """Who a new attempt syncs to, and whether Lichess has seen the puzzle from you already."""
+        return QueueFields(self._d.account.account_id(), self._d.repo.played_before(puzzle_id))
+
+    def session_change(self, session_id: int) -> int | None:
+        return self._d.repo.session_change(session_id)
+
+    def announce(self) -> None:
+        """Push the current status (e.g. after the history import changed its count)."""
+        self._notify(SyncUpdate(self.status()))
+
+    def recorded(self) -> None:
+        """An attempt was appended: sync it (never blocks, FR-6.16)."""
+        try:
+            self.kick()
+        except Exception:
+            log.exception("couldn't start the sync")
 
     # ---- the queue ------------------------------------------------------------------------------
     def kick(self) -> str | None:
@@ -243,7 +306,7 @@ class SyncService:
         ids = [r.attempt_id for r in batch]
         log.warning("sync: Lichess refused a batch of %d (%s); marked failed", len(ids), e)
         self._d.repo.mark(ids, "failed", self._now())
-        self._notify(SyncUpdate(self.status(), self._d.repo.attempts(ids)))
+        self._notify(SyncUpdate(self.status(), self._infos(self._d.repo.attempts(ids))))
         return None
 
     def _apply(self, batch: list, result: BatchResult) -> None:
@@ -260,7 +323,7 @@ class SyncService:
         self._d.account.update_rating(result.rating, result.provisional)
         self._d.account.note_reachable()
         ids = [r.attempt_id for r in batch]
-        self._notify(SyncUpdate(self.status(), self._d.repo.attempts(ids)))
+        self._notify(SyncUpdate(self.status(), self._infos(self._d.repo.attempts(ids))))
 
     def _now(self) -> str:
         return self._d.clock.now().isoformat(timespec="seconds")
