@@ -189,3 +189,22 @@ def test_show_answer_closes_the_analysis_board(page) -> None:  # type: ignore[no
     page.get_by_test_id("answer-player").wait_for()
     assert page.get_by_test_id("analysis-controls").count() == 0
     page.get_by_test_id("analyze-button").wait_for()
+
+
+def test_a_refused_setting_snaps_back(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.4-B7): an out-of-range value shows the error and the box returns to the saved value."""
+    page.goto(page.base_url + "/")
+    open_settings(page)
+    think = page.get_by_test_id("engine-think")
+    think.fill("50")
+    think.blur()
+    page.get_by_test_id("engine-settings-error").filter(has_text="between 0.2 and 10").wait_for()
+    page.wait_for_function("() => document.querySelector('[data-testid=engine-think]').value === '1'")
+
+
+def test_about_shows_a_missing_custom_engine(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.4-B6): About says the custom engine can't be found instead of "Not installed"."""
+    page.goto(page.base_url + "/?engine=custom_missing")
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="About").click()
+    page.get_by_test_id("about-engine").filter(has_text="can't be found").wait_for()

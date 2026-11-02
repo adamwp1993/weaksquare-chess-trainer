@@ -9,7 +9,8 @@
 // `?sync=slow` holds every solve at "Syncing…" until the test calls `window.__mockSyncNow()`, and
 // `?played=1` puts the second mock puzzle in your Lichess history (the "already played" badge).
 // Stockfish (v0.4): `?engine=missing` starts with no engine installed (the Install banner),
-// `?engine=custom` with your own engine set, and `?engine=slow` makes every analysis take 1.5 s.
+// `?engine=custom` with your own engine set, `?engine=custom_missing` with that engine's file gone,
+// and `?engine=slow` makes every analysis take 1.5 s.
 import { Chess } from "chess.js";
 import type { AnalysisPurpose, ApiClient, BackendEvent, EngineSettingsChange, SettingValues } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
@@ -233,6 +234,11 @@ export class MockClient implements ApiClient {
       this.engineSettings = { ...this.engineSettings, custom_path: CUSTOM_PATH };
     }
     if (engine === "slow") this.engineDelay = 1500;
+    if (engine === "custom_missing") {
+      const message = "Your custom engine can't be found. Choose it again, or switch back to the managed Stockfish.";
+      this.engine = { ...this.engine, state: "custom_invalid", source: "custom", name: "Stockfish 18", path: CUSTOM_PATH, message };
+      this.engineSettings = { ...this.engineSettings, custom_path: CUSTOM_PATH };
+    }
     if (typeof window !== "undefined") {
       (window as unknown as { __mockSyncNow: () => void }).__mockSyncNow = () => this.drain();
     }

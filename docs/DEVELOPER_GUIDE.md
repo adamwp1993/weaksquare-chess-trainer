@@ -24,8 +24,8 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times; stops with that build command if `web/dist` is older than `web/src`) |
 | Lint and format | `uv run ruff check .` and `uv run ruff format --check .` (drop `--check` to reformat) |
 | Type checks (`mypy`, `tsc --noEmit`, ESLint) | `uv run mypy src`, `npm.cmd --prefix web run typecheck` and `npm.cmd --prefix web run lint` |
-| Full-DB tests (needs the imported puzzle DB) | `uv run pytest -m fulldb`. Reads the dev data folder's `puzzles.db` read-only; add `--fulldb-path PATH` to use another one. Skips if there isn't one. |
-| Real-Stockfish tests | `uv run pytest -m engine`. Uses the dev data folder's managed install (run `uv run python scripts/fetch_stockfish.py --dev` first), read-only; add `--engine-path PATH` to test another `.exe`. Skips if there's none. The normal suite covers the same crash, timeout and restart handling with a fake UCI engine (`tests/fakes/uci_engine.py`), so it needs no binary. |
+| Full-DB tests (needs the imported puzzle DB) | `uv run pytest -m fulldb`. Reads the dev data folder's `puzzles.db` read-only; add `--fulldb-path=PATH` (with `=`: pytest would take a separate PATH as a test path) to use another one. Skips if there isn't one. |
+| Real-Stockfish tests | `uv run pytest -m engine`. Uses the dev data folder's managed install (run `uv run python scripts/fetch_stockfish.py --dev` first), read-only; add `--engine-path=PATH` (with `=`) to test another `.exe`. Skips if there's none. The normal suite covers the same crash, timeout and restart handling with a fake UCI engine (`tests/fakes/uci_engine.py`), so it needs no binary. |
 | All pre-commit checks | `uv run pre-commit run --all-files` |
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
 | Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |

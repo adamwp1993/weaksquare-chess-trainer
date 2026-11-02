@@ -113,3 +113,29 @@ def test_probe_fails_for_a_broken_engine(tmp_path: Path) -> None:
     not_an_engine.write_text("@echo hello\r\n")
     with pytest.raises(EngineError):
         probe_engine(str(not_an_engine))
+
+
+def test_close_during_a_search_is_immediate_and_quiet(caplog) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.4-B5): closing the app mid-search used to wait for the whole think time (the
+    lock file stayed held). close() now kills a busy engine at once; the search fails quietly."""
+    import threading
+
+    e = StockfishEngine(cmd("hang"))
+    errors: list[str] = []
+
+    def search() -> None:
+        try:
+            e.analyse(chess.Board(), 5.0, 1)
+        except EngineError as err:
+            errors.append(err.code)
+
+    t = threading.Thread(target=search)
+    t.start()
+    time.sleep(0.5)  # the search is running and holds the lock
+    caplog.set_level(logging.INFO, logger="weaksquare")
+    started = time.monotonic()
+    e.close()
+    assert time.monotonic() - started < 1.0
+    t.join(10)
+    assert not t.is_alive() and errors == ["engine_stopped"]
+    assert not any("restarted" in r.getMessage() or r.levelno >= logging.ERROR for r in caplog.records)

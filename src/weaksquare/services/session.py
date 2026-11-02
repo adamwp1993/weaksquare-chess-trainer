@@ -17,7 +17,13 @@ import chess
 
 from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
-from weaksquare.core.engine import EngineNotInstalled, refutation_plies, validate_fen, validate_line
+from weaksquare.core.engine import (
+    REFUTATION_MIN_PLIES,
+    EngineNotInstalled,
+    refutation_plies,
+    validate_fen,
+    validate_line,
+)
 from weaksquare.core.errors import ConflictError, NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
@@ -429,16 +435,38 @@ class SessionService:
             raise NotFoundError("There's no wrong move to refute in this puzzle.")
         fen_before, uci = wrong
         board = validate_line(fen_before, [uci])  # FR-7.6: validated before the engine sees it
-        analysis = self._engine_or_raise().analyse(board, player, multipv=1)
+        engine = self._engine_or_raise()
+        analysis = engine.analyse(board, player, multipv=1)
         if analysis.lines:
             first = analysis.lines[0]
-            result = Refutation(fen_before, uci, refutation_plies(first.pv), first.score)
+            line = self._extend_refutation(engine, board, player, refutation_plies(first.pv))
+            result = Refutation(fen_before, uci, line, first.score)
         else:
             result = Refutation(fen_before, uci, (), None, analysis.game_over)
         with s.lock:
             if s.current is cur:
                 cur.refutation = result
         return result
+
+    @staticmethod
+    def _extend_refutation(
+        engine: EngineService, board: chess.Board, player: Any, line: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        """§7.2: the reply line is 3–5 plies unless the game ends sooner. Stockfish sometimes stops its pv
+        at 2 (v0.4-B2), so ask again from where it stopped, at most twice."""
+        for _ in range(2):
+            if len(line) >= REFUTATION_MIN_PLIES:
+                break
+            end = board.copy()
+            for uci in line:
+                end.push_uci(uci)
+            if end.is_game_over():
+                break
+            more = engine.analyse(end, player, multipv=1)
+            if not more.lines or not more.lines[0].pv:
+                break
+            line = refutation_plies(line + more.lines[0].pv)
+        return line
 
     def analyze(self, session_id: int, fen: Any, purpose: Any = "panel") -> Analysis:
         """Eval and top lines for a position, only after the puzzle is over (FR-7.3, FR-7.7). The

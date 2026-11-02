@@ -68,6 +68,7 @@ export function TrainerView({
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
   // failure for a puzzle you never saw (v0.1-B1).
   const loading = useRef(false);
+  const puzzleSeq = useRef(0); // bumps on every load, so late replies for an old puzzle are ignored (v0.4-B3)
   const [busy, setBusy] = useState(false);
 
   const later = (fn: () => void, ms: number) => {
@@ -117,6 +118,7 @@ export function TrainerView({
   const load = useCallback(async () => {
     if (loading.current) return;
     loading.current = true;
+    puzzleSeq.current += 1;
     setBusy(true);
     timers.current.forEach(clearTimeout);
     timers.current = [];
@@ -257,8 +259,10 @@ export function TrainerView({
   // §7.2 step 2: put Stockfish's answer to your wrong move in front of the solution once it arrives.
   const loadRefutation = (solution: AnswerPosition[]) => {
     setRefutation("loading");
+    const seq = puzzleSeq.current;
     api.getRefutation(sessionId).then(
       (r) => {
+        if (seq !== puzzleSeq.current) return;
         const refPositions = answerPositions(r.fen_before, [r.wrong_move, ...r.line]);
         const wrongSan = refPositions[1]?.san ?? r.wrong_move;
         const verdict = r.score ?? r.game_over ?? "";
@@ -274,6 +278,7 @@ export function TrainerView({
         );
       },
       (e: Error) => {
+        if (seq !== puzzleSeq.current) return;
         if (e instanceof ApiCallError && e.code === "engine_not_installed") {
           refreshEngine();
           setRefutation("missing");

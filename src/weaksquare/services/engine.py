@@ -297,8 +297,9 @@ class EngineService:
 
     def close(self) -> None:
         """Stop the engine process (NFR-6; also before a reinstall or a binary change)."""
-        with self._engine_lock:
-            engine, self._engine, self._engine_path = self._engine, None, None
+        # Not under _engine_lock: a search in progress holds it for up to the think time (v0.4-B5).
+        # The adapter's close() kills a busy process at once; the next request starts a fresh one.
+        engine, self._engine, self._engine_path = self._engine, None, None
         if engine is not None:
             engine.close()
 

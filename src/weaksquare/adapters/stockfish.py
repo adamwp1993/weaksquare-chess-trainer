@@ -12,11 +12,12 @@
 from __future__ import annotations
 
 import collections
+import contextlib
 import logging
 import subprocess
 import sys
 import threading
-from typing import Any
+from typing import Any, NoReturn
 
 import chess
 import chess.engine
@@ -75,6 +76,27 @@ def _open(path: str | list[str]) -> chess.engine.SimpleEngine:
         raise EngineError(f"Stockfish couldn't be started ({type(e).__name__}).", code="engine_start_failed") from None
 
 
+RELEASE_AFTER_S = 1.0
+
+
+def _release_thread(engine: chess.engine.SimpleEngine) -> None:
+    """Work around a python-chess 1.11.2 bug (v0.4-B1). When the process is killed mid-search (our
+    timeout), its connection_lost handler raises InvalidStateError before it resolves the protocol's
+    `returncode` future, so SimpleEngine's background thread (not a daemon) waits forever and the
+    Python process can never exit. A moment after closing, resolve that future ourselves if nothing
+    else has; the thread then finishes normally."""
+    protocol = engine.protocol
+    loop = protocol.loop
+
+    def finish() -> None:
+        if not protocol.returncode.done():
+            log.info("releasing a stuck engine thread")
+            protocol.returncode.set_result(-1)
+
+    with contextlib.suppress(RuntimeError):  # the loop has already stopped: nothing is waiting
+        loop.call_soon_threadsafe(loop.call_later, RELEASE_AFTER_S, finish)
+
+
 def _close(engine: chess.engine.SimpleEngine | None) -> None:
     if engine is None:
         return
@@ -82,6 +104,7 @@ def _close(engine: chess.engine.SimpleEngine | None) -> None:
         engine.close()  # closes the transport: the process is killed if it doesn't exit
     except Exception:
         log.debug("engine close failed", exc_info=True)
+    _release_thread(engine)
 
 
 def _pid(engine: chess.engine.SimpleEngine | None) -> int | None:
@@ -129,6 +152,7 @@ class StockfishEngine:
         self._engine: chess.engine.SimpleEngine | None = None
         self._info: EngineInfo | None = None
         self._lock = threading.Lock()
+        self._closed = False  # set by close(): an in-flight search then fails quietly, no restart
 
     @property
     def path(self) -> str | list[str]:
@@ -145,6 +169,8 @@ class StockfishEngine:
         return engine
 
     def _ensure(self) -> chess.engine.SimpleEngine:
+        if self._closed:
+            raise EngineError("The engine has been stopped.", code="engine_stopped")
         if self._engine is None:
             self._engine = self._start()
         return self._engine
@@ -187,34 +213,48 @@ class StockfishEngine:
                     multipv=multipv,
                     info=chess.engine.INFO_SCORE | chess.engine.INFO_PV,
                 )
-            except chess.engine.EngineTerminatedError:
-                critical = _critical_line(pid)
-                if critical:
-                    log.error("engine terminated: %s", critical)
-                else:
-                    log.error("engine terminated unexpectedly")
-                self._restart_after("a crash")
-                raise EngineError(
-                    "Stockfish stopped unexpectedly and was restarted. Try again.", code="engine_crashed"
-                ) from None
-            except TimeoutError:
-                log.error("engine timed out (think time %.1fs)", think_s)
-                self._restart_after("a timeout")
-                raise EngineError("Stockfish didn't answer in time and was restarted.", code="engine_timeout") from None
-            except chess.engine.EngineError as e:
-                log.error("engine protocol error: %s", e)
-                self._restart_after("a protocol error")
-                raise EngineError("Stockfish sent something unexpected and was restarted.") from None
+            except (chess.engine.EngineError, TimeoutError) as e:
+                self._handle_failure(e, pid, think_s)
         lines = [line for line in (_line(i) for i in infos) if line is not None]
         if not lines:
             raise EngineError("Stockfish returned no analysis.")
         return lines
 
+    def _handle_failure(self, e: Exception, pid: int | None, think_s: float) -> NoReturn:
+        """A search failed: report it as a clean EngineError, restarting the engine once (FR-7.6)."""
+        if self._closed:  # close() killed it on purpose (v0.4-B5): no restart, no error log
+            raise EngineError("The engine has been stopped.", code="engine_stopped") from None
+        if isinstance(e, chess.engine.EngineTerminatedError):
+            critical = _critical_line(pid)
+            if critical:
+                log.error("engine terminated: %s", critical)
+            else:
+                log.error("engine terminated unexpectedly")
+            self._restart_after("a crash")
+            raise EngineError(
+                "Stockfish stopped unexpectedly and was restarted. Try again.", code="engine_crashed"
+            ) from None
+        if isinstance(e, TimeoutError):
+            log.error("engine timed out (think time %.1fs)", think_s)
+            self._restart_after("a timeout")
+            raise EngineError("Stockfish didn't answer in time and was restarted.", code="engine_timeout") from None
+        log.error("engine protocol error: %s", e)
+        self._restart_after("a protocol error")
+        raise EngineError("Stockfish sent something unexpected and was restarted.") from None
+
     def close(self) -> None:
-        with self._lock:
-            engine, self._engine = self._engine, None
-        if engine is not None:
+        """Stop the process now (NFR-6; v0.4-B5). It doesn't wait for a search in progress: the process
+        is killed, and that search fails quietly with `engine_stopped` instead of restarting."""
+        self._closed = True
+        engine, self._engine = self._engine, None
+        if engine is None:
+            return
+        if self._lock.acquire(blocking=False):  # idle: a polite `quit`
             try:
                 engine.quit()
             except Exception:
                 _close(engine)
+            finally:
+                self._lock.release()
+        else:  # mid-search: kill it rather than wait for the think time
+            _close(engine)

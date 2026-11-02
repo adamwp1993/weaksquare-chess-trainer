@@ -148,6 +148,17 @@ def build_engine_installer(
     )
 
 
+def engine_log_line(status: Any) -> str:
+    """NFR-4 (v0.4-B6): the banner can only see the managed install (it's written before user.db is
+    open), so the engine actually in use, a custom one included, is logged right after start-up."""
+    if status.state == "ready":
+        kind = "your own engine" if status.source == "custom" else f"managed, {status.tag}"
+        return f"Engine in use: {status.name} ({kind}) at {status.path}"
+    if status.state == "custom_invalid":
+        return f"Engine in use: none (custom engine missing: {status.path})"
+    return f"Engine in use: none ({status.state})"
+
+
 @dataclass
 class Services:
     db: Database
@@ -388,6 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         history=services.history,
         engine=services.engine,
     )
+    log.info("%s", engine_log_line(services.engine.status()))
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
 
     scheme = services.ui_settings.get().color_scheme

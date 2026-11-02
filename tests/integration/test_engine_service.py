@@ -285,3 +285,18 @@ def test_log_banner_names_the_engine(paths, tmp_path) -> None:  # type: ignore[n
     finally:
         logging.getLogger().removeHandler(handler)
         handler.close()
+
+
+def test_engine_log_line_names_the_engine_in_use(services, paths, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.4-B6): the start-up log names the engine actually in use, a custom one included."""
+    from weaksquare.app import engine_log_line
+
+    assert engine_log_line(services.engine.status()) == "Engine in use: none (not_installed)"
+    plant_managed_install(paths)
+    assert engine_log_line(services.engine.status()).startswith("Engine in use: Stockfish 19 (managed, sf_19) at ")
+    custom = tmp_path / "myfish.exe"
+    custom.write_bytes(b"MZ")
+    services.engine._runner.wait(services.engine.start_custom_check(str(custom)))
+    assert engine_log_line(services.engine.status()) == f"Engine in use: Custom Fish 2 (your own engine) at {custom}"
+    custom.unlink()
+    assert engine_log_line(services.engine.status()).startswith("Engine in use: none (custom engine missing")

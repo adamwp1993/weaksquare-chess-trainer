@@ -73,6 +73,11 @@ export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () =
                       </Text>
                       <Code style={{ wordBreak: "break-all" }}>{engine.path}</Code>
                     </Stack>
+                  ) : engine?.state === "custom_invalid" ? (
+                    <Stack gap={2}>
+                      <Text size="sm">Your custom engine can't be found (Settings → Engine)</Text>
+                      {engine.path && <Code style={{ wordBreak: "break-all" }}>{engine.path}</Code>}
+                    </Stack>
                   ) : (
                     "Not installed (Settings → Engine)"
                   )}

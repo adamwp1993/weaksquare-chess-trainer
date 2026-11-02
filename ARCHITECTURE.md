@@ -210,6 +210,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-02, v0.4: QA round 1 fixes to the engine (v0.4-B1, B2, B5, B6)
+- Context: `qa/QA-v0.4.md` round 1.
+- Decision:
+  - **B1, workaround for a python-chess 1.11.2 bug:** when a search is killed (our timeout), python-chess's `connection_lost` raises `InvalidStateError` before resolving the protocol's `returncode` future, so `SimpleEngine`'s background thread (not a daemon) waits forever and Python can't exit: the app kept `weaksquare.lock`, and `uv run pytest` never returned. `adapters/stockfish._close` now resolves that future a second after closing if nothing else has; the thread then ends normally. Remove it once python-chess fixes this upstream (a test runs the timeout in a child process and checks it exits).
+  - **B5:** `close()` no longer waits for a search in progress (up to the think time; the lock file stayed held). It kills a busy process at once; that search fails with `engine_stopped`, which is quiet: no restart and no error log. `EngineService.close` doesn't take the engine lock either.
+  - **B2:** Stockfish sometimes ends a pv after 2 plies. The refutation asks again from where the line stopped (at most twice) until it has 3 plies or the game is over (§7.2: 3–5).
+  - **B6:** the NFR-4 banner is written before `user.db` is open, so it can only describe the managed install. The engine actually in use (custom ones included) is logged right after start-up (`app.engine_log_line`).
+- Alternatives: an own asyncio loop in a daemon thread instead of `SimpleEngine` (more code to replace one future); pinning a newer python-chess (none fixes it as of 1.11.2).
+- Consequences: an upgrade of python-chess should re-run `tests/integration/test_qa_v04_engine.py` and drop the workaround if the thread exits without it.
+
 ### 2026-11-02, v0.4: The interactive engine, FR-7.3 in the backend, and evals "for you"
 - Context: FR-7.1–7.7 and §7.2 step 2; ARCHITECTURE §3 decisions 7 and 12; Adam's v0.4 planning choices (evals from your side; a post-puzzle panel plus an analysis board).
 - Decision:

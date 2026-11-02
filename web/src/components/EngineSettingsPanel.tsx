@@ -14,6 +14,7 @@ export function EngineSettingsPanel() {
   const [settings, setSettings] = useState<EngineSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [inputsKey, setInputsKey] = useState(0); // remounts the inputs so a refused value snaps back (v0.4-B7)
   const job = useJob(jobId);
 
   useEffect(() => {
@@ -31,7 +32,10 @@ export function EngineSettingsPanel() {
 
   const save = (change: EngineSettingsChange) => {
     setError(null);
-    api.setEngineSettings(change).then(setSettings, (e: Error) => setError(e.message));
+    api.setEngineSettings(change).then(setSettings, (e: Error) => {
+      setError(e.message);
+      setInputsKey((k) => k + 1);
+    });
   };
   const chooseCustom = async () => {
     setError(null);
@@ -61,7 +65,7 @@ export function EngineSettingsPanel() {
         )
       )}
       {settings && (
-        <Group grow align="flex-start">
+        <Group grow align="flex-start" key={inputsKey}>
           <NumberInput
             label="Think time (s)"
             description="Per position"
