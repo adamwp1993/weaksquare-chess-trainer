@@ -23,6 +23,7 @@ PUZZLE_PAGE_URL = "https://database.lichess.org/"  # the approximate puzzle coun
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 MIGRATIONS_DIR = PACKAGE_DIR / "adapters" / "db" / "migrations"
+ENGINE_MANIFEST = PACKAGE_DIR / "engine_manifest.json"  # pinned Stockfish release (FR-7.5)
 REPO_ROOT = PACKAGE_DIR.parent.parent
 WEB_DIST = REPO_ROOT / "web" / "dist"
 ICON_FILE = REPO_ROOT / "assets" / "icon" / "weaksquare.ico"  # built by scripts/make_icon.py (NFR-8a)
@@ -59,6 +60,11 @@ class Paths:
     @property
     def logs_dir(self) -> Path:
         return self.data_dir / "logs"
+
+    @property
+    def engines_dir(self) -> Path:
+        """Managed engine installs, one folder per release tag (FR-7.5; per data folder, NFR-2)."""
+        return self.data_dir / "engines"
 
     @property
     def lock_file(self) -> Path:

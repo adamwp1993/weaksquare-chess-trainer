@@ -58,6 +58,16 @@ class Desktop:
         )
         return str(chosen[0]) if chosen else None
 
+    def choose_engine_file(self) -> str | None:
+        """Native Open dialog for a UCI engine's .exe (FR-7.5 advanced setting). None if cancelled."""
+        if self._window is None:
+            return None
+        chosen = self._window.create_file_dialog(
+            10,  # webview.FileDialog.OPEN
+            file_types=("Chess engine (*.exe)", "All files (*.*)"),
+        )
+        return str(chosen[0]) if chosen else None
+
 
 def system_prefers_dark() -> bool:
     """The Windows app theme (Settings → Personalization → Colors → app mode). False if unknown."""

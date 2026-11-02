@@ -49,6 +49,7 @@ class HelpResult:
     answer_moves: tuple[str, ...]  # …and every move from there (UCI, both sides)
     attempt: AttemptResult | None
     answer_sounds: tuple[MoveSound, ...] = ()  # one per answer move
+    refute: bool = False  # Show answer after a wrong move: the engine's refutation comes first (§7.2)
 
 
 S = TypeVar("S")

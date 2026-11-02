@@ -57,6 +57,7 @@ weaksquare-chess-trainer/
 │  │  ├─ csv_rows.py           # puzzle CSV rows by header name
 │  │  ├─ themes.py             # theme catalog: names and picker groups
 │  │  ├─ checksums.py          # sha256sums.txt parsing
+│  │  ├─ engine.py             # EngineClient protocol, manifest, zip safety, FEN checks, "for you" evals (v0.4)
 │  │  ├─ filters.py            # FilterSpec (+ JSON schema, validation)
 │  │  ├─ queue.py              # ordering, ratios, queue building (pure; takes candidate ids)
 │  │  ├─ move_sounds.py        # which sound a move makes (v0.2)
@@ -75,6 +76,7 @@ weaksquare-chess-trainer/
 │  │                           #   v0.2: presets.py, stats.py, ui_settings.py, db_update.py (update check job)
 │  │                           #   v0.3: account.py (sign-in, launch check, sign-out), sync.py (the queue),
 │  │                           #         lichess_history.py (history import)
+│  │                           #   v0.4: engine_install.py (the Stockfish installer), engine.py (EngineService)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -89,7 +91,7 @@ weaksquare-chess-trainer/
 │  │  ├─ logging_setup.py      # rotating logs, redaction, crash hooks
 │  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
 │  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
-│  │  ├─ stockfish.py          # EngineClient impl (python-chess UCI)  (v0.4)
+│  │  ├─ stockfish.py          # StockfishEngine (python-chess UCI) + probe_engine  (v0.4)
 │  │  ├─ lichess.py            # LichessHttp (v0.3)   chesscom.py (v0.8)
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
@@ -111,7 +113,9 @@ weaksquare-chess-trainer/
 │  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
 │  ├─ fulldb/                  # opt-in timings against the full puzzle DB
 │  ├─ live/                    # opt-in, Adam only: Lichess with the weaksquare-test token (v0.3)
-│  ├─ fakes/                   # fake Lichess client, listener, browser, scheduler (v0.3)
+│  ├─ engine/                  # opt-in: the real Stockfish (-m engine) (v0.4)
+│  ├─ fakes/                   # fake Lichess client, listener, browser, scheduler (v0.3);
+│  │                           #   fake engine + a fake UCI engine subprocess (v0.4)
 │  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/);
 │                              #   tools/ holds the dev-only generator and recorder scripts
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
@@ -205,6 +209,46 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-02, v0.4: Try again is a practice run that can't record (FR-5.12)
+- Context: Adam's manual test: after Show answer and the analysis board he wanted to retry the puzzle. Letting Reset clear the result was rejected, because the first result may already be on Lichess and stats must agree with it.
+- Decision: `StandardMode.start_practice` builds a fresh state for the same puzzle with `practice = True` and a placeholder `attempt`, so the mode never decides again (a wrong move no longer decides when an attempt exists; `give_up` returns nothing). `SessionService.retry` (only once the puzzle is finished) swaps it in, keeping the engine cache; `submit_move`, `request_help` and `next_puzzle` also skip recording for practice states (defence in depth). FR-7.3 still applies: the engine is refused until the practice run is finished. Bridge: `retry_puzzle`. The UI keeps the first result's panel and shows a *Practice: not scored* badge.
+- Alternatives: Reset un-records the attempt (rewrites history that Lichess may already have); a separate practice queue (that's Spaced repetition, v0.5).
+- Consequences: practice runs leave no trace in `attempts`, Stats or sync. v0.5's modes can reuse `start_practice` if they need an unscored replay.
+
+### 2026-11-02, v0.4: QA fixes to the engine (v0.4-B1, B2, B5, B6, B8)
+- Context: `qa/QA-v0.4.md` round 1.
+- Decision:
+  - **B1, workaround for a python-chess 1.11.2 bug:** when a search is killed (our timeout), python-chess's `connection_lost` raises `InvalidStateError` before resolving the protocol's `returncode` future, so `SimpleEngine`'s background thread (not a daemon) waits forever and Python can't exit: the app kept `weaksquare.lock`, and `uv run pytest` never returned. `adapters/stockfish._close` now resolves that future a second after closing if nothing else has; the thread then ends normally. Remove it once python-chess fixes this upstream (a test runs the timeout in a child process and checks it exits).
+  - **B5:** `close()` no longer waits for a search in progress (up to the think time; the lock file stayed held). It kills a busy process at once; that search fails with `engine_stopped`, which is quiet: no restart and no error log. `EngineService.close` doesn't take the engine lock either.
+  - **B2:** Stockfish sometimes ends a pv after 2 plies. The refutation asks again from where the line stopped (at most twice) until it has 3 plies or the game is over (§7.2: 3–5).
+  - **B8 (round 2):** closing while the engine was still starting (~0.35 s) left it running. `StockfishEngine._adopt` checks `_closed` both before and after storing a newly started process; `close()` sets `_closed` before reading the process, so one of them always stops it. A process killed mid-search can also surface as `concurrent.futures.CancelledError`, now handled like the other failures (quiet `engine_stopped` after close, otherwise a crash with one restart).
+  - **B6:** the NFR-4 banner is written before `user.db` is open, so it can only describe the managed install. The engine actually in use (custom ones included) is logged right after start-up (`app.engine_log_line`).
+- Alternatives: an own asyncio loop in a daemon thread instead of `SimpleEngine` (more code to replace one future); pinning a newer python-chess (none fixes it as of 1.11.2).
+- Consequences: an upgrade of python-chess should re-run `tests/integration/test_qa_v04_engine.py` and drop the workaround if the thread exits without it.
+
+### 2026-11-02, v0.4: The interactive engine, FR-7.3 in the backend, and evals "for you"
+- Context: FR-7.1–7.7 and §7.2 step 2; ARCHITECTURE §3 decisions 7 and 12; Adam's v0.4 planning choices (evals from your side; a post-puzzle panel plus an analysis board).
+- Decision:
+  - **Shapes:** `core/engine.py` has the `EngineClient` protocol (`analyse(board, think_s, multipv)`, `configure`, `info`, `close`), the White-relative `EngineLine`, FEN and move-list validation, and `format_score`. `adapters/stockfish.py` (`StockfishEngine`) is the python-chess implementation; v0.8's background engine is a second instance, not new methods.
+  - **Never hangs, survives crashes (FR-7.6):** one process, started lazily and kept until close; a lock serializes requests; python-chess's timeout (think time + 10 s) bounds each one. A crash, timeout or protocol error kills the process, starts one new one (a failing restart leaves it stopped; the next request tries once more) and fails that request with `engine_crashed` / `engine_timeout`. python-chess logs engine traffic at DEBUG on `chess.engine`; a logger filter keeps the `CRITICAL ERROR` lines (by pid) for the error log and stops the rest reaching the log file. The process gets `CREATE_NO_WINDOW`.
+  - **`services/engine.py` (`EngineService`):** picks the binary (custom path, else the managed install), validates every position before the engine (and keeps only the legal prefix of each returned pv), owns the settings (`engine.think_s` 0.2–10 s, `engine.threads` 1–CPUs, `engine.hash_mb` 16–2048, `engine.custom_path` saved only after the probe passes, in a job), and runs the install job. Engine calls are **bridge calls the UI awaits** (about the think time, 1 s by default), not jobs: the UI shows a thinking state and never disables other controls. This refines decision 7 for short, bounded calls. **Latest request wins:** each caller key (a session's panel or analysis board) has a generation number; a queued request that's no longer the newest returns `superseded` without searching.
+  - **FR-7.3 is enforced in `SessionService`:** `get_refutation` and `analyze` refuse (`conflict`) until the puzzle is *finished* (line complete or Show answer used). Lost-but-still-playing counts as in progress. Results are cached per puzzle by FEN.
+  - **Refutation:** Standard mode keeps `first_wrong` (the FEN before it and the move); `HelpResult.refute` tells the UI to ask for it. It's the engine's line after that move, trimmed to 5 plies, with the eval.
+  - **Evals "for you" (FR-7.2):** the score is flipped to the solver's side: "+3.2 for you", "−1.4 for you", "0.0 (level)", "You mate in 3", "You're mated in 2". Mate, stalemate and insufficient material are answered without the engine.
+- Alternatives: running engine requests as jobs (needs a result channel and polling for a ~1 s call); hiding evals only in the UI (a bug or a hand-made bridge call could leak them); White-relative evals (Lichess's convention; Adam preferred "for you").
+- Consequences: tests use `tests/fakes/engine.py` (in process) through `build_services(make_engine=…)`, and `tests/fakes/uci_engine.py` (a subprocess that exits on an invalid position like Stockfish 19) for the adapter, so CI needs no binary. `-m engine` runs the real Stockfish. Settings need no migration (the `settings` table).
+
+### 2026-11-02, v0.4: The Stockfish installer and where the engine lives
+- Context: FR-7.5. The binary is gitignored, so every copy installs it, and Adam chose (v0.4 planning) to keep it per data folder like everything else (NFR-2).
+- Decision:
+  - `engine_manifest.json` pins `sf_19` / `stockfish-windows-x86-64-universal.zip` with GitHub's published digest (`3c8bf1f9…b48a7`, read from the releases API and confirmed by downloading the asset) and `exe_member` (`stockfish/stockfish-windows-x86-64-universal.exe`, read from the real zip). It's keyed `windows-x86_64`; GitHub also publishes a `windows-arm64` build, left out until the v1.1 platform work.
+  - `core/engine.py` holds the pure rules: manifest parsing, the platform key, and `check_zip_names`, which refuses the **whole** archive if any entry is absolute, has a drive letter or a `..` part.
+  - `services/engine_install.py` (`EngineInstaller`) downloads through `http.py` into `downloads/`, hashes, vets the names, extracts only the exe into `engines/.sf_19.tmp-*`, runs the probe (`adapters/stockfish.probe_engine`: the UCI handshake, then a 0.2 s search from the start must return a legal move), writes `install.json` (tag, asset and exe SHA-256, `id name`, time from the Clock), and renames the folder to `engines/sf_19`. A `--force` reinstall moves the old folder aside and puts it back if the swap fails. The download and the temp folder are always deleted. "Already installed" means the marker matches the manifest and the exe still has its recorded hash.
+  - `app.build_engine_installer` is the one constructor, shared by the app, `scripts/fetch_stockfish.py` and (through that script) `scripts/setup.py`.
+  - Workaround: right after the self-test, Windows denied the rename for about 1.6 s (Defender scanning the fresh exe, or the probe process still exiting). `adapters/files.rename_with_retry` retries "access denied" for up to 10 s; it's injected, since services can't sleep (decision 15).
+- Alternatives: one shared `engines` folder for dev and real runs (one 80 MB copy, but an exception to NFR-2); resuming a partial download (not worth it for 80 MB, and a leftover `.part` would break "leaves nothing behind").
+- Consequences: dev runs need their own install (`fetch_stockfish.py --dev`). Upgrading Stockfish is a manifest edit plus an entry here. `.exe` and `engines/` stay gitignored.
 
 ### 2026-11-01, v0.3: `@mantine/charts` + `recharts` for the rating trend
 - Context: FR-9.4 needs a line chart on Stats; Adam chose a library over a hand-written SVG at planning (more charts follow with the Coach and Progress pages).

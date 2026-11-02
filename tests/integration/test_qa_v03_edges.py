@@ -147,7 +147,7 @@ class Wired:
         self.api = Api(paths=paths, desktop=FakeDesktop(), clock=clock, dev_mode=True, runner=self.runner,
                        puzzle_db=s.puzzle_db, mixer=s.mixer, sessions=s.sessions, presets=s.presets, stats=s.stats,
                        ui_settings=s.ui_settings, db_update=s.db_update, account=s.account, sync=s.sync,
-                       history=s.history)  # fmt: skip
+                       history=s.history, engine=s.engine)  # fmt: skip
 
     def settle(self) -> None:
         for _ in range(10):

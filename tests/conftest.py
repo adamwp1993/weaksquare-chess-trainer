@@ -79,6 +79,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="puzzles.db for -m fulldb (default: the dev data folder's, read-only)",
     )
     parser.addoption(
+        "--engine-path",
+        default=None,
+        help="Stockfish exe for -m engine (default: the dev data folder's managed install)",
+    )
+    parser.addoption(
         "--record-lichess",
         action="store_true",
         default=False,

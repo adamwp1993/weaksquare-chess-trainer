@@ -1,7 +1,18 @@
 // Real client: calls the Python `Api` through pywebview's js_api bridge.
-import { ApiCallError, type ApiClient, type BackendEvent, type SettingValues } from "./ApiClient";
+import {
+  ApiCallError,
+  type AnalysisPurpose,
+  type ApiClient,
+  type BackendEvent,
+  type EngineSettingsChange,
+  type SettingValues,
+} from "./ApiClient";
 import type {
   AccountStatus,
+  Analysis,
+  EngineSettings,
+  EngineStatus,
+  Refutation,
   AttemptRating,
   BucketCounts,
   ApiError,
@@ -58,6 +69,47 @@ export class PywebviewClient implements ApiClient {
     const result = (await fn(...args)) as Envelope<T>;
     if (!result.ok) throw new ApiCallError(result.error);
     return result.data;
+  }
+
+  retryPuzzle(sessionId: number) {
+    return this.call<void>("retry_puzzle", sessionId);
+  }
+
+  getEngineStatus() {
+    return this.call<EngineStatus>("get_engine_status");
+  }
+
+  startEngineInstall(force: boolean) {
+    return this.call<string>("start_engine_install", force);
+  }
+
+  getEngineSettings() {
+    return this.call<EngineSettings>("get_engine_settings");
+  }
+
+  setEngineSettings(change: EngineSettingsChange) {
+    const { think_s = null, threads = null, hash_mb = null } = change;
+    return this.call<EngineSettings>("set_engine_settings", think_s, threads, hash_mb);
+  }
+
+  chooseEngineFile() {
+    return this.call<string | null>("choose_engine_file");
+  }
+
+  startCustomEngineCheck(path: string) {
+    return this.call<string>("start_custom_engine_check", path);
+  }
+
+  clearCustomEngine() {
+    return this.call<void>("clear_custom_engine");
+  }
+
+  getRefutation(sessionId: number) {
+    return this.call<Refutation>("get_refutation", sessionId);
+  }
+
+  analyzePosition(sessionId: number, fen: string, purpose: AnalysisPurpose) {
+    return this.call<Analysis>("analyze_position", sessionId, fen, purpose);
   }
 
   getAppInfo() {

@@ -11,15 +11,19 @@ import { useEffect, useRef, useState } from "react";
 export interface BoardProps {
   fen: string;
   orientation: "white" | "black";
-  /** Which side may move, or null when the board is read-only. */
-  movable: "white" | "black" | null;
+  /** Which side may move ("both": the analysis board, FR-7.7), or null when the board is read-only. */
+  movable: "white" | "black" | "both" | null;
   lastMove?: [string, string] | null;
   onMove?: (uci: string) => void;
   /** Hint (§7.2): circle the piece that moves next. */
   hintSquare?: string | null;
   /** Show the file and rank letters around the board. */
   coordinates?: boolean;
+  /** Arrows [from, to], e.g. the engine's best move on the analysis board. Callers check legality first. */
+  arrows?: [string, string][];
 }
+
+const NO_ARROWS: [string, string][] = [];
 
 const PROMOTIONS: { piece: string; label: string }[] = [
   { piece: "q", label: "Queen" },
@@ -40,7 +44,16 @@ function legalDests(chess: Chess): Map<Key, Key[]> {
 
 // The only chessground wrapper in the app (ARCHITECTURE §3 decision 11). It shows positions and
 // reports moves as UCI; whether a move is right is decided by the backend, never here.
-export function Board({ fen, orientation, movable, lastMove, onMove, hintSquare = null, coordinates = true }: BoardProps) {
+export function Board({
+  fen,
+  orientation,
+  movable,
+  lastMove,
+  onMove,
+  hintSquare = null,
+  coordinates = true,
+  arrows = NO_ARROWS,
+}: BoardProps) {
   const el = useRef<HTMLDivElement>(null);
   const cg = useRef<Api | null>(null);
   const onMoveRef = useRef(onMove);
@@ -78,7 +91,7 @@ export function Board({ fen, orientation, movable, lastMove, onMove, hintSquare 
       movable: {
         free: false,
         color: movable ?? undefined,
-        dests: movable === turn ? legalDests(chess) : new Map(),
+        dests: movable === turn || movable === "both" ? legalDests(chess) : new Map(),
         showDests: true,
         events: {
           after: (from, to) => {
@@ -89,13 +102,25 @@ export function Board({ fen, orientation, movable, lastMove, onMove, hintSquare 
           },
         },
       },
-      drawable: { autoShapes: hintSquare ? [{ orig: hintSquare as Key, brush: "green" }] : [] },
+      drawable: {
+        autoShapes: [
+          ...(hintSquare ? [{ orig: hintSquare as Key, brush: "green" }] : []),
+          ...arrows.map(([orig, dest]) => ({ orig: orig as Key, dest: dest as Key, brush: "paleBlue" })),
+        ],
+      },
     });
-  }, [fen, orientation, movable, lastMove, hintSquare, coordinates]);
+  }, [fen, orientation, movable, lastMove, hintSquare, coordinates, arrows]);
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: 560, aspectRatio: "1 / 1" }}>
-      <div ref={el} data-testid="board" data-hint={hintSquare ?? ""} style={{ width: "100%", height: "100%" }} />
+      <div
+        ref={el}
+        data-testid="board"
+        data-hint={hintSquare ?? ""}
+        data-arrows={arrows.map(([a, b]) => a + b).join(" ")}
+        data-fen={fen}
+        style={{ width: "100%", height: "100%" }}
+      />
       {promotion && (
         <Paper
           shadow="md"

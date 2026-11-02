@@ -196,3 +196,97 @@ def test_rating_change(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("session-rating").filter(has_text="+8 this session").wait_for()
     panel_top(page)
     shot(page, "rating-change")
+
+
+def _start(page, query: str = "") -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/" + query)
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for()
+
+
+def _solve(page) -> None:  # type: ignore[no-untyped-def]
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    play(page, "c3d1", "black")
+    page.get_by_test_id("outcome").filter(has_text="Solved").wait_for()
+
+
+def test_engine_panel_and_analysis_board(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4: the post-puzzle engine panel, and the analysis board after one move (FR-7.2, 7.7)."""
+    _start(page)
+    _solve(page)
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "engine-panel")
+    page.get_by_test_id("analyze-button").click()
+    play(page, "b5b8", "black")  # Rb8 on the analysis board (white to move after the solution)
+    page.get_by_test_id("analysis-moves").filter(has_text="Rb8").wait_for()
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.wait_for_function("() => document.querySelector('[data-testid=board]').getAttribute('data-arrows') !== ''")
+    page.mouse.move(1270, 890)
+    shot(page, "analysis-board")
+
+
+def test_refutation(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (§7.2 step 2): after a wrong move, "Why h6 fails" sits above the answer; Show me steps it."""
+    _start(page)
+    play(page, "h7h6", "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("refutation-label").filter(has_text="Why h6 fails").wait_for()
+    page.get_by_test_id("refutation-show").click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
+    page.get_by_test_id("line-preview").get_by_role("button", name="Forward").click()
+    page.mouse.move(1270, 890)
+    shot(page, "refutation")
+
+
+def test_engine_install(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (FR-7.5): the banner where the engine would be, when Stockfish isn't installed."""
+    _start(page, "?engine=missing")
+    _solve(page)
+    page.get_by_test_id("engine-banner").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "engine-install")
+
+
+def test_settings_engine(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (FR-7.4, 7.5): Settings, scrolled to the Engine section."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("gear").click()
+    section = page.get_by_test_id("engine-settings")
+    section.get_by_test_id("engine-in-use").wait_for()
+    section.scroll_into_view_if_needed()
+    page.mouse.move(1270, 890)
+    shot(page, "settings-engine")
+
+
+def test_show_me(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (FR-7.7): stepping through one of Stockfish's lines with Show me."""
+    _start(page)
+    _solve(page)
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.get_by_test_id("show-line").first.click()
+    preview = page.get_by_test_id("line-preview")
+    preview.get_by_role("button", name="Forward").click()
+    preview.get_by_role("button", name="Forward").click()
+    page.mouse.move(1270, 890)
+    shot(page, "show-me")
+
+
+def test_try_again(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.4 (FR-5.12): a practice run of a finished puzzle, after one correct move."""
+    _start(page)
+    play(page, "h7h6", "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("try-again").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn again").wait_for()
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    page.mouse.move(1270, 890)
+    shot(page, "try-again")

@@ -24,6 +24,8 @@ from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
 from weaksquare.services.db_update import UpdateCheckService
+from weaksquare.services.engine import Analysis as AnalysisResult
+from weaksquare.services.engine import EngineService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
@@ -64,7 +66,9 @@ class Api:
         account: AccountService,
         sync: SyncService,
         history: HistoryService,
+        engine: EngineService,
     ) -> None:
+        self._engine = engine
         self._account = account
         self._sync = sync
         self._history = history
@@ -281,8 +285,9 @@ class Api:
         r = self._sessions.request_help(session_id, kind)
         h = r.help
         return dto.HelpResponse(
-            h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome), list(h.answer_sounds)
-        )
+            h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome), list(h.answer_sounds),
+            h.refute,
+        )  # fmt: skip
 
     # ---- stats (FR-9.1, 9.2) ---------------------------------------------------------------------
     @bridge_call
@@ -296,6 +301,11 @@ class Api:
             row(r.overall), [row(t) for t in r.by_theme], [row(t) for t in r.by_length],
             [row(t) for t in r.by_rating], r.missing,
         )  # fmt: skip
+
+    @bridge_call
+    def retry_puzzle(self, session_id: int) -> None:
+        """FR-5.12 Try again (not scored): replay the finished puzzle from its start; nothing is recorded."""
+        self._sessions.retry(session_id)
 
     @bridge_call
     def get_session_stats(self, session_id: int) -> dto.SessionStats:
@@ -345,3 +355,63 @@ class Api:
             [dto.RatingPoint(p.at, p.rating, p.session_id) for p in h.points],
             [dto.SessionChange(c.session_id, c.started_at, c.change, c.solves) for c in h.sessions],
         )
+
+    # ---- engine (FR-7.1–7.7, §7.2 step 2) ----------------------------------------------------------
+    # Engine output exists only after a puzzle ends; SessionService refuses earlier calls (FR-7.3).
+    @bridge_call
+    def get_engine_status(self) -> dto.EngineStatus:
+        s = self._engine.status()
+        return dto.EngineStatus(s.state, s.source, s.name, s.path, s.tag, s.install_job_id, s.message)
+
+    @bridge_call
+    def start_engine_install(self, force: bool = False) -> str:
+        """Install (or with `force`, reinstall) the pinned Stockfish as a background job (FR-7.5)."""
+        return self._engine.start_install(force)
+
+    @bridge_call
+    def get_engine_settings(self) -> dto.EngineSettings:
+        return self._engine_settings()
+
+    @bridge_call
+    def set_engine_settings(
+        self, think_s: float | None = None, threads: int | None = None, hash_mb: int | None = None
+    ) -> dto.EngineSettings:
+        self._engine.set_settings(think_s, threads, hash_mb)
+        return self._engine_settings()
+
+    def _engine_settings(self) -> dto.EngineSettings:
+        s = self._engine.settings()
+        return dto.EngineSettings(s.think_s, s.threads, s.hash_mb, s.custom_path, s.max_threads)
+
+    @bridge_call
+    def choose_engine_file(self) -> str | None:
+        return self._desktop.choose_engine_file()
+
+    @bridge_call
+    def start_custom_engine_check(self, path: str) -> str:
+        """Test your own engine and use it if it passes (FR-7.5 advanced setting). Returns the job ID."""
+        if chr(0) in path:
+            raise ValidationError("That isn't a valid file path.")
+        return self._engine.start_custom_check(path)
+
+    @bridge_call
+    def clear_custom_engine(self) -> None:
+        self._engine.clear_custom()
+
+    @bridge_call
+    def get_refutation(self, session_id: int) -> dto.Refutation:
+        r = self._sessions.get_refutation(session_id)
+        return dto.Refutation(r.fen_before, r.wrong_move, list(r.line), r.score, r.game_over)
+
+    @bridge_call
+    def analyze_position(
+        self, session_id: int, fen: str, purpose: Literal["start", "panel", "board"] = "panel"
+    ) -> dto.Analysis:
+        """Eval and top lines after the puzzle (FR-7.2, 7.7). `purpose` keys latest-wins per view."""
+        return analysis_dto(self._sessions.analyze(session_id, fen, purpose))
+
+
+def analysis_dto(a: AnalysisResult) -> dto.Analysis:
+    return dto.Analysis(
+        a.fen, [dto.EngineLine(x.score, x.cp, x.mate, list(x.pv)) for x in a.lines], a.game_over, a.superseded
+    )

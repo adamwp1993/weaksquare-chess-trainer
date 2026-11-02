@@ -178,12 +178,13 @@ All six modes ship in version 1. The user picks one per session from a selector 
 - **FR-5.1** A **win** means the full line was solved with no wrong move and **no help used**. This matches Lichess's definition.
 - **FR-5.2** **Any help before completion counts as a loss:** Hint, Show answer or Explain.
 - **FR-5.3** A wrong move is a loss. The puzzle then continues so you can see the solution, with nothing more to lose.
-- **FR-5.4** After a puzzle ends (win or loss), Show answer and Explain are free.
+- **FR-5.4** After a puzzle ends (win or loss), Show answer and Explain are free. Show answer stays available after the end: clicking it again closes the analysis board and any line being shown, and goes back to the start of the solution. On the analysis board, **Close** reads **Back to the answer** when there's an answer to go back to. (Adam, v0.4 manual test.)
+- **FR-5.12** **Try again (not scored):** after a puzzle ends, **Try again** resets the board to the puzzle's start and lets you solve it again with the usual feedback and replies. It's practice: nothing is recorded, nothing is sent to Lichess, and the result shown for the puzzle stays the one from your first attempt. Hint and Show answer are free while practising. The engine stays hidden until the practice run ends, as in any puzzle (FR-7.3). (Adam, v0.4 manual test; chosen over letting Reset clear the result, because the first result may already be on Lichess.)
 - **FR-5.5** Record per attempt: `first_move_correct`, `line_correct`, `help_used` (none / hint / answer / explain), and `time_ms`.
 
 ### 7.2 Stuck ladder (each step unlocks the next)
 1. **Hint**: highlights the piece that moves next. Counts as a loss.
-2. **Show answer**: plays the solution step by step with back/forward controls. If you played a wrong move earlier, it first shows **Stockfish's refutation** of that move (the best reply line, 3–5 plies, with eval). Counts as a loss.
+2. **Show answer**: plays the solution step by step with back/forward controls. If you played a wrong move earlier, **Stockfish's refutation** of that move (the best reply line, 3–5 plies, with eval) appears above the answer as *Why <move> fails*, with its own **Show me** to step through it on the board. The answer itself is always the correct solution (Adam, v0.4 manual test: it used to start with the refutation). Counts as a loss.
 3. **Explain** (only if an LLM is configured): see §9. Counts as a loss.
 
 ---
@@ -269,14 +270,14 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 
 ### 9.1 Stockfish
 - **FR-7.1** Native Windows x64 Stockfish, run by the backend over UCI using python-chess. Use the official **universal** build (`stockfish-windows-x86-64-universal.zip` from the `sf_19` GitHub release). It detects the CPU's instruction set by itself, so the app never picks between AVX2, BMI2 and other builds.
-- **FR-7.2** Uses: refuting wrong moves, checking that "safe" candidates in Danger spotting really are safe, MultiPV top lines (default 3), and evals.
-- **FR-7.3** **No eval bar or engine lines are visible while a puzzle is in progress.** They appear after the puzzle ends.
+- **FR-7.2** Uses: refuting wrong moves, checking that "safe" candidates in Danger spotting really are safe, MultiPV top lines (default 3), and evals. **Evals are shown from your side** (the side you played in the puzzle): "+3.2 for you", "−1.4 for you", "You mate in 3", "You're mated in 2" (Adam, v0.4 planning).
+- **FR-7.3** **No eval bar or engine lines are visible while a puzzle is in progress.** They appear after the puzzle ends: the line is complete, or Show answer was used. A puzzle you've already lost with a wrong move but are still playing through is still in progress. The backend enforces this: engine requests for a puzzle that isn't finished are refused.
 - **FR-7.4** Settings: think time (default 1 s), threads (default CPU cores − 1), hash (default 256 MB).
 - **FR-7.5** **Engine install.** The binary is gitignored, so an installer fetches it. One implementation, `services/engine_install.py`, is used by `scripts/fetch_stockfish.py`, `scripts/setup.py`, the in-app Install button and the v1.0 first-run wizard.
   - **Pinned, never "latest":** `engine_manifest.json` records the release tag, asset name, URL and SHA-256 (taken from the digest GitHub publishes for the asset). Assets are **keyed by OS and CPU architecture** (e.g. `windows-x86_64`) from the start. Through v1.0 only the Windows entry exists, and on any other platform the installer refuses with a clear message. v1.1 adds the macOS and Linux entries without changing the format. Upgrading Stockfish means editing the manifest, with an ARCHITECTURE.md §7 decision-log entry.
   - **Verify before extracting:** download over HTTPS through `adapters/http.py` to a temp file and check the SHA-256. On a mismatch, delete the file and stop with a clear error.
   - **Extract safely:** take only the expected `.exe`. Reject absolute paths and `..` entries.
-  - **Install location:** `%LOCALAPPDATA%\WeakSquare\engines\<tag>\stockfish.exe`, outside the repo. Install into a temp folder and rename it into place, so a failed install leaves nothing half-written.
+  - **Install location:** `<data folder>\engines\<tag>\stockfish.exe`, outside the repo: `%LOCALAPPDATA%\WeakSquare\engines\…` for the app, `WeakSquare-dev\engines\…` for dev runs, and a temp folder in tests (NFR-2; Adam, v0.4 planning). `fetch_stockfish.py` and `setup.py` take `--dev` like `fetch_puzzle_db.py`. Install into a temp folder and rename it into place, so a failed install leaves nothing half-written.
   - **Smoke test:** after installing, `uci` must answer `uciok` and a short search from the start position must return a legal move. If not, remove the install and report the error.
   - **Idempotent:** if the installed engine already matches the manifest, do nothing. `--force` reinstalls.
   - **In the app:** when no engine is installed, engine features show *Stockfish isn't installed* with an **Install** button. It runs the same installer as a background job with progress.
@@ -284,6 +285,11 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-7.6** **Stockfish 19 exits on invalid input.** An invalid FEN, an illegal move in a move list, or another malformed command makes it print `info string CRITICAL ERROR …` and terminate. So:
   - validate every position and move list with python-chess before sending it;
   - if the engine process dies anyway, `EngineClient` logs the CRITICAL ERROR line, restarts the engine once, and fails that one request with a clear error. It never hangs.
+- **FR-7.7** **After the puzzle (v0.4; Adam, v0.4 planning).** Once the puzzle ends, an engine panel shows:
+  - the eval of the puzzle's start position, pinned at the top;
+  - the eval and top 3 lines of whichever position is on the board, following you as you step through Show answer;
+  - an **Analyze** button that turns the board into a free **analysis board**: you move pieces for either side (legal moves only), and after each move the engine re-analyzes and shows the eval, the top 3 lines and an arrow for its best move. Back, Forward, Reset (to the puzzle position) and Close. Nothing on the analysis board is ever scored.
+  - **Show me** next to each engine line (in the panel and on the analysis board): the line goes on the board at its starting position, read-only, and you step through it yourself with Back / Forward (or ← / →); nothing moves until you do. **Done** returns to the position you were on. (Adam, during the v0.4 manual test.)
 
 ### 9.2 LLM "Explain"
 - **FR-8.1** Optional. The button only appears when a provider and key are configured. Providers: **Anthropic** and **OpenAI**, behind one interface (`explain(context) -> ExplainResult`).
@@ -431,6 +437,13 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - The Suggested mix (§10.7) may include a share of your own-game puzzles (default 20%) linked to your top weaknesses, and "Why this mix" says so.
   - Each puzzle links back to its game in Game Review. You can archive any puzzle you don't want.
 - **FR-10.45** **Progress:** accuracy on your own-game puzzles appears on each weakness card (FR-10.38) next to Lichess-puzzle accuracy. It's a secondary signal only. A weakness's status is still decided by its game rate (§10.8), never by puzzle accuracy.
+
+### 10.10 Importing puzzles from your own files (v0.8; Adam, 2026-11-02)
+- **FR-10.46** **Import puzzles** from a file you already have: PGN (a `FEN` header and the solution as the moves; several games per file), EPD (`bm` or `pv` as the solution) or a simple CSV (FEN, solution in UCI or SAN, optional name). You give the set a label (e.g. the book's title). The app ships, links to and downloads **no** puzzle collections: copyrighted sets (for example published problem books) are yours to import only if you have them.
+- **FR-10.47** **Stored with your other puzzles:** imported puzzles go into `custom_puzzles` with `origin = import` and the set label, and train through the **My games** source (FR-3.15; it's renamed to **My puzzles** if that reads better at v0.8 planning), on their own or mixed with Lichess puzzles, in every mode that supports custom puzzles, Stats and Spaced repetition included. Filter by set label. They never sync to Lichess.
+- **FR-10.48** **Validated on import:** python-chess checks every position and every solution move; bad entries are skipped and listed in an import report (entry number and reason). Re-importing the same file adds nothing twice (one puzzle per set and position + solution). The import runs as a job with progress and cancel.
+- **FR-10.49** **Solving rules:** a book problem has one verified solution, so it's checked strictly like Lichess puzzles (§4.2), including "any mate counts" for mate-in-1, not with FR-10.43's 30 cp tolerance. If the file gives only the first move, the puzzle is that one move. The engine refutation and the post-puzzle panel (FR-7.2, 7.7) work as for any puzzle. Imported files usually carry no themes: they stay untagged until the lichess-puzzler tagger arrives (v0.10), which then tags them locally.
+- **FR-10.50** **Privacy:** the file is read on your PC and never sent anywhere; the User Guide says so.
 
 ## 11. Game Review: import a game, analyze it, explain better moves
 

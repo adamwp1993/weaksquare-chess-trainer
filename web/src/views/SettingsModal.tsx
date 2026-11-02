@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import type { AccountStatus, SoundSettings } from "../api/types";
 import { AccountPanel } from "../components/AccountPanel";
+import { EngineSettingsPanel } from "../components/EngineSettingsPanel";
 import { sounds as player } from "../sound/player";
 
 const SETS: { value: SoundSettings["set"]; label: string }[] = [
@@ -22,7 +23,8 @@ const SETS: { value: SoundSettings["set"]; label: string }[] = [
   { value: "futuristic", label: "Futuristic" },
 ];
 
-// The gear settings (FR-1.8): your Lichess account, appearance (FR-1.12) and sounds (FR-1.13), saved in
+// The gear settings (FR-1.8): your Lichess account, appearance (FR-1.12), sounds (FR-1.13) and the engine
+// (FR-7.4, 7.5), saved in
 // user.db through the bridge and applied at once. The same dialog opens from the gear and from ☰.
 export function SettingsModal({
   opened,
@@ -116,6 +118,11 @@ export function SettingsModal({
           <Text size="xs" c="dimmed">
             The sound sets are by Enigmahack for Lichess (AGPL-3.0). See web/public/sounds/CREDITS.md.
           </Text>
+        </Stack>
+
+        <Stack gap="xs">
+          <Title order={5}>Engine</Title>
+          {opened && <EngineSettingsPanel />}
         </Stack>
 
         <Stack gap="xs">

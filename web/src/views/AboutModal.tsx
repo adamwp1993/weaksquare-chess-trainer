@@ -1,16 +1,19 @@
 import { Anchor, Button, Code, Group, Modal, Stack, Table, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { AppInfo } from "../api/types";
+import type { AppInfo, EngineStatus } from "../api/types";
 
-// NFR-7: version, data and logs folders (with Open), puzzle DB export date, license, source link.
+// NFR-7: version, data and logs folders (with Open), puzzle DB export date, Stockfish version and path,
+// license, source link.
 export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!opened) return;
     api.getAppInfo().then(setInfo, (e: Error) => setError(e.message));
+    api.getEngineStatus().then(setEngine, () => setEngine(null));
   }, [opened]);
 
   const open = (kind: "data" | "logs") => api.openFolder(kind).catch((e: Error) => setError(e.message));
@@ -58,6 +61,26 @@ export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () =
                     ? "Not imported yet"
                     : `${info.puzzle_count.toLocaleString("en-US")} puzzles` +
                       (info.puzzle_db_export_date ? `, Lichess export of ${info.puzzle_db_export_date}` : "")}
+                </Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Th>Stockfish</Table.Th>
+                <Table.Td data-testid="about-engine">
+                  {engine?.state === "ready" ? (
+                    <Stack gap={2}>
+                      <Text size="sm">
+                        {engine.name} ({engine.source === "custom" ? "your own engine" : engine.tag})
+                      </Text>
+                      <Code style={{ wordBreak: "break-all" }}>{engine.path}</Code>
+                    </Stack>
+                  ) : engine?.state === "custom_invalid" ? (
+                    <Stack gap={2}>
+                      <Text size="sm">Your custom engine can't be found (Settings → Engine)</Text>
+                      {engine.path && <Code style={{ wordBreak: "break-all" }}>{engine.path}</Code>}
+                    </Stack>
+                  ) : (
+                    "Not installed (Settings → Engine)"
+                  )}
                 </Table.Td>
               </Table.Tr>
               <Table.Tr>

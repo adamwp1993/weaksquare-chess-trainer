@@ -69,7 +69,9 @@ def webview2_version() -> str:
     return "not found"
 
 
-def setup_logging(logs_dir: Path, app_version: str, *, webview_version: str | None = None) -> RotatingFileHandler:
+def setup_logging(
+    logs_dir: Path, app_version: str, *, webview_version: str | None = None, stockfish: str = "unknown"
+) -> RotatingFileHandler:
     logs_dir.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(
         logs_dir / "weaksquare.log", maxBytes=2 * 1024 * 1024, backupCount=4, encoding="utf-8"
@@ -82,11 +84,12 @@ def setup_logging(logs_dir: Path, app_version: str, *, webview_version: str | No
     for noisy in ("httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     log.info(
-        "WeakSquare %s starting | Python %s | %s | WebView2 %s | Stockfish: not used in this version",
+        "WeakSquare %s starting | Python %s | %s | WebView2 %s | Stockfish: %s",
         app_version,
         platform.python_version(),
         platform.platform(),
         webview_version or webview2_version(),
+        stockfish,
     )
     install_crash_hooks()
     return handler

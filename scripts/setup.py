@@ -6,12 +6,14 @@ Usage (from the repo root, in PowerShell, cmd or Git Bash):
     python scripts/setup.py --no-shortcut        # neither shortcut
     python scripts/setup.py --skip-puzzle-db     # don't download/import the puzzle database now
     python scripts/setup.py --puzzle-file PATH   # import a lichess_db_puzzle.csv.zst you already have
-    python scripts/setup.py --dev                # import the puzzles into the dev data folder instead
+    python scripts/setup.py --skip-engine        # don't install Stockfish now
+    python scripts/setup.py --dev                # puzzles and Stockfish go into the dev data folder instead
 
 Steps: uv (installed with pip if missing) -> Python packages from uv.lock -> npm packages from
 package-lock.json -> front-end build -> Playwright's Chromium -> pre-commit hooks -> puzzle database
 (the entire Lichess puzzle database: about 300 MB to download, about 6 million puzzles, roughly
-1.5 GB once imported; skipped if already imported) -> Start-menu and desktop shortcuts, with the
+1.5 GB once imported; skipped if already imported) -> Stockfish 19 (the pinned, hash-checked build
+from GitHub, about 80 MB; skipped if already installed) -> Start-menu and desktop shortcuts, with the
 WeakSquare icon (NFR-8a). Standard library only, because it runs before anything is installed.
 """
 
@@ -131,6 +133,17 @@ def import_puzzles(uv: list[str], args: argparse.Namespace) -> None:
     run(cmd)
 
 
+def install_engine(uv: list[str], args: argparse.Namespace) -> None:
+    step("Stockfish")
+    if args.skip_engine:
+        print("   skipped (--skip-engine). You can install it from inside the app instead.")
+        return
+    cmd = [*uv, "run", "python", "scripts/fetch_stockfish.py"]
+    if args.dev:
+        cmd.append("--dev")
+    run(cmd)
+
+
 def desktop_folder() -> Path:
     """The Desktop through the Windows known-folder API: it's often redirected to OneDrive, so
     %USERPROFILE%\\Desktop can be the wrong place (NFR-8a)."""
@@ -221,7 +234,8 @@ def main() -> int:
     ap.add_argument("--no-desktop-shortcut", action="store_true", help="create the Start-menu shortcut only")
     ap.add_argument("--skip-puzzle-db", action="store_true")
     ap.add_argument("--puzzle-file", metavar="PATH")
-    ap.add_argument("--dev", action="store_true", help="import the puzzles into the dev data folder")
+    ap.add_argument("--skip-engine", action="store_true", help="don't install Stockfish now")
+    ap.add_argument("--dev", action="store_true", help="use the dev data folder for the puzzles and Stockfish")
     args = ap.parse_args()
 
     npm = check_prerequisites()
@@ -232,6 +246,7 @@ def main() -> int:
     install_playwright(uv)
     install_pre_commit(uv)
     import_puzzles(uv, args)
+    install_engine(uv, args)
     links = create_shortcuts(args)
     print("\n" + finish_message(links))
     return 0

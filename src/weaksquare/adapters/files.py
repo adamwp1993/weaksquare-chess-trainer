@@ -1,10 +1,13 @@
-"""File helpers for the puzzle import: hashing and reading the (optionally zstd-compressed) CSV."""
+"""File helpers: hashing, the puzzle CSV (optionally zstd-compressed), and the engine zip (FR-7.5)."""
 
 from __future__ import annotations
 
 import csv
 import hashlib
 import io
+import shutil
+import time
+import zipfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,6 +30,50 @@ def sha256_file(path: Path, cancelled: Callable[[], bool] = lambda: False) -> st
                 raise CancelledError()
             digest.update(chunk)
     return digest.hexdigest()
+
+
+MAX_ENGINE_BYTES = 512 * 1024 * 1024  # the sf_19 exe is ~100 MB; refuse anything absurd (zip bomb)
+
+
+class ZipError(Exception):
+    """The archive can't be read, or the member is missing or too large."""
+
+
+def zip_names(path: Path) -> list[str]:
+    try:
+        with zipfile.ZipFile(path) as z:
+            return z.namelist()
+    except (zipfile.BadZipFile, OSError) as e:
+        raise ZipError(f"not a readable zip: {type(e).__name__}") from None
+
+
+def extract_member(path: Path, member: str, dest: Path, max_bytes: int = MAX_ENGINE_BYTES) -> None:
+    """Write exactly one archive member to `dest`. The caller has already vetted every entry name."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            info = z.getinfo(member)
+            if info.file_size > max_bytes:
+                raise ZipError("archive member is too large")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(info) as src, dest.open("wb") as out:
+                shutil.copyfileobj(src, out, CHUNK)
+    except KeyError:
+        raise ZipError("archive member is missing") from None
+    except (zipfile.BadZipFile, OSError) as e:
+        raise ZipError(f"couldn't extract: {type(e).__name__}") from None
+
+
+def rename_with_retry(src: Path, dst: Path, *, attempts: int = 40, wait_s: float = 0.25) -> None:
+    """Rename, retrying "access denied" for up to ~10 s. A freshly written exe is briefly locked on
+    Windows (Defender scans it; a just-closed engine process takes a moment to exit)."""
+    for attempt in range(attempts):
+        try:
+            src.rename(dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(wait_s)
 
 
 class PuzzleCsv:

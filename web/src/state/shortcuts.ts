@@ -7,7 +7,8 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: "N or Enter", action: "Next puzzle (or Skip, which counts as failed)" },
   { keys: "H", action: "Hint" },
   { keys: "A", action: "Show answer" },
-  { keys: "← / →", action: "Step back / forward through the answer" },
+  { keys: "R", action: "Try again (not scored), once the puzzle is over" },
+  { keys: "← / →", action: "Step back / forward (the answer, the analysis board, a line you chose with Show me)" },
   { keys: "C", action: "Show or hide the board coordinates" },
   { keys: "?", action: "This list" },
 ];

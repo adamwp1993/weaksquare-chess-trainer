@@ -36,6 +36,8 @@ class StandardState:
     played: list[str] = field(default_factory=list)
     hinted: bool = False
     start_fen: str = ""  # after the opponent's first move: where you start solving
+    first_wrong: tuple[str, str] | None = None  # (FEN before it, UCI): the move that lost the puzzle
+    practice: bool = False  # Try again (FR-5.12): `attempt` is a placeholder; nothing is ever recorded
 
 
 class StandardMode:
@@ -44,6 +46,16 @@ class StandardMode:
     def start(self, puzzle: Puzzle, now_ms: int) -> StandardState:
         board, _ = start_position(puzzle.fen, puzzle.moves)  # raises PuzzleDataError if the line is illegal
         return StandardState(puzzle=puzzle, board=board, next_index=1, started_ms=now_ms, start_fen=board.fen())
+
+    def start_practice(self, puzzle: Puzzle, now_ms: int) -> StandardState:
+        """FR-5.12 Try again (not scored): the same puzzle from the start, with the attempt already
+        decided, so nothing can be decided (or recorded) again; help is free, as after any end."""
+        state = self.start(puzzle, now_ms)
+        state.practice = True
+        state.attempt = AttemptResult(
+            win=False, first_move_correct=False, line_correct=False, help_used="none", time_ms=0
+        )
+        return state
 
     def _decide(self, state: StandardState, win: bool, now_ms: int, help_used: HelpUsed = "none") -> AttemptResult:
         result = AttemptResult(
@@ -68,11 +80,14 @@ class StandardMode:
 
         if not is_acceptable(state.board, move, expected):
             decided = None
+            if state.first_wrong is None:
+                state.first_wrong = (state.board.fen(), move.uci())
             if first_move and state.first_move_correct is None:
                 state.first_move_correct = False
             if not state.failed:
                 state.failed = True
-                decided = self._decide(state, win=False, now_ms=now_ms)
+                if state.attempt is None:  # already decided by help, or a practice run (FR-5.12)
+                    decided = self._decide(state, win=False, now_ms=now_ms)
             return Feedback("wrong", None, False, decided, move_sound)
 
         if first_move and state.first_move_correct is None:
@@ -107,7 +122,13 @@ class StandardMode:
         if state.finished:  # free after the end (FR-5.4): replay the whole line from the start
             line = tuple(state.puzzle.moves[1:])
             return HelpResult(
-                "answer", None, state.start_fen, line, None, tuple(sounds_for_line(state.start_fen, line))
+                "answer",
+                None,
+                state.start_fen,
+                line,
+                None,
+                tuple(sounds_for_line(state.start_fen, line)),
+                refute=state.first_wrong is not None,
             )
         if state.attempt is None and not state.hinted:
             raise ConflictError("Try a Hint first: Show answer unlocks after it.")
@@ -116,7 +137,9 @@ class StandardMode:
         rest = tuple(state.puzzle.moves[state.next_index :])
         state.failed = True
         state.finished = True  # the answer ends the puzzle
-        return HelpResult("answer", None, fen, rest, decided, tuple(sounds_for_line(fen, rest)))
+        return HelpResult(
+            "answer", None, fen, rest, decided, tuple(sounds_for_line(fen, rest)), refute=state.first_wrong is not None
+        )
 
     def give_up(self, state: StandardState, now_ms: int) -> AttemptResult | None:
         if state.attempt is not None:
