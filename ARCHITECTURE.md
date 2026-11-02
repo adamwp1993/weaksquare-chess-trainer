@@ -197,6 +197,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.3: `keyring` and the secret store
+- Context: FR-6.5 and SR-1/SR-7: the Lichess token lives only in Windows Credential Manager.
+- Decision: Python runtime dependency **`keyring`** (MIT; checked on PyPI; on Windows it pulls in `pywin32-ctypes` and `jaraco.*`). `adapters/secret_store.py` is the only importer and provides the `SecretStore` protocol, `KeyringSecretStore` and `MemorySecretStore`. That last one is what tests use, and the default for scripts that need no secret. Entries are named `weaksquare` (normal runs), `weaksquare-dev` (`--dev`, so dev runs never see your real sign-in) and `weaksquare-test` (the live-test token, SR-13). Under pytest, `KeyringSecretStore` refuses anything but `weaksquare-test`. Secrets are at most 1,200 characters: Credential Manager holds 2,560 bytes and keyring writes UTF-16, which is still well over FR-6.7's 512. keyring errors are re-raised as `SecretStoreError` with the error type only. The log redaction also covers JSON `"access_token": "…"` fields.
+- Alternatives: calling `CredWrite` through ctypes (more code, and v1.1's macOS/Linux port would need keyring's backends anyway).
+- Consequences: any code running as your Windows user can read the token (SR-15, accepted). Sign-out revokes it on Lichess.
+
 ### 2026-11-01, v0.2: Fast counts with Exclude solved and ratios (found by the full-DB self-check)
 - Context: with v0.2's defaults, the full-DB count took 4 s. `p.id NOT IN (solved ids)` needs `id`, which the covering index doesn't hold, so SQLite read every table row. A ratio mix also counted each group in its own scan, and its live match count ignored the groups' themes (counting the whole database).
 - Decision: Exclude solved is counted by subtraction: the count without it (covering index), minus the solved puzzles that match (looked up through the unique `id` index). Sampling a small pool drops the solved keys the same way. A ratio mix is counted in one scan, `SELECT COUNT(*), SUM(<group 1>), …` with the groups' union in `WHERE` (`count_with_buckets`), and `count_buckets` returns the total and the groups in one bridge call.
