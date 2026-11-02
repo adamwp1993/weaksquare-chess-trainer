@@ -1,0 +1,17 @@
+{
+  "_comment": "Pinned Stockfish release (FR-7.5). sha256 is GitHub's published digest for the asset. Upgrading means editing this file and adding an ARCHITECTURE.md section 7 entry.",
+  "engines": {
+    "stockfish": {
+      "tag": "sf_19",
+      "assets": {
+        "windows-x86_64": {
+          "name": "stockfish-windows-x86-64-universal.zip",
+          "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-windows-x86-64-universal.zip",
+          "sha256": "3c8bf1f9ea66a09350a40df4f632288285ac206d99f33ab5842c408fc30b48a7",
+          "size": 81431614,
+          "exe_member": "stockfish/stockfish-windows-x86-64-universal.exe"
+        }
+      }
+    }
+  }
+}
