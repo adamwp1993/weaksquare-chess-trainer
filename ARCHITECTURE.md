@@ -197,6 +197,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-01, v0.3: `@mantine/charts` + `recharts` for the rating trend
+- Context: FR-9.4 needs a line chart on Stats; Adam chose a library over a hand-written SVG at planning (more charts follow with the Coach and Progress pages).
+- Decision: npm runtime dependencies **`@mantine/charts`** (MIT, the same 9.7.x as `@mantine/core`), **`recharts`** (MIT) and its peer **`react-is`** (MIT, the same version as React), all checked on npm. `components/RatingTrend.tsx` draws a single series: a 2px line with 4px dots, the crosshair tooltip, horizontal grid only, and no legend (the title names it). The per-session table is its table view. The line color is checked with the dataviz palette validator against each surface: teal-9 `#087f5b` in Light, teal-8 `#0ca678` in Dark. Points are only `attempts.rating_after`, the glicko rating Lichess returned.
+- Alternatives: a hand-written SVG chart (no dependency, but no tooltip or axes for free).
+- Consequences: the bundle grows by 115 kB gzipped (218 → 333 kB; it loads from disk, so start-up is barely affected). Recharts renders inline SVG with inline styles, which the CSP already allows for Mantine. `npm audit --omit=dev` reports nothing.
+
 ### 2026-11-01, v0.3: Lichess sign-in, the sync queue, the history import and the angle rule
 - Context: FR-6.1–6.17, FR-1.6/1.7, and Adam's v0.3 planning decisions (REQUIREMENTS.md FR-3.9, 6.14, 6.16).
 - Decision:
@@ -211,7 +217,7 @@ Entry format:
 
 ### 2026-11-01, v0.3: `keyring` and the secret store
 - Context: FR-6.5 and SR-1/SR-7: the Lichess token lives only in Windows Credential Manager.
-- Decision: Python runtime dependency **`keyring`** (MIT; checked on PyPI; on Windows it pulls in `pywin32-ctypes` and `jaraco.*`). `adapters/secret_store.py` is the only importer and provides the `SecretStore` protocol, `KeyringSecretStore` and `MemorySecretStore`. That last one is what tests use, and the default for scripts that need no secret. Entries are named `weaksquare` (normal runs), `weaksquare-dev` (`--dev`, so dev runs never see your real sign-in) and `weaksquare-test` (the live-test token, SR-13). Under pytest, `KeyringSecretStore` refuses anything but `weaksquare-test`. Secrets are at most 1,200 characters: Credential Manager holds 2,560 bytes and keyring writes UTF-16, which is still well over FR-6.7's 512. keyring errors are re-raised as `SecretStoreError` with the error type only. The log redaction also covers JSON `"access_token": "…"` fields.
+- Decision: Python runtime dependency **`keyring`** (MIT; checked on PyPI; on Windows it pulls in `pywin32-ctypes` and `jaraco.*`). `adapters/secret_store.py` is the only importer and provides the `SecretStore` protocol, `KeyringSecretStore` and `MemorySecretStore`. That last one is what tests use, and the default for scripts that need no secret. Each data folder has its own entry: `weaksquare` for the real folder, `weaksquare-dev` for the dev folder and `weaksquare-<hash of the path>` for any other `WEAKSQUARE_DATA_DIR` (so smoke-test launches start signed out and never call Lichess with a stored sign-in). The live-test token uses `weaksquare-test` (SR-13). Under pytest, `KeyringSecretStore` refuses anything but `weaksquare-test`. Secrets are at most 1,200 characters: Credential Manager holds 2,560 bytes and keyring writes UTF-16, which is still well over FR-6.7's 512. keyring errors are re-raised as `SecretStoreError` with the error type only. The log redaction also covers JSON `"access_token": "…"` fields.
 - Alternatives: calling `CredWrite` through ctypes (more code, and v1.1's macOS/Linux port would need keyring's backends anyway).
 - Consequences: any code running as your Windows user can read the token (SR-15, accepted). Sign-out revokes it on Lichess.
 

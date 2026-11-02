@@ -150,3 +150,26 @@ def test_continue_helper_is_used_by_new_pages(browser, mock_url: str) -> None:  
         page.get_by_test_id("match-count").wait_for()
     finally:
         ctx.close()
+
+
+def open_stats(page) -> None:  # type: ignore[no-untyped-def]
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Stats").click()
+    page.get_by_test_id("stats-view").wait_for()
+
+
+def test_rating_trend_on_stats(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-9.4: a line of your Lichess rating over time and the change per session."""
+    page.goto(page.base_url + "/")
+    open_stats(page)
+    page.get_by_test_id("rating-chart").locator(".recharts-line-curve").wait_for()
+    assert page.get_by_test_id("rating-chart").locator(".recharts-line-dot").count() == 9
+    rows = page.get_by_test_id("rating-sessions").locator("tbody tr")
+    assert rows.count() == 5
+    assert rows.first.locator("td").last.inner_text() == "+8"  # newest session first
+
+
+def test_rating_trend_empty_when_signed_out(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?account=signed_out")
+    open_stats(page)
+    page.get_by_test_id("rating-trend-empty").wait_for()

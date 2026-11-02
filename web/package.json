@@ -12,12 +12,15 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@mantine/charts": "^9.7.4",
     "@mantine/core": "^9.7.4",
     "@mantine/hooks": "^9.7.4",
     "chess.js": "^1.4.0",
     "chessground": "^9.2.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-is": "^19.3.1",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -219,7 +219,7 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Stats
-*Added in v0.2.*
+*Added in v0.2. Changed in v0.3: the Lichess rating trend.*
 
 Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
 
@@ -228,6 +228,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 - **Puzzles played** and **Accuracy**: a puzzle counts as solved only with no wrong move and no help.
 - **First move right, line wrong**: of the puzzles where your first move was right, how often the rest of the line went wrong. Spotting the idea but miscalculating the follow-up shows up here, so a falling number means your calculation is improving.
 - **By theme**, **By length** (how many moves you make) and **By rating** (200-point bands, using the puzzle's rating when you played it) break the same numbers down. A puzzle with several themes counts once under each.
+- **Lichess puzzle rating** (*added in v0.3*): your rating over time, one point each time Lichess reported a new rating for your synced solves, and a table of the change in each session (newest first). Hover over the line to see a point's rating. It's empty until you sign in with Lichess and sync rated puzzles. The numbers are exactly what Lichess returned.
 
 **Gotchas**
 - If a database update removes a puzzle you played, your attempt still counts in the totals and by rating, but not by theme or length. A note under the tables says how many.

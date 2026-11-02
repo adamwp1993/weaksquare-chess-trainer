@@ -21,6 +21,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **Exclude played on Lichess** (on by default): your Lichess puzzle history is read when you sign in, and those puzzles are left out. A puzzle you've already played there shows *Already played on Lichess: rating unaffected*. [FR-3.9] [FR-6.17]
 - **Sign out** cancels your sign-in on Lichess as well as removing it from this PC. If Lichess can't be reached, the app asks first. [FR-6.6]
 - A **gear** icon opens Settings, now with your Lichess account at the top. [FR-1.8]
+- **Rating trend** on Stats: a chart of your Lichess puzzle rating over time and the change in each session, from what Lichess returned. [FR-9.4] [FR-6.11d]
 
 ### Changed
 - Puzzles you played before this version stay on this PC and aren't sent to Lichess.

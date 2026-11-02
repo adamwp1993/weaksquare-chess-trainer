@@ -1,7 +1,8 @@
 import { Alert, Group, Loader, Modal, Paper, SimpleGrid, Stack, Table, Tabs, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { StatRow, StatsReport } from "../api/types";
+import type { RatingHistory, StatRow, StatsReport } from "../api/types";
+import { RatingTrend } from "../components/RatingTrend";
 
 const pct = (x: number | null) => (x === null ? "–" : `${Math.round(x * 100)}%`);
 
@@ -60,13 +61,15 @@ function StatTable({ rows, first, testId }: { rows: StatRow[]; first: string; te
 }
 
 // FR-9.1, FR-9.2: accuracy per theme, length and rating band, and the "first move right, line
-// wrong" rate, from every attempt you've made in this app.
+// wrong" rate, from every attempt you've made in this app; FR-9.4: the Lichess rating trend.
 export function StatsView({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const [report, setReport] = useState<StatsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<RatingHistory | null>(null);
 
   useEffect(() => {
     if (!opened) return;
+    api.getRatingHistory().then(setRatings, () => setRatings(null));
     api.getStats().then(
       (r) => {
         setReport(r);
@@ -113,6 +116,7 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
               <StatTable rows={report.by_rating} first="Puzzle rating" testId="stats-by-rating" />
             </Tabs.Panel>
           </Tabs>
+          <RatingTrend history={ratings} />
           {report.missing > 0 && (
             <Text size="xs" c="dimmed" data-testid="stats-missing">
               {report.missing} of your attempts are on puzzles no longer in the puzzle database. They count in the totals
