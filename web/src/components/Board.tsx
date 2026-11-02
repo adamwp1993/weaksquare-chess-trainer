@@ -15,6 +15,10 @@ export interface BoardProps {
   movable: "white" | "black" | null;
   lastMove?: [string, string] | null;
   onMove?: (uci: string) => void;
+  /** Hint (§7.2): circle the piece that moves next. */
+  hintSquare?: string | null;
+  /** Show the file and rank letters around the board. */
+  coordinates?: boolean;
 }
 
 const PROMOTIONS: { piece: string; label: string }[] = [
@@ -36,7 +40,7 @@ function legalDests(chess: Chess): Map<Key, Key[]> {
 
 // The only chessground wrapper in the app (ARCHITECTURE §3 decision 11). It shows positions and
 // reports moves as UCI; whether a move is right is decided by the backend, never here.
-export function Board({ fen, orientation, movable, lastMove, onMove }: BoardProps) {
+export function Board({ fen, orientation, movable, lastMove, onMove, hintSquare = null, coordinates = true }: BoardProps) {
   const el = useRef<HTMLDivElement>(null);
   const cg = useRef<Api | null>(null);
   const onMoveRef = useRef(onMove);
@@ -49,7 +53,7 @@ export function Board({ fen, orientation, movable, lastMove, onMove }: BoardProp
   useEffect(() => {
     if (!el.current) return;
     cg.current = Chessground(el.current, {
-      coordinates: true,
+      coordinates,
       animation: { enabled: true, duration: 250 },
       highlight: { lastMove: true, check: true },
       premovable: { enabled: false },
@@ -59,7 +63,8 @@ export function Board({ fen, orientation, movable, lastMove, onMove }: BoardProp
       cg.current?.destroy();
       cg.current = null;
     };
-  }, []);
+    // Coordinates are drawn when chessground is created, so toggling them re-creates the board.
+  }, [coordinates]);
 
   useEffect(() => {
     const chess = new Chess(fen);
@@ -84,12 +89,13 @@ export function Board({ fen, orientation, movable, lastMove, onMove }: BoardProp
           },
         },
       },
+      drawable: { autoShapes: hintSquare ? [{ orig: hintSquare as Key, brush: "green" }] : [] },
     });
-  }, [fen, orientation, movable, lastMove]);
+  }, [fen, orientation, movable, lastMove, hintSquare, coordinates]);
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: 560, aspectRatio: "1 / 1" }}>
-      <div ref={el} data-testid="board" style={{ width: "100%", height: "100%" }} />
+      <div ref={el} data-testid="board" data-hint={hintSquare ?? ""} style={{ width: "100%", height: "100%" }} />
       {promotion && (
         <Paper
           shadow="md"

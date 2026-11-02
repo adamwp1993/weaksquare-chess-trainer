@@ -14,14 +14,14 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 
 | Task | Command |
 |---|---|
-| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py` (add `--no-shortcut` to skip the Start-menu shortcut). Safe to re-run. |
+| Set up a fresh clone (`scripts/setup.py`) | `python scripts/setup.py`. Creates Start-menu and desktop shortcuts with the app icon: add `--no-desktop-shortcut` for the Start menu only, or `--no-shortcut` for neither. Safe to re-run (the shortcuts are replaced, never duplicated). |
 | Download and import the puzzle database | `uv run python scripts/fetch_puzzle_db.py --dev` (dev data folder; drop `--dev` for the real one). `--file PATH` imports a `lichess_db_puzzle.csv.zst` you already have. Close the app first. |
 | Install or repair Stockfish (`scripts/fetch_stockfish.py`) | TODO(v0.4) |
 | Run the app (dev data folder) | `npm.cmd --prefix web run build` once, then `uv run python -m weaksquare --dev`. The Start-menu shortcut runs the app without `--dev`. |
 | Dev mode (hot-reloading front end) | `npm.cmd --prefix web run dev`, then in a second window `uv run python -m weaksquare --dev-server`. For the UI alone in a browser with fixed data: `npm.cmd --prefix web run dev -- --mode mock`, then open http://127.0.0.1:5173 |
 | Unit, integration and contract tests | `uv run pytest` |
 | End-to-end UI tests (mock client) | `uv run pytest -m e2e` (builds `web/dist-mock` first if it's out of date) |
-| Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times) |
+| Real-app smoke test | `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` (opens and closes the real window several times; stops with that build command if `web/dist` is older than `web/src`) |
 | Lint and format | `uv run ruff check .` and `uv run ruff format --check .` (drop `--check` to reformat) |
 | Type checks (`mypy`, `tsc --noEmit`, ESLint) | `uv run mypy src`, `npm.cmd --prefix web run typecheck` and `npm.cmd --prefix web run lint` |
 | Full-DB tests (needs the imported puzzle DB) | `uv run pytest -m fulldb`. Reads the dev data folder's `puzzles.db` read-only; add `--fulldb-path PATH` to use another one. Skips if there isn't one. |
@@ -29,6 +29,8 @@ Run from the repo root in PowerShell unless noted. Keep this table exact: QA run
 | Check the docs | `python scripts/check_docs.py` (add `--strict` before a handoff) |
 | Regenerate `web/src/api/types.ts` after changing `bridge/dto.py` | `uv run python scripts/gen_types.py` |
 | Regenerate the user-guide screenshots | `uv run pytest -m docs_screenshots` (writes `docs/img/*.png` from the mock client) |
+| Rebuild the app icon after changing `assets/icon/weaksquare.svg` | `uv run python scripts/make_icon.py` (commit the `.ico` with the SVG; `--check` tells you if they've drifted, and `uv run pytest -m e2e` runs that check) |
+| Re-record the update-check responses (needs the internet) | `uv run python tests/fixtures/tools/record_db_update.py` (writes scrubbed copies to `tests/fixtures/http/lichess_db/`; review the diff before committing) |
 | Store the live-test Lichess token (run it yourself, outside Claude Code) | TODO(v0.3) |
 | Live tests (opt-in) | TODO(v0.3) |
 | Build the Windows installer | TODO(v1.0) |
@@ -67,6 +69,8 @@ To add one:
 
 `puzzles.db` is never migrated in place. Every import builds a new file from all the puzzle migrations, then creates the indexes in `adapters/db/puzzles_indexes.sql` after the bulk load.
 
+When you add a puzzle migration, an existing `puzzles.db` has an older `schema_version` than the app knows. The app then shows **Upgrade the puzzle database**, which rebuilds the file from its own rows (`ExistingPuzzleDb` in `adapters/db/repos/puzzle_import.py`) through the same import path, with no download. The v0.2 upgrade (schema 1 → 2) adds the opening ids. A new column computed at import (like `opening_family`) needs its value derived from the CSV fields in `PuzzleDbWriter.add`, because the upgrade only replays those fields.
+
 ## Testing
 Levels and when each runs: ARCHITECTURE.md §6. Rules:
 - Tests mock `secret_store`, never `keyring`.
@@ -78,10 +82,10 @@ Levels and when each runs: ARCHITECTURE.md §6. Rules:
 ## How-to recipes
 Each recipe is written when the first real example exists, using that example.
 - Add a puzzle filter. The v0.1 side-to-move filter is the worked example:
-  1. **Schema:** add the field to `FilterSpec` in `src/weaksquare/core/filters.py` with a default that means "no restriction", plus its type check in `_coerce` and its rule in `validate()`. If the field already exists for a later version, remove it from the `later` list in `validate()`, which rejects it until then.
-  2. **SQL:** add its condition to `build_where` in `src/weaksquare/adapters/db/repos/puzzles.py`. If it needs a new column or index in `puzzles.db`, add a puzzle migration and update `puzzles_indexes.sql`. A full re-import picks both up.
-  3. **Tests:** extend `oracle_count` in `tests/integration/test_filter_count.py` with an independent version of the rule (plain SQL on the raw columns), and let `random_spec` generate the field. The 20 random specs then cover it, on the fixture and with `-m fulldb`.
-  4. **Bridge and UI:** run `uv run python scripts/gen_types.py`, add the field to `defaultFilters()` in `web/src/state/filters.ts` and to the mock's `matches()` in `web/src/api/mockClient.ts`, and add a control to `web/src/views/MixerView.tsx`.
+  1. **Schema:** add the field to `FilterSpec` in `src/weaksquare/core/filters.py` with a default (usually one that means "no restriction"), plus its type check in `_coerce` and its rule in `validate()`. If the field already exists for a later version, remove it from the `later` dict in `validate()`, which rejects it until then. If its default isn't "no restriction" (like the v0.2 quality thresholds), bump `SAVED_FILTERS_VERSION` and teach `upgrade_saved` to give saved filters the new default once.
+  2. **SQL:** add its condition to `build_where` in `src/weaksquare/adapters/db/repos/puzzles.py`. If it needs a new column or index in `puzzles.db`, add a puzzle migration and update `puzzles_indexes.sql`; the app then offers the local upgrade (see *Database migrations*). A filter on your own history joins `attempts` in user.db, which is the main schema of every connection (the v0.2 history filters are the example).
+  3. **Tests:** extend `oracle_count` in `tests/integration/test_filter_count.py` with an independent version of the rule (plain SQL on the raw columns, or a set computed in Python), and let `random_spec` generate the field. The 40 random specs then cover it, on the fixture and with `-m fulldb`.
+  4. **Bridge and UI:** run `uv run python scripts/gen_types.py`, add the field to `defaultFilters()` in `web/src/state/filters.ts` and to the mock's `matches()` in `web/src/api/mockClient.ts`, and add a control to `web/src/views/MixerView.tsx` (rarely used filters go in its **More filters** section).
   5. **Docs:** the User Guide's *Choosing your puzzles* table, and CHANGELOG.
 - Add a training mode: TODO(v0.5)
 - Add an LLM provider: TODO(v0.7)

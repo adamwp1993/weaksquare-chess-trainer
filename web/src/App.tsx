@@ -1,17 +1,35 @@
 import { ActionIcon, Alert, AppShell, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { FilterSpec, PuzzleDbStatus } from "./api/types";
+import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
+import { UpdateBanner } from "./components/UpdateBanner";
+import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
+import { useJob } from "./state/useJob";
+import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
+import { sounds as soundPlayer } from "./sound/player";
+import { SettingsModal } from "./views/SettingsModal";
+import { StatsView } from "./views/StatsView";
 import { TrainerView } from "./views/TrainerView";
+import { UpgradeView } from "./views/UpgradeView";
 
 const SAVE_FILTERS_DEBOUNCE_MS = 500;
 
 export function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [coordinates, setCoordinates] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sounds, setSounds] = useState<SoundSettings>({ on: false, volume: 70, set: "sfx" });
+  const [autoCheck, setAutoCheck] = useState(true);
+  const [offer, setOffer] = useState<UpdateOffer | null>(null);
+  const [checkJob, setCheckJob] = useState<string | null>(null);
+  const checkStatus = useJob(checkJob);
+  const checkStarted = useRef(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<PuzzleDbStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +37,20 @@ export function App() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [startNotice, setStartNotice] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const historyChanged = useCallback(() => setHistoryVersion((v) => v + 1), []);
   const saveTimer = useRef<number | undefined>(undefined);
 
   // The last filters you used come back from user.db (never browser storage).
   useEffect(() => {
     api.getSettings().then(
-      (s) => setSpec(s.last_filters ?? defaultFilters()),
+      (s) => {
+        setSpec(s.last_filters ?? defaultFilters());
+        setCoordinates(s.coordinates);
+        setSounds(s.sounds);
+        setAutoCheck(s.auto_check);
+      },
       () => setSpec(defaultFilters()),
     );
   }, []);
@@ -37,13 +63,33 @@ export function App() {
     }, SAVE_FILTERS_DEBOUNCE_MS);
   }, []);
 
+  const toggleCoordinates = useCallback(() => {
+    const on = !coordinates;
+    setCoordinates(on);
+    api.setSetting("ui.coordinates", on).catch(() => undefined);
+  }, [coordinates]);
+
+  useShortcuts({ c: toggleCoordinates, "?": () => setShortcutsOpen(true) });
+
+  // FR-1.13: the player follows the saved settings; off means silent and nothing loaded.
+  useEffect(() => soundPlayer.configure(sounds), [sounds]);
+  const changeSounds = useCallback((next: SoundSettings) => {
+    setSounds(next);
+    api.setSetting("ui.sounds", next).catch(() => undefined);
+  }, []);
+
   const start = async () => {
     if (!spec) return;
     setStarting(true);
     setStartError(null);
+    setStartNotice(null);
     try {
       const info = await api.startSession(spec);
       setSessionId(info.session_id);
+      if (info.empty_buckets.length > 0) {
+        const groups = info.empty_buckets.map((i) => `group ${i + 1}`).join(" and ");
+        setStartNotice(`No puzzles match ${groups}, so it's left out; the other groups share its share.`);
+      }
     } catch (e) {
       setStartError((e as Error).message);
     } finally {
@@ -57,10 +103,40 @@ export function App() {
 
   useEffect(refresh, [refresh]);
 
-  const imported = useCallback(() => {
-    setUpdateOpen(false);
+  // FR-2.5: the automatic update check, once per launch (the backend limits it to once a day).
+  const refreshOffer = useCallback(() => {
+    api.getUpdateOffer().then(setOffer, () => setOffer(null));
+  }, []);
+  useEffect(() => {
+    if (checkStarted.current || !dbStatus?.installed || dbStatus.needs_upgrade) return;
+    checkStarted.current = true;
+    api.checkForDbUpdate(false).then(setCheckJob, () => undefined);
+  }, [dbStatus]);
+  useEffect(() => {
+    if (checkStatus && checkStatus.state !== "running") refreshOffer();
+  }, [checkStatus, refreshOffer]);
+
+  const dismiss = (kind: "not_now" | "skip") => {
+    setOffer(null);
+    api.dismissUpdate(kind).catch(() => undefined);
+  };
+  const updateNow = async () => {
+    setOffer(null);
+    try {
+      await api.startPuzzleImport(null);
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
     refresh();
-  }, [refresh]);
+    setUpdateOpen(true);
+  };
+
+  // After an import the update dialog stays open, showing the exact new/removed numbers (FR-2.5).
+  const imported = useCallback(() => {
+    refresh();
+    refreshOffer();
+  }, [refresh, refreshOffer]);
 
   let main;
   if (error) main = <Text c="red">{error}</Text>;
@@ -72,6 +148,7 @@ export function App() {
     );
   else if (!dbStatus.installed)
     main = <ImportView firstRun runningJobId={dbStatus.import_job_id} onDone={imported} />;
+  else if (dbStatus.needs_upgrade) main = <UpgradeView runningJobId={dbStatus.import_job_id} onDone={imported} />;
   else if (!spec)
     main = (
       <Center h={300}>
@@ -81,11 +158,28 @@ export function App() {
   else
     main = (
       <Grid gap="lg">
+        {offer && (
+          <Grid.Col span={12}>
+            <UpdateBanner offer={offer} onUpdate={updateNow} onNotNow={() => dismiss("not_now")} onSkip={() => dismiss("skip")} />
+          </Grid.Col>
+        )}
         <Grid.Col span={{ base: 12, md: 4 }}>
-          <MixerView spec={spec} onChange={changeSpec} dbStatus={dbStatus} onStart={start} starting={starting} />
+          <MixerView
+            spec={spec}
+            onChange={changeSpec}
+            dbStatus={dbStatus}
+            onStart={start}
+            starting={starting}
+            historyVersion={historyVersion}
+          />
           {startError && (
             <Alert color="red" mt="sm" data-testid="start-error">
               {startError}
+            </Alert>
+          )}
+          {startNotice && (
+            <Alert color="yellow" mt="sm" withCloseButton onClose={() => setStartNotice(null)} data-testid="start-notice">
+              {startNotice}
             </Alert>
           )}
         </Grid.Col>
@@ -95,7 +189,13 @@ export function App() {
               <Text c="dimmed">Choose your puzzles on the left, then press Start.</Text>
             </Paper>
           ) : (
-            <TrainerView key={sessionId} sessionId={sessionId} onNewSession={() => setSessionId(null)} />
+            <TrainerView
+              key={sessionId}
+              sessionId={sessionId}
+              onNewSession={() => setSessionId(null)}
+              onHistoryChange={historyChanged}
+              coordinates={coordinates}
+            />
           )}
         </Grid.Col>
       </Grid>
@@ -116,6 +216,15 @@ export function App() {
               {dbStatus?.installed && (
                 <Menu.Item onClick={() => setUpdateOpen(true)}>Update puzzle database…</Menu.Item>
               )}
+              <Menu.Item onClick={() => setStatsOpen(true)} disabled={!dbStatus?.installed}>
+                Stats
+              </Menu.Item>
+              <Menu.Item onClick={() => setSettingsOpen(true)}>Settings…</Menu.Item>
+              <Menu.Item onClick={toggleCoordinates} data-testid="menu-coordinates">
+                {coordinates ? "Hide board coordinates" : "Show board coordinates"}
+              </Menu.Item>
+              <Menu.Item onClick={() => setShortcutsOpen(true)}>Keyboard shortcuts</Menu.Item>
+              <Menu.Divider />
               <Menu.Item onClick={() => setAboutOpen(true)}>About</Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -123,8 +232,28 @@ export function App() {
       </AppShell.Header>
       <AppShell.Main>{main}</AppShell.Main>
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
+      <ShortcutsHelp opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <SettingsModal
+        opened={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        coordinates={coordinates}
+        onCoordinates={toggleCoordinates}
+        sounds={sounds}
+        onSounds={changeSounds}
+        autoCheck={autoCheck}
+        onAutoCheck={(on) => {
+          setAutoCheck(on);
+          api.setSetting("puzzle_db.auto_check", on).catch(() => undefined);
+        }}
+      />
       <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
-        <ImportView firstRun={false} runningJobId={dbStatus?.import_job_id ?? null} onDone={imported} />
+        <ImportView
+          firstRun={false}
+          runningJobId={dbStatus?.import_job_id ?? null}
+          onDone={imported}
+          onChecked={refreshOffer}
+        />
       </Modal>
     </AppShell>
   );

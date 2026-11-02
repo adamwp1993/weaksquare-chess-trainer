@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from weaksquare.core.filters import FilterSpec, RatioBucket
+from weaksquare.core.move_sounds import MoveSound
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class PuzzleDbStatus:
     rating_min: int | None
     rating_max: int | None
     import_job_id: str | None
+    needs_upgrade: bool  # an older-schema puzzles.db: rebuild it locally (no download) first
 
 
 @dataclass(frozen=True)
@@ -67,8 +69,48 @@ class ThemeGroup:
 
 
 @dataclass(frozen=True)
+class SoundSettings:
+    on: bool
+    volume: int  # 0–100
+    set: Literal["sfx", "piano", "nes", "futuristic"]
+
+
+@dataclass(frozen=True)
 class UiSettings:
     last_filters: FilterSpec | None
+    coordinates: bool  # letters and numbers around the board
+    color_scheme: Literal["light", "dark", "auto"]  # FR-1.12; "auto" is Match system
+    sounds: SoundSettings  # FR-1.13
+    auto_check: bool  # FR-2.5: check for a newer puzzle database once a day
+
+
+@dataclass(frozen=True)
+class OpeningOption:
+    tag: str  # the Lichess OpeningTags value, e.g. Sicilian_Defense_Najdorf_Variation
+    name: str  # for display: "Najdorf Variation" under its family "Sicilian Defense"
+    count: int
+
+
+@dataclass(frozen=True)
+class OpeningFamily:
+    family: OpeningOption
+    variations: list[OpeningOption]
+
+
+@dataclass(frozen=True)
+class BucketCounts:
+    """A ratio mix's live counts (FR-3.10), from one scan: all groups together, and each group."""
+
+    total: int
+    buckets: list[int]
+
+
+@dataclass(frozen=True)
+class Preset:
+    name: str
+    spec: FilterSpec | None  # None when this version can't use it; `error` says why
+    error: str | None
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -76,6 +118,7 @@ class SessionInfo:
     session_id: int
     match_count: int
     queue_size: int | None
+    empty_buckets: list[int]  # ratio groups with no matching puzzles, left out of this session
 
 
 @dataclass(frozen=True)
@@ -88,6 +131,7 @@ class PuzzleView:
     opponent_move: str  # UCI, played (animated) first
     player_color: Literal["white", "black"]
     rating: int
+    opponent_sound: MoveSound  # FR-1.13
 
 
 @dataclass(frozen=True)
@@ -114,6 +158,20 @@ class MoveFeedback:
     reply: str | None  # the opponent's reply (UCI), to play on the board
     finished: bool  # the whole line has been played
     outcome: Outcome | None
+    move_sound: MoveSound | None  # FR-1.13: your move…
+    reply_sound: MoveSound | None  # …and the reply
+
+
+@dataclass(frozen=True)
+class HelpResponse:
+    """Hint or Show answer (§7.2). `outcome` is set when the help decided the attempt (a loss)."""
+
+    kind: Literal["hint", "answer"]
+    hint_square: str | None  # Hint: the piece that moves next
+    answer_fen: str | None  # Show answer: where the answer starts…
+    answer_moves: list[str]  # …and the moves from there (UCI, both sides)
+    outcome: Outcome | None
+    answer_sounds: list[MoveSound]  # one per answer move
 
 
 @dataclass(frozen=True)
@@ -128,6 +186,37 @@ class SessionStats:
     all_time_failed: int
 
 
+@dataclass(frozen=True)
+class StatRow:
+    key: str
+    label: str
+    attempts: int
+    solved: int
+    accuracy: float | None
+    first_right: int  # attempts where the first move was right
+    line_wrong_rate: float | None  # of those, the share where the line then went wrong (FR-9.2)
+
+
+@dataclass(frozen=True)
+class StatsReport:
+    overall: StatRow
+    by_theme: list[StatRow]
+    by_length: list[StatRow]
+    by_rating: list[StatRow]
+    missing: int  # attempts on puzzles no longer in the database
+
+
+@dataclass(frozen=True)
+class UpdateOffer:
+    """FR-2.5: a newer Lichess puzzle export is available."""
+
+    export_date: str | None
+    current_export_date: str | None
+    size: int | None  # bytes to download
+    approx_count: int | None  # from the database.lichess.org page, which can lag the file
+    approx_new: int | None
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -137,11 +226,20 @@ EXPORTED: list[type] = [
     FilterSpec,
     ThemeOption,
     ThemeGroup,
+    OpeningOption,
+    OpeningFamily,
+    BucketCounts,
+    Preset,
+    SoundSettings,
     UiSettings,
     SessionInfo,
     PuzzleView,
     ThemeLabel,
     Outcome,
     MoveFeedback,
+    HelpResponse,
     SessionStats,
+    StatRow,
+    StatsReport,
+    UpdateOffer,
 ]

@@ -22,9 +22,13 @@ from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
-from weaksquare.services.mixer import LAST_FILTERS_KEY, MixerService
+from weaksquare.services.db_update import UpdateCheckService
+from weaksquare.services.mixer import MixerService
+from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.session import SessionService
+from weaksquare.services.stats import StatsService
+from weaksquare.services.ui_settings import UiSettingsService
 
 log = logging.getLogger("weaksquare.frontend")
 
@@ -43,7 +47,15 @@ class Api:
         puzzle_db: PuzzleDbService,
         mixer: MixerService,
         sessions: SessionService,
+        presets: PresetService,
+        stats: StatsService,
+        ui_settings: UiSettingsService,
+        db_update: UpdateCheckService,
     ) -> None:
+        self._db_update = db_update
+        self._ui_settings = ui_settings
+        self._stats = stats
+        self._presets = presets
         self._mixer = mixer
         self._sessions = sessions
         self._paths = paths
@@ -90,8 +102,9 @@ class Api:
     def get_puzzle_db_status(self) -> PuzzleDbStatus:
         s = self._puzzle_db.status()
         return PuzzleDbStatus(
-            s.installed, s.puzzle_count, s.export_date, s.imported_at, s.rating_min, s.rating_max, s.import_job_id
-        )
+            s.installed, s.puzzle_count, s.export_date, s.imported_at, s.rating_min, s.rating_max, s.import_job_id,
+            s.needs_upgrade,
+        )  # fmt: skip
 
     @bridge_call
     def choose_puzzle_file(self) -> str | None:
@@ -103,6 +116,28 @@ class Api:
         if local_path is not None and (len(local_path) > 1000 or chr(0) in local_path):
             raise ValidationError("That isn't a valid file path.")
         return self._puzzle_db.start_import(local_path)
+
+    @bridge_call
+    def start_puzzle_db_upgrade(self) -> str:
+        """Rebuild an older-schema puzzles.db from its own rows (no download). Returns the job ID."""
+        return self._puzzle_db.start_upgrade()
+
+    # ---- update check (FR-2.5) -----------------------------------------------------------------
+    @bridge_call
+    def check_for_db_update(self, force: bool = False) -> str:
+        """Start the update check job (automatic at launch, or "Check for updates"). Returns the job ID."""
+        return self._db_update.start_check(force)
+
+    @bridge_call
+    def get_update_offer(self) -> dto.UpdateOffer | None:
+        o = self._db_update.current_offer()
+        if o is None:
+            return None
+        return dto.UpdateOffer(o.export_date, o.current_export_date, o.size, o.approx_count, o.approx_new)
+
+    @bridge_call
+    def dismiss_update(self, kind: Literal["not_now", "skip"]) -> None:
+        self._db_update.dismiss(kind)
 
     # ---- jobs -----------------------------------------------------------------------------------
     @bridge_call
@@ -119,12 +154,26 @@ class Api:
     # ---- settings (UI state persists here, never in browser storage) ---------------------------
     @bridge_call
     def get_settings(self) -> dto.UiSettings:
-        stored = self._mixer.ui_settings().get(LAST_FILTERS_KEY)
-        return dto.UiSettings(last_filters=FilterSpec.from_json(stored) if stored else None)
+        s = self._ui_settings.get()
+        snd = s.sounds
+        sound_set: Literal["sfx", "piano", "nes", "futuristic"] = (
+            snd.set if snd.set in ("piano", "nes", "futuristic") else "sfx"  # type: ignore[assignment]
+        )
+        return dto.UiSettings(
+            last_filters=s.last_filters,
+            coordinates=s.coordinates,
+            color_scheme=s.color_scheme,
+            sounds=dto.SoundSettings(snd.on, snd.volume, sound_set),
+            auto_check=s.auto_check,
+        )
 
     @bridge_call
-    def set_setting(self, key: Literal["mixer.filters"], value: Any) -> None:
-        self._mixer.set_ui_setting(key, value)
+    def set_setting(
+        self,
+        key: Literal["mixer.filters", "ui.coordinates", "ui.color_scheme", "ui.sounds", "puzzle_db.auto_check"],
+        value: Any,
+    ) -> None:
+        self._ui_settings.set(key, value)
 
     # ---- the mixer (FR-3.1–3.5) -----------------------------------------------------------------
     @bridge_call
@@ -138,11 +187,45 @@ class Api:
     def count_matches(self, spec: dict) -> int:
         return self._mixer.count(FilterSpec.from_json(spec))
 
+    @bridge_call
+    def count_buckets(self, spec: dict) -> dto.BucketCounts:
+        """A ratio mix's live counts (FR-3.10): the total and each group, in one call and one scan."""
+        total, buckets = self._mixer.counts_with_buckets(FilterSpec.from_json(spec))
+        return dto.BucketCounts(total, buckets)
+
+    @bridge_call
+    def get_opening_catalog(self) -> list[dto.OpeningFamily]:
+        def opt(o: Any) -> dto.OpeningOption:
+            return dto.OpeningOption(o.tag, o.name, o.count)
+
+        return [dto.OpeningFamily(opt(f.family), [opt(v) for v in f.variations]) for f in self._mixer.opening_catalog()]
+
+    # ---- presets (FR-3.13) ------------------------------------------------------------------
+    @staticmethod
+    def _preset(p: Preset) -> dto.Preset:
+        return dto.Preset(p.name, p.spec, p.error, p.updated_at)
+
+    @bridge_call
+    def list_presets(self) -> list[dto.Preset]:
+        return [self._preset(p) for p in self._presets.list()]
+
+    @bridge_call
+    def save_preset(self, name: str, spec: dict, overwrite: bool = False) -> dto.Preset:
+        return self._preset(self._presets.save(name, FilterSpec.from_json(spec), overwrite))
+
+    @bridge_call
+    def rename_preset(self, old_name: str, new_name: str) -> None:
+        self._presets.rename(old_name, new_name)
+
+    @bridge_call
+    def delete_preset(self, name: str) -> None:
+        self._presets.delete(name)
+
     # ---- sessions (FR-3.11, 3.12, 3.14, FR-4.1, FR-5.1, 5.3) -----------------------------------
     @bridge_call
     def start_session(self, spec: dict) -> dto.SessionInfo:
         info = self._sessions.start(FilterSpec.from_json(spec))
-        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size)
+        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size, info.empty_buckets)
 
     @bridge_call
     def next_puzzle(self, session_id: int) -> dto.PuzzleView | None:
@@ -150,24 +233,48 @@ class Api:
         if v is None:
             return None
         color: Literal["white", "black"] = "white" if v.player_color == "white" else "black"
-        return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating)
+        return dto.PuzzleView(v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating, v.opponent_sound)
+
+    @staticmethod
+    def _outcome(o: Any) -> dto.Outcome | None:
+        if o is None:
+            return None
+        return dto.Outcome(
+            win=o.win,
+            puzzle_id=o.puzzle_id,
+            rating=o.rating,
+            themes=[dto.ThemeLabel(t, display_name(t)) for t in o.themes],
+            solution=o.solution,
+            puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
+        )
 
     @bridge_call
     def submit_move(self, session_id: int, uci: str) -> dto.MoveFeedback:
         r = self._sessions.submit_move(session_id, uci[:8])
-        outcome = None
-        if r.outcome is not None:
-            o = r.outcome
-            outcome = dto.Outcome(
-                win=o.win,
-                puzzle_id=o.puzzle_id,
-                rating=o.rating,
-                themes=[dto.ThemeLabel(t, display_name(t)) for t in o.themes],
-                solution=o.solution,
-                puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
-            )
         f = r.feedback
-        return dto.MoveFeedback(f.kind, f.reply, f.finished, outcome)
+        return dto.MoveFeedback(f.kind, f.reply, f.finished, self._outcome(r.outcome), f.move_sound, f.reply_sound)
+
+    @bridge_call
+    def request_help(self, session_id: int, kind: Literal["hint", "answer"]) -> dto.HelpResponse:
+        """The stuck ladder (§7.2): Hint, then Show answer. Before the end, either is a loss."""
+        r = self._sessions.request_help(session_id, kind)
+        h = r.help
+        return dto.HelpResponse(
+            h.kind, h.hint_square, h.answer_fen, list(h.answer_moves), self._outcome(r.outcome), list(h.answer_sounds)
+        )
+
+    # ---- stats (FR-9.1, 9.2) ---------------------------------------------------------------------
+    @bridge_call
+    def get_stats(self) -> dto.StatsReport:
+        r = self._stats.report()
+
+        def row(t: Any) -> dto.StatRow:
+            return dto.StatRow(t.key, t.label, t.attempts, t.solved, t.accuracy, t.first_right, t.line_wrong_rate)
+
+        return dto.StatsReport(
+            row(r.overall), [row(t) for t in r.by_theme], [row(t) for t in r.by_length],
+            [row(t) for t in r.by_rating], r.missing,
+        )  # fmt: skip
 
     @bridge_call
     def get_session_stats(self, session_id: int) -> dto.SessionStats:

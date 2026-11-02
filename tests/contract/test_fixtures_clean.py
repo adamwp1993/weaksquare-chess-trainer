@@ -21,8 +21,21 @@ GAME_URL = re.compile(r"lichess\.org/(?!GAMEID\d)([A-Za-z0-9]{8})\b")
 PROFILE_URL = re.compile(r"(lichess\.org/@/|chess\.com/member/)(?!player_|opponent_)\w+")
 
 
+def _is_text(p: Path) -> bool:
+    data = p.read_bytes()
+    if b"\0" in data:
+        return False
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
 def _files() -> list[Path]:
-    return [p for p in FIXTURES.rglob("*") if p.is_file() and p.suffix in {".csv", ".json", ".ndjson", ".pgn", ".txt"}]
+    """Every text file under tests/fixtures, whatever its extension (v0.2: an .html recording was
+    skipped by the earlier list of extensions)."""
+    return [p for p in FIXTURES.rglob("*") if p.is_file() and "__pycache__" not in p.parts and _is_text(p)]
 
 
 @pytest.mark.parametrize("path", _files(), ids=lambda p: p.name)

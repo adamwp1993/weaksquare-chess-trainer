@@ -117,7 +117,7 @@ def test_bridge_round_trip(services, paths, clock) -> None:  # type: ignore[no-u
     spec = {"themes": ["mateIn1"], "match": "any", "queue_size": 2}
     assert api.count_matches(spec)["data"] > 0
     assert api.count_matches({"themes": 5})["error"]["code"] == "invalid_argument"
-    assert api.count_matches({"order": "easy_to_hard"})["error"]["code"] == "unsupported_in_this_version"
+    assert api.count_matches({"exclude_played_on_lichess": True})["error"]["code"] == "unsupported_in_this_version"
     sid = api.start_session(spec)["data"]["session_id"]
     view = api.next_puzzle(sid)["data"]
     assert "themes" not in view  # FR-3.14
@@ -131,3 +131,58 @@ def test_bridge_round_trip(services, paths, clock) -> None:  # type: ignore[no-u
     assert api.set_setting("mixer.filters", spec)["ok"]
     assert api.get_settings()["data"]["last_filters"]["themes"] == ["mateIn1"]
     assert api.set_setting("other", 1)["error"]["code"] == "invalid_argument"
+
+
+def test_saved_v01_filters_upgraded_once(services) -> None:  # type: ignore[no-untyped-def]
+    """The v0.1 → v0.2 defaults (quality on, Exclude solved on) apply once, then your choices stick."""
+    from weaksquare.adapters.db.repos.user_data import SettingsRepo
+
+    settings = SettingsRepo(services.db)
+    v01 = {**FilterSpec(rating_min=1200).to_json(), "min_popularity": None, "min_plays": None,
+           "exclude_solved_here": False}  # fmt: skip
+    settings.set("mixer.filters", v01)  # as v0.1 left it: no version marker
+    first = services.ui_settings.get().last_filters.to_json()
+    assert (first["min_popularity"], first["min_plays"], first["exclude_solved_here"]) == (50, 100, True)
+    assert first["rating_min"] == 1200
+    services.ui_settings.set("mixer.filters", {**first, "min_plays": None, "exclude_solved_here": False})
+    again = services.ui_settings.get().last_filters
+    assert again.min_plays is None and again.exclude_solved_here is False
+
+
+# ---- v0.2: Hint and Show answer are recorded as a loss (Done when) ------------------------------
+def test_hint_and_answer_recorded_as_a_loss(services) -> None:  # type: ignore[no-untyped-def]
+    from weaksquare.core.errors import ConflictError
+
+    sid = services.sessions.start(FilterSpec(queue_size=3, exclude_solved_here=False)).session_id
+
+    first = services.sessions.next_puzzle(sid)
+    with pytest.raises(ConflictError):
+        services.sessions.request_help(sid, "answer")  # Show answer unlocks after Hint
+    hint = services.sessions.request_help(sid, "hint")
+    assert hint.outcome is not None and not hint.outcome.win and hint.help.hint_square
+    solve(services, sid, first)  # finishing the line afterwards adds nothing
+    answer_after_end = services.sessions.request_help(sid, "answer")
+    assert answer_after_end.outcome is None  # free after the end (FR-5.4)
+
+    second = services.sessions.next_puzzle(sid)
+    services.sessions.request_help(sid, "hint")
+    ans = services.sessions.request_help(sid, "answer")
+    assert ans.outcome is None and list(ans.help.answer_moves) == solution(services, second.puzzle_id)[1:]
+
+    assert services.sessions.next_puzzle(sid) is not None  # third…
+    assert services.sessions.next_puzzle(sid) is None  # …skipped: the session is over
+    rows = attempts(services)
+    assert [(r["win"], r["help_used"]) for r in rows] == [(0, "hint"), (0, "hint"), (0, "none")]
+    assert services.sessions.stats(sid).failed == 3
+
+
+def test_request_help_over_the_bridge(paths, clock, services) -> None:  # type: ignore[no-untyped-def]
+    from tests.helpers import build_api
+
+    api = build_api(paths, clock)
+    sid = api.start_session({"queue_size": 1, "exclude_solved_here": False})["data"]["session_id"]
+    api.next_puzzle(sid)
+    assert api.request_help(sid, "answer")["error"]["code"] == "conflict"
+    hint = api.request_help(sid, "hint")["data"]
+    assert hint["kind"] == "hint" and len(hint["hint_square"]) == 2 and hint["outcome"]["win"] is False
+    assert api.request_help(sid, "explain")["error"]["code"] == "invalid_argument"

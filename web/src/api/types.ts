@@ -35,6 +35,7 @@ export interface PuzzleDbStatus {
   rating_min: number | null;
   rating_max: number | null;
   import_job_id: string | null;
+  needs_upgrade: boolean;
 }
 
 export interface RatioBucket {
@@ -56,9 +57,9 @@ export interface FilterSpec {
   min_popularity: number | null;
   min_plays: number | null;
   exclude_solved_here: boolean;
-  exclude_played_on_lichess: boolean;
   only_my_misses: boolean;
   ratios: RatioBucket[];
+  exclude_played_on_lichess: boolean;
   source: "lichess" | "my" | "both";
 }
 
@@ -73,14 +74,48 @@ export interface ThemeGroup {
   themes: ThemeOption[];
 }
 
+export interface OpeningOption {
+  tag: string;
+  name: string;
+  count: number;
+}
+
+export interface OpeningFamily {
+  family: OpeningOption;
+  variations: OpeningOption[];
+}
+
+export interface BucketCounts {
+  total: number;
+  buckets: number[];
+}
+
+export interface Preset {
+  name: string;
+  spec: FilterSpec | null;
+  error: string | null;
+  updated_at: string;
+}
+
+export interface SoundSettings {
+  on: boolean;
+  volume: number;
+  set: "sfx" | "piano" | "nes" | "futuristic";
+}
+
 export interface UiSettings {
   last_filters: FilterSpec | null;
+  coordinates: boolean;
+  color_scheme: "light" | "dark" | "auto";
+  sounds: SoundSettings;
+  auto_check: boolean;
 }
 
 export interface SessionInfo {
   session_id: number;
   match_count: number;
   queue_size: number | null;
+  empty_buckets: number[];
 }
 
 export interface PuzzleView {
@@ -90,6 +125,7 @@ export interface PuzzleView {
   opponent_move: string;
   player_color: "white" | "black";
   rating: number;
+  opponent_sound: "move" | "capture" | "check" | "checkmate" | "castle";
 }
 
 export interface ThemeLabel {
@@ -111,6 +147,17 @@ export interface MoveFeedback {
   reply: string | null;
   finished: boolean;
   outcome: Outcome | null;
+  move_sound: "move" | "capture" | "check" | "checkmate" | "castle" | null;
+  reply_sound: "move" | "capture" | "check" | "checkmate" | "castle" | null;
+}
+
+export interface HelpResponse {
+  kind: "hint" | "answer";
+  hint_square: string | null;
+  answer_fen: string | null;
+  answer_moves: string[];
+  outcome: Outcome | null;
+  answer_sounds: ("move" | "capture" | "check" | "checkmate" | "castle")[];
 }
 
 export interface SessionStats {
@@ -122,4 +169,30 @@ export interface SessionStats {
   finished: boolean;
   all_time_solved: number;
   all_time_failed: number;
+}
+
+export interface StatRow {
+  key: string;
+  label: string;
+  attempts: number;
+  solved: number;
+  accuracy: number | null;
+  first_right: number;
+  line_wrong_rate: number | null;
+}
+
+export interface StatsReport {
+  overall: StatRow;
+  by_theme: StatRow[];
+  by_length: StatRow[];
+  by_rating: StatRow[];
+  missing: number;
+}
+
+export interface UpdateOffer {
+  export_date: string | null;
+  current_export_date: string | null;
+  size: number | null;
+  approx_count: number | null;
+  approx_new: number | null;
 }

@@ -1,15 +1,22 @@
 // The only way the UI talks to the backend (ARCHITECTURE §3 decision 8).
 // Two implementations: pywebviewClient (the real app) and mockClient (UI development, Playwright).
 import type {
+  BucketCounts,
   ApiError,
   AppInfo,
   FilterSpec,
+  HelpResponse,
   Job,
   MoveFeedback,
+  OpeningFamily,
+  Preset,
   PuzzleDbStatus,
   PuzzleView,
   SessionInfo,
   SessionStats,
+  SoundSettings,
+  StatsReport,
+  UpdateOffer,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -28,6 +35,15 @@ export class ApiCallError extends Error {
 
 export type BackendEvent = { name: "job"; payload: Job };
 
+/** The settings the UI may write, and the value each one takes (validated again in Python). */
+export interface SettingValues {
+  "mixer.filters": FilterSpec;
+  "ui.coordinates": boolean;
+  "ui.color_scheme": "light" | "dark" | "auto";
+  "ui.sounds": SoundSettings;
+  "puzzle_db.auto_check": boolean;
+}
+
 export interface ApiClient {
   getAppInfo(): Promise<AppInfo>;
   openFolder(kind: "data" | "logs"): Promise<void>;
@@ -37,17 +53,34 @@ export interface ApiClient {
   choosePuzzleFile(): Promise<string | null>;
   /** Starts the import job (download when localPath is null). Returns the job ID. */
   startPuzzleImport(localPath: string | null): Promise<string>;
+  /** Rebuilds an older-schema puzzle database from its own rows (no download). Returns the job ID. */
+  startPuzzleDbUpgrade(): Promise<string>;
+  /** FR-2.5: start the update check (force: the "Check for updates" button). Returns the job ID. */
+  checkForDbUpdate(force: boolean): Promise<string>;
+  getUpdateOffer(): Promise<UpdateOffer | null>;
+  dismissUpdate(kind: "not_now" | "skip"): Promise<void>;
   getJob(jobId: string): Promise<Job>;
   cancelJob(jobId: string): Promise<boolean>;
   getSettings(): Promise<UiSettings>;
-  setSetting(key: "mixer.filters", value: FilterSpec): Promise<void>;
+  setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]): Promise<void>;
   getThemeCatalog(): Promise<ThemeGroup[]>;
   countMatches(spec: FilterSpec): Promise<number>;
+  /** A ratio mix's live counts (FR-3.10): all groups together, and each group, in one call. */
+  countBuckets(spec: FilterSpec): Promise<BucketCounts>;
+  getOpeningCatalog(): Promise<OpeningFamily[]>;
+  listPresets(): Promise<Preset[]>;
+  savePreset(name: string, spec: FilterSpec, overwrite: boolean): Promise<Preset>;
+  renamePreset(oldName: string, newName: string): Promise<void>;
+  deletePreset(name: string): Promise<void>;
   startSession(spec: FilterSpec): Promise<SessionInfo>;
   /** The next puzzle, or null when the session is complete. */
   nextPuzzle(sessionId: number): Promise<PuzzleView | null>;
   submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;
+  /** Hint, then Show answer (§7.2). Before the puzzle is decided, either one makes it a loss. */
+  requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse>;
   getSessionStats(sessionId: number): Promise<SessionStats>;
+  /** The Stats page (FR-9.1, 9.2): every attempt you've made here. */
+  getStats(): Promise<StatsReport>;
   /** Subscribe to pushed events (job progress). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

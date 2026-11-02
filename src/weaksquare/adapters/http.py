@@ -45,6 +45,12 @@ class DownloadResult:
     last_modified: str | None  # ISO date (YYYY-MM-DD) from the Last-Modified header
 
 
+@dataclass(frozen=True)
+class HeadInfo:
+    last_modified: str | None  # ISO date (YYYY-MM-DD)
+    size: int | None  # bytes, from Content-Length
+
+
 def _iso_date(header: str | None) -> str | None:
     if not header:
         return None
@@ -113,11 +119,18 @@ class HttpClient:
 
     def last_modified(self, url: str) -> str | None:
         """The Last-Modified date (YYYY-MM-DD) of `url`, from a HEAD request."""
+        return self.head_info(url).last_modified
 
-        def go() -> str | None:
+    def head_info(self, url: str) -> HeadInfo:
+        """Last-Modified date and Content-Length of `url`, from one HEAD request (FR-2.5)."""
+
+        def go() -> HeadInfo:
             r = self._client.head(url)
             self._check(r, url)
-            return _iso_date(r.headers.get("last-modified"))
+            length = r.headers.get("content-length")
+            return HeadInfo(
+                _iso_date(r.headers.get("last-modified")), int(length) if length and length.isdigit() else None
+            )
 
         return self._with_retry(url, go)
 

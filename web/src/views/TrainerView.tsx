@@ -3,8 +3,11 @@ import { Chess } from "chess.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Outcome, PuzzleView, SessionStats } from "../api/types";
+import { AnswerPlayer, answerPositions, type AnswerPosition } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
 import { SessionBar } from "../components/SessionBar";
+import { sounds } from "../sound/player";
+import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
 const REPLY_DELAY_MS = 300;
@@ -17,8 +20,21 @@ function uciMove(uci: string) {
 
 // Standard mode (FR-4.1): the opponent's first move plays, you answer, replies play automatically.
 // Themes stay hidden until the attempt is decided (FR-3.14). A wrong move is a loss (FR-5.3); you
-// can keep going to finish the line, or move on.
-export function TrainerView({ sessionId, onNewSession }: { sessionId: number; onNewSession: () => void }) {
+// can keep going to finish the line, or move on. When stuck (§7.2): Hint circles the piece that
+// moves next, then Show answer steps through the rest of the line. Before the end, either one is a
+// loss (FR-5.2); after it, Show answer is free (FR-5.4) and replays the whole line.
+export function TrainerView({
+  sessionId,
+  onNewSession,
+  onHistoryChange,
+  coordinates = true,
+}: {
+  sessionId: number;
+  onNewSession: () => void;
+  coordinates?: boolean;
+  /** An attempt may have been recorded: the mixer's history filters need a fresh count. */
+  onHistoryChange?: () => void;
+}) {
   const [view, setView] = useState<PuzzleView | null>(null);
   const [complete, setComplete] = useState(false);
   const [fen, setFen] = useState<string | null>(null);
@@ -29,6 +45,10 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
   const [message, setMessage] = useState<Message>(null);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hintSquare, setHintSquare] = useState<string | null>(null);
+  const [hinted, setHinted] = useState(false);
+  const [answer, setAnswer] = useState<{ positions: AnswerPosition[]; step: number } | null>(null);
+  const [helpBusy, setHelpBusy] = useState(false);
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
@@ -42,7 +62,8 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
 
   const refreshStats = useCallback(() => {
     api.getSessionStats(sessionId).then(setStats, () => undefined);
-  }, [sessionId]);
+    onHistoryChange?.();
+  }, [sessionId, onHistoryChange]);
 
   const load = useCallback(async () => {
     if (loading.current) return;
@@ -54,6 +75,9 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
     setLineDone(false);
     setMessage(null);
     setMovable(null);
+    setHintSquare(null);
+    setHinted(false);
+    setAnswer(null);
     try {
       const next = await api.nextPuzzle(sessionId);
       refreshStats();
@@ -72,6 +96,7 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
         setFen(c.fen());
         setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
         setMovable(next.player_color);
+        sounds.play(next.opponent_sound); // before you've clicked anything (FR-1.13)
         setMessage({ color: "gray", text: `Your turn: find the best move for ${next.player_color}.` });
       }, OPPONENT_DELAY_MS);
     } catch (e) {
@@ -105,10 +130,13 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
     setMovable(null);
     try {
       const fb = await api.submitMove(sessionId, uci);
+      sounds.play(fb.move_sound);
       if (fb.outcome) {
         setOutcome(fb.outcome);
         refreshStats();
+        sounds.later(fb.outcome.win ? "solved" : "failed");
       }
+      if (fb.kind !== "wrong" && fb.kind !== "illegal") setHintSquare(null);
       if (fb.kind === "correct" && fb.reply) {
         chess.current = after;
         setMessage({ color: "green", text: "Correct. Keep going." });
@@ -118,6 +146,7 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
           setFen(after.fen());
           setLastMove([reply.slice(0, 2), reply.slice(2, 4)]);
           setMovable(view.player_color);
+          sounds.play(fb.reply_sound);
         }, REPLY_DELAY_MS);
       } else if (fb.kind === "solved") {
         chess.current = after;
@@ -140,6 +169,63 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
     }
   };
 
+  const requestHelp = async (kind: "hint" | "answer") => {
+    if (helpBusy) return;
+    setHelpBusy(true);
+    try {
+      const help = await api.requestHelp(sessionId, kind);
+      if (help.outcome) {
+        setOutcome(help.outcome);
+        refreshStats();
+        sounds.play("failed");
+      }
+      const lost = help.outcome ? " This puzzle now counts as failed." : "";
+      if (kind === "hint") {
+        setHintSquare(help.hint_square);
+        setHinted(true);
+        setMessage({ color: "gray", text: `Hint: the circled piece moves next.${lost}` });
+      } else if (help.answer_fen) {
+        timers.current.forEach(clearTimeout);
+        timers.current = [];
+        setHintSquare(null);
+        setMovable(null);
+        setLineDone(true);
+        setAnswer({ positions: answerPositions(help.answer_fen, help.answer_moves, help.answer_sounds), step: 0 });
+        setMessage({ color: "gray", text: `The answer: step through it with Back and Forward.${lost}` });
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setHelpBusy(false);
+    }
+  };
+
+  const decided = outcome !== null;
+  const shown = answer ? answer.positions[answer.step] : null;
+  const canHint = view !== null && movable !== null && !lineDone && !answer && !helpBusy;
+  const canAnswer = view !== null && !answer && !helpBusy && (hinted || decided || lineDone) && (lineDone || movable !== null);
+  const stepAnswer = (delta: number) => {
+    if (!answer) return;
+    const to = Math.min(Math.max(answer.step + delta, 0), answer.positions.length - 1);
+    if (to === answer.step) return;
+    if (to > answer.step) sounds.play(answer.positions[to].sound);
+    setAnswer({ ...answer, step: to });
+  };
+  const next = () => {
+    if (complete) onNewSession();
+    else if (view && !busy) load();
+  };
+
+  // Keyboard shortcuts (state/shortcuts.ts has the list). Each does nothing unless its button is enabled.
+  useShortcuts({
+    n: next,
+    Enter: next,
+    h: () => canHint && requestHelp("hint"),
+    a: () => canAnswer && requestHelp("answer"),
+    ArrowLeft: () => stepAnswer(-1),
+    ArrowRight: () => stepAnswer(1),
+  });
+
   if (complete) {
     return (
       <Stack gap="md">
@@ -160,8 +246,6 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
     );
   }
 
-  const decided = outcome !== null;
-
   return (
     <Stack gap="md">
       <SessionBar stats={stats} />
@@ -173,7 +257,15 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
       <Group align="flex-start" gap="lg" wrap="nowrap">
         <div style={{ flex: "1 1 560px", minWidth: 320 }}>
           {fen && view && (
-            <Board fen={fen} orientation={view.player_color} movable={movable} lastMove={lastMove} onMove={onMove} />
+            <Board
+              fen={shown ? shown.fen : fen}
+              orientation={view.player_color}
+              movable={shown ? null : movable}
+              lastMove={shown ? shown.lastMove : lastMove}
+              onMove={onMove}
+              hintSquare={hintSquare}
+              coordinates={coordinates}
+            />
           )}
         </div>
         <Stack gap="sm" style={{ flex: "0 0 260px" }}>
@@ -207,6 +299,33 @@ export function TrainerView({ sessionId, onNewSession }: { sessionId: number; on
                 </Anchor>
               </Stack>
             </Paper>
+          )}
+          {answer && (
+            <AnswerPlayer
+              positions={answer.positions}
+              step={answer.step}
+              onStep={(to) => stepAnswer(to - answer.step)}
+            />
+          )}
+          <Group gap="xs" grow data-testid="help-controls">
+            <Button variant="light" color="gray" disabled={!canHint} onClick={() => requestHelp("hint")} data-testid="hint-button">
+              Hint
+            </Button>
+            <Button
+              variant="light"
+              color="gray"
+              disabled={!canAnswer}
+              onClick={() => requestHelp("answer")}
+              title={hinted || decided || lineDone ? undefined : "Use Hint first"}
+              data-testid="answer-button"
+            >
+              Show answer
+            </Button>
+          </Group>
+          {!decided && !lineDone && (
+            <Text size="xs" c="dimmed">
+              Hint and Show answer count the puzzle as failed. Show answer unlocks after a Hint.
+            </Text>
           )}
           <Button
             onClick={load}

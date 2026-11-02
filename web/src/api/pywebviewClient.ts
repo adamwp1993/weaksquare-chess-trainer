@@ -1,15 +1,21 @@
 // Real client: calls the Python `Api` through pywebview's js_api bridge.
-import { ApiCallError, type ApiClient, type BackendEvent } from "./ApiClient";
+import { ApiCallError, type ApiClient, type BackendEvent, type SettingValues } from "./ApiClient";
 import type {
+  BucketCounts,
   ApiError,
   AppInfo,
   FilterSpec,
+  HelpResponse,
   Job,
   MoveFeedback,
+  OpeningFamily,
+  Preset,
   PuzzleDbStatus,
   PuzzleView,
   SessionInfo,
   SessionStats,
+  StatsReport,
+  UpdateOffer,
   ThemeGroup,
   UiSettings,
 } from "./types";
@@ -74,6 +80,22 @@ export class PywebviewClient implements ApiClient {
     return this.call<string>("start_puzzle_import", localPath);
   }
 
+  startPuzzleDbUpgrade() {
+    return this.call<string>("start_puzzle_db_upgrade");
+  }
+
+  checkForDbUpdate(force: boolean) {
+    return this.call<string>("check_for_db_update", force);
+  }
+
+  getUpdateOffer() {
+    return this.call<UpdateOffer | null>("get_update_offer");
+  }
+
+  dismissUpdate(kind: "not_now" | "skip") {
+    return this.call<void>("dismiss_update", kind);
+  }
+
   getJob(jobId: string) {
     return this.call<Job>("get_job", jobId);
   }
@@ -86,7 +108,7 @@ export class PywebviewClient implements ApiClient {
     return this.call<UiSettings>("get_settings");
   }
 
-  setSetting(key: "mixer.filters", value: FilterSpec) {
+  setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]) {
     return this.call<void>("set_setting", key, value);
   }
 
@@ -96,6 +118,30 @@ export class PywebviewClient implements ApiClient {
 
   countMatches(spec: FilterSpec) {
     return this.call<number>("count_matches", spec);
+  }
+
+  countBuckets(spec: FilterSpec) {
+    return this.call<BucketCounts>("count_buckets", spec);
+  }
+
+  getOpeningCatalog() {
+    return this.call<OpeningFamily[]>("get_opening_catalog");
+  }
+
+  listPresets() {
+    return this.call<Preset[]>("list_presets");
+  }
+
+  savePreset(name: string, spec: FilterSpec, overwrite: boolean) {
+    return this.call<Preset>("save_preset", name, spec, overwrite);
+  }
+
+  renamePreset(oldName: string, newName: string) {
+    return this.call<void>("rename_preset", oldName, newName);
+  }
+
+  deletePreset(name: string) {
+    return this.call<void>("delete_preset", name);
   }
 
   startSession(spec: FilterSpec) {
@@ -110,8 +156,16 @@ export class PywebviewClient implements ApiClient {
     return this.call<MoveFeedback>("submit_move", sessionId, uci);
   }
 
+  requestHelp(sessionId: number, kind: "hint" | "answer") {
+    return this.call<HelpResponse>("request_help", sessionId, kind);
+  }
+
   getSessionStats(sessionId: number) {
     return this.call<SessionStats>("get_session_stats", sessionId);
+  }
+
+  getStats() {
+    return this.call<StatsReport>("get_stats");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

@@ -37,6 +37,7 @@ weaksquare-chess-trainer/
 ├─ plans/                      # the approved plan for each version, ticked off as work lands
 ├─ README.md  REQUIREMENTS.md  ARCHITECTURE.md  ROADMAP.md  CLAUDE.md  CHANGELOG.md
 ├─ docs/                      # USER_GUIDE.md, DEVELOPER_GUIDE.md, img/ (generated screenshots)
+├─ assets/icon/               # weaksquare.svg (source), weaksquare.ico (built by scripts/make_icon.py), CREDITS.md
 ├─ .claude/  .gitleaks.toml  .pre-commit-config.yaml  .gitignore
 ├─ src/weaksquare/
 │  ├─ __main__.py              # python -m weaksquare
@@ -58,6 +59,9 @@ weaksquare-chess-trainer/
 │  │  ├─ checksums.py          # sha256sums.txt parsing
 │  │  ├─ filters.py            # FilterSpec (+ JSON schema, validation)
 │  │  ├─ queue.py              # ordering, ratios, queue building (pure; takes candidate ids)
+│  │  ├─ move_sounds.py        # which sound a move makes (v0.2)
+│  │  ├─ stats.py              # Stats grouping: theme, length, rating band (v0.2)
+│  │  ├─ db_update.py          # newer-export rules, puzzle-count parsing (v0.2)
 │  │  ├─ scoring.py            # win/loss, help → loss, angle selection
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
@@ -65,7 +69,8 @@ weaksquare-chess-trainer/
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
-│  │                           #   v0.1: puzzle_db.py (import job), mixer.py (catalog, counts), session.py
+│  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
+│  │                           #   v0.2: presets.py, stats.py, ui_settings.py, db_update.py (update check job)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -86,21 +91,24 @@ weaksquare-chess-trainer/
 │  └─ jobs/runner.py           # background jobs: queue, progress, cancel
 ├─ web/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
+│  ├─ public/sounds/           # bundled sound sets + CREDITS.md (v0.2)
 │  └─ src/
 │     ├─ api/                  # ApiClient interface + pywebviewClient + mockClient
 │     ├─ components/           # Board (chessground wrapper), ThemePicker, FilterControls, SessionBar, …
 │     ├─ views/                # Startup, Trainer, Settings, Stats, Library, Review, Coach, Progress
-│     └─ state/                # small hooks and defaults (useJob, defaultFilters); no business logic
+│     ├─ sound/                # the move-sound player (v0.2); which sound comes from core/move_sounds.py
+│     └─ state/                # small hooks and defaults (useJob, defaultFilters, shortcuts, colorScheme)
 ├─ tests/
 │  ├─ unit/                    # core/ — fast, no I/O
 │  ├─ integration/             # services + real SQLite (tmp) + fake clients
 │  ├─ e2e/                     # Playwright against web/ with mockClient
 │  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
 │  ├─ fulldb/                  # opt-in timings against the full puzzle DB
-│  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings
+│  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/);
+│                              #   tools/ holds the dev-only generator and recorder scripts
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
                                #   (thin CLIs over services, download + hash check), check_docs.py,
-                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts)
+                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts), make_icon.py (v0.2)
 ```
 
 `services/` and later `adapters/` modules are created **in the version that first needs them**. The tree shows the end state.
@@ -188,6 +196,62 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-01, v0.2: Fast counts with Exclude solved and ratios (found by the full-DB self-check)
+- Context: with v0.2's defaults, the full-DB count took 4 s. `p.id NOT IN (solved ids)` needs `id`, which the covering index doesn't hold, so SQLite read every table row. A ratio mix also counted each group in its own scan, and its live match count ignored the groups' themes (counting the whole database).
+- Decision: Exclude solved is counted by subtraction: the count without it (covering index), minus the solved puzzles that match (looked up through the unique `id` index). Sampling a small pool drops the solved keys the same way. A ratio mix is counted in one scan, `SELECT COUNT(*), SUM(<group 1>), …` with the groups' union in `WHERE` (`count_with_buckets`), and `count_buckets` returns the total and the groups in one bridge call.
+- Alternatives: adding `id` to the covering index (a bigger index, and the per-row `NOT IN` check still costs).
+- Consequences: the default count takes about 315 ms on the 6.16M export. A three-group ratio over the whole rating range takes about 550 ms, just over the 500 ms target; narrower filters are faster.
+
+### 2026-11-01, v0.2: App icon, taskbar identity and the desktop shortcut
+- Context: NFR-8a.
+- Decision: `assets/icon/weaksquare.svg` is a 2×2 board in chessground's brown colors with the cburnett black queen (Colin M. L. Burnett, GPL-2.0-or-later), copied from chessground's CSS; credits are in `assets/icon/CREDITS.md`. `scripts/make_icon.py` renders it with Playwright's Chromium at 16–256 px and packs PNG entries into an `.ico` with `struct` (no new dependency); the build is deterministic, and `--check` (run by the e2e suite) compares it with the committed file. pywebview's `icon` argument only works on GTK and Qt, so `app.py` sets an explicit AppUserModelID (`WeakSquare.ChessTrainer`) before the window exists, and once it's shown sends `WM_SETICON` with the `.ico` (`adapters/desktop.py`). `setup.py` finds the Desktop with `SHGetKnownFolderPath(FOLDERID_Desktop)` (OneDrive redirection) and writes both shortcuts with `IconLocation`; saving to the same path replaces a shortcut.
+- Alternatives: Pillow plus cairosvg for the icon (two dependencies, one needing a native Cairo DLL); `%USERPROFILE%\Desktop` (wrong when OneDrive redirects it).
+- Consequences: the shortcuts don't carry the AppUserModelID (WScript.Shell can't set it), so a shortcut pinned to the taskbar may group separately from the running window. Adam's manual test checks the taskbar.
+
+### 2026-11-01, v0.2: The puzzle-database update check
+- Context: FR-2.5.
+- Decision: `core/db_update.py` holds the rules (newer = a different published SHA-256, or a later Last-Modified when the import has no hash; skipped exports are remembered as `sha256:<hash>` or `date:<date>`; at most once a day by the injected clock; the page's count parsed best-effort). `services/db_update.py` runs it as a `puzzle_db_update_check` job that the front end starts once per launch when a database is installed; "Check for updates" forces it. It makes three requests through `adapters/http.py` (`get_text` for the sums and the page, `head_info` for the file), catches every network error, and records the check time only after a successful check. "Not now" is kept in memory (this launch), "Skip" in `settings`. The offer disappears once its export is imported. After an update import the dialog stays open to show the exact new/removed numbers. Tests replay recorded responses (`tests/fixtures/http/lichess_db`, from `tests/fixtures/tools/record_db_update.py`) through the real `HttpClient` with an `httpx.MockTransport`.
+- Scrubbing: the page section included Lichess's sample CSV with real game URLs. The recorder keeps only the introduction and blanks lichess.org links. `test_fixtures_clean.py` used to scan only five extensions and missed the `.html`; it now scans every text file under `tests/fixtures`.
+- Alternatives: starting the check from `app.py` at launch (the result would arrive before the UI could listen for it).
+- Consequences: if Lichess redesigns the page, only the approximate count disappears; re-run the recorder and update `parse_count`.
+
+### 2026-11-01, v0.2: Dark mode without browser storage, AA contrast, move sounds from lila
+- Context: FR-1.12 and FR-1.13; decision 14 (no browser storage).
+- Decision:
+  - **Dark mode:** Mantine's default color-scheme manager uses localStorage, so `state/colorScheme.ts` provides one that keeps the scheme in memory and saves it through `set_setting("ui.color_scheme")`. `main.tsx` waits for `get_settings` (at most 1.5 s) before the first render, and `app.py` paints the window background in the saved scheme (`system_prefers_dark()` reads the Windows app mode for Match system), so nothing flashes. Match system is Mantine's `auto` (`prefers-color-scheme`, which WebView2 updates live). The plan's `?scheme=` start URL wasn't needed; the mock uses `?scheme=` only to start in a scheme for tests.
+  - **Contrast:** an e2e test checks every visible text node on every main screen in both schemes against WCAG AA. Mantine's defaults failed it, already in v0.1's light theme: dimmed grey 3.3:1, white on teal-6 buttons 2.6:1, teal light badges 4.3:1, green text 4.4:1. `main.tsx` sets `primaryShade: 9` and overrides those CSS variables.
+  - **Sounds:** `core/move_sounds.py` classifies each move (mate > check > capture > castle > move) and the bridge sends the kind with every move (`opponent_sound`, `move_sound`, `reply_sound`, `answer_sounds`), so the rule is unit-tested in Python. `web/src/sound/player.ts` creates `Audio` elements only while sounds are on, and a new sound stops the last. The files are lila's Enigmahack sets (AGPLv3+ in lila's `COPYING.md`), the six `.ogg` files each set needs, pinned to lila commit `9934f0a6`; lila's `Checkmate.ogg` is a git symlink to `Check.ogg`, so each set ships a copy of it. `web/public/sounds/CREDITS.md` lists every file with its SHA-256, and a contract test keeps it complete. The CSP gains `media-src 'self'`.
+  - **Autoplay:** a real-app smoke test shows WebView2 plays audio without a user gesture, so the planned `--autoplay-policy` switch wasn't added.
+  - The real-app smoke harness now stops with the build command when `web/dist` is older than `web/src` (a stale build had hidden the new Settings menu).
+- Alternatives: rendering at once and switching after the settings arrive (a visible flash); a JS move-sound classifier (no unit tests without a JS runner); shipping `.mp3` too (Chromium plays Ogg).
+- Consequences: a theme color change can fail the contrast test; fix it in `main.tsx`'s resolver.
+
+### 2026-11-01, v0.2: `on_help`, Stats definitions, one UI-settings service
+- Context: §7.2 steps 1–2 without an engine; FR-9.1/9.2; and dark mode, sounds and coordinates all needing persisted UI settings.
+- Decision:
+  - `TrainingMode.on_help(state, "hint" | "answer", now)` returns a `HelpResult` (hint square, or the answer's start FEN and remaining UCI moves). Help before the attempt is decided appends the loss at that moment with `help_used` set; after that it's free (FR-5.4). Mid-puzzle, Show answer is refused (`conflict`) until a Hint; once decided it needs none. Show answer ends the puzzle. After a finished line it replays from the start. Since Hint always comes first, Standard mode records `help_used = 'hint'` in practice; `'answer'` stays for modes that allow it directly.
+  - Stats read the attempts log left-joined to puzzles.db. "First move right, line wrong" is a share of the attempts whose first move was right (it measures calculation, not spotting). Rating bands use `attempts.puzzle_rating`.
+  - `services/ui_settings.py` owns every UI setting key and its validator; `set_setting`'s key is a `Literal` of the allowed keys, and the front end's `SettingValues` type mirrors it.
+- Alternatives: recording help as a separate event row (the attempts log already has `help_used`); keeping settings in `MixerService` (it would have grown a key per feature).
+- Consequences: adding a UI setting means a validator in `ui_settings.py`, a field in `dto.UiSettings` and a key in `SettingValues`.
+
+### 2026-11-01, v0.2: Ratios by quota, history filters in SQL, defaults that upgrade saved filters
+- Context: FR-3.8 to FR-3.11 and Adam's planning decisions (quality and Exclude solved on by default).
+- Decision:
+  - **Ratios** (`core.queue.allocate`): each refill computes every group's target share of everything drawn so far (largest remainder, ties broken by the injected rng), fills the shortfall and shuffles the slots. A 50/30/20 mix stays within one puzzle of exact. A group with no puzzles gets weight 0 at the start (`SessionInfo.empty_buckets`, shown as a notice), and one that runs dry mid-session gets weight 0 and its slots go to the others. Each group is the base filters with that group's themes (ANY); groups never repeat a puzzle between them.
+  - **Order:** a fixed-size queue in a non-random order is drawn whole, then sorted; an endless one sorts each refill of 50.
+  - **History filters** are subqueries on `attempts` (user.db is the main schema of every connection): `id NOT IN (ids ever won)` and `id IN (ids whose latest attempt lost)`. *Only my misses* overrides *Exclude solved*.
+  - **Changed defaults:** `FilterSpec` defaults are now popularity ≥ 50, ≥ 100 plays and Exclude solved on. Saved filters carry a `mixer.filters_version`; `upgrade_saved` gives v0.1 filters the new defaults once.
+  - The mixer recounts after each recorded attempt, since the history filters change the count.
+- Alternatives: a weighted coin per slot (drifts by several puzzles in short sessions); a history column copied into puzzles.db (it's replaced on every import).
+- Consequences: ratio sessions draw per group, so a session with N groups makes up to N sampling queries per refill.
+
+### 2026-11-01, v0.2: puzzles.db schema v2, upgraded locally from the old file
+- Context: the opening (FR-3.7) and quality (FR-3.8) filters need new columns and a wider covering index. puzzles.db is attached read-only, and the download is deleted after an import, so a v1 database can't be migrated in place or simply re-imported from disk.
+- Decision: `puzzles/0002_openings_quality.sql` adds `opening_family` and `opening_variation` (ids into a new `openings(id, tag, family_id, count)` table; the first OpeningTags tag is the family, the second its variation). The covering index becomes `(rating, length, player_color, t0, t1, t2, popularity, nb_plays)`, plus `(opening_family, rating)` and `(opening_variation, rating)`. When `puzzles.db` has an older schema, the app offers an **upgrade** job: `ExistingPuzzleDb` streams the current file's rows CSV-shaped through the same parser and `PuzzleDbWriter` into `puzzles.new.db`, which is checked and swapped as in FR-2.3. The writer also attaches the database it replaces and counts new and removed puzzle IDs before the swap (FR-2.5); a job can now return its own finish message. user.db `0002` adds `presets` and a nullable `attempts.puzzle_rating`, which is backfilled from puzzles.db where the puzzle still exists.
+- Alternatives: `ALTER TABLE` plus a 6M-row `UPDATE` on a copy of the live file (slower, and a second import path); forcing a 300 MB re-download.
+- Consequences: one code path builds every puzzles.db. Each future puzzles.db schema change reuses the upgrade job.
 
 ### 2026-11-01, v0.1: Standard-mode scoring details and the `TrainingMode` shape
 - Context: Show answer arrives only in v0.2, so v0.1 needed a defined behavior after a wrong move and when you move on early.

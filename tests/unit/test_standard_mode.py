@@ -74,3 +74,61 @@ def test_give_up_is_a_loss() -> None:
 def test_illegal_puzzle_data_is_refused() -> None:
     with pytest.raises(PuzzleDataError):
         mode.start(puzzle(MATE1.fen, "h8g8 a2a5"), 0)
+
+
+# ---- v0.2: Hint and Show answer (FR-5.2, FR-5.4, §7.2) -----------------------------------------
+from weaksquare.core.errors import ConflictError  # noqa: E402
+
+
+def test_hint_then_correct_line_is_a_loss_with_hint() -> None:
+    s = mode.start(LONG, 0)
+    h = mode.on_help(s, "hint", 100)
+    assert h.hint_square == "f5" and h.attempt is not None
+    assert (h.attempt.win, h.attempt.help_used, h.attempt.line_correct) == (False, "hint", False)
+    assert mode.on_move(s, "f5g4", 200).kind == "correct"
+    assert mode.on_move(s, "f7f3", 300).kind == "correct"
+    last = mode.on_move(s, "f3d1", 400)
+    assert last.kind == "solved" and last.attempt is None  # recorded once, at the hint
+    assert mode.give_up(s, 500) is None
+
+
+def test_answer_needs_a_hint_first_mid_puzzle() -> None:
+    s = mode.start(LONG, 0)
+    with pytest.raises(ConflictError):
+        mode.on_help(s, "answer", 10)
+    assert s.attempt is None  # refusing records nothing
+
+
+def test_hint_then_answer_gives_the_rest_and_ends_the_puzzle() -> None:
+    s = mode.start(LONG, 0)
+    mode.on_move(s, "f5g4", 10)  # first move right; the reply h3g4 is played
+    hint = mode.on_help(s, "hint", 20)
+    assert hint.hint_square == "f7" and hint.attempt is not None and hint.attempt.first_move_correct
+    ans = mode.on_help(s, "answer", 30)
+    assert ans.attempt is None  # already decided by the hint
+    assert ans.answer_moves == ("f7f3", "d5h5", "f3d1") and ans.answer_fen == s.board.fen()
+    assert mode.on_move(s, "f7f3", 40).kind == "illegal"  # the answer ended the puzzle
+
+
+def test_answer_after_a_wrong_move_is_free_and_needs_no_hint() -> None:
+    s = mode.start(LONG, 0)
+    wrong = mode.on_move(s, "f7f6", 10)
+    assert wrong.attempt is not None and wrong.attempt.help_used == "none"
+    ans = mode.on_help(s, "answer", 20)
+    assert ans.attempt is None and ans.answer_moves == tuple(LONG.moves[1:])
+
+
+def test_help_after_the_end_is_free_and_replays_from_the_start() -> None:
+    s = mode.start(MATE1, 0)
+    assert mode.on_move(s, "f1f8", 10).attempt.win  # type: ignore[union-attr]
+    ans = mode.on_help(s, "answer", 20)
+    assert ans.attempt is None and ans.answer_moves == ("f1f8",) and ans.answer_fen == s.start_fen
+    with pytest.raises(ConflictError):
+        mode.on_help(s, "hint", 30)
+
+
+def test_answer_records_answer_when_it_decides() -> None:
+    s = mode.start(LONG, 0)
+    s.hinted = True  # e.g. a hint on an earlier visit that was decided elsewhere
+    ans = mode.on_help(s, "answer", 10)
+    assert ans.attempt is not None and ans.attempt.help_used == "answer" and not ans.attempt.win

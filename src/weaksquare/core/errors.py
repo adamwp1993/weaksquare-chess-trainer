@@ -31,3 +31,11 @@ class ConflictError(AppError):
 
     code = "conflict"
     retryable = True
+
+
+class StaleKeyError(Exception):
+    """A puzzle key from before puzzles.db was replaced: keys don't survive a re-import (v0.2-B3).
+    Not an AppError: the session follows the re-import and retries; it never reaches the UI."""
+
+    def __init__(self, had: int, now: int) -> None:
+        super().__init__(f"puzzle keys are from database version {had}, now {now}")

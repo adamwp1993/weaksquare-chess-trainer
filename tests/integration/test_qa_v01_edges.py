@@ -259,7 +259,7 @@ def test_bridge_rejects_bad_arguments_without_crashing(services, paths, clock) -
         lambda: api.open_folder("C:/Windows"),
         lambda: api.get_job(None),
         lambda: api.start_puzzle_import("x" * 2000),
-        lambda: api.set_setting("mixer.filters", {"order": "easy_to_hard"}),
+        lambda: api.set_setting("mixer.filters", {"exclude_played_on_lichess": True}),
     ]
     for call in bad_calls:
         r = call()
@@ -304,7 +304,7 @@ def test_puzzle_in_progress_survives_a_swap_that_drops_it(services, tmp_path: Pa
 
 
 def test_two_swaps_in_one_session_never_repeat(services, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    spec = FilterSpec(themes=("mateIn1",), queue_size=None)
+    spec = FilterSpec(themes=("mateIn1",), queue_size=None, min_popularity=None, min_plays=None)
     sid = services.sessions.start(spec).session_id
     served = [services.sessions.next_puzzle(sid).puzzle_id for _ in range(5)]
     services.db.swap_puzzles_db(_subset_db(tmp_path / "a.db", lambda r: sum(map(ord, r.id)) % 5 != 0))
@@ -323,7 +323,7 @@ def _ids_with(services, theme: str) -> list[tuple[str]]:  # type: ignore[no-unty
 
 
 def test_swap_to_an_export_with_no_matches_ends_the_session(services, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    spec = FilterSpec(themes=("mateIn1",), queue_size=None)
+    spec = FilterSpec(themes=("mateIn1",), queue_size=None, min_popularity=None, min_plays=None)
     sid = services.sessions.start(spec).session_id
     assert services.sessions.next_puzzle(sid) is not None
     services.db.swap_puzzles_db(_subset_db(tmp_path / "a.db", lambda r: "mateIn1" not in r.themes))

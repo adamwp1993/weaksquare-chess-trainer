@@ -13,6 +13,33 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.2] - 2026-11-01
+Candidates: v0.2-rc1 (2026-11-01)
+
+### Added
+- **Mix by ratio:** give theme groups a share of the session, e.g. 50% forks, 30% pins or skewers, 20% one-movers. Each group shows its own count, and the mix holds to within one puzzle. [FR-3.10]
+- **Opening filter:** choose opening families or individual variations, with search. [FR-3.7]
+- **Quality filter:** minimum popularity and minimum plays, on by default at 50 and 100 (adjustable, or off). [FR-3.8]
+- **Your history:** leave out puzzles you've solved here (on by default), or train only your misses. [FR-3.9]
+- **Order:** random, easy → hard, or grouped by theme. [FR-3.11]
+- **Presets:** save your filters under a name, then load, rename or delete them. [FR-3.13]
+- **Hint** circles the piece that moves next, and **Show answer** (unlocked by a Hint) steps through the rest of the solution with Back and Forward. Either one before the end fails the puzzle; after it, Show answer is free. [FR-5.2] [FR-5.4]
+- **Stats** (☰ → Stats): accuracy by theme, length and rating band, plus the "first move right, line wrong" rate. [FR-9.1] [FR-9.2]
+- **Keyboard shortcuts:** N or Enter for the next puzzle, H for Hint, A for Show answer, arrows to step through it, C for coordinates, ? for the list.
+- Show or hide the board coordinates (C, the ☰ menu, or Settings); your choice is saved.
+- **Dark mode:** Light, Dark or Match system in ☰ → Settings…, applied at once and remembered; the app opens in your saved scheme. [FR-1.12]
+- **Move sounds:** moves, captures, checks, mates, and solved or failed puzzles, with an on/off switch, volume and four sound sets (sfx, piano, 8-bit, futuristic). In the default sfx set, a solved puzzle plays a short, soft chime. [FR-1.13]
+- **Update check:** once a day, a banner tells you when Lichess has a newer puzzle export (with its date, download size and an approximate count), with Update now, Not now and Skip this export. **Check for updates** in the update dialog checks at once, and Settings can turn the daily check off. It's silent offline and sends nothing about you. [FR-2.5]
+- **App icon and desktop shortcut:** setup also puts a shortcut on your desktop (`--no-desktop-shortcut` to skip), and the shortcuts, window and taskbar show the WeakSquare icon. [NFR-8a]
+- After a puzzle-database update, the finish message gives the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." [FR-2.5]
+
+### Changed
+- The puzzle-database screen says plainly that it downloads the **entire** Lichess puzzle database: about 300 MB, about 6 million puzzles, roughly 1.5 GB once imported. [FR-2.1a]
+- Phase, goal and origin themes are chosen in the theme list's own groups, alongside the other themes. [FR-3.6]
+- The filter panel scrolls on its own, so the board stays in view, and the match count updates as you play.
+- Dimmed text, the green messages and the teal buttons are darker (lighter in Dark), so all text meets WCAG AA contrast.
+- The first time v0.2 starts, it upgrades your puzzle database for the new opening and quality filters. This rebuilds it from the copy you already have (no download, about 2 minutes, with a progress bar), and your attempts and settings aren't touched. [FR-2.3]
+
 ## [v0.1] - 2026-11-01
 Candidates: v0.1-rc1 (2026-11-01)
 

@@ -18,9 +18,27 @@ pytestmark = pytest.mark.docs_screenshots
 IMG = Path(__file__).resolve().parents[2] / "docs" / "img"
 
 
+@pytest.fixture(scope="module")
+def browser(pw):  # type: ignore[no-untyped-def]
+    """Screenshots must come out byte for byte the same (v0.1-B14, v0.2-B5): GPU rasterization and
+    LCD text antialiasing vary by a pixel between runs, so render in software, without them."""
+    b = pw.chromium.launch(args=["--disable-gpu", "--disable-lcd-text", "--disable-partial-raster",
+                                 "--font-render-hinting=none", "--force-color-profile=srgb"])  # fmt: skip
+    yield b
+    b.close()
+
+
+def panel_top(page) -> None:  # type: ignore[no-untyped-def]
+    """Scroll the filter panel to the top: where focus left it depends on timing (v0.2-B5), and the
+    reader should see the panel's title, Preset and Mix by ratio."""
+    page.locator("[data-testid=mixer-scroll] .mantine-ScrollArea-viewport").first.evaluate("e => e.scrollTo(0, 0)")
+    page.mouse.move(1270, 890)  # no hover highlight anywhere
+
+
 def shot(page, name: str, **kwargs) -> None:  # type: ignore[no-untyped-def]
     IMG.mkdir(parents=True, exist_ok=True)
-    page.wait_for_timeout(400)  # let animations settle
+    page.evaluate("document.fonts.ready.then(() => true)")
+    page.wait_for_timeout(1000)  # let transitions (focus rings, the segmented-control indicator) settle (v0.2-B5)
     page.screenshot(path=str(IMG / f"{name}.png"), animations="disabled", **kwargs)
 
 
@@ -49,6 +67,9 @@ def test_choosing_puzzles(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_label("Maximum rating").press("Enter")
     page.get_by_label("2 moves").check()
     page.get_by_test_id("match-count").filter(has_text="307,865").wait_for()
+    page.locator("body").click(position={"x": 1100, "y": 600})  # take focus out of the rating box
+    page.set_viewport_size({"width": 1280, "height": 1180})  # the whole panel, down to Start
+    panel_top(page)
     shot(page, "mixer")
 
 
@@ -71,3 +92,80 @@ def test_about(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_role("menuitem", name="About").click()
     page.get_by_role("dialog").get_by_text("Data folder").wait_for()
     shot(page, "about")
+
+
+def _pick(page, test_id: str, name: str) -> None:  # type: ignore[no-untyped-def]
+    page.get_by_test_id(test_id).click()
+    page.get_by_role("checkbox", name=re.compile(f"^{name}")).last.check()
+    page.keyboard.press("Escape")
+
+
+def test_presets(page) -> None:  # type: ignore[no-untyped-def]
+    """A 50/30/20 ratio being saved as "Combo night" (v0.2)."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("ratio-switch").click()
+    _pick(page, "ratio-themes-0", "Fork")
+    _pick(page, "ratio-themes-1", "Discovered attack")
+    page.get_by_role("button", name="Add group").click()
+    _pick(page, "ratio-themes-2", "Mate in 1")
+    for i, w in enumerate(("50", "30", "20")):
+        page.get_by_test_id(f"ratio-weight-{i}").fill(w)
+    page.get_by_test_id("ratio-total").filter(has_text="Total 100%").wait_for()
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.evaluate("document.activeElement && document.activeElement.blur()")  # the last share box (v0.2-B5)
+    page.wait_for_timeout(500)
+    panel_top(page)
+    page.get_by_test_id("preset-save").click()
+    page.get_by_test_id("preset-name").fill("Combo night")
+    shot(page, "presets")
+
+
+def test_stats(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Stats").click()
+    page.get_by_test_id("stats-view").wait_for()
+    shot(page, "stats")
+
+
+def test_hint_and_answer(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for()
+    page.get_by_test_id("hint-button").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Hint").wait_for()
+    shot(page, "hint")
+    page.get_by_test_id("answer-button").click()
+    page.get_by_role("button", name="Forward").click()
+    page.get_by_test_id("answer-step").filter(has_text="1/3").wait_for()
+    shot(page, "answer")
+
+
+def test_settings_and_dark_mode(page) -> None:  # type: ignore[no-untyped-def]
+    """The Settings dialog, and the trainer in Dark (v0.2, FR-1.12, FR-1.13)."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Settings…").click()
+    page.get_by_test_id("settings").wait_for()
+    shot(page, "settings")
+
+    page.goto(page.base_url + "/?scheme=dark")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for()
+    play(page, "d5c3", "black")
+    page.get_by_test_id("trainer-message").filter(has_text="Correct").wait_for()
+    page.wait_for_timeout(700)
+    shot(page, "trainer-dark")
+
+
+def test_update_banner(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-2.5: the banner offering a newer puzzle database (v0.2)."""
+    page.goto(page.base_url + "/?scenario=update")
+    page.get_by_test_id("update-banner").wait_for()
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    shot(page, "update-banner")

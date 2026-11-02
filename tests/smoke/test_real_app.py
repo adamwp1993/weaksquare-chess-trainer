@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -94,3 +95,92 @@ def test_session_runs_and_attempts_persist_across_restart(pw, with_puzzles) -> N
 
     run(None)
     run("0 solved, 1 failed")
+
+
+def test_dark_scheme_survives_relaunch(pw, with_puzzles) -> None:  # type: ignore[no-untyped-def]
+    """FR-1.12 Done when: the color scheme is saved through the bridge and applied on relaunch."""
+    from tests.smoke.conftest import attach
+
+    def scheme(page) -> str:  # type: ignore[no-untyped-def]
+        return page.evaluate("document.documentElement.getAttribute('data-mantine-color-scheme')")
+
+    app = launch_app(with_puzzles, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            assert scheme(page) == "light"
+            page.get_by_role("button", name="Menu").click()
+            page.get_by_role("menuitem", name="Settings…").click()
+            page.get_by_test_id("color-scheme").get_by_text("Dark", exact=True).click()
+            assert scheme(page) == "dark"
+            page.wait_for_timeout(300)  # the save is a bridge call
+    finally:
+        assert app.close() == 0
+
+    app = launch_app(with_puzzles, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").wait_for(timeout=30_000)
+            assert scheme(page) == "dark"  # from the first render on
+            assert page.evaluate("[localStorage.length, sessionStorage.length]") == [0, 0]
+    finally:
+        assert app.close() == 0
+
+
+def test_sounds_may_play_without_a_click(app_page) -> None:  # type: ignore[no-untyped-def]
+    """FR-1.13: the opponent's first move plays a sound before you've clicked anything, so WebView2's
+    autoplay policy must allow audio without a user gesture. Playwright's evaluate isn't a gesture."""
+    app_page.get_by_test_id("import-view").wait_for(timeout=30_000)  # no puzzle DB in this data folder
+    result = app_page.evaluate(
+        """async () => {
+            const a = new Audio('/sounds/sfx/Move.ogg');
+            a.volume = 0;
+            try { await a.play(); return 'played'; } catch (e) { return e.name; }
+        }"""
+    )
+    assert result == "played"
+
+
+def test_window_has_the_app_icon(app_page, real_app: RunningApp) -> None:  # type: ignore[no-untyped-def]
+    """NFR-8a: the window (and so its taskbar button) shows the WeakSquare icon, not Python's."""
+    import ctypes
+    from ctypes import wintypes
+
+    from tests.smoke.conftest import windows_of
+
+    app_page.get_by_test_id("import-view").wait_for(timeout=30_000)
+    pid = real_app.app_pid()
+    assert pid is not None
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    user32.SendMessageW.restype = wintypes.LPARAM
+    user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    wm_geticon, icon_big = 0x7F, 1
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if any(user32.SendMessageW(h, wm_geticon, icon_big, 0) for h in windows_of(pid)):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError("no window of the app has a big icon set")
+    log = (real_app.data_dir / "logs" / "weaksquare.log").read_text(encoding="utf-8")
+    assert "window icon set" in log
+
+
+def test_smoke_launches_never_call_lichess(pw, with_puzzles) -> None:  # type: ignore[no-untyped-def]
+    """v0.2-B4: the harness turns the daily update check off, so no smoke test depends on the network.
+    With a puzzle database installed the app would otherwise check at once."""
+    from tests.smoke.conftest import attach
+
+    app = launch_app(with_puzzles, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            page.wait_for_timeout(1500)
+            assert page.get_by_test_id("update-banner").count() == 0
+            assert page.evaluate("pywebview.api.get_update_offer()") == {"ok": True, "data": None}
+            settings = page.evaluate("pywebview.api.get_settings()")
+            assert settings["data"]["auto_check"] is False
+    finally:
+        assert app.close() == 0
+    log = (with_puzzles / "logs" / "weaksquare.log").read_text(encoding="utf-8")
+    assert "newer puzzle database" not in log and "update check failed" not in log

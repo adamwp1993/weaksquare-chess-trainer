@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from weaksquare.core.checksums import find_sha256
 from weaksquare.core.clock import Clock
@@ -62,7 +62,7 @@ class Writer(Protocol):
 
     def add(self, rows: list[PuzzleRow]) -> None: ...
 
-    def finish(self, meta: dict[str, str]) -> object: ...
+    def finish(self, meta: dict[str, str], previous: Path | None = None) -> Any: ...
 
     def discard(self) -> None: ...
 
@@ -76,6 +76,7 @@ class PuzzleDbStatus:
     rating_min: int | None
     rating_max: int | None
     import_job_id: str | None
+    needs_upgrade: bool = False  # an older-schema puzzles.db: rebuild it locally before filtering (v0.2)
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,9 @@ class ImportDeps:
     sha256: Callable[[Path, Callable[[], bool]], str]
     swap: Callable[[Path], None]
     read_meta: Callable[[], dict[str, str] | None]
+    open_existing: Callable[[Path], CsvSource]  # the rows of an existing puzzles.db, CSV-shaped
+    schema_version: Callable[[Path], int]
+    latest_schema: int
 
 
 class PuzzleDbService:
@@ -107,14 +111,16 @@ class PuzzleDbService:
         def num(key: str) -> int | None:
             return int(meta[key]) if key in meta else None
 
+        installed = bool(meta)
         return PuzzleDbStatus(
-            installed=bool(meta),
+            installed=installed,
             puzzle_count=num("row_count"),
             export_date=meta.get("export_date"),
             imported_at=meta.get("imported_at"),
             rating_min=num("rating_min"),
             rating_max=num("rating_max"),
             import_job_id=active[0].id if active else None,
+            needs_upgrade=installed and self._d.schema_version(self._d.puzzles_db) < self._d.latest_schema,
         )
 
     # ---- commands ------------------------------------------------------------------------------
@@ -130,18 +136,35 @@ class PuzzleDbService:
                 raise ValidationError("Choose the Lichess puzzle export: a .csv.zst (or unpacked .csv) file.")
         return self._runner.submit(JOB_KIND, lambda progress, token: self.run(progress, token, source))
 
-    # ---- the job ---------------------------------------------------------------------------------
-    def run(self, progress: ProgressFn, token: CancelToken, local_file: Path | None) -> None:
+    def start_upgrade(self) -> str:
+        """Rebuild an older-schema puzzles.db from its own rows (no download), then swap it in."""
+        if self._runner.active(JOB_KIND):
+            raise ConflictError("A puzzle import is already running.")
+        if not self.status().needs_upgrade:
+            raise ConflictError("The puzzle database is already up to date.")
+        return self._runner.submit(JOB_KIND, self.run_upgrade)
+
+    # ---- the jobs --------------------------------------------------------------------------------
+    def run(self, progress: ProgressFn, token: CancelToken, local_file: Path | None) -> str:
         if local_file is None:
             path, meta = self._fetch(lambda f, msg: progress(None if f is None else f * 0.4, msg), token)
             import_from, import_span = 0.4, 0.5
         else:
             path, meta = local_file, {"source": "local file"}
             import_from, import_span = 0.0, 0.9
-        self._import(path, meta, progress, token, import_from, import_span)
+        summary = self._import(self._d.open_csv(path), meta, progress, token, import_from, import_span)
         if local_file is None:
             path.unlink(missing_ok=True)  # only after a successful import; a restart reuses it
             self._sidecar(path).unlink(missing_ok=True)
+        return finish_message(summary)
+
+    def run_upgrade(self, progress: ProgressFn, token: CancelToken) -> str:
+        old = self._d.read_meta() or {}
+        meta: dict[str, str] = {k: old[k] for k in ("source", "export_date", "sha256") if k in old}
+        summary = self._import(
+            self._d.open_existing(self._d.puzzles_db), meta, progress, token, 0.0, 0.9, compare=False
+        )
+        return f"Upgraded: {summary.row_count:,} puzzles, ready for the new filters."
 
     @staticmethod
     def _sidecar(path: Path) -> Path:
@@ -213,16 +236,16 @@ class PuzzleDbService:
 
     def _import(
         self,
-        path: Path,
+        csv_source: CsvSource,
         meta: dict[str, str],
         progress: ProgressFn,
         token: CancelToken,
         start: float,
         span: float,
-    ) -> None:
+        compare: bool = True,
+    ) -> Any:
         d = self._d
         writer = d.make_writer(d.new_db)
-        csv_source = d.open_csv(path)
         skipped = 0
         try:
             writer.open()
@@ -255,11 +278,12 @@ class PuzzleDbService:
                     "bad_file", f"Too many unreadable rows ({skipped:,} of {total:,}). Is the file complete?"
                 )
             progress(start + span, "Building indexes (this takes a minute)…")
-            writer.finish({**meta, "skipped_rows": str(skipped)})
+            summary = writer.finish({**meta, "skipped_rows": str(skipped)}, previous=d.puzzles_db if compare else None)
             token.raise_if_cancelled()
             progress(0.99, "Switching to the new database…")
             d.swap(d.new_db)
             log.info("puzzle import finished: %d puzzles, %d skipped rows", writer.rows_written, skipped)
+            return summary
         except JobCancelled:
             writer.discard()
             raise
@@ -272,3 +296,11 @@ class PuzzleDbService:
         except Exception:
             writer.discard()
             raise
+
+
+def finish_message(summary: Any) -> str:
+    """FR-2.5: the exact numbers, e.g. "6,201,004 puzzles: 44,112 new, 450 removed." """
+    count = f"{summary.row_count:,} puzzles"
+    if summary.new_count is None or summary.removed_count is None:
+        return f"{count} imported."
+    return f"{count}: {summary.new_count:,} new, {summary.removed_count:,} removed."

@@ -14,12 +14,20 @@ from dataclasses import dataclass
 from weaksquare import config
 from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
-from weaksquare.adapters.db.migrate import NewerSchemaError, migrate
-from weaksquare.adapters.db.repos.puzzle_import import PuzzleDbWriter
+from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.presets import PresetsRepo
+from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
+from weaksquare.adapters.db.repos.stats import StatsRepo
 from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo
-from weaksquare.adapters.desktop import Desktop, show_fatal
+from weaksquare.adapters.desktop import (
+    Desktop,
+    set_app_user_model_id,
+    set_window_icon,
+    show_fatal,
+    system_prefers_dark,
+)
 from weaksquare.adapters.files import PuzzleCsv, sha256_file
 from weaksquare.adapters.http import HttpClient
 from weaksquare.adapters.logging_setup import setup_logging
@@ -28,9 +36,13 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.jobs.runner import JobRunner
+from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.session import SessionService
+from weaksquare.services.stats import StatsService
+from weaksquare.services.ui_settings import UiSettingsService
 
 log = logging.getLogger("weaksquare")
 
@@ -71,6 +83,16 @@ def front_end_url(dev_server: bool) -> str | None:
     return str(index) if index.is_file() else None
 
 
+# The page background of each scheme (Mantine's body colors), so the window never flashes the
+# other scheme while the front end loads (FR-1.12).
+WINDOW_BACKGROUND = {"light": "#FFFFFF", "dark": "#242424"}
+
+
+def window_background(scheme: str, system_dark: bool) -> str:
+    dark = scheme == "dark" or (scheme == "auto" and system_dark)
+    return WINDOW_BACKGROUND["dark" if dark else "light"]
+
+
 def fix_mime_types() -> None:
     """The Windows registry often maps .js to text/plain, and WebView2 then refuses to run the
     module scripts that pywebview's local server sends. Pin the types the bundle needs."""
@@ -87,6 +109,10 @@ class Services:
     puzzle_db: PuzzleDbService
     mixer: MixerService
     sessions: SessionService
+    presets: PresetService
+    stats: StatsService
+    ui_settings: UiSettingsService
+    db_update: UpdateCheckService
 
     def close(self) -> None:
         self.http.close()
@@ -113,14 +139,35 @@ def build_services(
             sha256=sha256_file,
             swap=db.swap_puzzles_db,
             read_meta=meta.read,
+            open_existing=ExistingPuzzleDb,
+            schema_version=read_version,
+            latest_schema=load_migrations(config.MIGRATIONS_DIR / "puzzles")[-1].version,
         ),
         runner,
         clock,
     )
     puzzles = LichessDbSource(db)
-    mixer = MixerService(puzzles, SettingsRepo(db))
-    sessions = SessionService(puzzles, AttemptsRepo(db), SessionsRepo(db), clock, rng)
-    return Services(db=db, http=http, puzzle_db=puzzle_db, mixer=mixer, sessions=sessions)
+    attempts = AttemptsRepo(db)
+    mixer = MixerService(puzzles)
+    ui_settings = UiSettingsService(SettingsRepo(db))
+    sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng)
+    presets = PresetService(PresetsRepo(db), clock)
+    stats = StatsService(StatsRepo(db), attempts)
+    db_update = UpdateCheckService(
+        http, clock, SettingsRepo(db), meta.read, runner,
+        Urls(file=config.PUZZLE_DB_URL, sums=config.PUZZLE_SUMS_URL, page=config.PUZZLE_PAGE_URL),
+    )  # fmt: skip
+    return Services(
+        db=db,
+        http=http,
+        puzzle_db=puzzle_db,
+        mixer=mixer,
+        sessions=sessions,
+        presets=presets,
+        stats=stats,
+        ui_settings=ui_settings,
+        db_update=db_update,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -178,14 +225,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         puzzle_db=services.puzzle_db,
         mixer=services.mixer,
         sessions=services.sessions,
+        presets=services.presets,
+        stats=services.stats,
+        ui_settings=services.ui_settings,
+        db_update=services.db_update,
     )
 
-    window = webview.create_window(title, url, js_api=api, width=1280, height=860, min_size=(1000, 700))
+    scheme = services.ui_settings.get().color_scheme
+    set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's
+    window = webview.create_window(
+        title,
+        url,
+        js_api=api,
+        width=1280,
+        height=860,
+        min_size=(1000, 700),
+        background_color=window_background(scheme, system_prefers_dark()),
+    )
     if window is None:  # pragma: no cover - pywebview returns None only if creation failed
         raise RuntimeError("could not create the window")
     events.attach(window)
     desktop.attach(window)
     window.events.closing += events.detach
+    window.events.shown += lambda: log.info(
+        "window icon %s", "set" if set_window_icon(title, config.ICON_FILE) else "not set"
+    )
 
     try:
         webview.start(private_mode=True, http_server=not args.dev_server, debug=False)

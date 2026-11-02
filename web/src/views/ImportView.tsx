@@ -1,5 +1,5 @@
 import { Alert, Button, Group, Progress, Stack, Text, Title } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useJob } from "../state/useJob";
 
@@ -9,14 +9,27 @@ export function ImportView({
   firstRun,
   runningJobId,
   onDone,
+  onChecked,
 }: {
   firstRun: boolean;
   runningJobId: string | null;
   onDone: () => void;
+  /** After "Check for updates": the app re-reads the offer for its banner (FR-2.5). */
+  onChecked?: () => void;
 }) {
   const [jobId, setJobId] = useState<string | null>(runningJobId);
   const [startError, setError] = useState<string | null>(null);
   const job = useJob(jobId);
+  const [checkId, setCheckId] = useState<string | null>(null);
+  const check = useJob(checkId);
+  const notified = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (check && check.state !== "running" && notified.current !== check.id) {
+      notified.current = check.id;
+      onChecked?.();
+    }
+  }, [check, onChecked]);
   const finished = job !== null && job.state !== "running";
   const error = startError ?? (job?.state === "failed" ? job.message : null);
 
@@ -48,13 +61,14 @@ export function ImportView({
     <Stack gap="md" maw={640} data-testid="import-view">
       {firstRun && <Title order={2}>Get the puzzle database</Title>}
       <Text>
-        WeakSquare uses the Lichess open puzzle database: about 6 million puzzles, free and public domain.
+        WeakSquare uses the Lichess open puzzle database, free and public domain.
         {firstRun ? " It's needed once, before your first puzzle." : " Updating replaces it with the newest export."}
       </Text>
-      <Text size="sm" c="dimmed">
-        <b>Download from Lichess</b> fetches about 300 MB from database.lichess.org, checks it against the checksum
-        Lichess publishes, and imports it. This takes a few minutes. Nothing about you is sent. Your attempts and
-        settings are never touched.
+      <Text size="sm" c="dimmed" data-testid="import-what">
+        <b>Download from Lichess</b> fetches the <b>entire</b> Lichess puzzle database, every puzzle, not a sample:
+        about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It comes from
+        database.lichess.org, is checked against the checksum Lichess publishes, and takes a few minutes to import.
+        Nothing about you is sent. Your attempts and settings are never touched.
       </Text>
 
       {error && (
@@ -86,12 +100,34 @@ export function ImportView({
           </Text>
         </Stack>
       ) : (
-        <Group>
-          <Button onClick={() => start(null)}>Download from Lichess</Button>
-          <Button variant="default" onClick={chooseFile}>
-            Use a file I already have…
-          </Button>
-        </Group>
+        <Stack gap="xs">
+          {job?.state === "done" && (
+            <Alert color="green" data-testid="import-done">
+              {job.message}
+            </Alert>
+          )}
+          <Group>
+            <Button onClick={() => start(null)}>Download from Lichess</Button>
+            <Button variant="default" onClick={chooseFile}>
+              Use a file I already have…
+            </Button>
+            {!firstRun && (
+              <Button
+                variant="subtle"
+                loading={check?.state === "running"}
+                onClick={() => api.checkForDbUpdate(true).then(setCheckId, (e: Error) => setError(e.message))}
+                data-testid="check-updates"
+              >
+                Check for updates
+              </Button>
+            )}
+          </Group>
+          {check && check.state !== "running" && (
+            <Text size="sm" data-testid="check-result">
+              {check.message}
+            </Text>
+          )}
+        </Stack>
       )}
     </Stack>
   );

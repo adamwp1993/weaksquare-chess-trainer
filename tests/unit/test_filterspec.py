@@ -52,18 +52,94 @@ def test_invalid_input_rejected(data: object) -> None:
 @pytest.mark.parametrize(
     "data",
     [
-        {"openings": ["Italian Game"]},
-        {"min_popularity": 80},
-        {"min_plays": 100},
-        {"exclude_solved_here": True},
-        {"exclude_played_on_lichess": True},
-        {"only_my_misses": True},
-        {"ratios": [{"themes": ["fork"], "weight": 50}]},
-        {"order": "easy_to_hard"},
-        {"source": "my"},
+        {"exclude_played_on_lichess": True},  # v0.3
+        {"source": "my"},  # v0.8
     ],
 )
 def test_later_version_fields_rejected_not_ignored(data: dict) -> None:
     with pytest.raises(UnsupportedInThisVersion) as e:
         FilterSpec.from_json(data)
     assert e.value.code == "unsupported_in_this_version"
+
+
+# ---- v0.2 -------------------------------------------------------------------------------------
+
+
+def test_v02_defaults() -> None:
+    """Decided at v0.2 planning: a light quality filter and Exclude solved on, all adjustable."""
+    spec = FilterSpec()
+    assert spec.min_popularity == 50 and spec.min_plays == 100
+    assert spec.exclude_solved_here and not spec.only_my_misses
+    assert FilterSpec.from_json({}) == spec
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"openings": ["Italian_Game", "Sicilian_Defense_Najdorf_Variation", "Rapport-Jobava_System"]},
+        {"min_popularity": -100},
+        {"min_popularity": 100},
+        {"min_popularity": None, "min_plays": None},
+        {"min_plays": 0},
+        {"exclude_solved_here": False},
+        {"only_my_misses": True},
+        {"order": "easy_to_hard"},
+        {"order": "by_theme"},
+        {"ratios": [{"themes": ["fork"], "weight": 50}, {"themes": ["pin", "skewer"], "weight": 30},
+                    {"themes": ["oneMove"], "weight": 20}]},
+    ],
+)  # fmt: skip
+def test_v02_fields_accepted_and_round_trip(data: dict) -> None:
+    spec = FilterSpec.from_json(data)
+    assert FilterSpec.from_json(spec.to_json()) == spec
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"openings": ["Italian Game"]},  # spaces: not a Lichess tag
+        {"openings": ["x' OR 1=1 --"]},
+        {"openings": "Italian_Game"},
+        {"min_popularity": 101},
+        {"min_popularity": -101},
+        {"min_plays": -1},
+        {"min_plays": True},
+        {"order": "sideways"},
+        {"ratios": [{"themes": ["fork"], "weight": 100}]},  # one bucket isn't a ratio
+        {"ratios": [{"themes": ["fork"], "weight": 50}, {"themes": ["pin"], "weight": 40}]},  # 90%
+        {"ratios": [{"themes": [], "weight": 50}, {"themes": ["pin"], "weight": 50}]},
+        {"ratios": [{"themes": ["nope!"], "weight": 50}, {"themes": ["pin"], "weight": 50}]},
+        {"ratios": [{"themes": ["fork"], "weight": 0}, {"themes": ["pin"], "weight": 100}]},
+        {"ratios": [{"themes": ["fork"], "weight": True}, {"themes": ["pin"], "weight": 99}]},
+        {"themes": ["fork"], "ratios": [{"themes": ["fork"], "weight": 50}, {"themes": ["pin"], "weight": 50}]},
+    ],
+)
+def test_v02_invalid_input_rejected(data: object) -> None:
+    with pytest.raises(ValidationError):
+        FilterSpec.from_json(data)
+
+
+def test_only_my_misses_overrides_exclude_solved() -> None:
+    assert FilterSpec().excludes_solved
+    assert not FilterSpec(only_my_misses=True).excludes_solved
+    assert not FilterSpec(exclude_solved_here=False).excludes_solved
+
+
+def test_bucket_pool_uses_the_bucket_themes() -> None:
+    spec = FilterSpec.from_json(
+        {"match": "all", "rating_min": 1200, "ratios": [{"themes": ["fork"], "weight": 60},
+                                                        {"themes": ["pin", "skewer"], "weight": 40}]}
+    )  # fmt: skip
+    b = spec.bucket(1)
+    assert b.themes == ("pin", "skewer") and b.match == "any" and b.ratios == () and b.rating_min == 1200
+
+
+def test_v01_saved_filters_get_defaults_once() -> None:
+    from weaksquare.core.filters import upgrade_saved
+
+    v01 = {**FilterSpec().to_json(), "min_popularity": None, "min_plays": None, "exclude_solved_here": False}
+    up = upgrade_saved(v01, 1)
+    assert (up["min_popularity"], up["min_plays"], up["exclude_solved_here"]) == (50, 100, True)
+    # Already at v0.2: your choices (thresholds off, solved included) are kept.
+    assert upgrade_saved(v01, 2) == v01
+    assert upgrade_saved({**v01, "min_plays": 500}, 1)["min_plays"] == 500
