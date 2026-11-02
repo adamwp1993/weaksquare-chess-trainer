@@ -138,9 +138,10 @@ Scope:
 - Import: paste, file, Lichess URL, chess.com URL (§11.1).
 - Analysis pipeline, `game_analysis` and the analysis queue on the **background engine** (§11.2; ARCHITECTURE §3 decision 12). Review screen: eval graph, move symbols, key moments, refutations (§11.3).
 - Retry mode; Save as puzzle plus the **My games** puzzle source (FR-3.15, 11.15, 11.16); mistake reasons on game moves.
+- **Import puzzles from your own files** (PGN / EPD / CSV) into `custom_puzzles` with a set label, strict solving, an import report (FR-10.46–10.50; added 2026-11-02). No puzzle collections are shipped or downloaded.
 
-**Done when:** PGN edge-case tests (multi-game file, bad PGN, variants rejected); chess.com optional-field tests; the serial-request rule is enforced in the chess.com client; analysis is reused on re-import; a puzzle refutation returns promptly while a game analysis is running; recorded game fixtures are anonymized (SR-12a).
-**Adam's manual test:** link both accounts → sync → review one Lichess and one chess.com game → retry mistakes → save 2 puzzles → drill them.
+**Done when:** PGN edge-case tests (multi-game file, bad PGN, variants rejected); chess.com optional-field tests; the serial-request rule is enforced in the chess.com client; analysis is reused on re-import; a puzzle refutation returns promptly while a game analysis is running; recorded game fixtures are anonymized (SR-12a); puzzle-file import tests (each format, bad entries reported and skipped, re-import adds nothing, mate-in-1 alternatives accepted).
+**Adam's manual test:** link both accounts → sync → review one Lichess and one chess.com game → retry mistakes → save 2 puzzles → drill them → import a small PGN or EPD puzzle file of your own → check the import report → drill the set.
 
 ---
 

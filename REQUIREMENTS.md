@@ -436,6 +436,13 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - Each puzzle links back to its game in Game Review. You can archive any puzzle you don't want.
 - **FR-10.45** **Progress:** accuracy on your own-game puzzles appears on each weakness card (FR-10.38) next to Lichess-puzzle accuracy. It's a secondary signal only. A weakness's status is still decided by its game rate (§10.8), never by puzzle accuracy.
 
+### 10.10 Importing puzzles from your own files (v0.8; Adam, 2026-11-02)
+- **FR-10.46** **Import puzzles** from a file you already have: PGN (a `FEN` header and the solution as the moves; several games per file), EPD (`bm` or `pv` as the solution) or a simple CSV (FEN, solution in UCI or SAN, optional name). You give the set a label (e.g. the book's title). The app ships, links to and downloads **no** puzzle collections: copyrighted sets (for example published problem books) are yours to import only if you have them.
+- **FR-10.47** **Stored with your other puzzles:** imported puzzles go into `custom_puzzles` with `origin = import` and the set label, and train through the **My games** source (FR-3.15; it's renamed to **My puzzles** if that reads better at v0.8 planning), on their own or mixed with Lichess puzzles, in every mode that supports custom puzzles, Stats and Spaced repetition included. Filter by set label. They never sync to Lichess.
+- **FR-10.48** **Validated on import:** python-chess checks every position and every solution move; bad entries are skipped and listed in an import report (entry number and reason). Re-importing the same file adds nothing twice (one puzzle per set and position + solution). The import runs as a job with progress and cancel.
+- **FR-10.49** **Solving rules:** a book problem has one verified solution, so it's checked strictly like Lichess puzzles (§4.2), including "any mate counts" for mate-in-1, not with FR-10.43's 30 cp tolerance. If the file gives only the first move, the puzzle is that one move. The engine refutation and the post-puzzle panel (FR-7.2, 7.7) work as for any puzzle. Imported files usually carry no themes: they stay untagged until the lichess-puzzler tagger arrives (v0.10), which then tags them locally.
+- **FR-10.50** **Privacy:** the file is read on your PC and never sent anywhere; the User Guide says so.
+
 ## 11. Game Review: import a game, analyze it, explain better moves
 
 **Principle:** Stockfish grades every move locally, for free. The AI explains key moments using the same grounded-context and validation rules as Explain (§9.2). Without an LLM key, Game Review still works as a full engine review.
