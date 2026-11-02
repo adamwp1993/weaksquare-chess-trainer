@@ -1,2 +1,3 @@
-{"date":1793520000000,"win":true,"puzzle":{"fen":"8/8/8/8/8/8/8/8 w - - 0 1","id":"00DPQ","lastMove":"e2e4","plays":1000,"rating":1500,"solution":["e7e5"],"themes":["fork","short"]}}
-{"date":1793433600000,"win":false,"puzzle":{"fen":"8/8/8/8/8/8/8/8 w - - 0 1","id":"001KR","lastMove":"e2e4","plays":1000,"rating":1600,"solution":["e7e5"],"themes":["pin","short"]}}
+{"date":1793520000000,"win":true,"puzzle":{"id":"001KR","rating":1500,"plays":1000,"solution":["e7e5"],"themes":["fork","short"],"fen":"8/8/8/8/8/8/8/8 w - - 0 1","lastMove":"e2e4"}}
+{"date":1793433600000,"win":true,"puzzle":{"id":"008o6","rating":1500,"plays":1000,"solution":["e7e5"],"themes":["fork","short"],"fen":"8/8/8/8/8/8/8/8 w - - 0 1","lastMove":"e2e4"}}
+{"date":1793347200000,"win":false,"puzzle":{"id":"00DPQ","rating":1500,"plays":1000,"solution":["e7e5"],"themes":["fork","short"],"fen":"8/8/8/8/8/8/8/8 w - - 0 1","lastMove":"e2e4"}}

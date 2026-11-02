@@ -47,8 +47,13 @@ def test_solve_batch_request_and_response() -> None:
     assert json.loads(req.content) == {
         "solutions": [{"id": "001KR", "win": True, "rated": True}, {"id": "008o6", "win": False, "rated": True}]
     }
-    assert [(x.id, x.win, x.rating_diff) for x in r.rounds] == [("001KR", True, 8), ("008o6", False, -13)]
-    assert (r.rating, r.provisional) == (1829, False)
+    # Recorded from a live, unrated batch (rated: false), so every ratingDiff is 0.
+    assert [(x.id, x.win, x.rating_diff) for x in r.rounds] == [
+        ("001KR", True, 0),
+        ("008o6", False, 0),
+        ("00DPQ", True, 0),
+    ]
+    assert (r.rating, r.provisional) == (1829, True)
 
 
 def test_batch_limits_and_bad_angle() -> None:
@@ -66,7 +71,7 @@ def test_activity_streams_entries_since() -> None:
         return httpx.Response(200, content=_fixture("activity.ndjson"))
 
     got = list(_client(handler).activity(FAKE_TOKEN, 123))
-    assert [(e.puzzle_id, e.win) for e in got] == [("00DPQ", True), ("001KR", False)]
+    assert [(e.puzzle_id, e.win) for e in got] == [("001KR", True), ("008o6", True), ("00DPQ", False)]
     assert got[0].date_ms > got[1].date_ms  # newest first, as Lichess sends it
 
 

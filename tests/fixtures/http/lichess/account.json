@@ -1,10 +1,31 @@
 {
   "id": "player_a",
   "username": "player_a",
-  "perfs": {
-    "puzzle": { "games": 412, "rating": 1834, "rd": 62, "prog": 15 },
-    "blitz": { "games": 10, "rating": 1500, "rd": 120, "prog": 0, "prov": true }
+  "createdAt": 0,
+  "seenAt": 0,
+  "playTime": {
+    "total": 0,
+    "tv": 0
   },
-  "createdAt": 1356998400070,
-  "seenAt": 1356998400070
+  "url": "https://lichess.org/@/player_a",
+  "count": {
+    "all": 0,
+    "rated": 0,
+    "draw": 0,
+    "loss": 0,
+    "win": 0,
+    "bookmark": 0,
+    "playing": 0,
+    "import": 0,
+    "me": 0
+  },
+  "perfs": {
+    "puzzle": {
+      "games": 412,
+      "rating": 1834,
+      "rd": 62,
+      "prog": 15,
+      "prov": false
+    }
+  }
 }

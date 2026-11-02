@@ -8,4 +8,4 @@ Re-record with `uv run pytest -m live --record-lichess` (see docs/DEVELOPER_GUID
 scrubs and anonymizes (SR-12, SR-12a): the username becomes `player_a`, dates are fixed, and no
 headers or tokens are kept.
 
-Status: hand-written from the spec (not yet recorded).
+Status: recorded from live responses (scrubbed and anonymized).
