@@ -19,6 +19,8 @@ PLACEHOLDERS = re.compile(r"(lip_FAKE|sk-ant-FAKE|sk-FAKE)\w*")
 # A Lichess game URL is lichess.org/<8-char id>; only GAMEID placeholders are allowed.
 GAME_URL = re.compile(r"lichess\.org/(?!GAMEID\d)([A-Za-z0-9]{8})\b")
 PROFILE_URL = re.compile(r"(lichess\.org/@/|chess\.com/member/)(?!player_|opponent_)\w+")
+# Recorded API responses (v0.3): account names must be placeholders.
+USERNAME_FIELD = re.compile(r'"(username|id|name)"\s*:\s*"(?!player_|opponent_)[^"]*"')
 
 
 def _is_text(p: Path) -> bool:
@@ -50,6 +52,15 @@ def test_anonymized(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert not GAME_URL.search(text), f"{path.name} contains a real Lichess game URL"
     assert not PROFILE_URL.search(text), f"{path.name} contains a real profile URL"
+    if path.suffix == ".json" and "lichess" in path.parts:
+        # Puzzle ids are public dataset ids, so an "id" is allowed in a solve response's rounds.
+        for m in USERNAME_FIELD.finditer(text):
+            assert m.group(1) == "id" and '"rounds"' in text, f"{path.name} names someone: {m.group(0)}"
+
+
+def test_username_checker() -> None:
+    assert USERNAME_FIELD.search('{"username": "RealPerson"}')
+    assert not USERNAME_FIELD.search('{"username": "player_a"}')
 
 
 def test_checker_catches_a_real_url() -> None:
