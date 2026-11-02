@@ -62,7 +62,9 @@ weaksquare-chess-trainer/
 │  │  ├─ move_sounds.py        # which sound a move makes (v0.2)
 │  │  ├─ stats.py              # Stats grouping: theme, length, rating band (v0.2)
 │  │  ├─ db_update.py          # newer-export rules, puzzle-count parsing (v0.2)
-│  │  ├─ scoring.py            # win/loss, help → loss, angle selection
+│  │  ├─ scoring.py            # angle selection (v0.3), the result panel's rating status
+│  │  ├─ oauth.py              # PKCE challenge, authorize URL, callback check (v0.3)
+│  │  ├─ lichess.py            # LichessClient protocol, result types, response parsers (v0.3)
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
@@ -71,6 +73,8 @@ weaksquare-chess-trainer/
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
 │  │                           #   v0.2: presets.py, stats.py, ui_settings.py, db_update.py (update check job)
+│  │                           #   v0.3: account.py (sign-in, launch check, sign-out), sync.py (the queue),
+│  │                           #         lichess_history.py (history import)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -86,7 +90,9 @@ weaksquare-chess-trainer/
 │  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
 │  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
 │  │  ├─ stockfish.py          # EngineClient impl (python-chess UCI)  (v0.4)
-│  │  ├─ lichess.py            # (v0.3)   chesscom.py (v0.8)
+│  │  ├─ lichess.py            # LichessHttp (v0.3)   chesscom.py (v0.8)
+│  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
+│  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  └─ llm/                  # LLMProvider protocol, anthropic.py, openai.py (v0.7)
 │  └─ jobs/runner.py           # background jobs: queue, progress, cancel
 ├─ web/
@@ -104,11 +110,14 @@ weaksquare-chess-trainer/
 │  ├─ e2e/                     # Playwright against web/ with mockClient
 │  ├─ smoke/                   # the real app over CDP (harness in conftest.py)
 │  ├─ fulldb/                  # opt-in timings against the full puzzle DB
+│  ├─ live/                    # opt-in, Adam only: Lichess with the weaksquare-test token (v0.3)
+│  ├─ fakes/                   # fake Lichess client, listener, browser, scheduler (v0.3)
 │  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/);
 │                              #   tools/ holds the dev-only generator and recorder scripts
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
                                #   (thin CLIs over services, download + hash check), check_docs.py,
-                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts), make_icon.py (v0.2)
+                               #   gen_types.py (bridge/dto.py → web/src/api/types.ts), make_icon.py (v0.2),
+                               #   set_test_token.py (v0.3; Adam runs it, never Claude Code)
 ```
 
 `services/` and later `adapters/` modules are created **in the version that first needs them**. The tree shows the end state.
