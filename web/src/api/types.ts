@@ -51,7 +51,7 @@ export interface FilterSpec {
   rating_max: number | null;
   lengths: number[];
   side: "either" | "white" | "black";
-  order: "random" | "easy_to_hard" | "by_theme";
+  order: "random" | "easy_to_hard" | "by_theme" | "depth_ladder";
   queue_size: number | null;
   openings: string[];
   min_popularity: number | null;
@@ -109,6 +109,13 @@ export interface UiSettings {
   color_scheme: "light" | "dark" | "auto";
   sounds: SoundSettings;
   auto_check: boolean;
+  mode: "standard" | "commit_line" | "spaced_repetition";
+  show_length: boolean;
+  ladder_threshold: number;
+  ladder_window: number;
+  srs_intervals: number[];
+  filters_collapsed: boolean;
+  time_offset_days: number | null;
 }
 
 export interface SessionInfo {
@@ -116,6 +123,7 @@ export interface SessionInfo {
   match_count: number;
   queue_size: number | null;
   empty_buckets: number[];
+  mode: "standard" | "commit_line" | "spaced_repetition";
 }
 
 export interface PuzzleView {
@@ -127,6 +135,9 @@ export interface PuzzleView {
   rating: number;
   opponent_sound: "move" | "capture" | "check" | "checkmate" | "castle";
   already_played: boolean;
+  mode: "standard" | "commit_line" | "spaced_repetition";
+  solution_plies: number | null;
+  max_plies: number | null;
 }
 
 export interface ThemeLabel {
@@ -140,6 +151,18 @@ export interface AttemptRating {
   diff: number | null;
 }
 
+export interface LadderInfo {
+  level: number;
+  label: string;
+  step: number;
+  steps: number;
+  played: number;
+  wins: number;
+  window: number;
+  threshold: number;
+  top: boolean;
+}
+
 export interface Outcome {
   win: boolean;
   puzzle_id: string;
@@ -149,6 +172,7 @@ export interface Outcome {
   puzzle_url: string;
   attempt_id: number;
   lichess: AttemptRating | null;
+  level_up: LadderInfo | null;
 }
 
 export interface MoveFeedback {
@@ -170,6 +194,34 @@ export interface HelpResponse {
   refute: boolean;
 }
 
+export interface PlyGrade {
+  played: string | null;
+  expected: string;
+  player: boolean;
+  correct: boolean;
+}
+
+export interface CommitFeedback {
+  grades: PlyGrade[];
+  extra: string[];
+  replies_correct: number;
+  replies_total: number;
+  win: boolean;
+  outcome: Outcome | null;
+  line_sounds: ("move" | "capture" | "check" | "checkmate" | "castle")[];
+}
+
+export interface LadderPreview {
+  ladder: LadderInfo;
+  match_count: number;
+}
+
+export interface SrsStatus {
+  due: number;
+  next_due: string | null;
+  scheduled: number;
+}
+
 export interface SessionStats {
   solved: number;
   failed: number;
@@ -180,6 +232,8 @@ export interface SessionStats {
   all_time_solved: number;
   all_time_failed: number;
   rating_change: number | null;
+  mode: "standard" | "commit_line" | "spaced_repetition";
+  ladder: LadderInfo | null;
 }
 
 export interface StatRow {
@@ -198,6 +252,7 @@ export interface StatsReport {
   by_length: StatRow[];
   by_rating: StatRow[];
   missing: number;
+  by_mode: StatRow[];
 }
 
 export interface UpdateOffer {

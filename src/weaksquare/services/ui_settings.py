@@ -11,6 +11,8 @@ from typing import Any, Literal, Protocol
 
 from weaksquare.core.errors import ValidationError
 from weaksquare.core.filters import SAVED_FILTERS_VERSION, FilterSpec, upgrade_saved
+from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, validate_threshold, validate_window
+from weaksquare.core.srs import DEFAULT_INTERVALS, validate_intervals
 
 LAST_FILTERS_KEY = "mixer.filters"
 FILTERS_VERSION_KEY = "mixer.filters_version"  # which version's defaults the saved filters have
@@ -18,6 +20,15 @@ COORDINATES_KEY = "ui.coordinates"
 COLOR_SCHEME_KEY = "ui.color_scheme"  # FR-1.12
 SOUNDS_KEY = "ui.sounds"  # FR-1.13
 AUTO_CHECK_KEY = "puzzle_db.auto_check"  # FR-2.5: the daily update check (default on)
+# v0.5
+MODE_KEY = "trainer.mode"  # the Modes control (§6): the last mode used
+SHOW_LENGTH_KEY = "commit.show_length"  # Commit the line's Show move count (FR-4.2), default off
+LADDER_THRESHOLD_KEY = "ladder.threshold"  # FR-4.5, percent
+LADDER_WINDOW_KEY = "ladder.window"  # FR-4.5, attempts
+SRS_INTERVALS_KEY = "srs.intervals"  # FR-4.6, days per box
+FILTERS_COLLAPSED_KEY = "ui.filters_collapsed"  # FR-1.14
+TIME_OFFSET_KEY = "debug.time_offset_days"  # FR-4.6 fast-forward, --dev runs only (written by the bridge)
+TRAINING_MODES = ("standard", "commit_line", "spaced_repetition")
 
 ColorScheme = Literal["light", "dark", "auto"]  # "auto" is Match system
 COLOR_SCHEMES = ("light", "dark", "auto")
@@ -44,6 +55,12 @@ class UiSettings:
     color_scheme: ColorScheme  # default light
     sounds: SoundSettings
     auto_check: bool
+    mode: str = "standard"
+    show_length: bool = False
+    ladder_threshold: int = DEFAULT_THRESHOLD
+    ladder_window: int = DEFAULT_WINDOW
+    srs_intervals: tuple[int, ...] = DEFAULT_INTERVALS
+    filters_collapsed: bool = False
 
 
 def _bool(name: str) -> Callable[[Any], Any]:
@@ -74,6 +91,12 @@ def _sounds(value: Any) -> Any:
     return {"on": on, "volume": volume, "set": sound_set}
 
 
+def _mode(value: Any) -> Any:
+    if value not in TRAINING_MODES:
+        raise ValidationError("unknown training mode")
+    return value
+
+
 def _filters(value: Any) -> Any:
     return FilterSpec.from_json(value).to_json()
 
@@ -84,6 +107,12 @@ VALIDATORS: dict[str, Callable[[Any], Any]] = {
     COLOR_SCHEME_KEY: _color_scheme,
     SOUNDS_KEY: _sounds,
     AUTO_CHECK_KEY: _bool("auto_check"),
+    MODE_KEY: _mode,
+    SHOW_LENGTH_KEY: _bool("show_length"),
+    LADDER_THRESHOLD_KEY: validate_threshold,
+    LADDER_WINDOW_KEY: validate_window,
+    SRS_INTERVALS_KEY: lambda v: list(validate_intervals(v)),
+    FILTERS_COLLAPSED_KEY: _bool("filters_collapsed"),
 }
 
 
@@ -114,7 +143,41 @@ class UiSettingsService:
             color_scheme=scheme if scheme in COLOR_SCHEMES else "light",
             sounds=self._sounds(),
             auto_check=self._store.get(AUTO_CHECK_KEY) is not False,
+            mode=self._valid(MODE_KEY, "standard"),
+            show_length=self._valid(SHOW_LENGTH_KEY, False),
+            ladder_threshold=self.ladder_threshold(),
+            ladder_window=self.ladder_window(),
+            srs_intervals=self.srs_intervals(),
+            filters_collapsed=self._valid(FILTERS_COLLAPSED_KEY, False),
         )
+
+    def _valid(self, key: str, default: Any) -> Any:
+        """A stored value, or the default if it's missing or was written by another version."""
+        stored = self._store.get(key)
+        if stored is None:
+            return default
+        try:
+            return VALIDATORS[key](stored)
+        except ValidationError:
+            return default
+
+    # FR-4.6 fast-forward (--dev runs only; the bridge checks that before calling these)
+    def time_offset_days(self) -> int:
+        stored = self._store.get(TIME_OFFSET_KEY)
+        return stored if isinstance(stored, int) and not isinstance(stored, bool) and stored >= 0 else 0
+
+    def set_time_offset_days(self, days: int) -> None:
+        self._store.set(TIME_OFFSET_KEY, days)
+
+    # TrainingPrefs (services/session.py)
+    def srs_intervals(self) -> tuple[int, ...]:
+        return tuple(self._valid(SRS_INTERVALS_KEY, list(DEFAULT_INTERVALS)))
+
+    def ladder_threshold(self) -> int:
+        return int(self._valid(LADDER_THRESHOLD_KEY, DEFAULT_THRESHOLD))
+
+    def ladder_window(self) -> int:
+        return int(self._valid(LADDER_WINDOW_KEY, DEFAULT_WINDOW))
 
     def _sounds(self) -> SoundSettings:
         stored = self._store.get(SOUNDS_KEY)

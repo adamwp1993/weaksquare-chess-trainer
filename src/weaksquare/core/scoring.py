@@ -54,10 +54,14 @@ def selected_themes(spec: FilterSpec) -> tuple[str, ...]:
     return spec.themes
 
 
-def angle_for(spec: FilterSpec, puzzle_themes: tuple[str, ...] | list[str], length: int) -> str:
-    """The angle to report for one puzzle served by `spec` (FR-6.13, 6.14)."""
+def angle_for(
+    spec: FilterSpec, puzzle_themes: tuple[str, ...] | list[str], length: int, length_known: bool = False
+) -> str:
+    """The angle to report for one puzzle served by `spec` (FR-6.13, 6.14). `length_known`: the move
+    count was shown in advance some other way (Commit the line's Show move count, v0.5), which counts
+    as a narrowed move count. The depth ladder narrows `spec.lengths` itself (`at_ladder_level`)."""
     chosen = selected_themes(spec)
-    if not chosen and spec.all_lengths:
+    if not chosen and spec.all_lengths and not length_known:
         return MIX
     has = set(puzzle_themes)
     matched = [t for t in chosen if t in has]

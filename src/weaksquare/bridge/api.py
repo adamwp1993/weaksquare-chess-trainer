@@ -18,8 +18,9 @@ from weaksquare.bridge.errors import bridge_call
 from weaksquare.bridge.events import job_dto
 from weaksquare.config import APP_VERSION, LICENSE_NAME, REPO_URL, Paths
 from weaksquare.core.clock import Clock
-from weaksquare.core.errors import NotFoundError, ValidationError
+from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
+from weaksquare.core.ladder import LEVEL_NAMES, LEVELS, LadderStatus
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
@@ -39,6 +40,11 @@ log = logging.getLogger("weaksquare.frontend")
 
 FRONTEND_ERRORS_PER_MINUTE = 20
 MAX_RATING_IDS = 200
+
+
+def ladder_info(s: LadderStatus) -> dto.LadderInfo:
+    return dto.LadderInfo(s.level, LEVEL_NAMES[s.level], s.step, len(LEVELS), s.played, s.wins, s.window,
+                          s.threshold, s.top)  # fmt: skip
 
 
 def attempt_rating(r: RatingInfo | None) -> dto.AttemptRating | None:
@@ -185,12 +191,35 @@ class Api:
             color_scheme=s.color_scheme,
             sounds=dto.SoundSettings(snd.on, snd.volume, sound_set),
             auto_check=s.auto_check,
+            mode=s.mode,  # type: ignore[arg-type]
+            show_length=s.show_length,
+            ladder_threshold=s.ladder_threshold,
+            ladder_window=s.ladder_window,
+            srs_intervals=list(s.srs_intervals),
+            filters_collapsed=s.filters_collapsed,
+            time_offset_days=self._time_offset(),
         )
+
+    def _time_offset(self) -> int | None:
+        offset = getattr(self._clock, "offset_days", None)
+        return offset if self._dev_mode and isinstance(offset, int) else None
 
     @bridge_call
     def set_setting(
         self,
-        key: Literal["mixer.filters", "ui.coordinates", "ui.color_scheme", "ui.sounds", "puzzle_db.auto_check"],
+        key: Literal[
+            "mixer.filters",
+            "ui.coordinates",
+            "ui.color_scheme",
+            "ui.sounds",
+            "puzzle_db.auto_check",
+            "trainer.mode",
+            "commit.show_length",
+            "ladder.threshold",
+            "ladder.window",
+            "srs.intervals",
+            "ui.filters_collapsed",
+        ],
         value: Any,
     ) -> None:
         self._ui_settings.set(key, value)
@@ -205,7 +234,8 @@ class Api:
 
     @bridge_call
     def count_matches(self, spec: dict) -> int:
-        return self._mixer.count(FilterSpec.from_json(spec))
+        # A depth-ladder order counts the current level's pool (FR-4.5).
+        return self._mixer.count(self._sessions.pool_spec(FilterSpec.from_json(spec)))
 
     @bridge_call
     def count_buckets(self, spec: dict) -> dto.BucketCounts:
@@ -243,10 +273,52 @@ class Api:
 
     # ---- sessions (FR-3.11, 3.12, 3.14, FR-4.1, FR-5.1, 5.3) -----------------------------------
     @bridge_call
-    def start_session(self, spec: dict, rated: bool = True) -> dto.SessionInfo:
-        """`rated`: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false."""
-        info = self._sessions.start(FilterSpec.from_json(spec), rated)
-        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size, info.empty_buckets)
+    def set_time_offset(self, days: int) -> None:
+        """FR-4.6 fast-forward time: move the app's clock ahead by whole days. `--dev` runs only."""
+        setter = getattr(self._clock, "set_offset_days", None)
+        if not self._dev_mode or setter is None:
+            raise ConflictError("Fast-forward time is only available in --dev runs.")
+        try:
+            setter(days)
+        except ValueError as e:
+            raise ValidationError(str(e)) from None
+        self._ui_settings.set_time_offset_days(days)
+
+    @bridge_call
+    def start_session(
+        self,
+        spec: dict,
+        rated: bool = True,
+        mode: Literal["standard", "commit_line", "spaced_repetition"] = "standard",
+        show_length: bool = False,
+    ) -> dto.SessionInfo:
+        """`rated`: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false.
+        `mode` (v0.5, §6); `show_length`: Commit the line's Show move count (FR-4.2)."""
+        info = self._sessions.start(FilterSpec.from_json(spec), rated, mode, show_length)
+        return dto.SessionInfo(info.session_id, info.match_count, info.queue_size, info.empty_buckets,
+                               info.mode)  # type: ignore[arg-type]  # fmt: skip
+
+    @bridge_call
+    def get_srs_status(self) -> dto.SrsStatus:
+        s = self._sessions.srs_status()
+        return dto.SrsStatus(s.due, s.next_due, s.scheduled)
+
+    @bridge_call
+    def get_ladder_status(self, spec: dict) -> dto.LadderPreview:
+        """The level a depth-ladder session with these filters would start at, and its pool size (FR-4.5)."""
+        parsed = FilterSpec.from_json(spec)
+        st = self._sessions.ladder_status(parsed)
+        return dto.LadderPreview(ladder_info(st), self._mixer.count(parsed.at_ladder_level(st.level)))
+
+    @bridge_call
+    def submit_line(self, session_id: int, moves: list) -> dto.CommitFeedback:
+        """Commit the line (FR-4.2): grade the whole line you entered."""
+        r = self._sessions.submit_line(session_id, moves[:200])
+        c = r.result
+        return dto.CommitFeedback(
+            [dto.PlyGrade(g.played, g.expected, g.player, g.correct) for g in c.grades], list(c.extra),
+            c.replies_correct, c.replies_total, c.win, self._outcome(r.outcome), list(c.line_sounds),
+        )  # fmt: skip
 
     @bridge_call
     def next_puzzle(self, session_id: int) -> dto.PuzzleView | None:
@@ -255,7 +327,17 @@ class Api:
             return None
         color: Literal["white", "black"] = "white" if v.player_color == "white" else "black"
         return dto.PuzzleView(
-            v.number, v.puzzle_id, v.fen, v.opponent_move, color, v.rating, v.opponent_sound, v.already_played
+            v.number,
+            v.puzzle_id,
+            v.fen,
+            v.opponent_move,
+            color,
+            v.rating,
+            v.opponent_sound,
+            v.already_played,
+            v.mode,  # type: ignore[arg-type]
+            v.solution_plies,
+            v.max_plies,
         )
 
     @staticmethod
@@ -271,6 +353,7 @@ class Api:
             puzzle_url=f"https://lichess.org/training/{o.puzzle_id}",
             attempt_id=o.attempt_id,
             lichess=attempt_rating(o.lichess),
+            level_up=ladder_info(o.level_up) if o.level_up else None,
         )
 
     @bridge_call
@@ -299,7 +382,7 @@ class Api:
 
         return dto.StatsReport(
             row(r.overall), [row(t) for t in r.by_theme], [row(t) for t in r.by_length],
-            [row(t) for t in r.by_rating], r.missing,
+            [row(t) for t in r.by_rating], r.missing, [row(t) for t in r.by_mode],
         )  # fmt: skip
 
     @bridge_call
@@ -311,7 +394,8 @@ class Api:
     def get_session_stats(self, session_id: int) -> dto.SessionStats:
         s = self._sessions.stats(session_id)
         return dto.SessionStats(s.solved, s.failed, s.accuracy, s.played, s.queue_size, s.finished,
-                                s.all_time_solved, s.all_time_failed, s.rating_change)  # fmt: skip
+                                s.all_time_solved, s.all_time_failed, s.rating_change, s.mode,  # type: ignore[arg-type]
+                                ladder_info(s.ladder) if s.ladder else None)  # fmt: skip
 
     # ---- Lichess account and sync (FR-1.1, 1.6, 1.7, FR-6.1–6.17, FR-9.4) ------------------------
     # Nothing here ever returns a token (SR-1); the token stays inside the services.

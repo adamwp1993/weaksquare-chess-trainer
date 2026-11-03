@@ -1,4 +1,4 @@
-"""The basic Stats page (FR-9.1, FR-9.2): accuracy per theme, per length and per rating band, and the
+"""The basic Stats page (FR-9.1, FR-9.2): accuracy per theme, per length, per rating band and (v0.5) per mode, and the
 "first move right, line wrong" rate. Pure: takes attempt rows, returns grouped tallies.
 
 "First move right, line wrong" is measured among the attempts where your first move was right: the
@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 BAND = 200
 LENGTH_LABELS = {1: "1 move", 2: "2 moves", 3: "3 moves", 4: "4+ moves"}
+# Training modes in the order the Modes control shows them (v0.5). An unknown mode keeps its key.
+MODE_LABELS = {"standard": "Standard", "commit_line": "Commit the line", "spaced_repetition": "Spaced repetition"}
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,7 @@ class AttemptRow:
     puzzle_rating: int | None  # the rating when you played it (None for old attempts it can't recover)
     themes: tuple[str, ...] | None  # None: the puzzle is no longer in the database (FR-2.4)
     length: int | None
+    mode: str = "standard"
 
 
 @dataclass(frozen=True)
@@ -48,7 +51,8 @@ class Report:
     by_theme: list[Tally]  # most-played first
     by_length: list[Tally]  # 1, 2, 3, 4+
     by_rating: list[Tally]  # lowest band first; "unknown" last
-    missing: int  # attempts on puzzles no longer in the database (counted overall and by rating only)
+    missing: int  # attempts on puzzles no longer in the database (counted overall, by rating and by mode only)
+    by_mode: list[Tally]  # in MODE_LABELS order, only modes you've played
 
 
 class _Acc:
@@ -83,9 +87,11 @@ def build_report(rows: Iterable[AttemptRow], theme_name: Callable[[str], str]) -
     themes: dict[str, _Acc] = {}
     lengths: dict[int, _Acc] = {}
     ratings: dict[int | None, _Acc] = {}
+    modes: dict[str, _Acc] = {}
     missing = 0
     for r in rows:
         overall.add(r)
+        modes.setdefault(r.mode, _Acc()).add(r)
         ratings.setdefault(None if r.puzzle_rating is None else band(r.puzzle_rating), _Acc()).add(r)
         if r.themes is None:
             missing += 1
@@ -101,4 +107,6 @@ def build_report(rows: Iterable[AttemptRow], theme_name: Callable[[str], str]) -
     by_rating = [ratings[k].tally(str(k), band_label(k)) for k in known]
     if None in ratings:
         by_rating.append(ratings[None].tally("unknown", "Unknown"))
-    return Report(overall.tally("all", "All puzzles"), by_theme, by_length, by_rating, missing)
+    known_modes = [m for m in MODE_LABELS if m in modes] + sorted(m for m in modes if m not in MODE_LABELS)
+    by_mode = [modes[m].tally(m, MODE_LABELS.get(m, m)) for m in known_modes]
+    return Report(overall.tally("all", "All puzzles"), by_theme, by_length, by_rating, missing, by_mode)

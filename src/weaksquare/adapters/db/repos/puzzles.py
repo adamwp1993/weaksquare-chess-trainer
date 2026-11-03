@@ -172,6 +172,17 @@ class LichessDbSource:
                 out.update(r[0] for r in conn.execute(q, chunk))
         return out
 
+    def key_map(self, ids: Sequence[str]) -> dict[str, int]:
+        """Current key per puzzle ID, for Spaced repetition's queue of IDs (v0.5). Dropped IDs are missing."""
+        out: dict[str, int] = {}
+        ids = list(ids)
+        with self._db.session() as conn:
+            for i in range(0, len(ids), 500):
+                chunk = ids[i : i + 500]
+                q = f"SELECT id, n FROM pz.puzzles WHERE id IN ({', '.join('?' * len(chunk))})"
+                out.update((r[0], r[1]) for r in conn.execute(q, chunk))
+        return out
+
     def theme_bits(self) -> dict[str, int]:
         with self._db.session() as conn:
             return {r["theme"]: r["bit"] for r in conn.execute("SELECT theme, bit FROM pz.theme_bits")}
