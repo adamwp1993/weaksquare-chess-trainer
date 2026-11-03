@@ -2,7 +2,7 @@
 
 A Windows desktop app for chess tactics training on the Lichess puzzle database. Mix any combination of themes, ratings and puzzle lengths, solve on a board, sync solves to your Lichess account, get unstuck with Stockfish and optional AI explanations, and track whether the gaps in your play are actually closing.
 
-**Status:** in development. v0.5, training modes I (Commit the line, Spaced repetition for your misses, a depth-ladder order, and a collapsible filters panel), is released (2026-11-03). v0.6, training modes II (Name the idea first, Danger spotting) and mistake reasons, is in testing as v0.6-rc1. Built version by version per [ROADMAP.md](ROADMAP.md). See [CHANGELOG.md](CHANGELOG.md) for what each version added.
+**Status:** in development. v0.6, training modes II (Name the idea first, Danger spotting) and mistake reasons (why you missed it, with a breakdown in Stats), is released (2026-11-03). v0.7 (AI explanations with cost guardrails) is next. Built version by version per [ROADMAP.md](ROADMAP.md). See [CHANGELOG.md](CHANGELOG.md) for what each version added.
 
 ## Getting started
 The app runs from source on Windows 10 or 11. You need Git, Python 3.12 and Node.js LTS. Then:
