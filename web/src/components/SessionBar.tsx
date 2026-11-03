@@ -34,6 +34,11 @@ export function SessionBar({ stats }: { stats: SessionStats | null }) {
           <Text size="sm">
             Accuracy <b data-testid="stat-accuracy">{accuracy}</b>
           </Text>
+          {stats != null && stats.misclicks > 0 && (
+            <Text size="sm" c="dimmed" title="Misses you tagged Misclick: left out of your accuracy here" data-testid="stat-misclicks">
+              {stats.misclicks} {stats.misclicks === 1 ? "misclick" : "misclicks"}
+            </Text>
+          )}
           <Text size="sm">
             Played <b>{progress}</b>
           </Text>

@@ -413,6 +413,7 @@ export function OrderSelect({
   onChange,
   ratios = false,
   ladder = null,
+  ladderAllowed = true,
 }: {
   value: Order;
   endless: boolean;
@@ -421,6 +422,8 @@ export function OrderSelect({
   ratios?: boolean;
   /** FR-4.5: where a depth-ladder session with these themes would start. */
   ladder?: LadderInfo | null;
+  /** FR-3.11: the depth ladder works in Standard and Commit the line only. */
+  ladderAllowed?: boolean;
 }) {
   return (
     <Stack gap={4}>
@@ -435,10 +438,15 @@ export function OrderSelect({
           { value: "random", label: "Random" },
           { value: "easy_to_hard", label: "Easy → hard" },
           { value: "by_theme", label: "By theme" },
-          { value: "depth_ladder", label: "Depth ladder", disabled: ratios },
+          { value: "depth_ladder", label: "Depth ladder", disabled: ratios || (!ladderAllowed && value !== "depth_ladder") },
         ]}
         aria-label="Order"
       />
+      {value === "depth_ladder" && !ladderAllowed && (
+        <Text size="xs" c="red" data-testid="ladder-mode-note">
+          The depth ladder works in Standard and Commit the line. Choose another order for this mode.
+        </Text>
+      )}
       {value === "depth_ladder" && ladder && (
         <Text size="xs" c="dimmed" data-testid="ladder-status">
           {ladderLine(ladder)}

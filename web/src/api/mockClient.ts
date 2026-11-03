@@ -13,13 +13,16 @@
 // and `?engine=slow` makes every analysis take 1.5 s.
 // Training modes (v0.5): `?srs=none` starts with nothing due for Spaced repetition (default: two
 // puzzles due), `?dev=1` behaves like a --dev run (Settings → Debug → fast-forward time), and
-// `?mode=commit_line|spaced_repetition` starts on that mode.
+// `?mode=commit_line|name_idea|danger_spotting|spaced_repetition` starts on that mode.
+// v0.6: Danger spotting alternates safe and blunder candidates (the first is safe); `?reasons=off`
+// starts with the mistake-reason question turned off.
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
   ApiClient,
   BackendEvent,
   EngineSettingsChange,
+  ReasonKey,
   SettingValues,
   TrainingMode,
 } from "./ApiClient";
@@ -35,6 +38,11 @@ import type {
   AttemptRating,
   BucketCounts,
   CommitFeedback,
+  DangerFeedback,
+  DangerReveal,
+  IdeaResult,
+  ReasonPrompt,
+  ReasonStats,
   LadderInfo,
   LadderPreview,
   PlyGrade,
@@ -204,6 +212,19 @@ function gradeLine(start: string, solution: string[], line: string[]): { grades:
   }
   return { grades, extra: line.slice(end), firstWrong };
 }
+// The motif themes Name the idea grades against (core/themes.py motif_themes), for the mock's puzzles.
+const MOCK_MOTIFS = new Set([
+  "fork", "hangingPiece", "discoveredAttack", "kingsideAttack", "advancedPawn", "quietMove", "promotion",
+  "enPassant", "pin", "skewer", "deflection", "attraction", "sacrifice",
+]);
+const REASON_OPTIONS: ReasonPrompt["reasons"] = [
+  { key: "didntLook", label: "Didn't look for it", gap: "process" },
+  { key: "missedResource", label: "Missed their reply / defense / threat", gap: "process" },
+  { key: "miscalculated", label: "Saw the idea, calculated it wrong", gap: "calculation" },
+  { key: "unknownPattern", label: "Didn't know this pattern", gap: "knowledge" },
+  { key: "rushed", label: "Rushed / time pressure", gap: "time" },
+  { key: "misclick", label: "Misclick", gap: "noise" },
+];
 const MANAGED_PATH = "C:\\Users\\you\\AppData\\Local\\WeakSquare\\engines\\sf_19\\stockfish.exe";
 const CUSTOM_PATH = "C:\\Engines\\my-stockfish.exe";
 
@@ -228,6 +249,11 @@ interface MockSession {
     firstWrong: [string, string] | null; // (FEN before, UCI): what Show answer refutes (§7.2)
     practice?: boolean; // Try again (FR-5.12): `decided` from the start, so nothing is recorded
     submitted?: boolean; // Commit the line: the line was graded
+    tags?: { setup: string[]; payoff: string[] } | null; // Name the idea: null until tagged
+    danger?: { candidate: string; safe: boolean; phase: "call" | "refute" | "done"; call: "safe" | "unsafe" | null };
+    lostAttempt?: number; // the recorded loss, for the reason chips
+    suggested?: ReasonKey | null;
+    idea?: IdeaResult | null;
   } | null;
   solved: number;
   failed: number;
@@ -253,7 +279,11 @@ export class MockClient implements ApiClient {
     srs_intervals: [1, 3, 7, 14, 30],
     filters_collapsed: false,
     time_offset_days: null,
+    reasons_ask: "always",
+    rushed_s: 3,
   };
+  private reasons = new Map<number, ReasonKey>(); // attempt id -> its latest reason (§7.3)
+  private attemptSession = new Map<number, { session: number; win: boolean; mode: TrainingMode }>();
   // Spaced repetition: what's due now, and misses waiting for tomorrow (moved in by fast-forward).
   private srsDue: MockPuzzle[] = [MOCK_PUZZLES[2], MOCK_PUZZLES[3]];
   private srsLater: MockPuzzle[] = [];
@@ -297,7 +327,10 @@ export class MockClient implements ApiClient {
     if (params.get("srs") === "none") this.srsDue = [];
     if (params.get("dev") === "1") this.settings.time_offset_days = 0;
     const mode = params.get("mode");
-    if (mode === "commit_line" || mode === "spaced_repetition") this.settings.mode = mode;
+    if (mode === "commit_line" || mode === "spaced_repetition" || mode === "name_idea" || mode === "danger_spotting") {
+      this.settings.mode = mode;
+    }
+    if (params.get("reasons") === "off") this.settings.reasons_ask = "off";
     const account = params.get("account");
     if (account === "signed_out") this.account = { state: "signed_out", username: null, rating: null, provisional: false };
     if (account === "offline") this.account = { state: "offline", username: MOCK_USER, rating: null, provisional: false };
@@ -694,7 +727,7 @@ export class MockClient implements ApiClient {
 
   async getAppInfo(): Promise<AppInfo> {
     return {
-      version: "0.5.0",
+      version: "0.6.0",
       data_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare",
       logs_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare\\logs",
       dev_mode: false,
@@ -809,6 +842,19 @@ export class MockClient implements ApiClient {
     if (key === "ladder.window") this.settings = { ...this.settings, ladder_window: value as number };
     if (key === "srs.intervals") this.settings = { ...this.settings, srs_intervals: value as number[] };
     if (key === "ui.filters_collapsed") this.settings = { ...this.settings, filters_collapsed: value as boolean };
+    if (key === "reasons.ask") {
+      if (value !== "always" && value !== "off") {
+        throw new ApiCallError({ code: "invalid_argument", message: "reasons.ask must be 'always' or 'off'", retryable: false });
+      }
+      this.settings = { ...this.settings, reasons_ask: value as "always" | "off" };
+    }
+    if (key === "reasons.rushed_s") {
+      const n = value as number;
+      if (!Number.isInteger(n) || n < 1 || n > 30) {
+        throw new ApiCallError({ code: "invalid_argument", message: "The rushed threshold must be a whole number of seconds from 1 to 30.", retryable: false });
+      }
+      this.settings = { ...this.settings, rushed_s: n };
+    }
   }
 
   async getThemeCatalog(): Promise<ThemeGroup[]> {
@@ -890,6 +936,15 @@ export class MockClient implements ApiClient {
       this.sessions.set(id, { spec: { ...spec, ratios: [], themes: [] }, rated, mode, showLength: false, ladder: null, attempts: [], queue, served: 0, current: null, solved: 0, failed: 0 });
       return { session_id: id, match_count: queue.length, queue_size: spec.queue_size, empty_buckets: [], mode };
     }
+    if (spec.order === "depth_ladder" && mode !== "standard" && mode !== "commit_line") {
+      throw new ApiCallError({ code: "invalid_argument", message: "The depth ladder works in Standard and Commit the line. Choose another order.", retryable: false });
+    }
+    if (mode === "danger_spotting") {
+      if (this.engine.state !== "ready") {
+        throw new ApiCallError({ code: "engine_not_installed", message: "Danger spotting needs Stockfish to check the safe moves. Install it in Settings → Engine.", retryable: false });
+      }
+      rated = false; // FR-4.4: never synced
+    }
     const ladder = spec.order === "depth_ladder" ? { base: spec, key: ladderKey(spec) } : null;
     if (ladder) spec = atLevel(spec, this.ladderState(ladder.key).level);
     const pools = spec.ratios.length > 0 ? spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i))) : [this.pool(spec)];
@@ -925,11 +980,12 @@ export class MockClient implements ApiClient {
     const limit = s.spec.queue_size ?? Infinity;
     if (s.served >= limit || s.served >= s.queue.length) return null;
     const puzzle = s.queue[s.served++];
+    if (s.mode === "danger_spotting") return this.nextDanger(s, puzzle);
     const chess = new Chess(puzzle.fen);
     chess.move(uciToMove(puzzle.moves[0]));
     s.current = {
       puzzle, chess, start: chess.fen(), next: 1, decided: false, failed: false, hinted: false, finished: false,
-      firstWrong: null,
+      firstWrong: null, tags: s.mode === "name_idea" ? null : undefined,
     };
     return {
       number: s.served,
@@ -943,7 +999,137 @@ export class MockClient implements ApiClient {
       mode: s.mode,
       solution_plies: s.mode === "commit_line" && s.showLength ? puzzle.moves.length - 1 : null,
       max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : 60) : null,
+      candidate: null,
     };
+  }
+
+  /** Danger spotting (FR-4.4): odd puzzles get a "safe" move, even ones the real blunder. */
+  private nextDanger(s: MockSession, puzzle: MockPuzzle): PuzzleView {
+    const chess = new Chess(puzzle.fen);
+    const blunder = puzzle.moves[0];
+    const safe = s.served % 2 === 1;
+    const others = chess.moves({ verbose: true }).map((m) => m.from + m.to + (m.promotion ?? "")).filter((m) => m !== blunder).sort();
+    const candidate = safe && others.length ? others[0] : blunder;
+    s.current = {
+      puzzle, chess, start: chess.fen(), next: 1, decided: false, failed: false, hinted: false, finished: false,
+      firstWrong: null, danger: { candidate, safe: candidate !== blunder, phase: "call", call: null },
+    };
+    return {
+      number: s.served, puzzle_id: puzzle.id, fen: puzzle.fen, opponent_move: "",
+      player_color: chess.turn() === "w" ? "white" : "black", rating: puzzle.rating, opponent_sound: null,
+      already_played: false, mode: s.mode, solution_plies: null, max_plies: null, candidate,
+    };
+  }
+
+  private reveal(c: NonNullable<MockSession["current"]>): DangerReveal | null {
+    const d = c.danger;
+    if (!d) return null;
+    if (d.safe) return { candidate: d.candidate, is_safe: true, call: d.call, best_score: "+0.4 for you", candidate_score: "+0.3 for you", line: [] };
+    return { candidate: d.candidate, is_safe: false, call: d.call, best_score: null, candidate_score: null, line: c.puzzle.moves.slice(1) };
+  }
+
+  private decideDanger(s: MockSession, c: NonNullable<MockSession["current"]>, win: boolean) {
+    if (c.decided) return null;
+    c.decided = true;
+    if (win) s.solved++;
+    else s.failed++;
+    const outcome = { ...this.outcome(c.puzzle, win, s), danger: this.reveal(c) };
+    if (!win) {
+      c.lostAttempt = outcome.attempt_id;
+      c.suggested = c.danger && !c.danger.safe && c.danger.call === "safe" ? "missedResource" : null;
+    }
+    return outcome;
+  }
+
+  async callDanger(sessionId: number, call: "safe" | "unsafe"): Promise<DangerFeedback> {
+    const s = this.session(sessionId);
+    const c = s.current;
+    if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    if (!c.danger) throw new ApiCallError({ code: "conflict", message: "Safe / Unsafe is for Danger spotting.", retryable: false });
+    if (c.danger.phase !== "call") throw new ApiCallError({ code: "conflict", message: "You've already made your call for this puzzle.", retryable: false });
+    this.calls.push(`danger:${call}`);
+    c.danger.call = call;
+    const correct = (call === "safe") === c.danger.safe;
+    if (call === "unsafe" && !c.danger.safe) {
+      const sound = soundOf(c.chess.fen(), c.danger.candidate);
+      c.chess.move(uciToMove(c.danger.candidate));
+      c.danger.phase = "refute";
+      return { call, correct: true, refute: true, fen: c.chess.fen(), blunder_sound: sound, outcome: null };
+    }
+    c.danger.phase = "done";
+    c.finished = true;
+    const outcome = this.decideDanger(s, c, correct);
+    return { call, correct, refute: false, fen: c.chess.fen(), blunder_sound: null, outcome };
+  }
+
+  async setIdeaTags(sessionId: number, setup: string[], payoff: string[]) {
+    const s = this.session(sessionId);
+    const c = s.current;
+    if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    if (s.mode !== "name_idea") throw new ApiCallError({ code: "conflict", message: "Tagging the idea is for Name the idea first.", retryable: false });
+    if (c.tags) throw new ApiCallError({ code: "conflict", message: "You've already named the idea for this puzzle.", retryable: false });
+    if (setup.length + payoff.length === 0) {
+      throw new ApiCallError({ code: "invalid_argument", message: "Name at least one idea before you start solving.", retryable: false });
+    }
+    if (setup.length > 3 || payoff.length > 3) throw new ApiCallError({ code: "invalid_argument", message: "Pick at most 3 tags per slot.", retryable: false });
+    this.calls.push(`tags:${[...setup, ...payoff].join(",")}`);
+    c.tags = { setup, payoff };
+  }
+
+  private ideaResult(c: NonNullable<MockSession["current"]>): IdeaResult | null {
+    if (!c.tags || c.practice) return null;
+    const motifs = c.puzzle.themes.filter((t) => MOCK_MOTIFS.has(t));
+    const named = [...new Set([...c.tags.setup, ...c.tags.payoff])];
+    const label = (key: string) => ({ key, name: NAMES.get(key) ?? key });
+    const correct = named.filter((t) => motifs.includes(t));
+    return {
+      found: correct.length, total: motifs.length, extra: named.length - correct.length,
+      correct: correct.map(label), wrong: named.filter((t) => !motifs.includes(t)).map(label),
+      missed: motifs.filter((t) => !named.includes(t)).map(label),
+    };
+  }
+
+  async getReasonPrompt(sessionId: number): Promise<ReasonPrompt | null> {
+    if (this.settings.reasons_ask === "off") return null;
+    const c = this.session(sessionId).current;
+    if (!c || !c.finished || c.lostAttempt === undefined) return null;
+    this.calls.push("reasonPrompt");
+    return { attempt_id: c.lostAttempt, source: c.danger ? "danger" : "puzzle", suggested: c.suggested ?? null, reasons: REASON_OPTIONS };
+  }
+
+  async setMistakeReason(attemptId: number, reason: ReasonKey, note: string | null) {
+    const a = this.attemptSession.get(attemptId);
+    if (!a) throw new ApiCallError({ code: "not_found", message: "That attempt doesn't exist.", retryable: false });
+    if (a.win) throw new ApiCallError({ code: "conflict", message: "You solved that one: there's no miss to explain.", retryable: false });
+    if (!REASON_OPTIONS.some((r) => r.key === reason)) throw new ApiCallError({ code: "invalid_argument", message: "Unknown mistake reason.", retryable: false });
+    if (note && note.trim().length > 200) throw new ApiCallError({ code: "invalid_argument", message: "Keep the note under 200 characters.", retryable: false });
+    this.calls.push(`reason:${attemptId}=${reason}${note ? `:${note.trim()}` : ""}`);
+    this.reasons.set(attemptId, reason);
+  }
+
+  async getReasonStats(theme: string | null, mode: TrainingMode | null): Promise<ReasonStats> {
+    this.calls.push(`reasonStats:${theme ?? "all"}:${mode ?? "all"}`);
+    // Fixed history plus whatever you tagged in this mock session, filtered like the backend.
+    const base: [ReasonKey, number][] = [["didntLook", 7], ["missedResource", 5], ["miscalculated", 4], ["unknownPattern", 3], ["rushed", 2]];
+    const scale = theme || mode ? 0.5 : 1;
+    const counts = new Map(base.map(([k, n]) => [k, Math.round(n * scale)]));
+    let misclicks = 1;
+    for (const [id, r] of this.reasons) {
+      const a = this.attemptSession.get(id);
+      if (mode && a?.mode !== mode) continue;
+      if (r === "misclick") misclicks++;
+      else counts.set(r, (counts.get(r) ?? 0) + 1);
+    }
+    const tagged = [...counts.values()].reduce((x, y) => x + y, 0);
+    const reasons = REASON_OPTIONS.filter((o) => o.key !== "misclick").map((o) => ({
+      ...o, count: counts.get(o.key) ?? 0, share: tagged ? (counts.get(o.key) ?? 0) / tagged : null,
+    }));
+    const trend = [
+      { week: "2026-10-12", counts: [2, 1, 1, 0, 1].map((n) => Math.round(n * scale)) },
+      { week: "2026-10-19", counts: [3, 2, 1, 1, 0].map((n) => Math.round(n * scale)) },
+      { week: "2026-10-26", counts: [2, 2, 2, 2, 1].map((n) => Math.round(n * scale)) },
+    ];
+    return { reasons, tagged, untagged: 4, misclicks, misclick_warning: misclicks * 4 >= tagged + misclicks && tagged + misclicks >= 8, trend };
   }
 
   async submitLine(sessionId: number, moves: string[]): Promise<CommitFeedback> {
@@ -995,6 +1181,10 @@ export class MockClient implements ApiClient {
       throw new ApiCallError({ code: "conflict", message: "In Commit the line, enter the whole line and press Submit.", retryable: false });
     }
     if (c.finished) return { kind: "illegal", reply: null, finished: true, outcome: null, ...none };
+    if (c.tags === null) {
+      throw new ApiCallError({ code: "conflict", message: "Name the idea first, then press Start solving.", retryable: false });
+    }
+    if (c.danger) return this.refuteMove(s, c, uci);
     const expected = c.puzzle.moves[c.next];
     let ok = uci === expected;
     if (!ok) {
@@ -1039,11 +1229,49 @@ export class MockClient implements ApiClient {
     return { kind: "correct", reply, finished: false, outcome: null, move_sound: moveSound, reply_sound: replySound };
   }
 
+  /** Danger spotting: one move, the refutation's first (any mate counts). */
+  private refuteMove(s: MockSession, c: NonNullable<MockSession["current"]>, uci: string): MoveFeedback {
+    const d = c.danger!;
+    if (d.phase !== "refute") throw new ApiCallError({ code: "conflict", message: "Make your call first: Safe or Unsafe.", retryable: false });
+    const expected = c.puzzle.moves[1];
+    const probe = new Chess(c.chess.fen());
+    try {
+      probe.move(uciToMove(uci));
+    } catch {
+      return { kind: "illegal", reply: null, finished: false, outcome: null, move_sound: null, reply_sound: null };
+    }
+    const exp = new Chess(c.chess.fen());
+    exp.move(uciToMove(expected));
+    const ok = uci === expected || (exp.isCheckmate() && probe.isCheckmate());
+    const sound = soundOf(c.chess.fen(), uci);
+    if (ok) c.chess.move(uciToMove(uci));
+    else c.firstWrong = [c.chess.fen(), uci];
+    d.phase = "done";
+    c.finished = true;
+    const outcome = this.decideDanger(s, c, ok);
+    return { kind: ok ? "solved" : "wrong", reply: null, finished: true, outcome, move_sound: sound, reply_sound: null };
+  }
+
   async requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse> {
     const s = this.session(sessionId);
     const c = s.current;
     const conflict = (message: string) => new ApiCallError({ code: "conflict", message, retryable: false });
     if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    if (c.danger) {
+      const d = c.danger;
+      if (kind === "hint") {
+        if (d.phase !== "refute") throw conflict("Hint is only offered while you look for the refutation.");
+        const outcome = this.decideDanger(s, c, false);
+        c.hinted = true;
+        return { kind, hint_square: c.puzzle.moves[1].slice(0, 2), answer_fen: null, answer_moves: [], outcome, answer_sounds: [], refute: false };
+      }
+      if (d.phase === "refute" && !c.decided && !c.hinted) throw conflict("Try a Hint first: Show answer unlocks after it.");
+      const outcome = this.decideDanger(s, c, false);
+      d.phase = "done";
+      c.finished = true;
+      const line = d.safe ? [d.candidate] : c.puzzle.moves;
+      return { kind, hint_square: null, answer_fen: c.puzzle.fen, answer_moves: line, outcome, answer_sounds: lineSounds(c.puzzle.fen, line), refute: c.firstWrong !== null };
+    }
     const decide = () => {
       if (c.decided) return null;
       c.decided = c.failed = true;
@@ -1075,6 +1303,15 @@ export class MockClient implements ApiClient {
 
   private outcome(p: MockPuzzle, win: boolean, s: MockSession) {
     const { id, info } = this.queue(p, win, s.rated, s);
+    const sid = [...this.sessions.entries()].find(([, v]) => v === s)?.[0] ?? 0;
+    this.attemptSession.set(id, { session: sid, win, mode: s.mode });
+    const c = s.current;
+    if (c && !win && !c.danger) {
+      c.lostAttempt = id;
+      const idea = this.ideaResult(c);
+      // The mock's FR-5.9 rules (no clock, so never Rushed): first move right then wrong; no tag a motif.
+      c.suggested = c.firstWrong && c.next > 1 && c.firstWrong[0] !== c.start ? "miscalculated" : idea && idea.total > 0 && idea.found === 0 ? "unknownPattern" : null;
+    }
     return {
       win,
       puzzle_id: p.id,
@@ -1085,6 +1322,8 @@ export class MockClient implements ApiClient {
       attempt_id: id,
       lichess: { ...info },
       level_up: null as LadderInfo | null,
+      idea: c && !c.danger ? this.ideaResult(c) : null,
+      danger: null as DangerReveal | null,
     };
   }
 
@@ -1096,30 +1335,35 @@ export class MockClient implements ApiClient {
       throw new ApiCallError({ code: "conflict", message: "Finish the puzzle first: Try again is for after it's over.", retryable: true });
     }
     const chess = new Chess(c.puzzle.fen);
-    chess.move(uciToMove(c.puzzle.moves[0]));
+    if (!c.danger) chess.move(uciToMove(c.puzzle.moves[0]));
     this.calls.push("retry");
     s.current = {
       puzzle: c.puzzle, chess, start: chess.fen(), next: 1, decided: true, failed: false, hinted: false,
-      finished: false, firstWrong: null, practice: true,
+      finished: false, firstWrong: null, practice: true, tags: c.tags ? { setup: [], payoff: [] } : undefined,
+      danger: c.danger ? { ...c.danger, phase: "call", call: null } : undefined,
+      lostAttempt: c.lostAttempt, suggested: c.suggested,
     };
   }
 
   async getSessionStats(sessionId: number): Promise<SessionStats> {
     const s = this.session(sessionId);
-    const played = s.solved + s.failed;
+    const misclicks = [...this.reasons].filter(([id, r]) => r === "misclick" && this.attemptSession.get(id)?.session === sessionId).length;
+    const failed = s.failed - misclicks;
+    const played = s.solved + failed;
     const limit = Math.min(s.spec.queue_size ?? Infinity, s.queue.length);
     return {
       solved: s.solved,
-      failed: s.failed,
+      failed,
       accuracy: played ? s.solved / played : null,
       played,
       queue_size: s.spec.queue_size,
-      finished: played >= limit,
+      finished: played + misclicks >= limit,
       all_time_solved: this.allTime.solved,
       all_time_failed: this.allTime.failed,
       rating_change: this.sessionChange(s),
       mode: s.mode,
       ladder: s.ladder ? this.ladderInfo(s.ladder.key) : null,
+      misclicks,
     };
   }
 
@@ -1154,7 +1398,14 @@ export class MockClient implements ApiClient {
         r("1400", "1400–1599", 19, 12, 15, 3), r("1600", "1600–1799", 9, 5, 7, 2)],
       missing: 0,
       by_mode: [r("standard", "Standard", 44, 31, 37, 6), r("commit_line", "Commit the line", 9, 6, 8, 2),
+        r("name_idea", "Name the idea first", 6, 4, 5, 1), r("danger_spotting", "Danger spotting", 12, 8, 8, 0),
         r("spaced_repetition", "Spaced repetition", 5, 4, 4, 0)],
+      misclicks: 1,
+      misclick_warning: false,
+      details: {
+        replies_correct: 11, replies_total: 17, ideas_found: 5, ideas_total: 9, tags_named: 8,
+        danger_safe: 6, danger_safe_right: 5, danger_blunder: 6, danger_blunder_right: 3,
+      },
     }; // prettier-ignore
   }
 

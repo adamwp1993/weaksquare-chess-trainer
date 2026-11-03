@@ -109,6 +109,8 @@ def test_exclude_everything_included_gives_zero(page) -> None:  # type: ignore[n
     page.get_by_label("Search themes").fill("fork")
     page.get_by_role("checkbox", name=re.compile("^Fork")).check()
     page.keyboard.press("Escape")
+    # Let the first picker finish closing: the exclude picker can sit below the fold (v0.6's taller Modes control).
+    page.get_by_label("Search themes").wait_for(state="hidden")
     page.get_by_test_id("exclude-picker").click()
     page.get_by_label("Search exclude themes").fill("fork")
     page.get_by_role("checkbox", name=re.compile("^Fork")).check()

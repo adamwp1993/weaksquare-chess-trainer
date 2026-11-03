@@ -78,6 +78,7 @@ weaksquare-chess-trainer/
 │  │                           #   v0.3: account.py (sign-in, launch check, sign-out), sync.py (the queue),
 │  │                           #         lichess_history.py (history import)
 │  │                           #   v0.4: engine_install.py (the Stockfish installer), engine.py (EngineService)
+│  │                           #   v0.6: reasons.py (saving mistake reasons)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -158,7 +159,7 @@ weaksquare-chess-trainer/
 | Interface | Implementations | First version |
 |---|---|---|
 | `PuzzleSource` | `LichessDbSource` → `CustomPuzzleSource` | v0.1 → v0.8 |
-| `TrainingMode` | `Standard` (also serves Spaced repetition) → `CommitLine` → `NameIdea`, `DangerSpotting`. Depth ladder is a queue order (`core/ladder.py`), not a mode (v0.5 planning) | v0.1 → v0.5 → v0.6 |
+| `TrainingMode` | `Standard` (also serves Spaced repetition) → `CommitLine` → `NameIdea` (Standard's rules plus tags), `DangerSpotting` (its own call step, `on_call`). Depth ladder is a queue order (`core/ladder.py`), not a mode (v0.5 planning) | v0.1 → v0.5 → v0.6 |
 | `JobRunner` | thread-pool runner | v0.1 |
 | `SecretStore` | `KeyringSecretStore`, `FakeSecretStore` (tests) | v0.3 |
 | `LichessClient` | httpx implementation, fake | v0.3 |
@@ -210,6 +211,52 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-03, v0.6: QA fixes (v0.6-B1 to B10)
+- Context: `qa/QA-v0.6.md` rounds 1 (two majors, six minors) and 2 (B9, minor).
+- Decision:
+  - **B1:** `_danger_candidate` runs the MultiPV search for **every** Danger puzzle, before the coin flip, so a puzzle's load time no longer tells safe from blunder (it did on 14 of 14 in the real app). The trainer says "Preparing the position…" while it waits.
+  - **B5:** `SessionService._player` words evals from the punishing side once you called the real blunder Unsafe (the refutation of a wrong punishing move, the engine panel and the analysis board after it).
+  - **B3:** one refutation search per puzzle: concurrent `get_refutation` calls (the reason prompt and the "Why your move fails" panel) wait on the running search (`_Current.refuting`).
+  - **B4:** think time for Rushed starts when the trainer has shown the position: `core/modes/base.py` `OPPONENT_DELAY_MS` / `REPLY_DELAY_MS`, equal to `TrainerView`'s animation delays (`tests/contract/test_trainer_delays.py`).
+  - **B6:** the session bar's "All time" leaves Danger spotting out, like the Stats totals.
+  - **B2:** the note you're writing lives in `TrainerView`, so keys 1–6 save it as clicks do; a note over 200 characters is left out and the reason still saved.
+  - **B9:** Stockfish finishes a forced position early, and forced positions are the ones with no safe move, so a fast load still meant "Unsafe". `TrainerView` keeps every Danger load on "Preparing the position…" for at least the engine think time (read from `get_engine_settings` at every Danger load, so a think time changed mid-session counts at once: B10). It's padded in the UI, which is where the timing shows, rather than with a sleep in the session service.
+  - **B7, B8:** the safe verdict's wording, whole-number evenly labelled y ticks on the reason trend (`interval: 0`), and no promise of an unshipped feature in the User Guide.
+- Alternatives (B1): padding blunder loads with a sleep (still a timing side channel under load; and the search may as well be real); prefetching (see the session entry).
+- Consequences: every Danger puzzle costs one engine search (about the think time) to appear.
+
+### 2026-11-03, v0.6: Front end for Name the idea, Danger spotting and the reason chips
+- Context: the trainer view and the filters panel for FR-4.3, FR-4.4 and §7.3, and the Stats additions.
+- Decision:
+  - The Modes control became a **vertical** segmented control: five modes don't fit one row in the panel. The depth-ladder order is disabled outside Standard and Commit (`LADDER_MODES` in `state/modes.ts`), with a note if it was already chosen.
+  - `TrainerView` gains two branches like Commit's: **Name the idea** keeps the board read-only until `set_idea_tags` succeeds (`components/IdeaTags.tsx`); **Danger spotting** shows the raw position with an arrow on `candidate`, a call panel (`components/DangerCall.tsx`, keys **S**/**U**), and after a correct Unsafe flips the board to the punishing side for one move. The engine panel's start position is the raw FEN in Danger spotting (no opponent move).
+  - The idea pickers' lists live in `web/src/state/ideas.ts` (keys and names), kept equal to `core/themes.py` by `tests/contract/test_idea_lists.py`, rather than another bridge call for a fixed list.
+  - **Reason chips** (`components/ReasonChips.tsx`) sit **below the board** (FR-5.8): in the side column they pushed the engine panel off-screen and the page scrolled. They're asked for (`get_reason_prompt`) once the lost puzzle is over, and survive Try again. Keys 1–6.
+  - Stats: a **Why you missed** tab (`components/ReasonStatsPanel.tsx`) with a stacked weekly bar chart. Its colors are categorical slots 1–5 of the dataviz reference palette, validated against Mantine's light (`#ffffff`) and dark (`#242424`) surfaces; three light steps are under 3:1, so the chart always has its legend (kept in stack order with `itemSorter: null`) and a table view.
+- Alternatives: a Select for the Modes control (hides the choices behind a click); reason chips in the side column (see above); serving the idea lists over the bridge.
+- Consequences: the trainer view has three mode branches now (Commit, Name, Danger). A new mode that is played move by move still needs none.
+
+### 2026-11-03, v0.6: Session, bridge and Stats for the new modes and mistake reasons
+- Context: wiring FR-4.3, FR-4.4 and §7.3 through `SessionService`, the bridge and the Stats page.
+- Decision:
+  - **Danger spotting picks its candidate in `next_puzzle`**: a coin flip on the injected `rng` (or the owed safe slot), then, for a safe slot only, `validate_fen` → the **interactive** `EngineService.analyse(..., multipv=5)` from the blunderer's side. The session refuses to start without a ready engine (`engine_not_installed`). An engine failure on one puzzle shows the blunder and owes a safe one, rather than failing the session. `PuzzleView` gains `candidate`, and `opponent_move` is empty in this mode, so the real blunder never crosses the bridge before the end (pinned by a test). Danger attempts are recorded with no sync fields (`local`), `rated` forced off, and are excluded from `srs_rows` and the FR-3.9 history subqueries (`SOLVED_IDS`, `MISSED_IDS`).
+  - **The reason prompt lives on the session** (`reason_prompt`): what the FR-5.9 rules need is captured when a loss is recorded (`_ReasonBase`), and the refutation part comes from the cached `get_refutation` (fetched if an engine is ready). The front end asks once the puzzle is over. `ReasonsService.set_reason` validates and appends; it takes the suggestion from the session (`suggestion_for`) rather than from the UI. Try again keeps the chips' attempt.
+  - **Misclicks are excluded in SQL by the latest reason** (`LATEST_REASON` / `NOT_MISCLICK` in `repos/user_data.py`): the session and all-time tallies, the depth-ladder window and the Stats rows. The sync queue never reads `mistake_reasons`, so a misclick is still sent as a loss.
+  - **Stats**: Danger-spotting attempts count in By mode and the new mode details only, not overall or per theme, length or rating (spotting the danger isn't solving the puzzle). `get_reason_stats(theme, mode)` returns the breakdown and a trend by local calendar week (the injected clock's `local_date`).
+  - Bridge: `set_idea_tags`, `call_danger`, `get_reason_prompt`, `set_mistake_reason` and `get_reason_stats` (allowlist updated); `UiSettings.reasons_ask` / `rushed_s` (`reasons.ask`, `reasons.rushed_s`); `dto.TrainingMode` names the five modes once.
+- Alternatives: prefetching the next Danger candidate in the background (saves about the think time per safe puzzle, but needs a second engine request path and cancellation; not needed at a 1 s default); a `reason` column updated in place (see the entry below).
+- Consequences: loading a safe Danger puzzle waits for one engine search (the UI shows "Preparing the position…"). Changing a reason re-counts everything at once, since nothing is cached.
+
+### 2026-11-03, v0.6: Name the idea, Danger spotting and mistake reasons: modes, rules and storage
+- Context: FR-4.3, FR-4.4 and §7.3 (FR-5.6–5.10), with Adam's v0.6 planning decisions.
+- Decision:
+  - **Storage** (user.db `0005_reasons_modes.sql`, nullable columns only): `attempts.idea_tags` (JSON), `idea_found`, `idea_total`, `idea_extra`, `danger_candidate`, `danger_safe`, `danger_call`, plus the `mistake_reasons` table from REQUIREMENTS §4. Reasons are append-only too: choosing another chip adds a row and the latest row per `(source, ref_id)` counts, so the attempts log itself is never updated for a reason.
+  - **Name the idea** (`core/modes/name_idea.py`): `NameIdeaMode` subclasses `StandardMode` (its state adds the tags). `set_tags` must come before the first move. `grade_tags` compares your tags with `core.themes.motif_themes` (the Motifs, Advanced, Mate patterns and Special moves groups), whatever slot they're in. `IDEA_SETUP` / `IDEA_PAYOFF` only split the pickers.
+  - **Danger spotting** (`core/modes/danger.py`): its own state machine, `on_call(state, call)` then, after a correct Unsafe on the real blunder, one `on_move` for the refutation's first move. `safe_candidates` is pure over `ScoredMove`s (mover's side), so the 50 cp rule is unit-tested without an engine. Mate scores map to large values, and a mate against the mover is never safe. `wants_safe` keeps an "owed" safe slot when a puzzle had no safe move.
+  - **Reasons** (`core/reasons.py`): the reason set in FR-5.6 order (keys 1–6), and `suggest(ReasonContext)` with the FR-5.9 rules in a fixed order (rushed, miscalculated, missedResource, unknownPattern). `StandardState` gained `position_ms` / `decisive_ms` so "rushed" measures the deciding move's own think time.
+- Alternatives: putting a `reason` column on `attempts` and updating it (breaks decision 4's append-only log); grading idea tags by slot (Lichess has no role data to grade against); asking Stockfish for every Danger move list (only the safe slot needs the engine).
+- Consequences: Danger spotting and Name the idea plug into `SessionService`'s registry; Danger adds a call step to the trainer view, like Commit's Submit.
 
 ### 2026-11-03, after v0.5: The board re-measures itself on every press
 - Context: Adam, after signing off v0.5: a move only registered when he clicked the middle of a square. Chessground caches the board's screen position and re-measures only on a window resize, a scroll, or a change in the board's own size (its ResizeObserver). Content above the board (a notice, the session bar wrapping, the dev banner, the filters panel in a narrow window) can move the board without any of those, so clicks were mapped with the old position, off by up to the shift.

@@ -12,6 +12,12 @@ from typing import Literal, Protocol, TypeVar
 from weaksquare.core.move_sounds import MoveSound
 from weaksquare.core.puzzle import Puzzle
 
+# The trainer view's animation delays (web/src/views/TrainerView.tsx; tests/contract/test_trainer_delays.py
+# keeps them equal): the opponent's first move plays this long after the puzzle loads, and each reply this
+# long after your move. Think time for the mistake-reason suggestion starts once they've played (v0.6-B4).
+OPPONENT_DELAY_MS = 500
+REPLY_DELAY_MS = 300
+
 HelpUsed = Literal["none", "hint", "answer", "explain"]
 HelpKind = Literal["hint", "answer"]  # Explain joins in v0.7
 FeedbackKind = Literal["correct", "solved", "wrong", "illegal"]

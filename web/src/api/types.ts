@@ -109,13 +109,15 @@ export interface UiSettings {
   color_scheme: "light" | "dark" | "auto";
   sounds: SoundSettings;
   auto_check: boolean;
-  mode: "standard" | "commit_line" | "spaced_repetition";
+  mode: "standard" | "commit_line" | "name_idea" | "danger_spotting" | "spaced_repetition";
   show_length: boolean;
   ladder_threshold: number;
   ladder_window: number;
   srs_intervals: number[];
   filters_collapsed: boolean;
   time_offset_days: number | null;
+  reasons_ask: "always" | "off";
+  rushed_s: number;
 }
 
 export interface SessionInfo {
@@ -123,7 +125,7 @@ export interface SessionInfo {
   match_count: number;
   queue_size: number | null;
   empty_buckets: number[];
-  mode: "standard" | "commit_line" | "spaced_repetition";
+  mode: "standard" | "commit_line" | "name_idea" | "danger_spotting" | "spaced_repetition";
 }
 
 export interface PuzzleView {
@@ -133,11 +135,12 @@ export interface PuzzleView {
   opponent_move: string;
   player_color: "white" | "black";
   rating: number;
-  opponent_sound: "move" | "capture" | "check" | "checkmate" | "castle";
+  opponent_sound: "move" | "capture" | "check" | "checkmate" | "castle" | null;
   already_played: boolean;
-  mode: "standard" | "commit_line" | "spaced_repetition";
+  mode: "standard" | "commit_line" | "name_idea" | "danger_spotting" | "spaced_repetition";
   solution_plies: number | null;
   max_plies: number | null;
+  candidate: string | null;
 }
 
 export interface ThemeLabel {
@@ -163,6 +166,24 @@ export interface LadderInfo {
   top: boolean;
 }
 
+export interface IdeaResult {
+  found: number;
+  total: number;
+  extra: number;
+  correct: ThemeLabel[];
+  wrong: ThemeLabel[];
+  missed: ThemeLabel[];
+}
+
+export interface DangerReveal {
+  candidate: string;
+  is_safe: boolean;
+  call: "safe" | "unsafe" | null;
+  best_score: string | null;
+  candidate_score: string | null;
+  line: string[];
+}
+
 export interface Outcome {
   win: boolean;
   puzzle_id: string;
@@ -173,6 +194,30 @@ export interface Outcome {
   attempt_id: number;
   lichess: AttemptRating | null;
   level_up: LadderInfo | null;
+  idea: IdeaResult | null;
+  danger: DangerReveal | null;
+}
+
+export interface DangerFeedback {
+  call: "safe" | "unsafe";
+  correct: boolean;
+  refute: boolean;
+  fen: string;
+  blunder_sound: "move" | "capture" | "check" | "checkmate" | "castle" | null;
+  outcome: Outcome | null;
+}
+
+export interface ReasonOption {
+  key: "didntLook" | "missedResource" | "miscalculated" | "unknownPattern" | "rushed" | "misclick";
+  label: string;
+  gap: "process" | "calculation" | "knowledge" | "time" | "noise";
+}
+
+export interface ReasonPrompt {
+  attempt_id: number;
+  source: "puzzle" | "danger";
+  suggested: "didntLook" | "missedResource" | "miscalculated" | "unknownPattern" | "rushed" | "misclick" | null;
+  reasons: ReasonOption[];
 }
 
 export interface MoveFeedback {
@@ -232,8 +277,9 @@ export interface SessionStats {
   all_time_solved: number;
   all_time_failed: number;
   rating_change: number | null;
-  mode: "standard" | "commit_line" | "spaced_repetition";
+  mode: "standard" | "commit_line" | "name_idea" | "danger_spotting" | "spaced_repetition";
   ladder: LadderInfo | null;
+  misclicks: number;
 }
 
 export interface StatRow {
@@ -246,6 +292,18 @@ export interface StatRow {
   line_wrong_rate: number | null;
 }
 
+export interface ModeDetails {
+  replies_correct: number;
+  replies_total: number;
+  ideas_found: number;
+  ideas_total: number;
+  tags_named: number;
+  danger_safe: number;
+  danger_safe_right: number;
+  danger_blunder: number;
+  danger_blunder_right: number;
+}
+
 export interface StatsReport {
   overall: StatRow;
   by_theme: StatRow[];
@@ -253,6 +311,31 @@ export interface StatsReport {
   by_rating: StatRow[];
   missing: number;
   by_mode: StatRow[];
+  misclicks: number;
+  misclick_warning: boolean;
+  details: ModeDetails;
+}
+
+export interface ReasonStatRow {
+  key: "didntLook" | "missedResource" | "miscalculated" | "unknownPattern" | "rushed" | "misclick";
+  label: string;
+  gap: "process" | "calculation" | "knowledge" | "time" | "noise";
+  count: number;
+  share: number | null;
+}
+
+export interface ReasonWeek {
+  week: string;
+  counts: number[];
+}
+
+export interface ReasonStats {
+  reasons: ReasonStatRow[];
+  tagged: number;
+  untagged: number;
+  misclicks: number;
+  misclick_warning: boolean;
+  trend: ReasonWeek[];
 }
 
 export interface UpdateOffer {

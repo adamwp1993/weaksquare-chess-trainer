@@ -27,10 +27,12 @@ import {
   RatingSlider,
   SideSelect,
 } from "../components/FilterControls";
+import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { PresetMenu } from "../components/PresetMenu";
 import { RatioEditor } from "../components/RatioEditor";
 import { ThemePicker } from "../components/ThemePicker";
-import { MODES, modeLabel, shortDate } from "../state/modes";
+import { useEngineStatus } from "../state/engine";
+import { LADDER_MODES, MODES, modeLabel, shortDate } from "../state/modes";
 
 const COUNT_DEBOUNCE_MS = 250;
 // The panel scrolls on its own, so the page (and the board beside it) never does.
@@ -117,6 +119,7 @@ export function MixerView({
   const [countError, setCountError] = useState<string | null>(null);
   const [counting, setCounting] = useState(false);
   const [srs, setSrs] = useState<SrsStatus | null>(null);
+  const [engine, refreshEngine] = useEngineStatus();
   const [ladder, setLadder] = useState<LadderInfo | null>(null);
   const requestId = useRef(0);
   const savedThemes = useRef<string[]>([]);
@@ -179,6 +182,10 @@ export function MixerView({
   const usingRatios = spec.ratios.length > 0;
   const srsMode = mode === "spaced_repetition";
   const ladderOrder = spec.order === "depth_ladder";
+  const ladderAllowed = LADDER_MODES.includes(mode); // FR-3.11
+  const ladderBlocked = ladderOrder && !ladderAllowed;
+  const dangerMode = mode === "danger_spotting";
+  const needsEngine = dangerMode && engine !== null && engine.state !== "ready"; // FR-4.4
   const modeInfo = MODES.find((m) => m.value === mode);
 
   const toggleRatios = (on: boolean) => {
@@ -214,6 +221,7 @@ export function MixerView({
           <SegmentedControl
             size="xs"
             fullWidth
+            orientation="vertical"
             value={mode}
             onChange={(v) => onMode(v as TrainingMode)}
             data={MODES.map((m) => ({ value: m.value, label: m.label }))}
@@ -236,6 +244,12 @@ export function MixerView({
             onChange={(e) => onShowLength(e.currentTarget.checked)}
             data-testid="show-length-switch"
           />
+        )}
+        {needsEngine && engine && (
+          <Stack gap={4} data-testid="danger-needs-engine">
+            <Text size="sm">Danger spotting checks its safe moves with Stockfish, so it needs the engine.</Text>
+            <EngineInstallBanner status={engine} onChanged={refreshEngine} />
+          </Stack>
         )}
         {srsMode && (
           <Stack gap={2}>
@@ -347,7 +361,8 @@ export function MixerView({
           endless={spec.queue_size === null}
           onChange={(order) => set({ order })}
           ratios={usingRatios}
-          ladder={ladderOrder ? ladder : null}
+          ladder={ladderOrder && ladderAllowed ? ladder : null}
+          ladderAllowed={ladderAllowed}
         />
         </Stack>
         </fieldset>
@@ -378,15 +393,24 @@ export function MixerView({
         <QueueControls value={spec.queue_size} onChange={(queue_size) => set({ queue_size })} />
         <Switch
           label="Rated"
-          description={rated ? "Solves count toward your Lichess puzzle rating." : "Solves sync to Lichess as unrated."}
-          checked={rated}
+          description={
+            dangerMode
+              ? "Danger spotting stays on this PC: nothing is sent to Lichess."
+              : rated
+                ? "Solves count toward your Lichess puzzle rating."
+                : "Solves sync to Lichess as unrated."
+          }
+          checked={rated && !dangerMode}
+          disabled={dangerMode}
           onChange={(e) => onRated(e.currentTarget.checked)}
           data-testid="rated-switch"
         />
         <Button
           onClick={onStart}
           loading={starting}
-          disabled={srsMode ? !srs || srs.due === 0 : count === 0 || countError !== null}
+          disabled={
+            srsMode ? !srs || srs.due === 0 : count === 0 || countError !== null || ladderBlocked || needsEngine || (dangerMode && engine === null)
+          }
           data-testid="start"
         >
           Start

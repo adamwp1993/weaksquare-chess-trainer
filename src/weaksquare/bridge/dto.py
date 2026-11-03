@@ -13,6 +13,10 @@ from typing import Literal
 from weaksquare.core.filters import FilterSpec, RatioBucket
 from weaksquare.core.move_sounds import MoveSound
 
+# The Modes control (§6), v0.5 + v0.6.
+TrainingMode = Literal["standard", "commit_line", "name_idea", "danger_spotting", "spaced_repetition"]
+ReasonKey = Literal["didntLook", "missedResource", "miscalculated", "unknownPattern", "rushed", "misclick"]
+
 
 @dataclass(frozen=True)
 class ApiError:
@@ -82,13 +86,15 @@ class UiSettings:
     color_scheme: Literal["light", "dark", "auto"]  # FR-1.12; "auto" is Match system
     sounds: SoundSettings  # FR-1.13
     auto_check: bool  # FR-2.5: check for a newer puzzle database once a day
-    mode: Literal["standard", "commit_line", "spaced_repetition"]  # v0.5: the Modes control (§6)
+    mode: TrainingMode  # v0.5: the Modes control (§6)
     show_length: bool  # Commit the line: Show move count (FR-4.2)
     ladder_threshold: int  # FR-4.5, percent
     ladder_window: int  # FR-4.5, attempts
     srs_intervals: list[int]  # FR-4.6, days per box
     filters_collapsed: bool  # FR-1.14
     time_offset_days: int | None  # FR-4.6 fast-forward: --dev runs only (None in the real app)
+    reasons_ask: Literal["always", "off"]  # FR-5.8: ask why you missed a puzzle
+    rushed_s: int  # FR-5.9: a deciding move faster than this suggests Rushed
 
 
 @dataclass(frozen=True)
@@ -126,7 +132,7 @@ class SessionInfo:
     match_count: int
     queue_size: int | None
     empty_buckets: list[int]  # ratio groups with no matching puzzles, left out of this session
-    mode: Literal["standard", "commit_line", "spaced_repetition"]  # v0.5 (§6)
+    mode: TrainingMode  # v0.5 (§6)
 
 
 @dataclass(frozen=True)
@@ -135,15 +141,16 @@ class PuzzleView:
 
     number: int
     puzzle_id: str
-    fen: str  # before the opponent's move
-    opponent_move: str  # UCI, played (animated) first
-    player_color: Literal["white", "black"]
+    fen: str  # before the opponent's move (Danger spotting: the position you judge the candidate in)
+    opponent_move: str  # UCI, played (animated) first; empty in Danger spotting
+    player_color: Literal["white", "black"]  # Danger spotting: the side about to move
     rating: int
-    opponent_sound: MoveSound  # FR-1.13
+    opponent_sound: MoveSound | None  # FR-1.13; None in Danger spotting
     already_played: bool  # Lichess has seen this puzzle from you: rating unaffected (badge)
-    mode: Literal["standard", "commit_line", "spaced_repetition"]
+    mode: TrainingMode
     solution_plies: int | None  # Commit the line with Show move count only: moves to enter, both sides
     max_plies: int | None  # Commit the line: the longest line Submit accepts
+    candidate: str | None  # Danger spotting: the highlighted move (UCI); never says whether it's the blunder
 
 
 @dataclass(frozen=True)
@@ -218,6 +225,30 @@ class CommitFeedback:
 
 
 @dataclass(frozen=True)
+class IdeaResult:
+    """Name the idea first (FR-4.3): your tags against the puzzle's motif themes."""
+
+    found: int
+    total: int  # the puzzle's motifs; 0 means no tag score
+    extra: int
+    correct: list[ThemeLabel]  # your tags that were motifs
+    wrong: list[ThemeLabel]  # your tags that weren't
+    missed: list[ThemeLabel]  # motifs you didn't name
+
+
+@dataclass(frozen=True)
+class DangerReveal:
+    """Danger spotting (FR-4.4): the truth about the candidate, after the end."""
+
+    candidate: str  # UCI
+    is_safe: bool
+    call: Literal["safe", "unsafe"] | None  # None if you moved on (or used Show answer) before calling
+    best_score: str | None  # a safe candidate: Stockfish's best line, from the blunderer's side…
+    candidate_score: str | None  # …and the candidate's
+    line: list[str]  # after the candidate: Stockfish's line (safe) or the refutation (the blunder)
+
+
+@dataclass(frozen=True)
 class Outcome:
     """Sent once per puzzle, when the attempt is decided; themes are revealed here."""
 
@@ -230,6 +261,37 @@ class Outcome:
     attempt_id: int
     lichess: AttemptRating | None  # None when the attempt isn't synced (not a Lichess puzzle)
     level_up: LadderInfo | None  # the depth ladder moved up with this attempt (FR-4.5)
+    idea: IdeaResult | None  # Name the idea first (FR-4.3)
+    danger: DangerReveal | None  # Danger spotting (FR-4.4)
+
+
+@dataclass(frozen=True)
+class DangerFeedback:
+    """Danger spotting: your Safe/Unsafe call."""
+
+    call: Literal["safe", "unsafe"]
+    correct: bool
+    refute: bool  # Unsafe on the real blunder: it was played; now find the refutation's first move
+    fen: str  # the position after the call (after the blunder when you refute)
+    blunder_sound: MoveSound | None  # the blunder's sound, when it was played
+    outcome: Outcome | None  # set when the call decided the attempt
+
+
+@dataclass(frozen=True)
+class ReasonOption:
+    key: ReasonKey
+    label: str
+    gap: Literal["process", "calculation", "knowledge", "time", "noise"]
+
+
+@dataclass(frozen=True)
+class ReasonPrompt:
+    """§7.3: why did you miss it? The chips are `reasons`, in order (keys 1–6)."""
+
+    attempt_id: int
+    source: Literal["puzzle", "danger"]
+    suggested: ReasonKey | None  # pre-highlighted only; saved when you click (FR-5.9)
+    reasons: list[ReasonOption]
 
 
 @dataclass(frozen=True)
@@ -266,8 +328,9 @@ class SessionStats:
     all_time_solved: int
     all_time_failed: int
     rating_change: int | None  # FR-6.11c: summed only from changes Lichess returned
-    mode: Literal["standard", "commit_line", "spaced_repetition"]
+    mode: TrainingMode
     ladder: LadderInfo | None  # depth ladder (FR-4.5)
+    misclicks: int  # FR-5.10: left out of solved/failed/accuracy
 
 
 @dataclass(frozen=True)
@@ -282,6 +345,21 @@ class StatRow:
 
 
 @dataclass(frozen=True)
+class ModeDetails:
+    """FR-9.3: each mode's own measure, as counts (a share is n/a when its total is 0)."""
+
+    replies_correct: int  # Commit the line: calculation accuracy = replies_correct ÷ replies_total
+    replies_total: int
+    ideas_found: int  # Name the idea: ideas found = ideas_found ÷ ideas_total…
+    ideas_total: int
+    tags_named: int  # …tags right = ideas_found ÷ tags_named
+    danger_safe: int  # Danger spotting: safe candidates shown, and called right
+    danger_safe_right: int
+    danger_blunder: int  # real blunders shown, and called right and refuted
+    danger_blunder_right: int
+
+
+@dataclass(frozen=True)
 class StatsReport:
     overall: StatRow
     by_theme: list[StatRow]
@@ -289,6 +367,36 @@ class StatsReport:
     by_rating: list[StatRow]
     missing: int  # attempts on puzzles no longer in the database
     by_mode: list[StatRow]  # v0.5 (FR-9.1)
+    misclicks: int  # v0.6 (FR-5.10): left out of every row above
+    misclick_warning: bool  # an unusually high share of your tagged misses are misclicks
+    details: ModeDetails  # v0.6 (FR-9.3)
+
+
+@dataclass(frozen=True)
+class ReasonStatRow:
+    key: ReasonKey
+    label: str
+    gap: Literal["process", "calculation", "knowledge", "time", "noise"]
+    count: int
+    share: float | None  # of the tagged misses (misclicks aside)
+
+
+@dataclass(frozen=True)
+class ReasonWeek:
+    week: str  # ISO date of the Monday
+    counts: list[int]  # per reason, in `ReasonStats.reasons` order
+
+
+@dataclass(frozen=True)
+class ReasonStats:
+    """FR-9.7: why you missed puzzles (for one theme and/or mode when filtered)."""
+
+    reasons: list[ReasonStatRow]  # every reason except misclick, in FR-5.6 order
+    tagged: int
+    untagged: int  # misses you didn't tag
+    misclicks: int  # shown separately
+    misclick_warning: bool
+    trend: list[ReasonWeek]  # oldest first
 
 
 @dataclass(frozen=True)
@@ -424,7 +532,12 @@ EXPORTED: list[type] = [
     ThemeLabel,
     AttemptRating,
     LadderInfo,
+    IdeaResult,
+    DangerReveal,
     Outcome,
+    DangerFeedback,
+    ReasonOption,
+    ReasonPrompt,
     MoveFeedback,
     HelpResponse,
     PlyGrade,
@@ -433,7 +546,11 @@ EXPORTED: list[type] = [
     SrsStatus,
     SessionStats,
     StatRow,
+    ModeDetails,
     StatsReport,
+    ReasonStatRow,
+    ReasonWeek,
+    ReasonStats,
     UpdateOffer,
     AccountStatus,
     SyncStatus,

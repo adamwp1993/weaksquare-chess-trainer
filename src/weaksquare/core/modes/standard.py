@@ -18,7 +18,15 @@ import chess
 
 from weaksquare.core.chess_rules import is_acceptable, parse_move, start_position
 from weaksquare.core.errors import ConflictError, ValidationError
-from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult, HelpUsed
+from weaksquare.core.modes.base import (
+    OPPONENT_DELAY_MS,
+    REPLY_DELAY_MS,
+    AttemptResult,
+    Feedback,
+    HelpKind,
+    HelpResult,
+    HelpUsed,
+)
 from weaksquare.core.move_sounds import sound_for, sounds_for_line
 from weaksquare.core.puzzle import Puzzle
 
@@ -38,6 +46,8 @@ class StandardState:
     start_fen: str = ""  # after the opponent's first move: where you start solving
     first_wrong: tuple[str, str] | None = None  # (FEN before it, UCI): the move that lost the puzzle
     practice: bool = False  # Try again (FR-5.12): `attempt` is a placeholder; nothing is ever recorded
+    position_ms: int = 0  # when the position you're moving in appeared (mistake reasons, FR-5.9)
+    decisive_ms: int | None = None  # think time of the move that decided the attempt; None if help did
 
 
 class StandardMode:
@@ -45,7 +55,8 @@ class StandardMode:
 
     def start(self, puzzle: Puzzle, now_ms: int) -> StandardState:
         board, _ = start_position(puzzle.fen, puzzle.moves)  # raises PuzzleDataError if the line is illegal
-        return StandardState(puzzle=puzzle, board=board, next_index=1, started_ms=now_ms, start_fen=board.fen())
+        return StandardState(puzzle=puzzle, board=board, next_index=1, started_ms=now_ms, start_fen=board.fen(),
+                             position_ms=now_ms + OPPONENT_DELAY_MS)  # fmt: skip
 
     def start_practice(self, puzzle: Puzzle, now_ms: int) -> StandardState:
         """FR-5.12 Try again (not scored): the same puzzle from the start, with the attempt already
@@ -87,6 +98,7 @@ class StandardMode:
             if not state.failed:
                 state.failed = True
                 if state.attempt is None:  # already decided by help, or a practice run (FR-5.12)
+                    state.decisive_ms = max(0, now_ms - state.position_ms)
                     decided = self._decide(state, win=False, now_ms=now_ms)
             return Feedback("wrong", None, False, decided, move_sound)
 
@@ -105,6 +117,7 @@ class StandardMode:
         reply_sound = sound_for(state.board, reply)
         state.board.push(reply)
         state.next_index += 1
+        state.position_ms = now_ms + REPLY_DELAY_MS
         return Feedback("correct", reply.uci(), False, None, move_sound, reply_sound)
 
     def on_help(self, state: StandardState, kind: HelpKind, now_ms: int) -> HelpResult:

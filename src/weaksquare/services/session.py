@@ -4,6 +4,10 @@ v0.5: the training mode is chosen per session (§6): Standard, Commit the line (
 repetition (FR-4.6, a queue of due puzzles played with Standard's rules). The depth ladder (FR-4.5) is
 an order: the session draws from the current level and moves up when the window says so.
 
+v0.6: Name the idea first (FR-4.3, Standard's rules after tagging) and Danger spotting (FR-4.4: the
+interactive engine checks the safe candidates; results stay local). After a lost puzzle, the reason
+prompt (§7.3) suggests why you missed it (FR-5.9).
+
 Session state (queue, current puzzle, mode state) is kept in memory; every decided attempt is
 appended to `attempts` at once, so closing the app never loses a result.
 """
@@ -26,21 +30,35 @@ from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import (
     REFUTATION_MIN_PLIES,
+    EngineError,
     EngineNotInstalled,
     refutation_plies,
     validate_fen,
     validate_line,
 )
-from weaksquare.core.errors import ConflictError, NotFoundError, StaleKeyError, ValidationError
+from weaksquare.core.errors import AppError, ConflictError, NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LEVELS, LadderStatus, ladder_key
 from weaksquare.core.ladder import status as ladder_status
-from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
+from weaksquare.core.modes.base import OPPONENT_DELAY_MS, AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.commit_line import CommitLineMode, CommitResult, CommitState, max_plies
+from weaksquare.core.modes.danger import MODE as DANGER
+from weaksquare.core.modes.danger import MULTIPV as DANGER_MULTIPV
+from weaksquare.core.modes.danger import (
+    CallResult,
+    DangerMode,
+    DangerState,
+    ScoredMove,
+    pick_safe,
+    safe_candidates,
+    wants_safe,
+)
+from weaksquare.core.modes.name_idea import IdeaScore, IdeaTags, NameIdeaMode, NameIdeaState
 from weaksquare.core.modes.standard import StandardMode, StandardState
 from weaksquare.core.move_sounds import MoveSound, sounds_for_line
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
+from weaksquare.core.reasons import DEFAULT_RUSHED_S, ReasonContext, is_forcing_reply, suggest
 from weaksquare.core.scoring import MIX, angle_for
 from weaksquare.core.srs import DEFAULT_INTERVALS, Card, Review, due_order, next_due, schedule
 from weaksquare.core.srs import MODE as SRS_MODE
@@ -49,9 +67,10 @@ from weaksquare.services.engine import Analysis, EngineService
 log = logging.getLogger(__name__)
 
 MAX_BAD_PUZZLES = 20
-STANDARD, COMMIT = "standard", "commit_line"
-MODES = (STANDARD, COMMIT, SRS_MODE)  # the Modes control, in order (v0.5)
-State = StandardState | CommitState
+STANDARD, COMMIT, NAME = "standard", "commit_line", "name_idea"
+MODES = (STANDARD, COMMIT, NAME, DANGER, SRS_MODE)  # the Modes control, in order (v0.5, v0.6)
+LADDER_MODES = (STANDARD, COMMIT)  # FR-3.11: the depth ladder works in these
+State = StandardState | CommitState | DangerState  # NameIdeaState is a StandardState
 
 
 class PuzzleSource(Protocol):
@@ -124,6 +143,10 @@ class TrainingPrefs(Protocol):
 
     def ladder_window(self) -> int: ...
 
+    def reasons_ask(self) -> str: ...  # v0.6 (FR-5.8): 'always' or 'off'
+
+    def rushed_s(self) -> int: ...  # v0.6 (FR-5.9)
+
 
 class _DefaultPrefs:
     def srs_intervals(self) -> tuple[int, ...]:
@@ -134,6 +157,12 @@ class _DefaultPrefs:
 
     def ladder_window(self) -> int:
         return DEFAULT_WINDOW
+
+    def reasons_ask(self) -> str:
+        return "always"
+
+    def rushed_s(self) -> int:
+        return DEFAULT_RUSHED_S
 
 
 class Sessions(Protocol):
@@ -163,10 +192,26 @@ class Refutation:
     line: tuple[str, ...]  # the reply line after it (UCI)
     score: str | None  # from your side (FR-7.2); None when the game ended
     game_over: str | None = None
+    mate: int | None = None  # from your side: < 0 means the refutation mates you (mistake reasons, FR-5.9)
 
 
 AnalysisPurpose = Literal["start", "panel", "board"]
 PURPOSES = ("start", "panel", "board")
+
+
+@dataclass(frozen=True)
+class _ReasonBase:
+    """What the reason suggestion needs from a lost attempt, taken when it's recorded (FR-5.9). The
+    refutation part is added when the prompt is asked for, from Stockfish's answer to `first_wrong`."""
+
+    attempt_id: int
+    source: str  # 'puzzle' / 'danger'
+    decisive_ms: int | None
+    first_right_later_wrong: bool
+    first_wrong: tuple[str, str] | None
+    idea_found: int | None
+    idea_total: int | None
+    called_blunder_safe: bool
 
 
 @dataclass
@@ -175,6 +220,9 @@ class _Current:
     started_at: str
     refutation: Refutation | None = None
     analyses: dict[str, Analysis] = field(default_factory=dict)  # by FEN, for this puzzle
+    reason: _ReasonBase | None = None  # set when the attempt was recorded as a loss
+    suggested: str | None = None  # the last suggestion the prompt gave
+    refuting: threading.Event | None = None  # a refutation search is running; set when it's done (v0.6-B3)
 
 
 @dataclass
@@ -204,6 +252,8 @@ class _Session:
     ladder_base: FilterSpec | None = None  # the filters as chosen (order = depth_ladder); `spec` is the level's pool
     ladder: LadderStatus | None = None
     ladder_levels: list[int] = field(default_factory=list)  # open levels known at start (see ladder_preview)
+    # v0.6: Danger spotting owes the next puzzle a safe candidate when one had none (FR-4.4).
+    owed_safe: bool = False
 
 
 @dataclass(frozen=True)
@@ -225,11 +275,12 @@ class PuzzleView:
     opponent_move: str  # played (animated) first
     player_color: str
     rating: int
-    opponent_sound: MoveSound  # FR-1.13: the opponent's first move plays a sound too
+    opponent_sound: MoveSound | None  # FR-1.13: the opponent's first move plays a sound too (None: Danger spotting)
     already_played: bool = False  # Lichess has seen it from you: rating unaffected (badge)
     mode: str = STANDARD
     solution_plies: int | None = None  # Commit the line with Show move count only: how many moves to enter
     max_plies: int | None = None  # Commit the line: the longest line Submit accepts
+    candidate: str | None = None  # Danger spotting: the highlighted move (never says if it's the blunder)
 
 
 @dataclass(frozen=True)
@@ -242,6 +293,42 @@ class Outcome:
     attempt_id: int = 0
     lichess: Any = None  # RatingInfo: the Lichess rating change, or why there isn't one (FR-6.11b)
     level_up: LadderStatus | None = None  # the depth ladder moved up with this attempt (FR-4.5)
+    idea: IdeaScore | None = None  # Name the idea: your tags, graded (FR-4.3)
+    danger: DangerReveal | None = None  # Danger spotting: the truth about the candidate (FR-4.4)
+
+
+@dataclass(frozen=True)
+class DangerReveal:
+    candidate: str
+    is_safe: bool
+    call: str | None
+    best_score: str | None  # safe candidates: Stockfish's best line…
+    candidate_score: str | None  # …and the candidate's, from the blunderer's side
+    line: tuple[str, ...]  # after the candidate: Stockfish's line (safe) or the refutation (the blunder)
+
+
+@dataclass(frozen=True)
+class SafeInfo:
+    """Kept on a Danger state with a safe candidate, for the reveal after the end."""
+
+    best_score: str
+    candidate_score: str
+    line: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DangerOutcome:
+    result: CallResult
+    outcome: Outcome | None
+
+
+@dataclass(frozen=True)
+class ReasonPrompt:
+    """§7.3: ask why you missed this one. `suggested` is only pre-highlighted (FR-5.9)."""
+
+    attempt_id: int
+    source: str
+    suggested: str | None
 
 
 @dataclass(frozen=True)
@@ -284,6 +371,7 @@ class SessionStats:
     rating_change: int | None = None  # FR-6.11c: the sum of the changes Lichess returned
     mode: str = STANDARD
     ladder: LadderStatus | None = None  # depth ladder (FR-4.5): the level and its window
+    misclicks: int = 0  # FR-5.10: left out of solved/failed/accuracy, counted here
 
 
 def _parse_time(text: str) -> datetime:
@@ -322,10 +410,21 @@ class SessionService:
         self._mode_fields = mode_fields or (lambda **kw: None)
         self._standard = StandardMode()
         self._commit = CommitLineMode()
+        self._name = NameIdeaMode()
+        self._danger = DangerMode()
+        self._modes: dict[str, Any] = {COMMIT: self._commit, NAME: self._name, DANGER: self._danger}
         self._sessions: dict[int, _Session] = {}
 
     def _mode_for(self, s: _Session) -> Any:
-        return self._commit if s.mode == COMMIT else self._standard  # SRS plays by Standard's rules
+        return self._modes.get(s.mode, self._standard)  # SRS plays by Standard's rules
+
+    def _require_engine(self) -> EngineService:
+        """Danger spotting checks its safe candidates with Stockfish (FR-4.4, FR-7.2)."""
+        if self._engine is None or self._engine.status().state != "ready":
+            raise EngineNotInstalled(
+                "Danger spotting needs Stockfish to check the safe moves. Install it in Settings → Engine."
+            )
+        return self._engine
 
     def start(
         self, spec: FilterSpec, rated: bool = True, mode: str = STANDARD, show_length: bool = False
@@ -334,6 +433,11 @@ class SessionService:
             raise ValidationError("Unknown training mode.")
         if mode == SRS_MODE:
             return self._start_srs(spec, rated)
+        if spec.depth_ladder and mode not in LADDER_MODES:
+            raise ValidationError("The depth ladder works in Standard and Commit the line. Choose another order.")
+        if mode == DANGER:
+            self._require_engine()
+            rated = False  # FR-4.4: Danger spotting never syncs
         ladder = None
         base = None
         ladder_levels: list[int] = []
@@ -482,18 +586,29 @@ class SessionService:
     def _record(self, s: _Session, result: AttemptResult, commit: CommitResult | None = None) -> Outcome:
         assert s.current is not None
         p = s.current.state.puzzle
+        state = s.current.state
         sync_fields = None
-        if self._sync is not None and self._queue_fields is not None and p.ref.source == "lichess":
+        local_only = s.mode == DANGER  # FR-4.4: Danger spotting stays on this PC
+        if not local_only and self._sync is not None and self._queue_fields is not None and p.ref.source == "lichess":
             q = self._sync.fields_for(p.ref.id)
             # Spaced repetition ignores the filters: nothing was chosen in advance, so `mix` (§8.3).
             angle = MIX if s.mode == SRS_MODE else angle_for(s.spec, p.themes, p.length, length_known=s.show_length)
             sync_fields = self._queue_fields(status="pending", rated=s.rated, angle=angle,
                                              account=q.account, already_played=q.already_played)  # fmt: skip
+        idea = self._name.score(state) if isinstance(state, NameIdeaState) else None
+        danger = state if isinstance(state, DangerState) else None
         extra = self._mode_fields(
             replies_correct=commit.replies_correct if commit else None,
             replies_total=commit.replies_total if commit else None,
             ladder_key=s.ladder.key if s.ladder else None,
             ladder_level=s.ladder.level if s.ladder else None,
+            idea_tags=state.tags.to_json() if isinstance(state, NameIdeaState) and state.tags else None,
+            idea_found=idea.found if idea and idea.total else None,
+            idea_total=idea.total if idea else None,
+            idea_extra=idea.extra if idea and idea.total else None,
+            danger_candidate=danger.candidate if danger else None,
+            danger_safe=danger.is_safe if danger else None,
+            danger_call=danger.call if danger else None,
         )
         aid = self._attempts.append(p.ref, s.id, s.mode, s.current.started_at,
                                     self._clock.now().isoformat(timespec="seconds"), result, p.rating,
@@ -503,8 +618,44 @@ class SessionService:
             found = self._sync.attempt_ratings([aid])
             info = found[0] if found else None
             self._sync.recorded()
+        if not result.win:
+            s.current.reason = self._reason_base(s, aid, result, commit, idea)
         level_up = self._after_ladder_attempt(s)
-        return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating, aid, info, level_up)
+        return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating, aid, info, level_up,
+                       idea, self._reveal(danger) if danger else None)  # fmt: skip
+
+    @staticmethod
+    def _reveal(state: DangerState) -> DangerReveal:
+        info = state.safe_info if isinstance(state.safe_info, SafeInfo) else None
+        if state.is_safe:
+            return DangerReveal(state.candidate, True, state.call, info.best_score if info else None,
+                                info.candidate_score if info else None, info.line if info else ())  # fmt: skip
+        return DangerReveal(state.candidate, False, state.call, None, None, tuple(state.puzzle.moves[1:]))
+
+    def _reason_base(
+        self, s: _Session, aid: int, result: AttemptResult, commit: CommitResult | None, idea: IdeaScore | None
+    ) -> _ReasonBase:
+        assert s.current is not None
+        state = s.current.state
+        if isinstance(state, DangerState):
+            return _ReasonBase(aid, "danger", state.decisive_ms, False, None, None, None,
+                               state.call == "safe" and not state.is_safe)  # fmt: skip
+        # Decided by Submit (Commit the line): the think time is the whole entry, from when the opponent's
+        # first move had played (v0.6-B4).
+        if commit is not None:
+            decisive: int | None = max(0, result.time_ms - OPPONENT_DELAY_MS)
+        else:
+            decisive = state.decisive_ms if isinstance(state, StandardState) else None
+        return _ReasonBase(
+            attempt_id=aid,
+            source="puzzle",
+            decisive_ms=decisive,
+            first_right_later_wrong=result.first_move_correct and result.help_used == "none",
+            first_wrong=state.first_wrong,
+            idea_found=idea.found if idea else None,
+            idea_total=idea.total if idea else None,
+            called_blunder_safe=False,
+        )
 
     def next_puzzle(self, session_id: int) -> PuzzleView | None:
         """The next puzzle, or None when the session is complete. Moving on from an undecided
@@ -548,6 +699,12 @@ class SessionService:
                 s.served += 1
                 s.served_ids.append(puzzle.ref.id)
                 s.current = _Current(state, self._clock.now().isoformat(timespec="seconds"))
+                if isinstance(state, DangerState):
+                    # The raw position, from the side about to move; the blunder itself never reaches
+                    # the front end before the end (FR-4.4).
+                    return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, "",
+                                      "white" if state.board.turn else "black", puzzle.rating, None, False, s.mode,
+                                      candidate=state.candidate)  # fmt: skip
                 played = self._sync.played_before(puzzle.ref.id) if self._sync is not None else False
                 commit = isinstance(state, CommitState)
                 return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, puzzle.moves[0],
@@ -557,13 +714,60 @@ class SessionService:
                                   max_plies(puzzle, s.show_length) if commit else None)  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
 
-    def _start_state(self, s: _Session, puzzle: Puzzle, practice: bool = False) -> State:
+    def _start_state(self, s: _Session, puzzle: Puzzle, practice: bool = False, prev: State | None = None) -> State:
         now = self._clock.monotonic_ms()
+        if s.mode == DANGER:
+            if practice and isinstance(prev, DangerState):
+                state = self._danger.start_practice(puzzle, now, prev.candidate, prev.is_safe)
+                state.safe_info = prev.safe_info
+                return state
+            candidate, is_safe, info = self._danger_candidate(s, puzzle)
+            state = self._danger.start(puzzle, self._clock.monotonic_ms(), candidate, is_safe)
+            state.safe_info = info
+            return state
+        if s.mode == NAME:
+            return self._name.start_practice(puzzle, now) if practice else self._name.start(puzzle, now)
         if s.mode == COMMIT:
             if practice:
                 return self._commit.start_practice(puzzle, now, s.show_length)
             return self._commit.start(puzzle, now, s.show_length)
         return self._standard.start_practice(puzzle, now) if practice else self._standard.start(puzzle, now)
+
+    def _danger_candidate(self, s: _Session, puzzle: Puzzle) -> tuple[str, bool, SafeInfo | None]:
+        """FR-4.4: about half the candidates are a Stockfish-verified safe move. The interactive engine
+        (ARCHITECTURE §3 decision 12) looks at the raw position from the blunderer's side; a puzzle with
+        no safe move shows the blunder and owes the next one a safe candidate."""
+        blunder = puzzle.moves[0]
+        engine = self._require_engine()
+        board = validate_fen(puzzle.fen)  # FR-7.6: validated before the engine sees it
+        mover: Any = "white" if board.turn == chess.WHITE else "black"
+        # The search runs for every puzzle, safe slot or not, so how long a puzzle takes to appear says
+        # nothing about the answer (v0.6-B1).
+        analysis: Analysis | None
+        try:
+            analysis = engine.analyse(board, mover, multipv=DANGER_MULTIPV)
+        except EngineNotInstalled:
+            raise
+        except AppError as e:  # the engine failed once: show the blunder and owe a safe one
+            log.warning("danger spotting: no engine answer for %s (%s)", puzzle.ref, e.message)
+            analysis = None
+        with self._rng_lock:
+            want = wants_safe(self._rng, s.owed_safe)
+        if not want:
+            return blunder, False, None
+        if analysis is None:
+            s.owed_safe = True
+            return blunder, False, None
+        lines = {line.pv[0]: line for line in analysis.lines if line.pv}
+        scored = [ScoredMove(m, line.cp, line.mate) for m, line in lines.items()]
+        with self._rng_lock:
+            pick = pick_safe(self._rng, safe_candidates(scored, blunder))
+        if pick is None:
+            s.owed_safe = True
+            return blunder, False, None
+        s.owed_safe = False
+        best, chosen = analysis.lines[0], lines[pick.move]
+        return pick.move, True, SafeInfo(best.score, chosen.score, tuple(chosen.pv[1:]))
 
     def _next_srs_key(self, s: _Session) -> int | None:
         """The next due puzzle still in the database (a re-import may have dropped some, FR-2.4)."""
@@ -672,6 +876,80 @@ class SessionService:
                 outcome = self._record(s, result.attempt, result)
             return CommitOutcome(result, outcome)
 
+    def set_idea_tags(self, session_id: int, setup: Any, payoff: Any) -> IdeaTags:
+        """Name the idea first (FR-4.3): your tags, before your first move."""
+        s = self._session(session_id)
+        with s.lock:
+            if s.current is None:
+                raise ValidationError("There's no puzzle in progress.")
+            state = s.current.state
+            if not isinstance(state, NameIdeaState):
+                raise ConflictError("Tagging the idea is for Name the idea first.")
+            return self._name.set_tags(state, setup, payoff, self._clock.monotonic_ms())
+
+    def call_danger(self, session_id: int, call: Any) -> DangerOutcome:
+        """Danger spotting (FR-4.4): Safe or Unsafe."""
+        s = self._session(session_id)
+        with s.lock:
+            if s.current is None:
+                raise ValidationError("There's no puzzle in progress.")
+            state = s.current.state
+            if not isinstance(state, DangerState):
+                raise ConflictError("Safe / Unsafe is for Danger spotting.")
+            result = self._danger.on_call(state, call, self._clock.monotonic_ms())
+            outcome = self._record(s, result.attempt) if result.attempt and not state.practice else None
+            return DangerOutcome(result, outcome)
+
+    # ---- mistake reasons (§7.3) -----------------------------------------------------------------------
+
+    def reason_prompt(self, session_id: int) -> ReasonPrompt | None:
+        """Ask why you missed the puzzle: once it's over, after a recorded loss, unless the setting is Off
+        (FR-5.7, 5.8). The suggestion (FR-5.9) uses Stockfish's refutation when the engine is installed."""
+        if self._prefs.reasons_ask() == "off":
+            return None
+        s = self._session(session_id)
+        with s.lock:
+            cur = s.current
+            if cur is None or cur.reason is None or not cur.state.finished:
+                return None
+            base = cur.reason
+            refutation = cur.refutation
+        if base.first_wrong is not None and refutation is None and self._engine is not None:
+            try:
+                refutation = self.get_refutation(session_id)
+            except AppError as e:  # no engine, or it failed: no refutation-based suggestion
+                log.info("reason prompt without a refutation: %s", e.code)
+        forcing = mates = False
+        if refutation is not None and refutation.line and base.first_wrong is not None:
+            board = chess.Board(base.first_wrong[0])
+            board.push_uci(base.first_wrong[1])
+            forcing = is_forcing_reply(board.fen(), refutation.line[0])
+            mates = refutation.mate is not None and refutation.mate < 0
+        suggested = suggest(
+            ReasonContext(
+                decisive_ms=base.decisive_ms,
+                rushed_ms=self._prefs.rushed_s() * 1000,
+                first_right_later_wrong=base.first_right_later_wrong,
+                reply_forcing=forcing,
+                reply_mates=mates,
+                idea_found=base.idea_found,
+                idea_total=base.idea_total,
+                called_blunder_safe=base.called_blunder_safe,
+            )
+        )
+        with s.lock:
+            if s.current is cur:
+                cur.suggested = suggested
+        return ReasonPrompt(base.attempt_id, base.source, suggested)
+
+    def suggestion_for(self, attempt_id: int) -> str | None:
+        """The last suggestion shown for this attempt, if its puzzle is still the current one."""
+        for s in list(self._sessions.values()):
+            cur = s.current
+            if cur is not None and cur.reason is not None and cur.reason.attempt_id == attempt_id:
+                return cur.suggested
+        return None
+
     def request_help(self, session_id: int, kind: HelpKind) -> HelpOutcome:
         """Hint or Show answer (§7.2). Before the attempt is decided it's recorded as a loss."""
         s = self._session(session_id)
@@ -701,7 +979,13 @@ class SessionService:
 
     @staticmethod
     def _player(cur: _Current) -> Any:
-        return "white" if chess.Board(cur.state.start_fen).turn == chess.WHITE else "black"
+        """Whose side evals are worded from (FR-7.2): the side you played. In Danger spotting that's the
+        punishing side once you called the real blunder Unsafe and played on (v0.6-B5)."""
+        state = cur.state
+        mover = chess.Board(state.start_fen).turn
+        if isinstance(state, DangerState) and state.call == "unsafe" and not state.is_safe:
+            mover = not mover
+        return "white" if mover == chess.WHITE else "black"
 
     def get_refutation(self, session_id: int) -> Refutation:
         """The engine's answer to the move that lost this puzzle (Show answer, §7.2 step 2)."""
@@ -712,8 +996,26 @@ class SessionService:
                 return cur.refutation
             wrong = cur.state.first_wrong
             player = self._player(cur)
+            running = cur.refuting
+            if running is None and wrong is not None:
+                cur.refuting = threading.Event()
         if wrong is None:
             raise NotFoundError("There's no wrong move to refute in this puzzle.")
+        if running is not None:  # another caller is searching it: wait for that answer (v0.6-B3)
+            running.wait(60)
+            with s.lock:
+                if cur.refutation is not None:
+                    return cur.refutation
+            raise EngineError("Stockfish didn't answer. Try again.")
+        try:
+            return self._search_refutation(s, cur, wrong, player)
+        finally:
+            with s.lock:
+                done, cur.refuting = cur.refuting, None
+            if done is not None:
+                done.set()
+
+    def _search_refutation(self, s: _Session, cur: _Current, wrong: tuple[str, str], player: Any) -> Refutation:
         fen_before, uci = wrong
         board = validate_line(fen_before, [uci])  # FR-7.6: validated before the engine sees it
         engine = self._engine_or_raise()
@@ -721,7 +1023,7 @@ class SessionService:
         if analysis.lines:
             first = analysis.lines[0]
             line = self._extend_refutation(engine, board, player, refutation_plies(first.pv))
-            result = Refutation(fen_before, uci, line, first.score)
+            result = Refutation(fen_before, uci, line, first.score, mate=first.mate)
         else:
             result = Refutation(fen_before, uci, (), None, analysis.game_over)
         with s.lock:
@@ -782,9 +1084,12 @@ class SessionService:
                 raise ConflictError("Finish the puzzle first: Try again is for after it's over.")
             puzzle = s.current.state.puzzle
             s.current = _Current(
-                self._start_state(s, puzzle, practice=True),
+                self._start_state(s, puzzle, practice=True, prev=s.current.state),
                 s.current.started_at,
                 analyses=s.current.analyses,  # same positions: the engine's answers still hold
+                refutation=s.current.refutation,
+                reason=s.current.reason,  # the reason chips stay until you move on (FR-5.8)
+                suggested=s.current.suggested,
             )
 
     def stats(self, session_id: int) -> SessionStats:
@@ -806,4 +1111,5 @@ class SessionService:
             rating_change=self._sync.session_change(session_id) if self._sync is not None else None,
             mode=s.mode,
             ladder=s.ladder,
+            misclicks=getattr(t, "misclicks", 0),
         )

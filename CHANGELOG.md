@@ -13,6 +13,16 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.6] - 2026-11-03
+Candidates: v0.6-rc1 (2026-11-03)
+
+### Added
+- **Name the idea first:** a new training mode. Before your first move you tag the idea (setup and payoff motifs), then solve as usual; afterwards you see which ideas you found, which you missed and which tags were extra. [FR-4.3]
+- **Danger spotting:** a new training mode that shows the position just before a blunder with one move highlighted. Call it **Safe** or **Unsafe**; if it's the blunder, punish it with the right reply. About half the highlighted moves are safe ones that Stockfish has checked, so "Unsafe" isn't always the answer. It needs Stockfish, and the results stay on this PC (they don't sync, and they don't affect Spaced repetition or the history filters). [FR-4.4]
+- **Why you missed it:** after a failed puzzle, six chips (keys **1–6**) ask why: didn't look, missed their reply, miscalculated, didn't know the pattern, rushed, or misclick. The app highlights a likely reason; you can add a short note, skip, or change your answer until you move on. Turn the question off, or change what counts as rushed, in Settings → Training. [FR-5.6] [FR-5.7] [FR-5.8] [FR-5.9]
+- **Misclicks don't count against you here:** a miss you tag Misclick is left out of your accuracy (the session bar, Stats and the depth ladder) and counted on its own. It still counts as a loss on Lichess. [FR-5.10]
+- **Stats:** a **Why you missed** breakdown (filter by theme and mode, with a weekly trend), and each mode's own measure: Commit's calculation accuracy, Name the idea's ideas found and tags right, and Danger-spotting accuracy on safe moves and on blunders. [FR-9.3] [FR-9.7]
+
 ### Fixed
 - Clicking a square on the board works anywhere in the square again. After something above the board appeared or changed height, a move only registered when you clicked near the middle of the square.
 

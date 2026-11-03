@@ -93,9 +93,13 @@ def test_v05_modes_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Path)
             page.get_by_test_id("commit-submit").click()
             page.get_by_test_id("outcome").filter(has_text="Solved").wait_for(timeout=10_000)
             replies = n // 2
-            assert (
-                page.get_by_test_id("commit-calculation").inner_text() == f"Replies predicted: {replies} of {replies}"
-            )
+            if replies:  # QA v0.6: a one-move puzzle has no replies line (v0.5-B4), so this flaked on those
+                assert (
+                    page.get_by_test_id("commit-calculation").inner_text()
+                    == f"Replies predicted: {replies} of {replies}"
+                )
+            else:
+                assert page.get_by_test_id("commit-calculation").count() == 0
             shot(page, "commit-result")
             assert q(user_db, "SELECT mode, win, replies_correct, replies_total FROM attempts") == [
                 ("commit_line", 1, replies, replies)

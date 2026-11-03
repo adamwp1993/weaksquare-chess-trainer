@@ -21,6 +21,7 @@ from weaksquare.core.clock import Clock
 from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.ladder import LEVEL_NAMES, LEVELS, LadderStatus
+from weaksquare.core.reasons import REASONS
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
@@ -31,6 +32,7 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
+from weaksquare.services.reasons import ReasonsService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.sync import RatingInfo, SyncService
@@ -73,8 +75,10 @@ class Api:
         sync: SyncService,
         history: HistoryService,
         engine: EngineService,
+        reasons: ReasonsService,
     ) -> None:
         self._engine = engine
+        self._reasons = reasons
         self._account = account
         self._sync = sync
         self._history = history
@@ -198,6 +202,8 @@ class Api:
             srs_intervals=list(s.srs_intervals),
             filters_collapsed=s.filters_collapsed,
             time_offset_days=self._time_offset(),
+            reasons_ask="off" if s.reasons_ask == "off" else "always",
+            rushed_s=s.rushed_s,
         )
 
     def _time_offset(self) -> int | None:
@@ -219,6 +225,8 @@ class Api:
             "ladder.window",
             "srs.intervals",
             "ui.filters_collapsed",
+            "reasons.ask",
+            "reasons.rushed_s",
         ],
         value: Any,
     ) -> None:
@@ -291,7 +299,7 @@ class Api:
         self,
         spec: dict,
         rated: bool = True,
-        mode: Literal["standard", "commit_line", "spaced_repetition"] = "standard",
+        mode: dto.TrainingMode = "standard",
         show_length: bool = False,
     ) -> dto.SessionInfo:
         """`rated`: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false.
@@ -339,6 +347,7 @@ class Api:
             v.mode,  # type: ignore[arg-type]
             v.solution_plies,
             v.max_plies,
+            v.candidate,
         )
 
     @staticmethod
@@ -355,6 +364,8 @@ class Api:
             attempt_id=o.attempt_id,
             lichess=attempt_rating(o.lichess),
             level_up=ladder_info(o.level_up) if o.level_up else None,
+            idea=idea_result(o.idea) if o.idea else None,
+            danger=danger_reveal(o.danger) if o.danger else None,
         )
 
     @bridge_call
@@ -362,6 +373,33 @@ class Api:
         r = self._sessions.submit_move(session_id, uci[:8])
         f = r.feedback
         return dto.MoveFeedback(f.kind, f.reply, f.finished, self._outcome(r.outcome), f.move_sound, f.reply_sound)
+
+    @bridge_call
+    def set_idea_tags(self, session_id: int, setup: list, payoff: list) -> None:
+        """Name the idea first (FR-4.3): your setup and payoff tags, before your first move."""
+        self._sessions.set_idea_tags(session_id, setup[:10], payoff[:10])
+
+    @bridge_call
+    def call_danger(self, session_id: int, call: Literal["safe", "unsafe"]) -> dto.DangerFeedback:
+        """Danger spotting (FR-4.4): is the highlighted move safe?"""
+        r = self._sessions.call_danger(session_id, call)
+        c = r.result
+        return dto.DangerFeedback(c.call, c.correct, c.refute, c.fen, c.blunder_sound,  # type: ignore[arg-type]
+                                  self._outcome(r.outcome))  # fmt: skip
+
+    @bridge_call
+    def get_reason_prompt(self, session_id: int) -> dto.ReasonPrompt | None:
+        """§7.3: after a lost puzzle, the reason chips and the suggested one (None: don't ask)."""
+        p = self._sessions.reason_prompt(session_id)
+        if p is None:
+            return None
+        return dto.ReasonPrompt(p.attempt_id, p.source, p.suggested,  # type: ignore[arg-type]
+                                [dto.ReasonOption(r.key, r.label, r.gap) for r in REASONS])  # fmt: skip
+
+    @bridge_call
+    def set_mistake_reason(self, attempt_id: int, reason: str, note: str | None = None) -> None:
+        """Save why you missed it (FR-5.6). Choosing again replaces it; the latest counts."""
+        self._reasons.set_reason(attempt_id, reason, note)
 
     @bridge_call
     def request_help(self, session_id: int, kind: Literal["hint", "answer"]) -> dto.HelpResponse:
@@ -381,9 +419,22 @@ class Api:
         def row(t: Any) -> dto.StatRow:
             return dto.StatRow(t.key, t.label, t.attempts, t.solved, t.accuracy, t.first_right, t.line_wrong_rate)
 
+        d = r.details
         return dto.StatsReport(
             row(r.overall), [row(t) for t in r.by_theme], [row(t) for t in r.by_length],
-            [row(t) for t in r.by_rating], r.missing, [row(t) for t in r.by_mode],
+            [row(t) for t in r.by_rating], r.missing, [row(t) for t in r.by_mode], r.misclicks, r.misclick_warning,
+            dto.ModeDetails(d.replies_correct, d.replies_total, d.ideas_found, d.ideas_total, d.tags_named,
+                            d.danger_safe, d.danger_safe_right, d.danger_blunder, d.danger_blunder_right),
+        )  # fmt: skip
+
+    @bridge_call
+    def get_reason_stats(self, theme: str | None = None, mode: str | None = None) -> dto.ReasonStats:
+        """FR-9.7: the mistake-reason breakdown, optionally for one theme and/or one mode."""
+        r = self._stats.reasons(theme, mode)
+        return dto.ReasonStats(
+            [dto.ReasonStatRow(c.key, c.label, c.gap, c.count, c.share) for c in r.reasons],  # type: ignore[arg-type]
+            r.tagged, r.untagged, r.misclicks, r.misclick_warning,
+            [dto.ReasonWeek(w.week.isoformat(), list(w.counts)) for w in r.trend],
         )  # fmt: skip
 
     @bridge_call
@@ -396,7 +447,7 @@ class Api:
         s = self._sessions.stats(session_id)
         return dto.SessionStats(s.solved, s.failed, s.accuracy, s.played, s.queue_size, s.finished,
                                 s.all_time_solved, s.all_time_failed, s.rating_change, s.mode,  # type: ignore[arg-type]
-                                ladder_info(s.ladder) if s.ladder else None)  # fmt: skip
+                                ladder_info(s.ladder) if s.ladder else None, s.misclicks)  # fmt: skip
 
     # ---- Lichess account and sync (FR-1.1, 1.6, 1.7, FR-6.1–6.17, FR-9.4) ------------------------
     # Nothing here ever returns a token (SR-1); the token stays inside the services.
@@ -494,6 +545,18 @@ class Api:
     ) -> dto.Analysis:
         """Eval and top lines after the puzzle (FR-7.2, 7.7). `purpose` keys latest-wins per view."""
         return analysis_dto(self._sessions.analyze(session_id, fen, purpose))
+
+
+def _labels(keys: tuple[str, ...]) -> list[dto.ThemeLabel]:
+    return [dto.ThemeLabel(k, display_name(k)) for k in keys]
+
+
+def idea_result(i: Any) -> dto.IdeaResult:
+    return dto.IdeaResult(i.found, i.total, i.extra, _labels(i.correct), _labels(i.wrong), _labels(i.missed))
+
+
+def danger_reveal(d: Any) -> dto.DangerReveal:
+    return dto.DangerReveal(d.candidate, d.is_safe, d.call, d.best_score, d.candidate_score, list(d.line))
 
 
 def analysis_dto(a: AnalysisResult) -> dto.Analysis:
