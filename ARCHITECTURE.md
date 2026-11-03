@@ -78,6 +78,7 @@ weaksquare-chess-trainer/
 │  │                           #   v0.3: account.py (sign-in, launch check, sign-out), sync.py (the queue),
 │  │                           #         lichess_history.py (history import)
 │  │                           #   v0.4: engine_install.py (the Stockfish installer), engine.py (EngineService)
+│  │                           #   v0.6: reasons.py (saving mistake reasons)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -210,6 +211,17 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-03, v0.6: Front end for Name the idea, Danger spotting and the reason chips
+- Context: the trainer view and the filters panel for FR-4.3, FR-4.4 and §7.3, and the Stats additions.
+- Decision:
+  - The Modes control became a **vertical** segmented control: five modes don't fit one row in the panel. The depth-ladder order is disabled outside Standard and Commit (`LADDER_MODES` in `state/modes.ts`), with a note if it was already chosen.
+  - `TrainerView` gains two branches like Commit's: **Name the idea** keeps the board read-only until `set_idea_tags` succeeds (`components/IdeaTags.tsx`); **Danger spotting** shows the raw position with an arrow on `candidate`, a call panel (`components/DangerCall.tsx`, keys **S**/**U**), and after a correct Unsafe flips the board to the punishing side for one move. The engine panel's start position is the raw FEN in Danger spotting (no opponent move).
+  - The idea pickers' lists live in `web/src/state/ideas.ts` (keys and names), kept equal to `core/themes.py` by `tests/contract/test_idea_lists.py`, rather than another bridge call for a fixed list.
+  - **Reason chips** (`components/ReasonChips.tsx`) sit **below the board** (FR-5.8): in the side column they pushed the engine panel off-screen and the page scrolled. They're asked for (`get_reason_prompt`) once the lost puzzle is over, and survive Try again. Keys 1–6.
+  - Stats: a **Why you missed** tab (`components/ReasonStatsPanel.tsx`) with a stacked weekly bar chart. Its colors are categorical slots 1–5 of the dataviz reference palette, validated against Mantine's light (`#ffffff`) and dark (`#242424`) surfaces; three light steps are under 3:1, so the chart always has its legend (kept in stack order with `itemSorter: null`) and a table view.
+- Alternatives: a Select for the Modes control (hides the choices behind a click); reason chips in the side column (see above); serving the idea lists over the bridge.
+- Consequences: the trainer view has three mode branches now (Commit, Name, Danger). A new mode that is played move by move still needs none.
 
 ### 2026-11-03, v0.6: Session, bridge and Stats for the new modes and mistake reasons
 - Context: wiring FR-4.3, FR-4.4 and §7.3 through `SessionService`, the bridge and the Stats page.

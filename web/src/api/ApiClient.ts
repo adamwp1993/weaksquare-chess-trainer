@@ -9,6 +9,9 @@ import type {
   AttemptRating,
   BucketCounts,
   CommitFeedback,
+  DangerFeedback,
+  ReasonPrompt,
+  ReasonStats,
   LadderPreview,
   SrsStatus,
   ApiError,
@@ -64,7 +67,13 @@ export interface SettingValues {
   "ladder.window": number;
   "srs.intervals": number[];
   "ui.filters_collapsed": boolean;
+  // v0.6
+  "reasons.ask": "always" | "off";
+  "reasons.rushed_s": number;
 }
+
+/** Why you missed it (§7.3, FR-5.6). */
+export type ReasonKey = ReasonPrompt["reasons"][number]["key"];
 
 /** The Modes control (§6). Later modes join when they ship. */
 export type TrainingMode = SessionInfo["mode"];
@@ -120,6 +129,16 @@ export interface ApiClient {
   /** The next puzzle, or null when the session is complete. */
   nextPuzzle(sessionId: number): Promise<PuzzleView | null>;
   submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;
+  /** Name the idea first (FR-4.3): your tags, before your first move. */
+  setIdeaTags(sessionId: number, setup: string[], payoff: string[]): Promise<void>;
+  /** Danger spotting (FR-4.4): is the highlighted move safe? */
+  callDanger(sessionId: number, call: "safe" | "unsafe"): Promise<DangerFeedback>;
+  /** §7.3: after a lost puzzle, once it's over, the reason chips (null: don't ask). */
+  getReasonPrompt(sessionId: number): Promise<ReasonPrompt | null>;
+  /** FR-5.6: save why you missed it; choosing again replaces it. */
+  setMistakeReason(attemptId: number, reason: ReasonKey, note: string | null): Promise<void>;
+  /** FR-9.7: the mistake-reason breakdown, optionally for one theme and/or mode. */
+  getReasonStats(theme: string | null, mode: TrainingMode | null): Promise<ReasonStats>;
   /** Hint, then Show answer (§7.2). Before the puzzle is decided, either one makes it a loss. */
   requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse>;
   /** FR-5.12 Try again (not scored): replay the finished puzzle from its start; nothing is recorded. */

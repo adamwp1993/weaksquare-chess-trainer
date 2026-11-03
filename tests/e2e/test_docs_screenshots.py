@@ -347,3 +347,61 @@ def test_filters_hidden(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("filters-summary").filter(has_text="puzzles").wait_for()
     page.mouse.move(1270, 890)
     shot(page, "filters-hidden")
+
+
+def test_name_the_idea(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.6 (FR-4.3): tagging the idea before you move, then the tag score after the end."""
+    page.goto(page.base_url + "/?mode=name_idea")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("idea-tags").wait_for()
+    page.get_by_test_id("idea-setup").click()
+    page.get_by_role("option", name="Deflection", exact=True).click()
+    page.keyboard.press("Escape")
+    page.get_by_test_id("idea-payoff").click()
+    page.get_by_role("option", name="Fork", exact=True).click()
+    page.keyboard.press("Escape")
+    panel_top(page)
+    shot(page, "name-the-idea")
+    page.get_by_test_id("idea-start").click()
+    play(page, "d5c3", "black")
+    page.wait_for_timeout(600)
+    play(page, "c3d1", "black")
+    page.get_by_test_id("idea-result").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "name-the-idea-result")
+
+
+def test_danger_spotting(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.6 (FR-4.4): the highlighted move and the Safe / Unsafe call; then punishing a blunder."""
+    page.goto(page.base_url + "/?mode=danger_spotting")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("danger-call").wait_for()
+    panel_top(page)
+    shot(page, "danger-spotting")
+    page.get_by_test_id("danger-safe").click()
+    page.get_by_test_id("next-button").click()
+    page.get_by_test_id("danger-call").wait_for()
+    page.get_by_test_id("danger-unsafe").click()
+    page.get_by_test_id("trainer-message").filter(has_text="punish it").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "danger-punish")
+
+
+def test_mistake_reasons(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.6 (§7.3): the reason chips below the board after a miss, and the Stats breakdown."""
+    _start(page)
+    play(page, "f7f6", "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_test_id("reason-chips").wait_for()
+    page.get_by_test_id("reason-didntLook").click()
+    page.get_by_test_id("reason-saved").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "mistake-reasons")
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Stats").click()
+    page.get_by_test_id("stats-reasons-tab").click()
+    page.get_by_test_id("reasons-trend-table").wait_for()
+    shot(page, "stats-reasons")

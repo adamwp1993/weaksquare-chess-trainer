@@ -1,13 +1,16 @@
-import { Button, Group, NumberInput, Stack, Text, TextInput } from "@mantine/core";
+import { Button, Group, NumberInput, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
 // Settings → Training (v0.5): the depth ladder's threshold and window (FR-4.5) and the Spaced
-// repetition boxes (FR-4.6). Saved through the bridge, which validates them again.
+// repetition boxes (FR-4.6); v0.6: when to ask why you missed (FR-5.8) and the Rushed threshold
+// (FR-5.9). Saved through the bridge, which validates them again.
 export function TrainingSettingsPanel() {
   const [threshold, setThreshold] = useState<number | null>(null);
   const [window, setWindow] = useState<number | null>(null);
   const [intervals, setIntervals] = useState("");
+  const [ask, setAsk] = useState<"always" | "off">("always");
+  const [rushed, setRushed] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -17,6 +20,8 @@ export function TrainingSettingsPanel() {
         setThreshold(s.ladder_threshold);
         setWindow(s.ladder_window);
         setIntervals(s.srs_intervals.join(", "));
+        setAsk(s.reasons_ask);
+        setRushed(s.rushed_s);
       },
       () => undefined,
     );
@@ -89,6 +94,47 @@ export function TrainingSettingsPanel() {
       <Text size="xs" c="dimmed">
         A missed puzzle comes back after the first number of days; each time you solve it in Spaced repetition it
         waits for the next one. Solving it from the last box retires it. 2 to 10 boxes, each longer than the one before.
+      </Text>
+      <Text size="sm" fw={500} mt="xs">
+        Why you missed it
+      </Text>
+      <Group align="end" gap="md">
+        <Stack gap={2}>
+          <Text size="sm">Ask after a failed puzzle</Text>
+          <SegmentedControl
+            size="xs"
+            value={ask}
+            onChange={(v) => {
+              const value = v as "always" | "off";
+              setAsk(value);
+              save(value === "always" ? "You'll be asked after each failed puzzle." : "You won't be asked.", () =>
+                api.setSetting("reasons.ask", value),
+              );
+            }}
+            data={[
+              { value: "always", label: "Always" },
+              { value: "off", label: "Off" },
+            ]}
+            aria-label="Ask why you missed"
+            data-testid="reasons-ask"
+          />
+        </Stack>
+        {rushed !== null && (
+          <NumberInput
+            label="Suggest Rushed under (seconds)"
+            min={1}
+            max={30}
+            value={rushed}
+            onChange={(v) => typeof v === "number" && setRushed(v)}
+            onBlur={() => save("Rushed threshold saved.", () => api.setSetting("reasons.rushed_s", rushed))}
+            style={{ flex: 1 }}
+            data-testid="reasons-rushed"
+          />
+        )}
+      </Group>
+      <Text size="xs" c="dimmed">
+        After a failed puzzle, six chips ask why you missed it (keys 1–6). The app highlights a likely reason, for
+        example Rushed when you moved faster than this; it's only saved when you pick one.
       </Text>
       {error && (
         <Text size="xs" c="red" data-testid="training-settings-error">

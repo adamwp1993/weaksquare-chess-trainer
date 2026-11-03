@@ -5,6 +5,7 @@ import {
   type ApiClient,
   type BackendEvent,
   type EngineSettingsChange,
+  type ReasonKey,
   type SettingValues,
   type TrainingMode,
 } from "./ApiClient";
@@ -17,6 +18,9 @@ import type {
   AttemptRating,
   BucketCounts,
   CommitFeedback,
+  DangerFeedback,
+  ReasonPrompt,
+  ReasonStats,
   LadderPreview,
   SrsStatus,
   ApiError,
@@ -230,6 +234,26 @@ export class PywebviewClient implements ApiClient {
 
   submitMove(sessionId: number, uci: string) {
     return this.call<MoveFeedback>("submit_move", sessionId, uci);
+  }
+
+  setIdeaTags(sessionId: number, setup: string[], payoff: string[]) {
+    return this.call<void>("set_idea_tags", sessionId, setup, payoff);
+  }
+
+  callDanger(sessionId: number, call: "safe" | "unsafe") {
+    return this.call<DangerFeedback>("call_danger", sessionId, call);
+  }
+
+  getReasonPrompt(sessionId: number) {
+    return this.call<ReasonPrompt | null>("get_reason_prompt", sessionId);
+  }
+
+  setMistakeReason(attemptId: number, reason: ReasonKey, note: string | null) {
+    return this.call<void>("set_mistake_reason", attemptId, reason, note);
+  }
+
+  getReasonStats(theme: string | null, mode: TrainingMode | null) {
+    return this.call<ReasonStats>("get_reason_stats", theme, mode);
   }
 
   requestHelp(sessionId: number, kind: "hint" | "answer") {

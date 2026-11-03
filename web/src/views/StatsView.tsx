@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { RatingHistory, StatRow, StatsReport } from "../api/types";
 import { RatingTrend } from "../components/RatingTrend";
+import { ModeDetailsTable, ReasonStatsPanel } from "../components/ReasonStatsPanel";
 
 const pct = (x: number | null) => (x === null ? "–" : `${Math.round(x * 100)}%`);
 
@@ -106,6 +107,7 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
               <Tabs.Tab value="length">By length</Tabs.Tab>
               <Tabs.Tab value="rating">By rating</Tabs.Tab>
               <Tabs.Tab value="mode" data-testid="stats-mode-tab">By mode</Tabs.Tab>
+              <Tabs.Tab value="reasons" data-testid="stats-reasons-tab">Why you missed</Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="theme" pt="sm">
               <StatTable rows={report.by_theme} first="Theme" testId="stats-by-theme" />
@@ -117,10 +119,26 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
               <StatTable rows={report.by_rating} first="Puzzle rating" testId="stats-by-rating" />
             </Tabs.Panel>
             <Tabs.Panel value="mode" pt="sm">
-              <StatTable rows={report.by_mode} first="Mode" testId="stats-by-mode" />
+              <Stack gap="sm">
+                <StatTable rows={report.by_mode} first="Mode" testId="stats-by-mode" />
+                <ModeDetailsTable d={report.details} />
+                <Text size="xs" c="dimmed">
+                  Danger-spotting results count only here: spotting a blunder isn't solving the puzzle, so they're left
+                  out of the totals and the other tabs.
+                </Text>
+              </Stack>
+            </Tabs.Panel>
+            <Tabs.Panel value="reasons" pt="sm">
+              <ReasonStatsPanel themes={report.by_theme} />
             </Tabs.Panel>
           </Tabs>
           <RatingTrend history={ratings} />
+          {report.misclicks > 0 && (
+            <Text size="xs" c="dimmed" data-testid="stats-misclicks">
+              {report.misclicks} {report.misclicks === 1 ? "miss" : "misses"} tagged Misclick {report.misclicks === 1 ? "is" : "are"} left
+              out of these numbers.
+            </Text>
+          )}
           {report.missing > 0 && (
             <Text size="xs" c="dimmed" data-testid="stats-missing">
               {report.missing} of your attempts are on puzzles no longer in the puzzle database. They count in the totals

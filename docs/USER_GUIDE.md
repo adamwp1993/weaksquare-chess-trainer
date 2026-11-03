@@ -41,6 +41,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your puzzle history:** the puzzles you've played on Lichess are read once, then only new ones.
     - **Signing out** tells Lichess to cancel your sign-in.
   - **Stockfish download** (v0.4): installing Stockfish (from setup, `fetch_stockfish.py` or the **Install Stockfish** button) downloads one file, the official Stockfish 19 Windows build, from github.com. Nothing about you is sent. The engine itself runs entirely on your PC and never uses the internet.
+  - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
 ## Getting started: the puzzle database
@@ -225,7 +226,7 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Stats
-*Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode.*
+*Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode. Changed in v0.6: mode details, Why you missed, misclicks.*
 
 Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
 
@@ -233,12 +234,19 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 
 - **Puzzles played** and **Accuracy**: a puzzle counts as solved only with no wrong move and no help.
 - **First move right, line wrong**: of the puzzles where your first move was right, how often the rest of the line went wrong. Spotting the idea but miscalculating the follow-up shows up here, so a falling number means your calculation is improving.
-- **By theme**, **By length** (how many moves you make), **By rating** (200-point bands, using the puzzle's rating when you played it) and **By mode** (*added in v0.5*: Standard, Commit the line, Spaced repetition) break the same numbers down. A puzzle with several themes counts once under each.
+- **By theme**, **By length** (how many moves you make), **By rating** (200-point bands, using the puzzle's rating when you played it) and **By mode** (*added in v0.5*) break the same numbers down. A puzzle with several themes counts once under each.
+- **Each mode's own measure** (*added in v0.6*, on the **By mode** tab):
+  - **Commit the line:** calculation accuracy, the replies you predicted out of all the solutions' replies.
+  - **Name the idea first:** **ideas found** (the puzzle's motifs you named, out of all its motifs) and **tags right** (your tags that were motifs, out of all your tags).
+  - **Danger spotting:** how often you called a **safe** move Safe, and how often you spotted **and punished** a real blunder. Look at both: a habit of always saying "Unsafe" shows up as a low first number.
+- **Why you missed** (*added in v0.6*): how often you gave each reason for a miss (see [Mistake reasons](#mistake-reasons)), with its gap type (process, calculation, knowledge, time). Pick a **Theme** or a **Mode** to see one part of your training, for example why you miss forks. **By week** shows the same counts over time, as a chart and a table.
 - **Lichess puzzle rating** (*added in v0.3*): your rating over time, one point each time Lichess reported a new rating for your synced solves, and a table of the change in each session (newest first). Hover over the line to see a point's rating. It's empty until you sign in with Lichess and sync rated puzzles. The numbers are exactly what Lichess returned.
 
 **Gotchas**
 - If a database update removes a puzzle you played, your attempt still counts in the totals and by rating, but not by theme or length. A note under the tables says how many.
 - Attempts from v0.1 get their puzzle's rating filled in the first time you open Stats, where the puzzle is still in the database.
+- **Misclicks don't count** (*v0.6*): a miss you tagged **Misclick** is left out of every number above, and a note says how many there are. If a lot of your tagged misses are misclicks, **Why you missed** says so.
+- **Danger-spotting results count only on the By mode tab**: spotting a blunder isn't solving the puzzle, so they're left out of the totals and the other tabs.
 
 ## Solving a puzzle
 *Added in v0.1. Changed in v0.2: Hint, Show answer and keyboard shortcuts.*
@@ -258,7 +266,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 - Pressing **Skip (counts as failed)** before you've finished also records a failed attempt.
 - Using **Hint** or **Show answer** before the puzzle is decided fails it too (see below). After it's decided, Show answer is free.
 
-**The session bar** at the top shows this session's **Solved**, **Failed**, **Accuracy** and **Played**, and once you're signed in to Lichess, the rating change this session (e.g. **+34 this session**). On the right, **All time** counts every attempt you've ever made; your attempts are saved as you go, so they survive closing the app. When a fixed-length session ends, you get a summary and a **New session** button.
+**The session bar** at the top shows this session's **Solved**, **Failed**, **Accuracy** and **Played**, and once you're signed in to Lichess, the rating change this session (e.g. **+34 this session**). Misses you tagged **Misclick** are counted apart ("1 misclick") and left out of Failed and Accuracy (*v0.6*, see [Mistake reasons](#mistake-reasons)). On the right, **All time** counts every attempt you've ever made; your attempts are saved as you go, so they survive closing the app. When a fixed-length session ends, you get a summary and a **New session** button.
 
 ![A solved puzzle with its themes revealed](img/solved.png)
 
@@ -358,7 +366,7 @@ In **⚙ Settings → Engine**:
 - If your own engine can't be found any more (the file was moved or deleted), the app says so and offers **Use the managed Stockfish**.
 
 ## Training modes
-*Added in v0.5.*
+*Added in v0.5. Changed in v0.6: Name the idea first and Danger spotting.*
 
 The **Mode** control at the top of the filters panel picks how you train. Your choice is remembered next time.
 
@@ -366,6 +374,8 @@ The **Mode** control at the top of the filters panel picks how you train. Your c
 |---|---|
 | **Standard** | The usual way: find the best move, the opponent replies automatically, and a wrong move is flagged at once. |
 | **Commit the line** | Calculation practice: you work out the whole line in your head, enter it on the board, and only then find out if it was right. |
+| **Name the idea first** | Pattern recognition: say what the idea is before you play it (*added in v0.6*). |
+| **Danger spotting** | Blunder-checking: is the move about to be played safe, and if not, how do you punish it? (*added in v0.6*) |
 | **Spaced repetition** | Puzzles you missed come back on their review day until you've learned them. |
 
 **Switching modes while a session is running starts a new session** in the new mode, with your current filters and Rated setting, just like pressing Start. The puzzle you were on is left unfinished and isn't recorded. If the new session can't start (for example, nothing is due for Spaced repetition), the app says why and your current session and mode carry on.
@@ -395,8 +405,48 @@ After Submit, **Your line** lists every move with ✓ or ✗ and, where yours wa
 - A wrong prediction doesn't cost you the puzzle, but the moves you entered after it were played on *your* board, not the real one. The app still compares them with the solution's moves one by one.
 - Stockfish's **Why your move fails** only appears when your first wrong move was played in the real position, that is, when every move before it matched the solution.
 
+### Name the idea first
+*Added in v0.6.* Before you touch a piece, you say what the tactic is. Naming it first trains you to recognise the pattern, not just to find a move that works.
+
+1. Choose **Name the idea first**, then press **Start**. The opponent's first move plays as usual, and the board waits.
+2. Under **Name the idea**, pick up to three **Setup** motifs (how you get there, for example Deflection or Attraction) and up to three **Payoff** motifs (what it wins, for example a Fork, a Pin or a mate pattern). You need at least one tag.
+3. Press **Start solving** and solve the puzzle as in Standard.
+
+![Tagging the idea](img/name-the-idea.png)
+
+When the puzzle ends you see **Ideas found 1 of 2 · 1 extra**: each of your tags with ✓ (it was one of the puzzle's motifs) or ✗ (it wasn't), and the motifs you missed.
+
+![The tag score](img/name-the-idea-result.png)
+
+- Solving is scored exactly as in Standard: your tags don't decide whether you solved the puzzle, and they're scored separately (see [Stats](#stats)).
+- **A tag counts whichever box it's in.** The Setup/Payoff split is there to help you think: Lichess doesn't record which role a theme plays in a puzzle.
+- Your tags are compared with the puzzle's **motif** themes only (motifs, advanced tactics, mate patterns and special moves), not with phases, goals or lengths. A puzzle with none of those has no tag score.
+- Solves sync to Lichess as in Standard. **Try again** skips the tagging.
+
+### Danger spotting
+*Added in v0.6.* Most lost games turn on a move that looked fine. Danger spotting shows you the position **just before** a blunder, from the side that's about to play, with one move highlighted by an arrow.
+
+1. Choose **Danger spotting**, then press **Start**. It needs Stockfish (see [Installing Stockfish](#installing-stockfish)); without it, the panel offers the install and **Start** is greyed out.
+2. Decide whether the highlighted move is safe, then press **Safe** (or **S**) or **Unsafe** (or **U**).
+3. If you say **Unsafe** and it really is the blunder, it's played and the board turns round: now find the move that punishes it, for the other side. One move is enough.
+
+![Is the highlighted move safe?](img/danger-spotting.png)
+
+![Punish the blunder](img/danger-punish.png)
+
+**How it's scored**
+- **Safe** on a safe move is solved. **Unsafe** on the blunder, followed by the right punishing move (any mate counts where the solution mates), is solved.
+- Calling a safe move Unsafe, calling the blunder Safe, or not finding the punishment is a miss.
+- After the end, the result says which it was: a safe move with Stockfish's evaluation of it and of its best line, or the game's blunder and the move that punishes it. **Show answer** steps through the whole line.
+
+**Gotchas**
+- **About half the highlighted moves are safe.** The safe ones are checked by Stockfish when the puzzle loads: a move counts as safe if it's at most half a pawn worse than Stockfish's best move and doesn't allow a mate. That check takes about your engine think time, so a puzzle can take a moment to appear.
+- Before your call there's no Hint (it would give the answer away). **Show answer** before your call counts as a miss and tells you whether the move was safe.
+- **Results stay on this PC.** Nothing is sent to Lichess, so the **Rated** switch is greyed out. Danger-spotting results don't put puzzles into Spaced repetition and don't count for *Exclude solved here* or *Only my misses*.
+- The depth ladder isn't available in this mode or in Name the idea first.
+
 ### Spaced repetition
-Every puzzle you fail, in any mode, goes into the first of five review boxes. That includes the puzzles you failed before v0.5. A puzzle in box 1 comes back the next day. Each time you solve it in **Spaced repetition** it moves up a box and waits longer: 1, 3, 7, 14, then 30 days. Solving it from the last box retires it. Failing it again, anywhere, puts it back in box 1.
+Every puzzle you fail, in any mode except Danger spotting, goes into the first of five review boxes. That includes the puzzles you failed before v0.5. A puzzle in box 1 comes back the next day. Each time you solve it in **Spaced repetition** it moves up a box and waits longer: 1, 3, 7, 14, then 30 days. Solving it from the last box retires it. Failing it again, anywhere, puts it back in box 1.
 
 1. Choose **Spaced repetition**. The panel shows how many puzzles are due now and when the next one is.
 2. Press **Start**. You get the puzzles that are due, the most overdue first, and solve them as in Standard.
@@ -409,6 +459,7 @@ Every puzzle you fail, in any mode, goes into the first of five review boxes. Th
 - Solving a puzzle in another mode doesn't move it up a box. Only reviews here do.
 - These puzzles are usually ones Lichess has already seen from you, so they show **Already played: rating unaffected**. Lichess doesn't rate a puzzle twice.
 - You can change the boxes under **Settings → Training** (see [Training settings](#training-settings)).
+- A miss you tag **Misclick** (see [Mistake reasons](#mistake-reasons)) still comes back here: replaying it costs nothing.
 
 ### Depth ladder
 The depth ladder is an **Order** choice (**Choose your puzzles → Order → Depth ladder**), and it works in Standard and in Commit the line. It trains you to calculate deeper, one step at a time:
@@ -423,17 +474,56 @@ The depth ladder is an **Order** choice (**Choose your puzzles → Order → Dep
 - A level with no puzzles for your filters is skipped. Mate in 2, for example, only has 2-move puzzles, so for it Short is already the top of the ladder.
 - The ladder sets **Number of moves** itself, so that control is greyed out. It can't be combined with **Mix by ratio**.
 - Because you know the length in advance, Lichess counts these solves like a themed session: for the theme that matched, or the length (Short / Long / Very long) when you chose All themes.
-- You can change the 80% and the 20 under **Settings → Training**. Try again (practice) runs don't count.
+- You can change the 80% and the 20 under **Settings → Training**. Try again (practice) runs don't count, and neither do misses you tag **Misclick** (v0.6).
 
 ### Training settings
-*Added in v0.5.* Under **⚙ → Settings → Training**:
+*Added in v0.5. Changed in v0.6: the mistake-reason settings.* Under **⚙ → Settings → Training**:
 
 | Setting | What it does |
 |---|---|
 | **Move up at (%)** / **Over the last (puzzles)** | The depth ladder's threshold (80% by default, 10–100) and how many recent puzzles at your level it looks at (20 by default, 3–100). Saved when you leave the box. |
 | **Review boxes (days)** | Spaced repetition's boxes, as days separated by commas (1, 3, 7, 14, 30 by default). 2 to 10 boxes, each longer than the one before, up to 365 days. Press **Save**. |
+| **Ask after a failed puzzle** | *v0.6.* **Always** (the default) shows the [mistake-reason](#mistake-reasons) chips after each miss; **Off** never asks. |
+| **Suggest Rushed under (seconds)** | *v0.6.* A deciding move made faster than this (3 s by default, 1–30) gets **Rushed** suggested. Saved when you leave the box. |
 
 Changing either setting applies to everything you've already played: the app works your boxes and ladder levels out from your attempt history, rather than storing them separately.
+
+## Mistake reasons
+*Added in v0.6.*
+
+Themes say *what* you missed; a reason says *why*. Telling "I didn't know this pattern" apart from "I knew it but didn't look" matters, because they need different training: the first needs more puzzles of that theme, the second needs a slower, more careful habit.
+
+After a failed puzzle, once it's over, a row of six chips appears below the board:
+
+| Key | Reason | Gap |
+|---|---|---|
+| **1** | Didn't look for it | process |
+| **2** | Missed their reply / defense / threat | process |
+| **3** | Saw the idea, calculated it wrong | calculation |
+| **4** | Didn't know this pattern | knowledge |
+| **5** | Rushed / time pressure | time |
+| **6** | Misclick | noise |
+
+![Why did you miss it?](img/mistake-reasons.png)
+
+1. Click a chip, or press its number. It's saved at once ("Saved").
+2. Optionally, **Add a note** (up to 200 characters) and **Save note**.
+3. Changed your mind? Pick another chip: the latest one counts. **Skip** hides the chips. You can always just go to the next puzzle.
+
+**The suggested reason**
+The app highlights a likely reason with **Suggested**, but it's only saved if you click it:
+- **Rushed**: your deciding move came in under 3 seconds (change this in [Training settings](#training-settings)).
+- **Miscalculated**: your first move was right and a later one was wrong.
+- **Missed their reply**: Stockfish's answer to your move is a check, a capture or a mate (only with Stockfish installed), or, in Danger spotting, you called the real blunder Safe.
+- **Didn't know this pattern**: in Name the idea first, none of your tags was one of the puzzle's motifs.
+
+**Misclicks**
+A miss you tag **Misclick** is left out of your accuracy here: the session bar ("1 misclick"), Stats and the depth ladder. It still counts as a loss on Lichess, because Lichess has no take-backs, and it still comes back in Spaced repetition. If a lot of your misses are misclicks, Stats says so: that's worth a look.
+
+**Gotchas**
+- You're asked after every miss in every mode, including Danger spotting, but not during **Try again** practice. The chips stay while you practise.
+- To stop being asked, set **Ask after a failed puzzle** to **Off** in Settings → Training. In a later version you'll also be able to be asked about your game mistakes only.
+- Your reasons and notes stay on this PC.
 
 ## Keyboard shortcuts
 *Added in v0.2.*
@@ -447,6 +537,8 @@ Changing either setting applies to everything you've already played: the app wor
 | **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4) |
 | **C** | Show or hide the letters and numbers around the board |
 | **F** | Hide or show the filters panel (v0.5) |
+| **S** / **U** | Danger spotting: call the highlighted move Safe or Unsafe (v0.6) |
+| **1**–**6** | After a failed puzzle: pick why you missed it (v0.6) |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
