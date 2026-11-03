@@ -124,7 +124,7 @@ Shown when the app launches.
 - `games(id PK, source, source_game_id, url, pgn, played_at, time_control, time_class, rated, user_color, user_rating, opponent, opponent_rating, result, eco, opening, platform_accuracy_user, platform_accuracy_opp, has_evals, analysis_status, fetched_at)`: the game library (§11.5), shared by Game Review and the Coach. `analysis_status` is none / analyzed / ai_reviewed.
 - `account_sync(platform PK, username, last_sync_at, last_archive, etag_json)`: incremental sync state per linked account
 - `coach_checkpoints(id PK, created_at, trigger, games_total, new_games, window_size, report_id, suggested_preset_json, ai_summary_json, cost_usd)`: one row per checkpoint (§10.8)
-- `weaknesses(id PK, key, kind, label, first_seen_checkpoint, baseline_rate, baseline_games, status, status_changed_at, related_themes)`. `key` is a theme or simple-tag key; `kind` is missed / allowed / habit.
+- `weaknesses(id PK, key, kind, label, first_seen_checkpoint, baseline_rate, baseline_games, status, status_changed_at, related_themes)`. `key` is a theme or simple-tag key; `kind` is missed / allowed / habit, plus opening / endgame / phase / time from v0.11 (FR-10.57).
 - `weakness_metrics(weakness_id, checkpoint_id, window_games, occurrences, game_rate, puzzle_attempts, puzzle_first_try_accuracy)`: the trend data for each weakness at each checkpoint
 - `game_analysis(game_id, ply, fen_before, move_uci, mover, eval_before, eval_after, best_move, multipv_json, cp_loss, classification, themes, kind, phase, low_clock)`: one row per analyzed move. Shared by Game Review (§11) and the Coach (§10). `kind` is missed / allowed / other for mistakes.
 - `game_errors`: a **view** over `game_analysis`, containing the user's mistakes only, used by the Coach
@@ -222,7 +222,7 @@ Habit tags (FR-10.27) and themes describe **what** went wrong. Mistake reasons r
 - **FR-5.11** **What it feeds:**
   - **Stats:** reason breakdown overall, per theme, per habit tag and per mode (FR-9.7)
   - **Coach:** reason breakdown per weakness (FR-10.38), and drill-mode choice in the Suggested mix (FR-10.29)
-  - **LLM coaching:** reason counts only, never your notes, unless you explicitly include them
+  - **LLM coaching:** reason counts only, never your notes, unless you explicitly include them with the per-run **Include my notes** option (FR-10.60, v0.11)
 
 ## 8. Lichess integration
 
@@ -320,13 +320,18 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-8.13** **Monthly budget** (default **$5.00**). Warn at 80%. At 100%, Explain and Coach are disabled until the next month or until the budget is raised.
 - **FR-8.14** **Hard `max_tokens`** on every request. Defaults: Explain 1,500; Coach Summary 2,500; Coach Detailed 5,000.
 - **FR-8.15** **Reasoning / thinking effort** setting, default **off/low**. Hidden reasoning is billed as output and can multiply cost 2–5×. If enabled, the estimate accounts for it.
-- **FR-8.16** Prompts stay compact by design. The app never sends raw PGNs (headers, clocks, comments) to the LLM, and never sends batches of games. The only game text allowed is a **single game's SAN move list**, for the Game Review narrative (FR-11.19), anonymized. The Coach sends aggregates only (§10).
+- **FR-8.16** Prompts stay compact by design. The app never sends raw PGNs to the LLM: no headers, player names, dates, URLs, clocks or comments, ever. Game text is allowed only in these cases, always anonymized as You / Opponent:
+  - a **single game's SAN move list**, for the Game Review narrative (FR-11.19)
+  - from v0.11, the Coach's **game digests** (FR-10.52), which carry SAN only for the opening and the key moments
+  - from v0.11, with **Advanced analysis** switched on and confirmed (FR-10.56), the SAN move lists of the games in that run, up to its game cap
+
+  Otherwise the Coach sends aggregates and example positions (§10). (Rule changed by Adam, 2026-11-03, for whole-game coaching.)
 
 ---
 
 ## 10. Coach: weakness analysis and recommendations
 
-**Principle:** Stockfish and python-chess do the analysis locally, for free. The LLM gets only a compact summary and does the coaching. LLM cost doesn't grow with the number of games analyzed. Without an LLM key, the Coach still produces a full weakness report and recommended presets.
+**Principle:** Stockfish and python-chess do the analysis locally, for free. The LLM gets only a compact summary and does the coaching. By default, LLM cost grows only slowly with the number of games: aggregates, plus one short digest per game from v0.11. Advanced analysis (FR-10.56) is the one opt-in exception. Without an LLM key, the Coach still produces a full weakness report and recommended presets.
 
 ### 10.1 Sources and settings
 - **FR-10.1** A **Coach** button on the main page opens the Coach page.
@@ -449,6 +454,58 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.49** **Solving rules:** a book problem has one verified solution, so it's checked strictly like Lichess puzzles (§4.2), including "any mate counts" for mate-in-1, not with FR-10.43's 30 cp tolerance. If the file gives only the first move, the puzzle is that one move. The engine refutation and the post-puzzle panel (FR-7.2, 7.7) work as for any puzzle. Imported files usually carry no themes: they stay untagged until the lichess-puzzler tagger arrives (v0.10), which then tags them locally.
 - **FR-10.50** **Privacy:** the file is read on your PC and never sent anywhere; the User Guide says so.
 
+### 10.11 Whole-game coaching (v0.11; Adam, 2026-11-03)
+The Coach looks at your games the way a tutor would: tactics, but also strategy, openings, endgames and how you use your time. The engine and python-chess measure the facts, and the LLM diagnoses from them. The areas below are **examples, not a closed list**.
+- **FR-10.51** **Goal:** find your tactical, strategic and practical weaknesses across a set of games, including ones nobody listed in advance (e.g. *"you attack before castling"*, *"you trade into lost king-and-pawn endgames"*).
+- **FR-10.52** **Game digest** (local, deterministic, built from the v0.8 `game_analysis` with no new engine pass where the data already exists). One short record per game:
+  - your color, the result and the opening (ECO code and name)
+  - the eval timeline, compressed to the key moments, each with the position (FEN), your move, the best move and the eval swing
+  - king safety and development: the move each side castled (or didn't), your moves before castling, minor pieces developed by move 10, and early queen moves
+  - the pawn structure when the opening ends (e.g. isolated queen pawn, doubled pawns), and trades made while ahead or behind
+  - the endgame type, if the game reached one, from the material signature (king and pawn, rook, minor piece, queen, mixed)
+  - time use: your clock at each key moment, summarised (not the clock on every move), and mistakes made under 10% of your time
+  - the mistake reasons you tagged on this game's moves (§7.3)
+  
+  Digests are stored locally and reused across runs.
+- **FR-10.53** **Whole-game measures** (free, shown in the report without an LLM, each with the sample-size guard of FR-10.34):
+  - **Openings:** per opening, your score, average eval when the opening ends (around move 15), and errors in the first 15 moves
+  - **Phases and conversion:** errors per phase, how often you win from +2 or better, and how often you save the game from −2 or worse
+  - **Endgame types:** results and errors per endgame type
+  - **Time use:** your blunder rate under 10% of your time vs. the rest of the game
+  - **King safety and development:** how often you castle late or never, and how your results change when you do
+- **FR-10.54** **Open-ended diagnosis (LLM):**
+  - **Input:** the digests of the games in the run, the whole-game measures, and the aggregates of FR-10.21.
+  - **The prompt** asks the LLM to find weaknesses across tactics, strategy and practical play, *including but not limited to* openings, phases, endgame types, king safety and time use.
+  - **Output (JSON):** for each weakness, a category (tactical / strategic / opening / endgame / time / other), a plain-language explanation, practical advice, a suggested topic (FR-10.59), and **evidence**, which is a list of game references and plies.
+  - **Game references:** games are sent as local labels (G1, G2, …) that the app maps back to its own games on your PC. No game IDs or URLs are sent.
+- **FR-10.55** **Evidence rule** (validated like FR-10.23):
+  - Every cited game and ply must exist in the data that was sent, and citations that don't are dropped. A weakness left with no valid evidence is dropped.
+  - A weakness that cites fewer than 3 games is shown as **tentative**.
+  - Every citation opens that game in Game Review at that ply.
+  - The LLM's text is rendered escaped, and any move it names is validated before it's drawn (FR-8.4).
+- **FR-10.56** **Advanced analysis** (a per-run option, **off by default**):
+  - **What it adds:** the SAN move list of every game in the run, on top of the digests. Headers, names, dates, URLs, comments and clocks are still stripped.
+  - **Game cap:** 30 by default, adjustable from 10 to 50.
+  - **Before Confirm:** the usual estimate (FR-8.11) plus how it compares with a standard run, e.g. *"Advanced: about 4× the tokens of a standard run, ~$0.40 (8% of this month's budget), about 2 minutes. It takes longer and uses more API tokens."* The per-run cap and the monthly budget apply as usual.
+  - **Never automatic:** checkpoint summaries (FR-10.37) never use it.
+- **FR-10.57** **Findings become tracked weaknesses** when they can be measured:
+  - A finding that matches a whole-game measure (FR-10.53) or a habit check becomes a weakness of kind `opening`, `endgame`, `phase`, `time` or `habit`, with statuses decided by its **game rate** (§10.8), as for every weakness.
+  - A finding that can't be measured stays an **observation**: it's shown with the report and noted when it recurs across runs, but it has no status.
+  - The new kinds and the digest storage are a new migration, designed at v0.11 planning.
+- **FR-10.58** **Something to do for each weakness:**
+  - tactical → a puzzle preset (FR-10.22)
+  - opening → the games where it happened, and the opening trainer once it exists (v2.0)
+  - endgame or conversion → the positions from your games where it happened, opened on the analysis board
+  - time → flagged in "Why this mix" (FR-10.30)
+- **FR-10.59** **Lesson pointers:**
+  - **First, the in-app drill:** e.g. *"Learn zugzwang"* loads zugzwang puzzles at a lower rating band, with Explain on.
+  - **Then outside resources:**
+    - a **curated map** from topics (themes, endgame types, opening families) to stable free pages, such as Lichess Practice and Lichess Learn
+    - **search links** for YouTube, chess.com and any site you choose (Settings: which sites are shown, and an optional custom search URL with a `{q}` placeholder)
+  - **The LLM only picks a topic** from the app's list. It never writes a URL, and any link the app didn't build itself is dropped.
+  - **Links open in your default browser.** The app never fetches those sites, and the search terms go to the site you click (the User Guide's privacy section says so).
+- **FR-10.60** **Include my notes** (a per-run option, **off by default**): adds your mistake-reason notes (§7.3) for the games and puzzles in the run to the prompt. Before Confirm, you see exactly which notes will be sent.
+
 ## 11. Game Review: import a game, analyze it, explain better moves
 
 **Principle:** Stockfish grades every move locally, for free. The AI explains key moments using the same grounded-context and validation rules as Explain (§9.2). Without an LLM key, Game Review still works as a full engine review.
@@ -567,7 +624,7 @@ The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.0, each a stop-a
 | M5 Modes + stats + reasons | v0.5, v0.6 |
 | M4 LLM Explain + guardrails | v0.7 (moved after the modes; guardrails still ship before the first LLM call) |
 | M6 Game Review | v0.8 (engine), v0.9 (AI) |
-| M7 Coach + fix tracking | v0.10 (Coach), v1.0 (checkpoints, release) |
+| M7 Coach + fix tracking | v0.10 (Coach), v0.11 (whole-game coaching), v1.0 (checkpoints, release) |
 
 ---
 
