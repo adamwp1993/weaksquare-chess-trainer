@@ -116,8 +116,8 @@ Scope:
 ---
 
 ## v0.6: Training modes II + mistake reasons
-- **Name the idea first** and **Danger spotting** (with Stockfish-verified safe candidates) (FR-4.3, 4.4).
-- **Mistake reasons** for puzzles: chips, keyboard 1–6, suggestions, misclick handling (§7.3, FR-5.6–5.11).
+- **Name the idea first** (setup and payoff motifs, graded as ideas found + extras; no target square, v0.6 planning) and **Danger spotting** (with Stockfish-verified safe candidates within 50 cp of best; a correct Unsafe is followed by the refutation's first move; local only) (FR-4.3, 4.4).
+- **Mistake reasons** for puzzles: chips, keyboard 1–6, suggestions, misclick handling (§7.3, FR-5.6–5.11). The ask setting is *Always* / *Off* until Game Review ships.
 - Stats: reason breakdown, Commit/Name/Danger accuracy (FR-9.3, 9.7).
 
 **Done when:** safe-candidate verification test; reason-suggestion rule tests; a misclick is excluded from local stats but still sent as a loss.

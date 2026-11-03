@@ -158,7 +158,7 @@ weaksquare-chess-trainer/
 | Interface | Implementations | First version |
 |---|---|---|
 | `PuzzleSource` | `LichessDbSource` → `CustomPuzzleSource` | v0.1 → v0.8 |
-| `TrainingMode` | `Standard` (also serves Spaced repetition) → `CommitLine` → `NameIdea`, `DangerSpotting`. Depth ladder is a queue order (`core/ladder.py`), not a mode (v0.5 planning) | v0.1 → v0.5 → v0.6 |
+| `TrainingMode` | `Standard` (also serves Spaced repetition) → `CommitLine` → `NameIdea` (Standard's rules plus tags), `DangerSpotting` (its own call step, `on_call`). Depth ladder is a queue order (`core/ladder.py`), not a mode (v0.5 planning) | v0.1 → v0.5 → v0.6 |
 | `JobRunner` | thread-pool runner | v0.1 |
 | `SecretStore` | `KeyringSecretStore`, `FakeSecretStore` (tests) | v0.3 |
 | `LichessClient` | httpx implementation, fake | v0.3 |
