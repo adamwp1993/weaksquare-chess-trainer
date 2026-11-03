@@ -25,7 +25,7 @@ def timed_next(page) -> float:  # type: ignore[no-untyped-def]
     return float(page.evaluate("performance.now()") - t0)
 
 
-@pytest.mark.xfail(strict=True, reason="v0.6-B10: the padding uses the think time cached at the session's first load")
+# Regression test for v0.6-B10 (fixed after QA round 3).
 def test_b10_a_longer_think_time_set_mid_session_pads_to_the_new_time(page) -> None:  # type: ignore[no-untyped-def]
     danger_start(page)
     page.get_by_test_id("danger-safe").click()

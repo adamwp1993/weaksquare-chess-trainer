@@ -212,7 +212,7 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
-### 2026-11-03, v0.6: QA fixes (v0.6-B1 to B9)
+### 2026-11-03, v0.6: QA fixes (v0.6-B1 to B10)
 - Context: `qa/QA-v0.6.md` rounds 1 (two majors, six minors) and 2 (B9, minor).
 - Decision:
   - **B1:** `_danger_candidate` runs the MultiPV search for **every** Danger puzzle, before the coin flip, so a puzzle's load time no longer tells safe from blunder (it did on 14 of 14 in the real app). The trainer says "Preparing the position…" while it waits.
@@ -221,7 +221,7 @@ Entry format:
   - **B4:** think time for Rushed starts when the trainer has shown the position: `core/modes/base.py` `OPPONENT_DELAY_MS` / `REPLY_DELAY_MS`, equal to `TrainerView`'s animation delays (`tests/contract/test_trainer_delays.py`).
   - **B6:** the session bar's "All time" leaves Danger spotting out, like the Stats totals.
   - **B2:** the note you're writing lives in `TrainerView`, so keys 1–6 save it as clicks do; a note over 200 characters is left out and the reason still saved.
-  - **B9:** Stockfish finishes a forced position early, and forced positions are the ones with no safe move, so a fast load still meant "Unsafe". `TrainerView` keeps every Danger load on "Preparing the position…" for at least the engine think time (read once from `get_engine_settings`). It's padded in the UI, which is where the timing shows, rather than with a sleep in the session service.
+  - **B9:** Stockfish finishes a forced position early, and forced positions are the ones with no safe move, so a fast load still meant "Unsafe". `TrainerView` keeps every Danger load on "Preparing the position…" for at least the engine think time (read from `get_engine_settings` at every Danger load, so a think time changed mid-session counts at once: B10). It's padded in the UI, which is where the timing shows, rather than with a sleep in the session service.
   - **B7, B8:** the safe verdict's wording, whole-number evenly labelled y ticks on the reason trend (`interval: 0`), and no promise of an unshipped feature in the User Guide.
 - Alternatives (B1): padding blunder loads with a sleep (still a timing side channel under load; and the search may as well be real); prefetching (see the session entry).
 - Consequences: every Danger puzzle costs one engine search (about the think time) to appear.
