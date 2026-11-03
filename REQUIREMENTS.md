@@ -45,7 +45,7 @@ Solves sync to the user's Lichess account so they count toward their real puzzle
 | Mistake tagging | **lichess-puzzler** tagger (Python, AGPL-3.0) | Lichess's own puzzle theme tagger, so game mistakes get the same theme names as the puzzle DB |
 | Game sources | Lichess API; chess.com Published-Data API | Read-only, used by the Coach |
 
-**Decided:** front end = React + TypeScript + Vite + Mantine (see ARCHITECTURE.md §3). **Decided:** runs from source, no packaged `.exe` (NFR-8; ARCHITECTURE.md §7). **To decide during the build:** default model IDs (v0.7).
+**Decided:** front end = React + TypeScript + Vite + Mantine (see ARCHITECTURE.md §3). **Decided:** runs from source, no packaged `.exe` (NFR-8; ARCHITECTURE.md §7). **Decided (v0.7 planning, Adam):** no default model is pre-selected; you pick one from the price table's models (FR-1.3).
 
 ---
 
@@ -56,8 +56,8 @@ Shown when the app launches.
 
 - **FR-1.1** "Sign in with Lichess" button runs the OAuth PKCE flow (§8.1). Shows status: *Not signed in* / *Signed in as `<username>`* / *Sign-in failed (reason)*.
 - **FR-1.2** LLM provider dropdown: *None*, *Anthropic*, *OpenAI*.
-- **FR-1.3** Model field for the selected provider. Pre-filled with a default but editable. Model names must not be hard-coded anywhere else in the app.
-- **FR-1.4** API key field (optional, masked) with a **Test key** button that makes a minimal API call and reports success or the error.
+- **FR-1.3** Model field for the selected provider: a dropdown of every model in the price table (`llm_prices`) for that provider, each with its rough cost per Explain, and you can also type any other model ID. **Nothing is pre-selected** (Adam, v0.7 planning): until you pick a model, Test key checks only the key and Explain asks you to pick one. A model with no row in the price table can't be used until you add its prices (FR-8.9). Model names must not be hard-coded anywhere outside the provider defaults module (`core/llm/defaults.py`), which also seeds the price table.
+- **FR-1.4** API key field (optional, masked) with a **Test key** button that makes a minimal API call and reports success or the error. The call is the provider's free model lookup (`GET /v1/models/{model}`, or `/v1/models` when no model is picked), so testing a key costs nothing. The FR-1.6 silent test uses the same call.
 - **FR-1.5** **Continue** button goes to the main page.
 - **FR-1.6** **Fast path:** if a stored Lichess token validates against `GET /api/account`, and either no LLM is configured or the stored key passes a silent test, the page shows a single **Continue as `<username>`** button, listing the linked chess.com username if there is one. A link expands the full form.
 - **FR-1.11** **Linked accounts panel:** Lichess (the signed-in account, FR-1.1) and an optional **chess.com username** with a **Verify** button (§11.5). Either account can be unlinked here or in the gear settings.
@@ -186,7 +186,7 @@ All of these ship in version 1. You pick a mode per session from the **Modes** c
 ### 7.2 Stuck ladder (each step unlocks the next)
 1. **Hint**: highlights the piece that moves next. Counts as a loss.
 2. **Show answer**: plays the solution step by step with back/forward controls. If you played a wrong move earlier, **Stockfish's refutation** of that move (the best reply line, 3–5 plies, with eval) appears above the answer as *Why <move> fails*, with its own **Show me** to step through it on the board. The answer itself is always the correct solution (Adam, v0.4 manual test: it used to start with the refutation). Counts as a loss.
-3. **Explain** (only if an LLM is configured): see §9. Counts as a loss.
+3. **Explain** (only if an LLM is configured): see §9. Counts as a loss. In practice it's available once the puzzle is over (like the engine, FR-7.3), and it comes after Show answer, which already decided the attempt, so Explain itself never changes a result (v0.7 planning).
 
 ---
 
@@ -296,19 +296,20 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - **Show me** next to each engine line (in the panel and on the analysis board): the line goes on the board at its starting position, read-only, and you step through it yourself with Back / Forward (or ← / →); nothing moves until you do. **Done** returns to the position you were on. (Adam, during the v0.4 manual test.)
 
 ### 9.2 LLM "Explain"
-- **FR-8.1** Optional. The button only appears when a provider and key are configured. Providers: **Anthropic** and **OpenAI**, behind one interface (`explain(context) -> ExplainResult`).
+- **FR-8.1** Optional. The button only appears when a provider and key are configured. Providers: **Anthropic** and **OpenAI**, behind one interface (`explain(context) -> ExplainResult`). **Explain requires Stockfish** (Adam, v0.7 planning): without it the button is disabled and the install banner shows. It's enabled once the puzzle is over (FR-7.3), in every mode including Danger spotting.
 - **FR-8.2** **The LLM explains; it doesn't calculate.** It receives grounded context:
   - FEN, side to move, the full solution line (SAN and UCI)
   - Puzzle themes (revealed at this point)
   - The user's attempted moves, and Stockfish's refutation of any wrong move
   - Stockfish MultiPV lines and evals
   - Attack/defense facts computed by python-chess for the key squares and pieces (what attacks and defends the target, what each solution move changes)
+  - In Danger spotting (Adam, v0.7 planning): the highlighted candidate, your call (Safe / Unsafe) and whether it was safe, so the explanation covers why that move was safe or was the blunder
 
   The prompt tells it to use only the moves provided and never invent moves or pieces.
 - **FR-8.3** **Structured output** (JSON): a short summary, then one step per solution move containing an explanation and annotations (`arrow from→to`, `circle square`, color), then key ideas (e.g. "deflection," "overloaded defender").
 - **FR-8.4** **Validation before display:** every move must be legal in sequence from the puzzle position, and every square must be valid. Drop invalid annotations and show a small "some annotations were discarded" note.
 - **FR-8.5** **"Show me":** steps through the solution on the board, drawing each step's arrows and circles with chessground's shape API.
-- **FR-8.6** **Cost control:** only runs on an explicit button press. Results are cached by `(puzzle_id, user move path, provider, model)`. All guardrails in §9.3 apply.
+- **FR-8.6** **Cost control:** only runs on an explicit button press. Results are cached by `(puzzle_id, user move path, provider, model)`. A cached result costs nothing and is shown even when the budget is used up. All guardrails in §9.3 apply.
 - **FR-8.7** LLM text is rendered as **escaped text / sanitized markdown**, never raw HTML (prevents injection into the web view).
 - **FR-8.8** Timeouts and readable errors (bad key, quota, network).
 
@@ -316,10 +317,10 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-8.9** **Editable price table** (`llm_prices`), seeded with the prices in §16 (as of 2026-10-31), including long-context price tiers (e.g. Claude Haiku 5.5 charges more above a 100k-token prompt). Every cost figure in the app is computed from this table and the token counts the provider actually reports.
 - **FR-8.10** **Usage log:** every request records feature, provider, model, input and output tokens, and cost.
 - **FR-8.11** **Pre-run estimate:** manually started Coach runs always show estimated input/output tokens and cost, with a **Confirm** button. Automatic checkpoint runs follow FR-10.37. Explain shows its estimate inline (no confirm needed, since it's cents at most).
-- **FR-8.12** **Per-run cap** (default **$0.50**). A request estimated above the cap is blocked unless the user raises the cap.
-- **FR-8.13** **Monthly budget** (default **$5.00**). Warn at 80%. At 100%, Explain and Coach are disabled until the next month or until the budget is raised.
+- **FR-8.12** **Per-run cap** (default **$0.50**). A request estimated above the cap is blocked unless the user raises the cap. The estimate checked against the cap is the worst case: estimated input plus the full `max_tokens` of output.
+- **FR-8.13** **Monthly budget** (default **$5.00**). Warn at 80%. At 100%, Explain and Coach are disabled until the next month or until the budget is raised. Requests go through until the month's logged spend reaches the budget, so the last one can take you slightly over (Adam, v0.7 planning). The month is the local calendar month.
 - **FR-8.14** **Hard `max_tokens`** on every request. Defaults: Explain 1,500; Coach Summary 2,500; Coach Detailed 5,000.
-- **FR-8.15** **Reasoning / thinking effort** setting, default **off/low**. Hidden reasoning is billed as output and can multiply cost 2–5×. If enabled, the estimate accounts for it.
+- **FR-8.15** **Reasoning / thinking effort** setting: **Low** (default), **Medium** or **High**. Hidden reasoning is billed as output and can multiply cost 2–5×. If enabled, the estimate accounts for it: Medium and High raise the request's `max_tokens` to 2× and 4× the defaults, so thinking can't cut the answer short, and the estimate and cap use the raised limit. There's no Off: current Claude models such as Opus 5.5 refuse to turn thinking off, so Low is the floor on both providers (v0.7 planning).
 - **FR-8.16** Prompts stay compact by design. The app never sends raw PGNs to the LLM: no headers, player names, dates, URLs, clocks or comments, ever. Game text is allowed only in these cases, always anonymized as You / Opponent:
   - a **single game's SAN move list**, for the Game Review narrative (FR-11.19)
   - from v0.11, the Coach's **game digests** (FR-10.52), which carry SAN only for the opening and the key moments
@@ -675,6 +676,8 @@ The project is open source under **AGPL-3.0-or-later** from the first commit (`L
 | GPT-5.4 mini | $0.75 | $4.50 | OpenAI pricing, via pricing trackers (2026) |
 | GPT-5.4 | $2.50 | $15.00 | same |
 | GPT-5.5 | $5.00 | $30.00 | same |
+
+The four Claude rows were re-checked against Anthropic's model table at v0.7 planning (2026-11-03) and match. The GPT rows are re-checked when the OpenAI adapter is written.
 
 Estimated cost per request at these prices (my token estimates; actual usage gets logged): Explain ≈ $0.001 (Haiku 5.5) to $0.045 (GPT-5.5); Coach Detailed ≈ $0.004 to $0.19.
 

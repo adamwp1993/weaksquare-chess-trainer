@@ -129,6 +129,7 @@ Scope:
 - Provider interface, Anthropic and OpenAI, model field, **Test key** (FR-1.2–1.4).
 - **All guardrails first:** price table, usage log, estimates, per-run cap, monthly budget, `max_tokens`, reasoning setting, spend indicator (§9.3, FR-1.10).
 - Explain (stuck ladder step 3): grounded context, structured output, validation, board annotations, caching (FR-8.1–8.8).
+- Planning decisions (Adam, 2026-11-03): no model pre-selected (pick from the price table); the budget blocks at 100%; Explain requires Stockfish; Explain also works in Danger spotting. No new dependencies: both providers are called through `adapters/http.py`.
 
 **Done when:** budget and cap enforcement tests (blocked when over); annotation-validation tests drop illegal moves and squares; the live test makes 1 real Explain call with Haiku or nano under the cap.
 **Adam's manual test:** set a $0.05 monthly budget → Explain until blocked → raise it → compare one puzzle across two models.
