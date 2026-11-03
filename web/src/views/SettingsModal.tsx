@@ -14,6 +14,7 @@ import {
 import type { AccountStatus, SoundSettings } from "../api/types";
 import { AccountPanel } from "../components/AccountPanel";
 import { EngineSettingsPanel } from "../components/EngineSettingsPanel";
+import { DebugPanel, TrainingSettingsPanel } from "../components/TrainingSettingsPanel";
 import { sounds as player } from "../sound/player";
 
 const SETS: { value: SoundSettings["set"]; label: string }[] = [
@@ -23,8 +24,8 @@ const SETS: { value: SoundSettings["set"]; label: string }[] = [
   { value: "futuristic", label: "Futuristic" },
 ];
 
-// The gear settings (FR-1.8): your Lichess account, appearance (FR-1.12), sounds (FR-1.13) and the engine
-// (FR-7.4, 7.5), saved in
+// The gear settings (FR-1.8): your Lichess account, appearance (FR-1.12), sounds (FR-1.13), the engine
+// (FR-7.4, 7.5), training (v0.5: FR-4.5, 4.6) and, in --dev runs, Debug (fast-forward time), saved in
 // user.db through the bridge and applied at once. The same dialog opens from the gear and from ☰.
 export function SettingsModal({
   opened,
@@ -37,7 +38,12 @@ export function SettingsModal({
   onAutoCheck,
   account,
   onAccountChanged,
+  timeOffset = null,
+  onTimeOffset = () => undefined,
 }: {
+  /** FR-4.6 fast-forward: a number in --dev runs, null in the real app (no Debug section). */
+  timeOffset?: number | null;
+  onTimeOffset?: (days: number) => void;
   account: AccountStatus | null;
   onAccountChanged: () => void;
   opened: boolean;
@@ -126,6 +132,11 @@ export function SettingsModal({
         </Stack>
 
         <Stack gap="xs">
+          <Title order={5}>Training</Title>
+          {opened && <TrainingSettingsPanel />}
+        </Stack>
+
+        <Stack gap="xs">
           <Title order={5}>Puzzle database</Title>
           <Switch
             label="Check for a newer puzzle database once a day"
@@ -135,6 +146,13 @@ export function SettingsModal({
             data-testid="auto-check-switch"
           />
         </Stack>
+
+        {timeOffset !== null && (
+          <Stack gap="xs">
+            <Title order={5}>Debug</Title>
+            {opened && <DebugPanel offset={timeOffset} onOffset={onTimeOffset} />}
+          </Stack>
+        )}
       </Stack>
     </Modal>
   );

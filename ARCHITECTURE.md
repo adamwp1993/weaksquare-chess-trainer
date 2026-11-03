@@ -211,6 +211,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-02, v0.5: Front end for the modes and the collapsible filters panel
+- Context: §6's Modes control, Commit the line's entry on the board, and FR-1.14 (Adam, v0.5 planning).
+- Decision:
+  - The Modes control and Show move count live in `MixerView`; the modes list is `web/src/state/modes.ts`. In Spaced repetition the filters sit in a disabled `<fieldset>` (greyed, unreachable by keyboard), with the due line at the top; the queue size and Rated stay live.
+  - Commit entry (`TrainerView` + `components/CommitLine.tsx`) keeps the entered line in React state and checks legality with chess.js; the board is movable for both colors. Entered moves play sounds from `entrySound`, which mirrors `core/move_sounds.py`'s priority locally, because the moves only reach the backend at Submit (a bridge call per entered move just for its sound wasn't worth it). The graded line comes back from `submit_line`.
+  - Hide filters: `App` keeps `MixerView` mounted in a `display: none` grid column (so its state, counts and catalogs survive) and shows `FiltersStrip` across the top; the trainer column takes the full width and `Board` gets a larger `maxWidth` (`min(760px, 100vh − 240px)`) with the side panel centred beside it. The state is `ui.filters_collapsed` in `user.db`. **F** toggles it.
+  - The mock client implements every new method with the backend's rules (Commit grading, the ladder by theme-set key, SRS due puzzles until reviewed), with `?mode=`, `?srs=none` and `?dev=1` scenarios.
+- Alternatives: a vertical strip beside the board (too narrow for a readable summary); unmounting the panel while hidden (it would refetch everything and lose unsaved input).
+- Consequences: the trainer has a Commit branch; a later move-by-move mode needs none.
+
 ### 2026-11-02, v0.5: Commit the line has its own entry point instead of `on_move`
 - Context: FR-4.2 grades a whole line at once; decision 6 assumed every mode is played move by move through `on_move`.
 - Decision: `CommitLineMode` (`core/modes/commit_line.py`) keeps `start`, `start_practice`, `on_help` and `give_up`, refuses `on_move` with `ConflictError`, and adds `on_submit(state, line)`. Grading is pure (`grade()`): your moves are compared with the solution's by index; a mating alternative (§4.2) is accepted only while every earlier move matched exactly, so the position is real, and it ends the line there. `first_wrong` (for Stockfish's refutation) is set only under the same condition. Calculation accuracy is stored on the attempt (`replies_correct`, `replies_total`, migration 0004). The front end checks legality only (chess.js) and the backend re-checks the line with python-chess. Bridge: `submit_line`; `PuzzleView.max_plies` (a sanity cap: 2× the solution + 10, at most 60) and `solution_plies` (only with Show move count, so the length never reaches the UI when it's hidden). Show move count makes `angle_for(..., length_known=True)` report the length theme when the themes are All (§8.3).

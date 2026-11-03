@@ -3,10 +3,11 @@ import { Chess } from "chess.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { ApiCallError } from "../api/ApiClient";
-import type { AttemptRating, Outcome, PuzzleView, SessionStats } from "../api/types";
+import type { AttemptRating, CommitFeedback, Outcome, PuzzleView, SessionStats } from "../api/types";
 import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
 import { AnswerPlayer, answerPositions, type AnswerPosition, type AnswerSegment } from "../components/AnswerPlayer";
 import { Board } from "../components/Board";
+import { CommitControls, CommitResult, entryBoard, entrySound } from "../components/CommitLine";
 import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { AnalyzeButton, EnginePanel } from "../components/EnginePanel";
 import { RatingChange } from "../components/LichessStatus";
@@ -17,9 +18,21 @@ import { useShortcuts } from "../state/shortcuts";
 
 const OPPONENT_DELAY_MS = 500;
 const REPLY_DELAY_MS = 300;
+const WIDE_BOARD = "min(760px, calc(100vh - 240px))"; // FR-1.14: filters hidden, the board fills the height
 const RATING_POLL_MS = 2000; // while a solve shows "Syncing…" (pushed sync events normally win)
 
 type Message = { color: "green" | "red" | "gray"; text: string } | null;
+
+function turnMessage(view: PuzzleView, again: boolean): string {
+  if (view.mode === "commit_line") {
+    return again
+      ? "Enter the whole line again: your moves and the replies you expect. Not scored."
+      : "Enter the whole line: your moves and the replies you expect. Nothing is checked until you press Submit.";
+  }
+  return again
+    ? `Your turn again: find the best move for ${view.player_color}. Not scored.`
+    : `Your turn: find the best move for ${view.player_color}.`;
+}
 
 function uciMove(uci: string) {
   return { from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci[4] : undefined };
@@ -32,12 +45,16 @@ function uciMove(uci: string) {
 // loss (FR-5.2); after it, Show answer is free (FR-5.4) and replays the whole line.
 // Stockfish (v0.4): after a wrong move, Show answer starts with the engine's refutation of it (§7.2).
 // Once the puzzle is over, the engine panel and the analysis board appear (FR-7.2, 7.7); never before (FR-7.3).
+// Commit the line (v0.5, FR-4.2): you move both sides with nothing checked, then Submit grades the line.
 export function TrainerView({
   sessionId,
   onNewSession,
   onHistoryChange,
   coordinates = true,
+  wide = false,
 }: {
+  /** FR-1.14: the filters panel is hidden, so the board may grow (within the window's height). */
+  wide?: boolean;
   sessionId: number;
   onNewSession: () => void;
   coordinates?: boolean;
@@ -48,7 +65,7 @@ export function TrainerView({
   const [complete, setComplete] = useState(false);
   const [fen, setFen] = useState<string | null>(null);
   const [lastMove, setLastMove] = useState<[string, string] | null>(null);
-  const [movable, setMovable] = useState<"white" | "black" | null>(null);
+  const [movable, setMovable] = useState<"white" | "black" | "both" | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [lineDone, setLineDone] = useState(false);
   // FR-5.12 Try again: a practice run of the finished puzzle. Nothing is recorded; the result shown
@@ -70,6 +87,10 @@ export function TrainerView({
   const [engine, refreshEngine] = useEngineStatus();
   const [helpBusy, setHelpBusy] = useState(false);
   const [rating, setRating] = useState<AttemptRating | null>(null);
+  // Commit the line: the moves you've entered (UCI, both sides), and the graded line after Submit.
+  const [entry, setEntry] = useState<string[]>([]);
+  const [commitResult, setCommitResult] = useState<CommitFeedback | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
@@ -143,6 +164,8 @@ export function TrainerView({
     setAnalysis(null);
     setPreview(null);
     setBestMove(null);
+    setEntry([]);
+    setCommitResult(null);
     try {
       const next = await api.nextPuzzle(sessionId);
       refreshStats();
@@ -160,9 +183,9 @@ export function TrainerView({
         chess.current = c;
         setFen(c.fen());
         setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
-        setMovable(next.player_color);
+        setMovable(next.mode === "commit_line" ? "both" : next.player_color);
         sounds.play(next.opponent_sound); // before you've clicked anything (FR-1.13)
-        setMessage({ color: "gray", text: `Your turn: find the best move for ${next.player_color}.` });
+        setMessage({ color: "gray", text: turnMessage(next, false) });
       }, OPPONENT_DELAY_MS);
     } catch (e) {
       setError((e as Error).message);
@@ -180,7 +203,66 @@ export function TrainerView({
     return () => pending.forEach(clearTimeout);
   }, [load]);
 
+  // Commit the line: enter a move for either side; nothing is checked until Submit (FR-4.2).
+  const onCommitMove = (uci: string) => {
+    if (!view || !chess.current) return;
+    const start = chess.current.fen();
+    const board = entryBoard(start, entry);
+    if (view.max_plies !== null && entry.length >= view.max_plies) {
+      setFen(board.fen());
+      return;
+    }
+    try {
+      const move = board.move(uciMove(uci));
+      sounds.play(entrySound(move));
+    } catch {
+      setFen(entryBoard(start, entry).fen()); // illegal: snap back
+      return;
+    }
+    setEntry([...entry, uci]);
+    setFen(board.fen());
+    setLastMove([uci.slice(0, 2), uci.slice(2, 4)]);
+  };
+
+  const undoEntry = (all: boolean) => {
+    if (!chess.current) return;
+    const rest = all ? [] : entry.slice(0, -1);
+    setEntry(rest);
+    setFen(entryBoard(chess.current.fen(), rest).fen());
+    const last = rest[rest.length - 1];
+    setLastMove(last ? [last.slice(0, 2), last.slice(2, 4)] : view ? [view.opponent_move.slice(0, 2), view.opponent_move.slice(2, 4)] : null);
+  };
+
+  const submitLine = async () => {
+    if (!view || entry.length === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const r = await api.submitLine(sessionId, entry);
+      setCommitResult(r);
+      setMovable(null);
+      setLineDone(true);
+      setHintSquare(null);
+      if (r.outcome) {
+        decide(r.outcome);
+        sounds.later(r.outcome.win ? "solved" : "failed");
+      }
+      if (practice) {
+        const right = r.grades.filter((g) => g.player).every((g) => g.correct);
+        setMessage(right ? { color: "green", text: "Right line! (practice, not scored)" } : { color: "gray", text: "Not quite (practice, not scored)." });
+      } else if (r.outcome) {
+        setMessage(r.outcome.win ? { color: "green", text: "Solved: your line is right!" } : { color: "red", text: "Not quite: see your line below." });
+      } else {
+        setMessage({ color: "gray", text: "Here's how your line compares (this puzzle already counted as failed)." });
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const onMove = async (uci: string) => {
+    if (view?.mode === "commit_line") return onCommitMove(uci);
     const before = chess.current;
     if (!before || !view) return;
     const after = new Chess(before.fen());
@@ -347,6 +429,8 @@ export function TrainerView({
     setHintSquare(null);
     setHinted(false);
     setMovable(null);
+    setEntry([]);
+    setCommitResult(null);
     const c = new Chess(view.fen);
     setFen(view.fen);
     setLastMove(null);
@@ -357,9 +441,9 @@ export function TrainerView({
       chess.current = c;
       setFen(c.fen());
       setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
-      setMovable(view.player_color);
+      setMovable(view.mode === "commit_line" ? "both" : view.player_color);
       sounds.play(view.opponent_sound);
-      setMessage({ color: "gray", text: `Your turn again: find the best move for ${view.player_color}. Not scored.` });
+      setMessage({ color: "gray", text: turnMessage(view, true) });
     }, OPPONENT_DELAY_MS);
   };
   const stepAnalysis = (to: number) => {
@@ -424,8 +508,8 @@ export function TrainerView({
           {error}
         </Alert>
       )}
-      <Group align="flex-start" gap="lg" wrap="nowrap">
-        <div style={{ flex: "1 1 560px", minWidth: 320 }}>
+      <Group align="flex-start" gap="lg" wrap="nowrap" justify={wide ? "center" : undefined}>
+        <div style={wide ? { flex: `0 1 ${WIDE_BOARD}`, minWidth: 320 } : { flex: "1 1 560px", minWidth: 320 }}>
           {fen && view && (
             <Board
               fen={previewPos ? previewPos.fen : (boardFen ?? fen)}
@@ -436,6 +520,7 @@ export function TrainerView({
               hintSquare={analysisPos ? null : hintSquare}
               coordinates={coordinates}
               arrows={arrow ? [arrow] : undefined}
+              maxWidth={wide ? WIDE_BOARD : 560}
             />
           )}
         </div>
@@ -475,6 +560,12 @@ export function TrainerView({
                     </Badge>
                   ))}
                 </Group>
+                {outcome.level_up && (
+                  <Badge color="teal" variant="light" style={{ textTransform: "none" }} data-testid="level-up">
+                    Level up! Now {outcome.level_up.label.toLowerCase()} puzzles ({outcome.level_up.level}
+                    {outcome.level_up.top ? "+" : ""} moves)
+                  </Badge>
+                )}
                 <RatingChange info={rating} />
                 <Anchor size="sm" href={outcome.puzzle_url} target="_blank" rel="noreferrer">
                   Open this puzzle on Lichess
@@ -482,6 +573,18 @@ export function TrainerView({
               </Stack>
             </Paper>
           )}
+          {view?.mode === "commit_line" && !lineDone && movable !== null && (
+            <CommitControls
+              entered={entry.length}
+              target={view.solution_plies}
+              max={view.max_plies}
+              busy={submitting}
+              onUndo={() => undoEntry(false)}
+              onClear={() => undoEntry(true)}
+              onSubmit={submitLine}
+            />
+          )}
+          {commitResult && startFen && !analysis && !linePreview && <CommitResult startFen={startFen} result={commitResult} />}
           {answer && !analysis && !linePreview && (
             <AnswerPlayer
               positions={answer.positions}
@@ -585,6 +688,7 @@ export function TrainerView({
           {!decided && !lineDone && (
             <Text size="xs" c="dimmed">
               Hint and Show answer count the puzzle as failed. Show answer unlocks after a Hint.
+              {view?.mode === "commit_line" ? " Hint circles the piece that makes your first move." : ""}
             </Text>
           )}
           <Button

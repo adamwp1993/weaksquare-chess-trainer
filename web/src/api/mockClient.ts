@@ -11,8 +11,18 @@
 // Stockfish (v0.4): `?engine=missing` starts with no engine installed (the Install banner),
 // `?engine=custom` with your own engine set, `?engine=custom_missing` with that engine's file gone,
 // and `?engine=slow` makes every analysis take 1.5 s.
+// Training modes (v0.5): `?srs=none` starts with nothing due for Spaced repetition (default: two
+// puzzles due), `?dev=1` behaves like a --dev run (Settings → Debug → fast-forward time), and
+// `?mode=commit_line|spaced_repetition` starts on that mode.
 import { Chess } from "chess.js";
-import type { AnalysisPurpose, ApiClient, BackendEvent, EngineSettingsChange, SettingValues } from "./ApiClient";
+import type {
+  AnalysisPurpose,
+  ApiClient,
+  BackendEvent,
+  EngineSettingsChange,
+  SettingValues,
+  TrainingMode,
+} from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
@@ -24,6 +34,11 @@ import type {
   Refutation,
   AttemptRating,
   BucketCounts,
+  CommitFeedback,
+  LadderInfo,
+  LadderPreview,
+  PlyGrade,
+  SrsStatus,
   AppInfo,
   FilterSpec,
   HelpResponse,
@@ -122,10 +137,11 @@ function matches(p: MockPuzzle, spec: FilterSpec): boolean {
 }
 
 function validate(spec: FilterSpec) {
-  if (spec.ratios.length === 0) return;
   const fail = (message: string) => {
     throw new ApiCallError({ code: "invalid_argument", message, retryable: false });
   };
+  if (spec.order === "depth_ladder" && spec.ratios.length > 0) fail("The depth ladder can't be combined with ratios: pick themes instead.");
+  if (spec.ratios.length === 0) return;
   if (spec.themes.length > 0) fail("With ratios, the themes come from each ratio: clear the theme list.");
   if (spec.ratios.length < 2) fail("Ratios need between 2 and 10 groups.");
   if (spec.ratios.some((b) => b.themes.length === 0)) fail("Each ratio needs at least one valid theme.");
@@ -144,12 +160,59 @@ const RATING_POINTS: [string, number, number][] = [
   ["2026-10-28T21:00:00", 1813, 4], ["2026-10-28T21:33:00", 1826, 4], ["2026-10-31T17:20:00", 1834, 5],
 ]; // prettier-ignore
 const MOCK_USER = "your_name";
+const LEVELS = [2, 3, 4];
+const LEVEL_NAMES: Record<number, string> = { 2: "Short", 3: "Long", 4: "Very long" };
+
+// Depth ladder (FR-4.5): the same key as core/ladder.py, so a theme set keeps its level.
+function ladderKey(spec: FilterSpec): string {
+  const themes = [...spec.themes].sort();
+  const match = themes.length > 1 ? spec.match : "any";
+  return JSON.stringify({ exclude: [...spec.exclude_themes].sort(), match, themes });
+}
+
+function atLevel(spec: FilterSpec, level: number): FilterSpec {
+  return { ...spec, lengths: [level], order: "random" };
+}
+
+// Commit the line (FR-4.2): the same grading as core/modes/commit_line.py.
+function gradeLine(start: string, solution: string[], line: string[]): { grades: PlyGrade[]; extra: string[]; firstWrong: [string, string] | null } {
+  const grades: PlyGrade[] = [];
+  const board = new Chess(start);
+  let same = true;
+  let end = solution.length;
+  let firstWrong: [string, string] | null = null;
+  for (let i = 0; i < solution.length; i++) {
+    const expected = solution[i];
+    const mine = i < line.length ? line[i] : null;
+    const player = i % 2 === 0;
+    let correct = mine === expected;
+    if (player && !correct && mine !== null && same) {
+      const probe = new Chess(board.fen());
+      const exp = new Chess(board.fen());
+      probe.move(uciToMove(mine));
+      exp.move(uciToMove(expected));
+      correct = exp.isCheckmate() && probe.isCheckmate();
+      if (!correct) firstWrong ??= [board.fen(), mine];
+    }
+    grades.push({ played: mine, expected, player, correct });
+    if (same && mine !== null && correct && mine !== expected) {
+      end = i + 1;
+      break;
+    }
+    if (same && mine === expected) board.move(uciToMove(expected));
+    else same = false;
+  }
+  return { grades, extra: line.slice(end), firstWrong };
+}
 const MANAGED_PATH = "C:\\Users\\you\\AppData\\Local\\WeakSquare\\engines\\sf_19\\stockfish.exe";
 const CUSTOM_PATH = "C:\\Engines\\my-stockfish.exe";
 
 interface MockSession {
   spec: FilterSpec;
   rated: boolean;
+  mode: TrainingMode;
+  showLength: boolean;
+  ladder: { base: FilterSpec; key: string } | null;
   attempts: number[];
   queue: MockPuzzle[];
   served: number;
@@ -164,6 +227,7 @@ interface MockSession {
     finished: boolean;
     firstWrong: [string, string] | null; // (FEN before, UCI): what Show answer refutes (§7.2)
     practice?: boolean; // Try again (FR-5.12): `decided` from the start, so nothing is recorded
+    submitted?: boolean; // Commit the line: the line was graded
   } | null;
   solved: number;
   failed: number;
@@ -182,7 +246,19 @@ export class MockClient implements ApiClient {
     color_scheme: "light",
     sounds: { on: true, volume: 70, set: "sfx" },
     auto_check: true,
+    mode: "standard",
+    show_length: false,
+    ladder_threshold: 80,
+    ladder_window: 20,
+    srs_intervals: [1, 3, 7, 14, 30],
+    filters_collapsed: false,
+    time_offset_days: null,
   };
+  // Spaced repetition: what's due now, and misses waiting for tomorrow (moved in by fast-forward).
+  private srsDue: MockPuzzle[] = [MOCK_PUZZLES[2], MOCK_PUZZLES[3]];
+  private srsLater: MockPuzzle[] = [];
+  private srsBoxes = 3; // scheduled but not due, beyond the lists above
+  private ladders = new Map<string, { level: number; recent: boolean[] }>();
   private allTime = { solved: 41, failed: 17 };
   private presets = new Map<string, Preset>();
   private offer: UpdateOffer | null = null;
@@ -218,6 +294,10 @@ export class MockClient implements ApiClient {
     const scheme = params.get("scheme");
     if (scheme === "dark" || scheme === "auto") this.settings.color_scheme = scheme;
     if (params.get("sounds") === "off") this.settings.sounds = { ...this.settings.sounds, on: false };
+    if (params.get("srs") === "none") this.srsDue = [];
+    if (params.get("dev") === "1") this.settings.time_offset_days = 0;
+    const mode = params.get("mode");
+    if (mode === "commit_line" || mode === "spaced_repetition") this.settings.mode = mode;
     const account = params.get("account");
     if (account === "signed_out") this.account = { state: "signed_out", username: null, rating: null, provisional: false };
     if (account === "offline") this.account = { state: "offline", username: MOCK_USER, rating: null, provisional: false };
@@ -392,8 +472,78 @@ export class MockClient implements ApiClient {
     return MOCK_PUZZLES.filter((p) => matches(p, spec) && this.matchesHistory(p, spec));
   }
 
-  private record(p: MockPuzzle, win: boolean) {
+  private record(p: MockPuzzle, win: boolean, s?: MockSession): LadderInfo | null {
     this.history.set(p.id, [...(this.history.get(p.id) ?? []), win]);
+    if (!win && !this.srsLater.some((q) => q.id === p.id)) this.srsLater.push(p); // due tomorrow (FR-4.6)
+    if (s?.mode === "spaced_repetition") {
+      this.srsDue = this.srsDue.filter((q) => q.id !== p.id); // reviewed: due again later, or moved up a box
+      if (win) this.srsBoxes++;
+    }
+    if (!s?.ladder) return null;
+    const st = this.ladderState(s.ladder.key);
+    st.recent.push(win);
+    const window = this.settings.ladder_window;
+    const recent = st.recent.slice(-window);
+    const wins = recent.filter(Boolean).length;
+    if (st.level < 4 && recent.length >= window && wins * 100 >= this.settings.ladder_threshold * window) {
+      st.level++;
+      st.recent = [];
+      s.spec = atLevel(s.ladder.base, st.level);
+      s.queue = s.queue.slice(0, s.served).concat(this.pool(s.spec).filter((q) => !s.queue.slice(0, s.served).includes(q)));
+      return this.ladderInfo(s.ladder.key);
+    }
+    return null;
+  }
+
+  private ladderState(key: string) {
+    let st = this.ladders.get(key);
+    if (!st) {
+      st = { level: 2, recent: [] };
+      this.ladders.set(key, st);
+    }
+    return st;
+  }
+
+  private ladderInfo(key: string): LadderInfo {
+    const st = this.ladderState(key);
+    const window = this.settings.ladder_window;
+    const recent = st.recent.slice(-window);
+    return {
+      level: st.level,
+      label: LEVEL_NAMES[st.level],
+      step: LEVELS.indexOf(st.level) + 1,
+      steps: LEVELS.length,
+      played: recent.length,
+      wins: recent.filter(Boolean).length,
+      window,
+      threshold: this.settings.ladder_threshold,
+      top: st.level === 4,
+    };
+  }
+
+  async getLadderStatus(spec: FilterSpec): Promise<LadderPreview> {
+    const ladder = this.ladderInfo(ladderKey(spec));
+    return { ladder, match_count: this.pool(atLevel(spec, ladder.level)).length * SCALE };
+  }
+
+  async getSrsStatus(): Promise<SrsStatus> {
+    return {
+      due: this.srsDue.length,
+      next_due: this.srsLater.length > 0 ? "2026-11-03" : "2026-11-05",
+      scheduled: this.srsDue.length + this.srsLater.length + this.srsBoxes,
+    };
+  }
+
+  async setTimeOffset(days: number) {
+    if (this.settings.time_offset_days === null) {
+      throw new ApiCallError({ code: "conflict", message: "Fast-forward time is only available in --dev runs.", retryable: false });
+    }
+    this.calls.push(`timeOffset:${days}`);
+    if (days > (this.settings.time_offset_days ?? 0)) {
+      this.srsDue.push(...this.srsLater);
+      this.srsLater = [];
+    }
+    this.settings = { ...this.settings, time_offset_days: days };
   }
 
   private emit(job: Job) {
@@ -544,7 +694,7 @@ export class MockClient implements ApiClient {
 
   async getAppInfo(): Promise<AppInfo> {
     return {
-      version: "0.4.0",
+      version: "0.5.0",
       data_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare",
       logs_dir: "C:\\Users\\you\\AppData\\Local\\WeakSquare\\logs",
       dev_mode: false,
@@ -653,6 +803,12 @@ export class MockClient implements ApiClient {
     if (key === "ui.color_scheme") this.settings = { ...this.settings, color_scheme: value as UiSettings["color_scheme"] };
     if (key === "ui.sounds") this.settings = { ...this.settings, sounds: value as UiSettings["sounds"] };
     if (key === "puzzle_db.auto_check") this.settings = { ...this.settings, auto_check: value as boolean };
+    if (key === "trainer.mode") this.settings = { ...this.settings, mode: value as TrainingMode };
+    if (key === "commit.show_length") this.settings = { ...this.settings, show_length: value as boolean };
+    if (key === "ladder.threshold") this.settings = { ...this.settings, ladder_threshold: value as number };
+    if (key === "ladder.window") this.settings = { ...this.settings, ladder_window: value as number };
+    if (key === "srs.intervals") this.settings = { ...this.settings, srs_intervals: value as number[] };
+    if (key === "ui.filters_collapsed") this.settings = { ...this.settings, filters_collapsed: value as boolean };
   }
 
   async getThemeCatalog(): Promise<ThemeGroup[]> {
@@ -664,6 +820,7 @@ export class MockClient implements ApiClient {
 
   async countMatches(spec: FilterSpec) {
     validate(spec);
+    if (spec.order === "depth_ladder") return (await this.getLadderStatus(spec)).match_count;
     if (spec.ratios.length > 0) {
       const ids = new Set(spec.ratios.flatMap((_, i) => this.pool(bucketSpec(spec, i)).map((p) => p.id)));
       return ids.size * SCALE;
@@ -719,8 +876,22 @@ export class MockClient implements ApiClient {
     }
   }
 
-  async startSession(spec: FilterSpec, rated: boolean = true): Promise<SessionInfo> {
+  async startSession(
+    spec: FilterSpec, rated: boolean = true, mode: TrainingMode = "standard", showLength: boolean = false,
+  ): Promise<SessionInfo> {
     validate(spec);
+    this.calls.push(`start:${mode}`);
+    if (mode === "spaced_repetition") {
+      if (this.srsDue.length === 0) {
+        throw new ApiCallError({ code: "invalid_argument", message: "Nothing is due for review. Missed puzzles come back here on their review day.", retryable: false });
+      }
+      const id = this.nextSession++;
+      const queue = [...this.srsDue]; // still due until reviewed, like the backend
+      this.sessions.set(id, { spec: { ...spec, ratios: [], themes: [] }, rated, mode, showLength: false, ladder: null, attempts: [], queue, served: 0, current: null, solved: 0, failed: 0 });
+      return { session_id: id, match_count: queue.length, queue_size: spec.queue_size, empty_buckets: [], mode };
+    }
+    const ladder = spec.order === "depth_ladder" ? { base: spec, key: ladderKey(spec) } : null;
+    if (ladder) spec = atLevel(spec, this.ladderState(ladder.key).level);
     const pools = spec.ratios.length > 0 ? spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i))) : [this.pool(spec)];
     const queue = interleave(pools, spec);
     if (queue.length === 0) {
@@ -731,9 +902,9 @@ export class MockClient implements ApiClient {
       });
     }
     const id = this.nextSession++;
-    this.sessions.set(id, { spec, rated, attempts: [], queue, served: 0, current: null, solved: 0, failed: 0 });
+    this.sessions.set(id, { spec, rated, mode, showLength: showLength && mode === "commit_line", ladder, attempts: [], queue, served: 0, current: null, solved: 0, failed: 0 });
     const empty = spec.ratios.length > 0 ? pools.flatMap((p, i) => (p.length === 0 ? [i] : [])) : [];
-    return { session_id: id, match_count: queue.length * SCALE, queue_size: spec.queue_size, empty_buckets: empty };
+    return { session_id: id, match_count: queue.length * SCALE, queue_size: spec.queue_size, empty_buckets: empty, mode };
   }
 
   private session(id: number): MockSession {
@@ -747,7 +918,7 @@ export class MockClient implements ApiClient {
     if (s.current && !s.current.decided) {
       s.failed++;
       this.allTime.failed++;
-      this.record(s.current.puzzle, false);
+      this.record(s.current.puzzle, false, s);
       this.queue(s.current.puzzle, false, s.rated, s);
     }
     s.current = null;
@@ -769,6 +940,49 @@ export class MockClient implements ApiClient {
       rating: puzzle.rating,
       opponent_sound: soundOf(puzzle.fen, puzzle.moves[0]),
       already_played: this.lichessHistory.has(puzzle.id),
+      mode: s.mode,
+      solution_plies: s.mode === "commit_line" && s.showLength ? puzzle.moves.length - 1 : null,
+      max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : Math.min(60, 2 * (puzzle.moves.length - 1) + 10)) : null,
+    };
+  }
+
+  async submitLine(sessionId: number, moves: string[]): Promise<CommitFeedback> {
+    const s = this.session(sessionId);
+    const c = s.current;
+    const fail = (code: string, message: string) => new ApiCallError({ code, message, retryable: false });
+    if (!c) throw fail("invalid_argument", "There's no puzzle in progress.");
+    if (s.mode !== "commit_line") throw fail("conflict", "Submit is for Commit the line: in this mode, play your moves on the board.");
+    if (c.finished) throw fail("conflict", "This puzzle is over: there's nothing to submit.");
+    if (moves.length === 0) throw fail("invalid_argument", "Enter at least one move before you submit.");
+    const probe = new Chess(c.start);
+    try {
+      moves.forEach((m) => probe.move(uciToMove(m)));
+    } catch {
+      throw fail("invalid_argument", "The line contains an illegal move.");
+    }
+    this.calls.push(`submitLine:${moves.join(" ")}`);
+    const { grades, extra, firstWrong } = gradeLine(c.start, c.puzzle.moves.slice(1), moves);
+    const win = grades.filter((g) => g.player).every((g) => g.correct);
+    const replies = grades.filter((g) => !g.player);
+    c.finished = true;
+    c.submitted = true;
+    c.firstWrong = firstWrong;
+    let outcome = null;
+    if (!c.decided) {
+      c.decided = true;
+      if (win) {
+        s.solved++;
+        this.allTime.solved++;
+      } else {
+        s.failed++;
+        this.allTime.failed++;
+      }
+      const levelUp = this.record(c.puzzle, win, s);
+      outcome = { ...this.outcome(c.puzzle, win, s), level_up: levelUp };
+    }
+    return {
+      grades, extra, replies_correct: replies.filter((g) => g.correct).length, replies_total: replies.length,
+      win: win && outcome !== null, outcome, line_sounds: lineSounds(c.start, moves),
     };
   }
 
@@ -777,6 +991,9 @@ export class MockClient implements ApiClient {
     const c = s.current;
     if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
     const none = { move_sound: null, reply_sound: null };
+    if (s.mode === "commit_line") {
+      throw new ApiCallError({ code: "conflict", message: "In Commit the line, enter the whole line and press Submit.", retryable: false });
+    }
     if (c.finished) return { kind: "illegal", reply: null, finished: true, outcome: null, ...none };
     const expected = c.puzzle.moves[c.next];
     let ok = uci === expected;
@@ -798,20 +1015,21 @@ export class MockClient implements ApiClient {
       c.decided = c.failed = true;
       s.failed++;
       this.allTime.failed++;
-      this.record(c.puzzle, false);
-      const outcome = this.outcome(c.puzzle, false, s);
+      const levelUp = this.record(c.puzzle, false, s);
+      const outcome = { ...this.outcome(c.puzzle, false, s), level_up: levelUp };
       return { kind: "wrong", reply: null, finished: false, outcome, move_sound: moveSound, reply_sound: null };
     }
     c.chess.move(uciToMove(uci));
     c.next++;
     if (c.next >= c.puzzle.moves.length || c.chess.isCheckmate()) {
       c.finished = true;
-      const outcome = c.decided ? null : this.outcome(c.puzzle, true, s);
+      let outcome = null;
       if (!c.decided) {
         c.decided = true;
         s.solved++;
         this.allTime.solved++;
-        this.record(c.puzzle, true);
+        const levelUp = this.record(c.puzzle, true, s);
+        outcome = { ...this.outcome(c.puzzle, true, s), level_up: levelUp };
       }
       return { kind: "solved", reply: null, finished: true, outcome, move_sound: moveSound, reply_sound: null };
     }
@@ -831,14 +1049,14 @@ export class MockClient implements ApiClient {
       c.decided = c.failed = true;
       s.failed++;
       this.allTime.failed++;
-      this.record(c.puzzle, false);
-      return this.outcome(c.puzzle, false, s);
+      const levelUp = this.record(c.puzzle, false, s);
+      return { ...this.outcome(c.puzzle, false, s), level_up: levelUp };
     };
     if (kind === "hint") {
       if (c.finished) throw conflict("The puzzle is over: there's nothing left to hint.");
       const outcome = decide();
       c.hinted = true;
-      const square = c.puzzle.moves[c.next].slice(0, 2);
+      const square = c.puzzle.moves[s.mode === "commit_line" ? 1 : c.next].slice(0, 2);
       return { kind, hint_square: square, answer_fen: null, answer_moves: [], outcome, answer_sounds: [], refute: false };
     }
     if (c.finished) {
@@ -849,8 +1067,9 @@ export class MockClient implements ApiClient {
     if (!c.decided && !c.hinted) throw conflict("Try a Hint first: Show answer unlocks after it.");
     const outcome = decide();
     c.finished = true;
-    const rest = c.puzzle.moves.slice(c.next);
-    const fen = c.chess.fen();
+    const commit = s.mode === "commit_line";
+    const rest = c.puzzle.moves.slice(commit ? 1 : c.next);
+    const fen = commit ? c.start : c.chess.fen();
     return { kind, hint_square: null, answer_fen: fen, answer_moves: rest, outcome, answer_sounds: lineSounds(fen, rest), refute: c.firstWrong !== null };
   }
 
@@ -865,6 +1084,7 @@ export class MockClient implements ApiClient {
       puzzle_url: `https://lichess.org/training/${p.id}`,
       attempt_id: id,
       lichess: { ...info },
+      level_up: null as LadderInfo | null,
     };
   }
 
@@ -898,6 +1118,8 @@ export class MockClient implements ApiClient {
       all_time_solved: this.allTime.solved,
       all_time_failed: this.allTime.failed,
       rating_change: this.sessionChange(s),
+      mode: s.mode,
+      ladder: s.ladder ? this.ladderInfo(s.ladder.key) : null,
     };
   }
 
@@ -931,6 +1153,8 @@ export class MockClient implements ApiClient {
       by_rating: [r("1000", "1000–1199", 9, 8, 9, 1), r("1200", "1200–1399", 21, 16, 18, 2),
         r("1400", "1400–1599", 19, 12, 15, 3), r("1600", "1600–1799", 9, 5, 7, 2)],
       missing: 0,
+      by_mode: [r("standard", "Standard", 44, 31, 37, 6), r("commit_line", "Commit the line", 9, 6, 8, 2),
+        r("spaced_repetition", "Spaced repetition", 5, 4, 4, 0)],
     }; // prettier-ignore
   }
 

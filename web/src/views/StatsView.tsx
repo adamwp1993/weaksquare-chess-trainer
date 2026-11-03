@@ -105,6 +105,7 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
               <Tabs.Tab value="theme">By theme</Tabs.Tab>
               <Tabs.Tab value="length">By length</Tabs.Tab>
               <Tabs.Tab value="rating">By rating</Tabs.Tab>
+              <Tabs.Tab value="mode" data-testid="stats-mode-tab">By mode</Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="theme" pt="sm">
               <StatTable rows={report.by_theme} first="Theme" testId="stats-by-theme" />
@@ -114,6 +115,9 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
             </Tabs.Panel>
             <Tabs.Panel value="rating" pt="sm">
               <StatTable rows={report.by_rating} first="Puzzle rating" testId="stats-by-rating" />
+            </Tabs.Panel>
+            <Tabs.Panel value="mode" pt="sm">
+              <StatTable rows={report.by_mode} first="Mode" testId="stats-by-mode" />
             </Tabs.Panel>
           </Tabs>
           <RatingTrend history={ratings} />

@@ -1,7 +1,9 @@
 import { ActionIcon, Alert, AppShell, Button, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import type { TrainingMode } from "./api/ApiClient";
 import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
+import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
@@ -47,6 +49,13 @@ export function App() {
   const [startError, setStartError] = useState<string | null>(null);
   const [startNotice, setStartNotice] = useState<string | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
+  // v0.5: the Modes control (§6), Show move count (FR-4.2), the collapsed panel (FR-1.14), and the
+  // dev-only fast-forward (FR-4.6; null in the real app). All saved through the bridge.
+  const [mode, setMode] = useState<TrainingMode>("standard");
+  const [showLength, setShowLength] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [timeOffset, setTimeOffset] = useState<number | null>(null);
   const historyChanged = useCallback(() => setHistoryVersion((v) => v + 1), []);
   const saveTimer = useRef<number | undefined>(undefined);
 
@@ -58,6 +67,10 @@ export function App() {
         setCoordinates(s.coordinates);
         setSounds(s.sounds);
         setAutoCheck(s.auto_check);
+        setMode(s.mode);
+        setShowLength(s.show_length);
+        setCollapsed(s.filters_collapsed);
+        setTimeOffset(s.time_offset_days);
       },
       () => setSpec(defaultFilters()),
     );
@@ -77,7 +90,14 @@ export function App() {
     api.setSetting("ui.coordinates", on).catch(() => undefined);
   }, [coordinates]);
 
-  useShortcuts({ c: toggleCoordinates, "?": () => setShortcutsOpen(true) });
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((was) => {
+      api.setSetting("ui.filters_collapsed", !was).catch(() => undefined);
+      return !was;
+    });
+  }, []);
+
+  useShortcuts({ c: toggleCoordinates, f: () => started && toggleCollapsed(), "?": () => setShortcutsOpen(true) });
 
   // FR-1.13: the player follows the saved settings; off means silent and nothing loaded.
   useEffect(() => soundPlayer.configure(sounds), [sounds]);
@@ -86,13 +106,13 @@ export function App() {
     api.setSetting("ui.sounds", next).catch(() => undefined);
   }, []);
 
-  const start = async () => {
+  const start = async (asMode: TrainingMode = mode) => {
     if (!spec) return;
     setStarting(true);
     setStartError(null);
     setStartNotice(null);
     try {
-      const info = await api.startSession(spec, rated);
+      const info = await api.startSession(spec, rated, asMode, showLength);
       setSessionId(info.session_id);
       if (info.empty_buckets.length > 0) {
         const groups = info.empty_buckets.map((i) => `group ${i + 1}`).join(" and ");
@@ -103,6 +123,17 @@ export function App() {
     } finally {
       setStarting(false);
     }
+  };
+
+  // §6: switching mode while a session is running starts a new one in that mode, like Start.
+  const changeMode = (next: TrainingMode) => {
+    setMode(next);
+    api.setSetting("trainer.mode", next).catch(() => undefined);
+    if (sessionId !== null) start(next);
+  };
+  const changeShowLength = (on: boolean) => {
+    setShowLength(on);
+    api.setSetting("commit.show_length", on).catch(() => undefined);
   };
 
   const refresh = useCallback(() => {
@@ -185,17 +216,36 @@ export function App() {
             </Alert>
           </Grid.Col>
         )}
+        {timeOffset !== null && timeOffset > 0 && (
+          <Grid.Col span={12}>
+            <Alert color="orange" data-testid="time-offset-banner">
+              Time fast-forwarded +{timeOffset} {timeOffset === 1 ? "day" : "days"} (dev). Settings → Debug sets it back.
+            </Alert>
+          </Grid.Col>
+        )}
         {offer && (
           <Grid.Col span={12}>
             <UpdateBanner offer={offer} onUpdate={updateNow} onNotNow={() => dismiss("not_now")} onSkip={() => dismiss("skip")} />
           </Grid.Col>
         )}
-        <Grid.Col span={{ base: 12, md: 4 }}>
+        {collapsed && (
+          <Grid.Col span={12}>
+            <FiltersStrip summary={summary} rated={rated} onExpand={toggleCollapsed} />
+          </Grid.Col>
+        )}
+        {/* Hidden, not unmounted, while collapsed, so the panel comes back exactly as it was (FR-1.14). */}
+        <Grid.Col span={{ base: 12, md: 4 }} style={collapsed ? { display: "none" } : undefined} data-testid="mixer-column">
           <MixerView
+            mode={mode}
+            onMode={changeMode}
+            showLength={showLength}
+            onShowLength={changeShowLength}
+            onCollapse={toggleCollapsed}
+            onSummary={setSummary}
             spec={spec}
             onChange={changeSpec}
             dbStatus={dbStatus}
-            onStart={start}
+            onStart={() => start()}
             starting={starting}
             historyVersion={historyVersion}
             rated={rated}
@@ -213,10 +263,17 @@ export function App() {
             </Alert>
           )}
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 8 }}>
+        <Grid.Col span={{ base: 12, md: collapsed ? 12 : 8 }}>
+          {startError && collapsed && (
+            <Alert color="red" mb="sm" data-testid="start-error-collapsed">
+              {startError}
+            </Alert>
+          )}
           {sessionId === null ? (
             <Paper withBorder p="xl" radius="md">
-              <Text c="dimmed">Choose your puzzles on the left, then press Start.</Text>
+              <Text c="dimmed">
+                {collapsed ? "Show filters to choose your puzzles, then press Start." : "Choose your puzzles on the left, then press Start."}
+              </Text>
             </Paper>
           ) : (
             <TrainerView
@@ -225,6 +282,7 @@ export function App() {
               onNewSession={() => setSessionId(null)}
               onHistoryChange={historyChanged}
               coordinates={coordinates}
+              wide={collapsed}
             />
           )}
         </Grid.Col>
@@ -284,6 +342,8 @@ export function App() {
         }}
         account={account}
         onAccountChanged={refreshLichess}
+        timeOffset={timeOffset}
+        onTimeOffset={setTimeOffset}
       />
       <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
         <ImportView

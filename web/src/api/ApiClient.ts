@@ -8,6 +8,9 @@ import type {
   Refutation,
   AttemptRating,
   BucketCounts,
+  CommitFeedback,
+  LadderPreview,
+  SrsStatus,
   ApiError,
   AppInfo,
   FilterSpec,
@@ -54,7 +57,17 @@ export interface SettingValues {
   "ui.color_scheme": "light" | "dark" | "auto";
   "ui.sounds": SoundSettings;
   "puzzle_db.auto_check": boolean;
+  // v0.5
+  "trainer.mode": TrainingMode;
+  "commit.show_length": boolean;
+  "ladder.threshold": number;
+  "ladder.window": number;
+  "srs.intervals": number[];
+  "ui.filters_collapsed": boolean;
 }
+
+/** The Modes control (§6). Later modes join when they ship. */
+export type TrainingMode = SessionInfo["mode"];
 
 /** Which view asked: a newer request for the same purpose supersedes an older one. */
 export type AnalysisPurpose = "start" | "panel" | "board";
@@ -93,8 +106,17 @@ export interface ApiClient {
   savePreset(name: string, spec: FilterSpec, overwrite: boolean): Promise<Preset>;
   renamePreset(oldName: string, newName: string): Promise<void>;
   deletePreset(name: string): Promise<void>;
-  /** rated: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false. */
-  startSession(spec: FilterSpec, rated: boolean): Promise<SessionInfo>;
+  /** rated: the session's Rated toggle (FR-1.9); off syncs every solve as rated: false.
+   *  mode (§6); showLength: Commit the line's Show move count (FR-4.2). */
+  startSession(spec: FilterSpec, rated: boolean, mode: TrainingMode, showLength: boolean): Promise<SessionInfo>;
+  /** Commit the line (FR-4.2): grade the whole line you entered (UCI, both sides). */
+  submitLine(sessionId: number, moves: string[]): Promise<CommitFeedback>;
+  /** Spaced repetition (FR-4.6): what's due. */
+  getSrsStatus(): Promise<SrsStatus>;
+  /** Depth ladder (FR-4.5): the level these filters would start at, and its pool size. */
+  getLadderStatus(spec: FilterSpec): Promise<LadderPreview>;
+  /** FR-4.6 fast-forward time: --dev runs only. */
+  setTimeOffset(days: number): Promise<void>;
   /** The next puzzle, or null when the session is complete. */
   nextPuzzle(sessionId: number): Promise<PuzzleView | null>;
   submitMove(sessionId: number, uci: string): Promise<MoveFeedback>;

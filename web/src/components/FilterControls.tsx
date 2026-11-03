@@ -10,7 +10,7 @@ import {
   Text,
 } from "@mantine/core";
 import { useMemo, useState } from "react";
-import type { OpeningFamily } from "../api/types";
+import type { LadderInfo, OpeningFamily } from "../api/types";
 import { LENGTH_OPTIONS } from "../state/filters";
 
 // A number box that only commits on blur or Enter, so typing "1600" isn't clamped keystroke by
@@ -105,19 +105,34 @@ export function RatingSlider({
 }
 
 // FR-3.4: 1 / 2 / 3 / 4+ and All (an empty list means All).
-export function MoveCountSelect({ value, onChange }: { value: number[]; onChange: (lengths: number[]) => void }) {
+export function MoveCountSelect({
+  value,
+  onChange,
+  setByLadder = false,
+}: {
+  value: number[];
+  onChange: (lengths: number[]) => void;
+  /** The depth-ladder order sets the move count itself (FR-4.5). */
+  setByLadder?: boolean;
+}) {
   const all = value.length === 0 || value.length === LENGTH_OPTIONS.length;
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>
         Number of moves
       </Text>
+      {setByLadder && (
+        <Text size="xs" c="dimmed" data-testid="lengths-by-ladder">
+          Set by the depth ladder (see Order).
+        </Text>
+      )}
       <Group gap="sm">
-        <Checkbox label="All" checked={all} onChange={() => onChange([])} aria-label="All lengths" />
+        <Checkbox label="All" checked={all} disabled={setByLadder} onChange={() => onChange([])} aria-label="All lengths" />
         {LENGTH_OPTIONS.map((o) => (
           <Checkbox
             key={o.value}
             label={o.label}
+            disabled={setByLadder}
             aria-label={`${o.label} moves`}
             checked={!all && value.includes(o.value)}
             onChange={(e) => {
@@ -130,6 +145,14 @@ export function MoveCountSelect({ value, onChange }: { value: number[]; onChange
       </Group>
     </Stack>
   );
+}
+
+/** "Short puzzles (2 moves), step 1 of 3 · 14 of 20 played, 79% · 80% over 20 moves you up" */
+export function ladderLine(l: LadderInfo): string {
+  const level = `${l.label} puzzles (${l.level}${l.top ? "+" : ""} moves), step ${l.step} of ${l.steps}`;
+  if (l.top) return `${level}: the top of the ladder.`;
+  const acc = l.played ? `, ${Math.round((l.wins / l.played) * 100)}%` : "";
+  return `${level} · ${l.played} of ${l.window} played${acc} · ${l.threshold}% over ${l.window} moves you up.`;
 }
 
 // FR-3.5
@@ -381,10 +404,24 @@ export function OpeningSelect({
   );
 }
 
-export type Order = "random" | "easy_to_hard" | "by_theme";
+export type Order = "random" | "easy_to_hard" | "by_theme" | "depth_ladder";
 
-// FR-3.11
-export function OrderSelect({ value, endless, onChange }: { value: Order; endless: boolean; onChange: (o: Order) => void }) {
+// FR-3.11 (and FR-4.5: the depth ladder)
+export function OrderSelect({
+  value,
+  endless,
+  onChange,
+  ratios = false,
+  ladder = null,
+}: {
+  value: Order;
+  endless: boolean;
+  onChange: (o: Order) => void;
+  /** Ratios are on: the depth ladder can't be combined with them. */
+  ratios?: boolean;
+  /** FR-4.5: where a depth-ladder session with these themes would start. */
+  ladder?: LadderInfo | null;
+}) {
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>
@@ -398,10 +435,21 @@ export function OrderSelect({ value, endless, onChange }: { value: Order; endles
           { value: "random", label: "Random" },
           { value: "easy_to_hard", label: "Easy → hard" },
           { value: "by_theme", label: "By theme" },
+          { value: "depth_ladder", label: "Depth ladder", disabled: ratios },
         ]}
         aria-label="Order"
       />
-      {endless && value !== "random" && (
+      {value === "depth_ladder" && ladder && (
+        <Text size="xs" c="dimmed" data-testid="ladder-status">
+          {ladderLine(ladder)}
+        </Text>
+      )}
+      {value !== "depth_ladder" && ratios && (
+        <Text size="xs" c="dimmed">
+          The depth ladder can't be combined with ratios.
+        </Text>
+      )}
+      {endless && (value === "easy_to_hard" || value === "by_theme") && (
         <Text size="xs" c="dimmed" data-testid="order-endless-note">
           With Endless, each block of 50 puzzles is sorted.
         </Text>
