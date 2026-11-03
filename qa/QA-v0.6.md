@@ -270,3 +270,59 @@ Also noted: clicking the board doesn't move focus out of the note field (chessgr
 ## For Adam
 - B9: in your 20 Danger puzzles, an instant load is always the blunder; it should be rare (~1 in 20).
 - The rest of the round-1 list still applies.
+
+---
+
+# Round 3, 2026-11-03: re-verification of B9
+
+Branch `v0.6` at `eb3dca6` ("Fix v0.6-B9 (QA round 2)"). Same rules: no product code, docs or config changed; new tests under `tests/` only. The real app ran with temp data folders only.
+
+## Verdict: **PASS WITH ISSUES** (minor only)
+
+B9 is fixed at the think time a session starts with. I found one new minor issue, **B10**: the padding uses the think time read at the session's first load, so raising the think time during a session brings the forced-position tell back until the next session.
+
+## B9 re-verification
+- **Real app, forced positions only.** `tests/smoke/test_qa_v06_round3_real_app.py` uses a puzzles.db cut down to the fixture's 5 forced positions plus a few ordinary ones; 8 matched the default filters. Without the pad, Stockfish answers these in 0.01–0.45 s.
+  - At 1 s think time, 2 runs: the forced positions loaded in 1.38–1.42 s and the ordinary ones in 1.38–2.44 s, so there's no fast load (asserted ≥ 0.95 s).
+- **Round-1 timing test** (`test_qa_v06_real_app.py`): every load took 1.34–1.95 s. Guessing from the load time was right 4 of 14 times, and "Preparing the position" showed after 14 of 14 Next clicks.
+- **Builder's e2e** `test_b9_danger_puzzles_take_at_least_the_think_time` passes.
+- **Regressions during the wait** (new `tests/e2e/test_qa_v06_round3.py`, mock):
+  - Next and `n` spam loads exactly one puzzle: "Puzzle 2", Failed 0, no extra calls.
+  - S, U and R during the wait do nothing.
+  - Switching to Standard during the wait ends on Standard, and the old load doesn't paint a Danger puzzle afterwards. TrainerView is keyed by session, so the old view unmounts.
+  - Try again, then Next, is still padded (≥ 950 ms).
+
+## New bug
+
+**v0.6-B10 (minor): raising the engine think time mid-session brings the B9 tell back until the next session.**
+- Cause: `TrainerView` caches `thinkMs` the first time it needs it (once per trainer, which is once per session) and never re-reads it after **Settings → Engine** changes.
+- Steps (real app): start Danger spotting at 1 s. After the first puzzle, set the think time to 3 s, then press Next through the session.
+- Expected: every puzzle takes at least 3 s to appear.
+- Actual: ordinary positions take 3.42–6.52 s (the backend now searches for 3 s), but the padding is still 1 s.
+  - The two one-legal-move forced positions loaded in about 1.39 s in both runs, the third in one of two.
+  - Run 1: `5u38V` 1.41 s, `001KR` 1.39 s, `8hajx` 1.42 s, `00DPQ` 1.42 s, against 3.47–6.52 s for the rest.
+  - Run 2: `001KR` 1.39 s and `5u38V` 1.39 s, against 3.42–3.97 s for the rest.
+- So within that session a fast load still means "Unsafe" (all forced positions are blunders). Lowering the think time only makes loads slower, with no leak. A new session reads the setting again.
+- Fix direction: read the think time at each Danger load, or refresh the cache when the engine settings change.
+- Evidence:
+  - `tests/e2e/test_qa_v06_round3.py::test_b10_a_longer_think_time_set_mid_session_pads_to_the_new_time` (xfail strict; mock: 1,428 ms after raising to 3 s).
+  - `tests/smoke/test_qa_v06_round3_real_app.py` (prints `QA-OBS after raising think time to 3 s mid-session`).
+
+## Evidence: commands run (round 3)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1031 passed** (193 s) |
+| `uv run pytest -m e2e` | **196 passed, 1 xfailed** (B10) (527 s) |
+| `uv run pytest -m smoke` (`web/dist` as rebuilt by the builder; the freshness guard passed) | **26 passed, 1 skipped** (349 s), the v0.4 and v0.5 real-app tests included |
+| `uv run pytest -m docs_screenshots` | **24 passed**, `docs/img` unchanged |
+| `npm.cmd --prefix web run typecheck` / `lint`, `uv run ruff check .`, `uv run pre-commit run --all-files`, `python scripts/check_docs.py --strict` | rc 0 / rc 0 / clean / Passed / 0 errors, 0 warnings |
+
+I didn't re-run `-m engine` or `-m fulldb`: the only product change is in the front end.
+
+## Tests added (round 3)
+- `tests/e2e/test_qa_v06_round3.py` (5): B10 (xfail strict); Next spam during the wait; S, U and R during the wait; a mode switch during the wait; Try again then Next is padded.
+- `tests/smoke/test_qa_v06_round3_real_app.py` (1): forced-position-only DB at 1 s (asserted), then a think-time raise mid-session (B10, printed).
+
+## For Adam
+- B10: if you change the think time during a Danger session, start a new session before judging whether load time gives anything away.
