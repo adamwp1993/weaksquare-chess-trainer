@@ -32,7 +32,8 @@ def test_signed_out_solve_is_queued_with_its_angle(pw, tmp_path: Path, fixture_p
         with attach(pw, app) as page:
             page.reload()  # the startup page shows again on every load
             page.get_by_test_id("startup").wait_for(timeout=30_000)
-            assert "Not signed in" in page.get_by_test_id("startup-status").inner_text()
+            # QA v0.6: wait for it; reading at once sometimes caught "Checking…" (a test race, not the app)
+            page.get_by_test_id("startup-status").filter(has_text="Not signed in").wait_for(timeout=15_000)
             shot(page, "startup-signed-out")
             page.get_by_test_id("startup-continue").click()
             page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
