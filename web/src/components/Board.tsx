@@ -75,7 +75,16 @@ export function Board({
       premovable: { enabled: false },
       draggable: { showGhost: true },
     });
+    // Chessground remembers where the board is and re-measures only on a resize or a scroll. Content
+    // above it (a notice, the session bar wrapping, the filters panel in a narrow window) can move the
+    // board without either, and clicks then land on the wrong square unless they hit a square's middle.
+    // Forget the old position before chessground handles each press (capture phase: before its own).
+    const wrapper = el.current;
+    const remeasure = () => cg.current?.state.dom.bounds.clear();
+    const presses = ["mousedown", "touchstart"] as const;
+    presses.forEach((ev) => wrapper.addEventListener(ev, remeasure, { capture: true, passive: true }));
     return () => {
+      presses.forEach((ev) => wrapper.removeEventListener(ev, remeasure, { capture: true }));
       cg.current?.destroy();
       cg.current = null;
     };

@@ -211,6 +211,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, after v0.5: The board re-measures itself on every press
+- Context: Adam, after signing off v0.5: a move only registered when he clicked the middle of a square. Chessground caches the board's screen position and re-measures only on a window resize, a scroll, or a change in the board's own size (its ResizeObserver). Content above the board (a notice, the session bar wrapping, the dev banner, the filters panel in a narrow window) can move the board without any of those, so clicks were mapped with the old position, off by up to the shift.
+- Decision: `components/Board.tsx`, the only chessground wrapper, clears chessground's cached bounds (`state.dom.bounds.clear()`) in a capture-phase `mousedown`/`touchstart` listener on its element, so chessground measures again just before it handles each press.
+- Alternatives: dispatching `chessground.resize` or calling `redrawAll()` on layout changes (every component that can move the board would have to know about it, and `redrawAll` rebuilds the DOM); a ResizeObserver on ancestors (sees size, not position).
+- Consequences: one `getBoundingClientRect()` per press, which costs nothing noticeable. `tests/e2e/test_board_clicks.py` clicks near square corners, including after the board has been pushed down.
+
 ### 2026-11-02, v0.5: QA fixes (v0.5-B1 to B9)
 - Context: `qa/QA-v0.5.md` rounds 1 and 2 (six minor bugs, then B7, a major slowdown caused by the B2 fix, and two minor test-tooling flakes).
 - Decision:

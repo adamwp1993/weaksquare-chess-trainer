@@ -13,6 +13,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Fixed
+- Clicking a square on the board works anywhere in the square again. After something above the board appeared or changed height, a move only registered when you clicked near the middle of the square.
+
 ## [v0.5] - 2026-11-03
 Candidates: v0.5-rc1 (2026-11-03)
 

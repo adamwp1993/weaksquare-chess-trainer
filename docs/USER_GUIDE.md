@@ -244,7 +244,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 *Added in v0.1. Changed in v0.2: Hint, Show answer and keyboard shortcuts.*
 
 1. The board turns to your side and the opponent's move plays first. Then it's your turn: find the best move.
-2. Drag a piece, or click it and then its destination. When a pawn promotes, choose the piece.
+2. Drag a piece, or click it and then its destination. A click anywhere inside a square counts. When a pawn promotes, choose the piece. *Changed after v0.5:* a click only registered near a square's middle after something above the board changed height.
 3. If your move is right, the opponent's reply plays automatically. Keep going until the line is complete.
 4. When the puzzle ends, the result panel shows whether you **Solved** or **Failed** it, and reveals its **themes**. When you're signed in, it also shows the **Lichess rating** change (see [Your puzzle rating](#your-puzzle-rating)). **Open this puzzle on Lichess** shows it on the Lichess website.
 5. Press **Next puzzle**.
