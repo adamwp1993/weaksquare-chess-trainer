@@ -12,6 +12,7 @@ from typing import Any, Literal, Protocol
 from weaksquare.core.errors import ValidationError
 from weaksquare.core.filters import SAVED_FILTERS_VERSION, FilterSpec, upgrade_saved
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, validate_threshold, validate_window
+from weaksquare.core.reasons import DEFAULT_RUSHED_S, validate_rushed_s
 from weaksquare.core.srs import DEFAULT_INTERVALS, validate_intervals
 
 LAST_FILTERS_KEY = "mixer.filters"
@@ -28,7 +29,11 @@ LADDER_WINDOW_KEY = "ladder.window"  # FR-4.5, attempts
 SRS_INTERVALS_KEY = "srs.intervals"  # FR-4.6, days per box
 FILTERS_COLLAPSED_KEY = "ui.filters_collapsed"  # FR-1.14
 TIME_OFFSET_KEY = "debug.time_offset_days"  # FR-4.6 fast-forward, --dev runs only (written by the bridge)
-TRAINING_MODES = ("standard", "commit_line", "spaced_repetition")
+# v0.6
+REASONS_ASK_KEY = "reasons.ask"  # FR-5.8: when to ask why you missed ('always' / 'off'; 'game_review' in v0.8)
+RUSHED_S_KEY = "reasons.rushed_s"  # FR-5.9: a deciding move faster than this suggests Rushed
+REASONS_ASK = ("always", "off")
+TRAINING_MODES = ("standard", "commit_line", "name_idea", "danger_spotting", "spaced_repetition")
 
 ColorScheme = Literal["light", "dark", "auto"]  # "auto" is Match system
 COLOR_SCHEMES = ("light", "dark", "auto")
@@ -61,6 +66,8 @@ class UiSettings:
     ladder_window: int = DEFAULT_WINDOW
     srs_intervals: tuple[int, ...] = DEFAULT_INTERVALS
     filters_collapsed: bool = False
+    reasons_ask: str = "always"
+    rushed_s: int = DEFAULT_RUSHED_S
 
 
 def _bool(name: str) -> Callable[[Any], Any]:
@@ -97,6 +104,12 @@ def _mode(value: Any) -> Any:
     return value
 
 
+def _reasons_ask(value: Any) -> Any:
+    if value not in REASONS_ASK:
+        raise ValidationError("reasons.ask must be 'always' or 'off'")
+    return value
+
+
 def _filters(value: Any) -> Any:
     return FilterSpec.from_json(value).to_json()
 
@@ -113,6 +126,8 @@ VALIDATORS: dict[str, Callable[[Any], Any]] = {
     LADDER_WINDOW_KEY: validate_window,
     SRS_INTERVALS_KEY: lambda v: list(validate_intervals(v)),
     FILTERS_COLLAPSED_KEY: _bool("filters_collapsed"),
+    REASONS_ASK_KEY: _reasons_ask,
+    RUSHED_S_KEY: validate_rushed_s,
 }
 
 
@@ -149,6 +164,8 @@ class UiSettingsService:
             ladder_window=self.ladder_window(),
             srs_intervals=self.srs_intervals(),
             filters_collapsed=self._valid(FILTERS_COLLAPSED_KEY, False),
+            reasons_ask=self.reasons_ask(),
+            rushed_s=self.rushed_s(),
         )
 
     def _valid(self, key: str, default: Any) -> Any:
@@ -178,6 +195,12 @@ class UiSettingsService:
 
     def ladder_window(self) -> int:
         return int(self._valid(LADDER_WINDOW_KEY, DEFAULT_WINDOW))
+
+    def reasons_ask(self) -> str:
+        return str(self._valid(REASONS_ASK_KEY, "always"))
+
+    def rushed_s(self) -> int:
+        return int(self._valid(RUSHED_S_KEY, DEFAULT_RUSHED_S))
 
     def _sounds(self) -> SoundSettings:
         stored = self._store.get(SOUNDS_KEY)

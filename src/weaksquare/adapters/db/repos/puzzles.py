@@ -31,10 +31,14 @@ class Where:
 
 
 # FR-3.9. Only Lichess puzzles live in puzzles.db; the `win` index makes both lookups cheap.
-SOLVED_IDS = "SELECT a.puzzle_id FROM attempts a WHERE a.puzzle_source = 'lichess' AND a.win = 1"
+# Danger-spotting results don't count: spotting the danger isn't solving the puzzle (FR-4.4, v0.6).
+SOLVED_IDS = (
+    "SELECT a.puzzle_id FROM attempts a WHERE a.puzzle_source = 'lichess' AND a.win = 1 AND a.mode != 'danger_spotting'"
+)
 MISSED_IDS = (
     "SELECT a.puzzle_id FROM attempts a WHERE a.puzzle_source = 'lichess' AND a.win = 0"
-    " AND a.id = (SELECT MAX(b.id) FROM attempts b WHERE b.puzzle_source = 'lichess' AND b.puzzle_id = a.puzzle_id)"
+    " AND a.id = (SELECT MAX(b.id) FROM attempts b WHERE b.puzzle_source = 'lichess' AND b.puzzle_id = a.puzzle_id"
+    " AND b.mode != 'danger_spotting')"
 )
 # FR-3.9 (v0.3): your Lichess puzzle history, plus what this app has synced (the sync adds those).
 PLAYED_IDS = "SELECT h.puzzle_id FROM lichess_history h"

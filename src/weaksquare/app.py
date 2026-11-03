@@ -25,7 +25,14 @@ from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleD
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
-from weaksquare.adapters.db.repos.user_data import AttemptsRepo, ModeFields, SessionsRepo, SettingsRepo, SyncFields
+from weaksquare.adapters.db.repos.user_data import (
+    AttemptsRepo,
+    MistakeReasonsRepo,
+    ModeFields,
+    SessionsRepo,
+    SettingsRepo,
+    SyncFields,
+)
 from weaksquare.adapters.desktop import (
     Desktop,
     set_app_user_model_id,
@@ -63,6 +70,7 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
+from weaksquare.services.reasons import ReasonsService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
@@ -175,6 +183,7 @@ class Services:
     history: HistoryService
     scheduler: Any
     engine: EngineService
+    reasons: ReasonsService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -299,8 +308,9 @@ def build_services(
     )
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields,
                               engine=engine, prefs=ui_settings, mode_fields=ModeFields)  # fmt: skip
+    reasons = ReasonsService(attempts, MistakeReasonsRepo(db), clock, sessions.suggestion_for)
     presets = PresetService(PresetsRepo(db), clock)
-    stats = StatsService(StatsRepo(db), attempts, sync_repo)
+    stats = StatsService(StatsRepo(db), attempts, sync_repo, clock)
     db_update = UpdateCheckService(
         http, clock, SettingsRepo(db), meta.read, runner,
         Urls(file=config.PUZZLE_DB_URL, sums=config.PUZZLE_SUMS_URL, page=config.PUZZLE_PAGE_URL),
@@ -320,6 +330,7 @@ def build_services(
         history=history,
         scheduler=scheduler,
         engine=engine,
+        reasons=reasons,
     )
 
 
@@ -399,6 +410,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sync=services.sync,
         history=services.history,
         engine=services.engine,
+        reasons=services.reasons,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

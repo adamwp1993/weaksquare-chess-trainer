@@ -71,6 +71,7 @@ def build_api(
         sync=services.sync,
         history=services.history,
         engine=services.engine,
+        reasons=services.reasons,
     )
 
 

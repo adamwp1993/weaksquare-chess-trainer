@@ -211,6 +211,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.6: Session, bridge and Stats for the new modes and mistake reasons
+- Context: wiring FR-4.3, FR-4.4 and §7.3 through `SessionService`, the bridge and the Stats page.
+- Decision:
+  - **Danger spotting picks its candidate in `next_puzzle`**: a coin flip on the injected `rng` (or the owed safe slot), then, for a safe slot only, `validate_fen` → the **interactive** `EngineService.analyse(..., multipv=5)` from the blunderer's side. The session refuses to start without a ready engine (`engine_not_installed`). An engine failure on one puzzle shows the blunder and owes a safe one, rather than failing the session. `PuzzleView` gains `candidate`, and `opponent_move` is empty in this mode, so the real blunder never crosses the bridge before the end (pinned by a test). Danger attempts are recorded with no sync fields (`local`), `rated` forced off, and are excluded from `srs_rows` and the FR-3.9 history subqueries (`SOLVED_IDS`, `MISSED_IDS`).
+  - **The reason prompt lives on the session** (`reason_prompt`): what the FR-5.9 rules need is captured when a loss is recorded (`_ReasonBase`), and the refutation part comes from the cached `get_refutation` (fetched if an engine is ready). The front end asks once the puzzle is over. `ReasonsService.set_reason` validates and appends; it takes the suggestion from the session (`suggestion_for`) rather than from the UI. Try again keeps the chips' attempt.
+  - **Misclicks are excluded in SQL by the latest reason** (`LATEST_REASON` / `NOT_MISCLICK` in `repos/user_data.py`): the session and all-time tallies, the depth-ladder window and the Stats rows. The sync queue never reads `mistake_reasons`, so a misclick is still sent as a loss.
+  - **Stats**: Danger-spotting attempts count in By mode and the new mode details only, not overall or per theme, length or rating (spotting the danger isn't solving the puzzle). `get_reason_stats(theme, mode)` returns the breakdown and a trend by local calendar week (the injected clock's `local_date`).
+  - Bridge: `set_idea_tags`, `call_danger`, `get_reason_prompt`, `set_mistake_reason` and `get_reason_stats` (allowlist updated); `UiSettings.reasons_ask` / `rushed_s` (`reasons.ask`, `reasons.rushed_s`); `dto.TrainingMode` names the five modes once.
+- Alternatives: prefetching the next Danger candidate in the background (saves about the think time per safe puzzle, but needs a second engine request path and cancellation; not needed at a 1 s default); a `reason` column updated in place (see the entry below).
+- Consequences: loading a safe Danger puzzle waits for one engine search (the UI shows "Preparing the position…"). Changing a reason re-counts everything at once, since nothing is cached.
+
 ### 2026-11-03, v0.6: Name the idea, Danger spotting and mistake reasons: modes, rules and storage
 - Context: FR-4.3, FR-4.4 and §7.3 (FR-5.6–5.10), with Adam's v0.6 planning decisions.
 - Decision:

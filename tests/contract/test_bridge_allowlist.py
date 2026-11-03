@@ -63,6 +63,11 @@ ALLOWLIST = {
     "get_srs_status",  # v0.5: Spaced repetition (FR-4.6)
     "get_ladder_status",  # v0.5: depth ladder (FR-4.5)
     "set_time_offset",  # v0.5: fast-forward time, --dev runs only
+    "set_idea_tags",  # v0.6: Name the idea first (FR-4.3)
+    "call_danger",  # v0.6: Danger spotting (FR-4.4)
+    "get_reason_prompt",  # v0.6: mistake reasons (§7.3)
+    "set_mistake_reason",  # v0.6: mistake reasons (FR-5.6)
+    "get_reason_stats",  # v0.6: the reason breakdown (FR-9.7)
 }
 
 
