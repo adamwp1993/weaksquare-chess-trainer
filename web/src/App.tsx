@@ -106,8 +106,9 @@ export function App() {
     api.setSetting("ui.sounds", next).catch(() => undefined);
   }, []);
 
-  const start = async (asMode: TrainingMode = mode) => {
-    if (!spec) return;
+  /** Starts a session; false if it couldn't (the error is shown). */
+  const start = async (asMode: TrainingMode = mode): Promise<boolean> => {
+    if (!spec) return false;
     setStarting(true);
     setStartError(null);
     setStartNotice(null);
@@ -118,18 +119,22 @@ export function App() {
         const groups = info.empty_buckets.map((i) => `group ${i + 1}`).join(" and ");
         setStartNotice(`No puzzles match ${groups}, so it's left out; the other groups share its share.`);
       }
+      return true;
     } catch (e) {
       setStartError((e as Error).message);
+      return false;
     } finally {
       setStarting(false);
     }
   };
 
   // §6: switching mode while a session is running starts a new one in that mode, like Start.
-  const changeMode = (next: TrainingMode) => {
+  // If the new session can't start (e.g. nothing is due), the mode stays as it was and the running
+  // session carries on, with the reason shown (v0.5-B1).
+  const changeMode = async (next: TrainingMode) => {
+    if (sessionId !== null && !(await start(next))) return;
     setMode(next);
     api.setSetting("trainer.mode", next).catch(() => undefined);
-    if (sessionId !== null) start(next);
   };
   const changeShowLength = (on: boolean) => {
     setShowLength(on);

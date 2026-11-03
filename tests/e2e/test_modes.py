@@ -143,15 +143,16 @@ def test_fast_forward_brings_a_miss_back_in_a_dev_run(page) -> None:  # type: ig
     start_session(page)
     page.get_by_test_id("next-button").click()  # skip: a miss, due tomorrow
     page.wait_for_timeout(300)
-    choose_mode(page, "Spaced repetition")
-    page.get_by_test_id("srs-due").filter(has_text="0 puzzles due now").wait_for()
+    choose_mode(page, "Spaced repetition")  # nothing due yet: the switch can't start, so Standard stays (B1)
+    page.get_by_test_id("start-error").filter(has_text="Nothing is due").wait_for()
+    assert page.get_by_test_id("session-mode").inner_text() == "Standard"
     page.get_by_test_id("gear").click()
     page.get_by_test_id("time-offset").fill("1")
     page.get_by_test_id("time-offset-apply").click()
     page.keyboard.press("Escape")
     page.get_by_test_id("time-offset-banner").filter(has_text="+1 day").wait_for()
-    choose_mode(page, "Standard")
     choose_mode(page, "Spaced repetition")
+    page.get_by_test_id("session-mode").filter(has_text="Spaced repetition").wait_for()
     page.get_by_test_id("srs-due").filter(has_text="1 puzzle due now").wait_for()
     assert "timeOffset:1" in calls(page)
 
@@ -240,3 +241,46 @@ def test_stats_by_mode_and_training_settings(page) -> None:  # type: ignore[no-u
     page.get_by_test_id("srs-intervals").fill("2, 4, 8")
     page.get_by_test_id("srs-intervals-save").click()
     assert "setting:srs.intervals=[2,4,8]" in calls(page)
+
+
+# ---- Regressions from QA v0.5 round 1 ----------------------------------------------------------------
+
+
+def test_one_move_commit_has_no_replies_line(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression v0.5-B4: a one-move puzzle showed "Replies predicted: 0 of 0"."""
+    open_app(page, "?mode=commit_line")
+    page.get_by_label("1 moves").check()
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    start_session(page)
+    enter(page, ["f1f8"], "white")  # the mock's mate-in-1 (001KR)
+    page.get_by_test_id("commit-submit").click()
+    page.get_by_test_id("outcome").filter(has_text="Solved").wait_for()
+    page.get_by_test_id("commit-result").wait_for()
+    assert page.get_by_test_id("commit-calculation").count() == 0
+
+
+def test_already_played_badge_is_whole(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression v0.5-B5: the badge was cut off in the side column, and claimed Lichess had the puzzle."""
+    open_app(page, "?played=1")
+    page.get_by_test_id("more-filters").click()
+    page.get_by_test_id("exclude-played").uncheck()
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    start_session(page)
+    page.get_by_test_id("next-button").click()  # the mock's second puzzle is in your Lichess history
+    badge = page.get_by_test_id("already-played")
+    badge.wait_for()
+    assert badge.inner_text() == "Already played: rating unaffected"
+    fits = badge.evaluate(
+        "e => e.scrollWidth <= e.clientWidth + 1 && [...e.querySelectorAll('*')].every(c => c.scrollWidth <= c.clientWidth + 1)"
+    )
+    assert fits
+
+
+def test_show_move_count_says_it_applies_from_the_next_session_both_ways(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression v0.5-B6."""
+    open_app(page, "?mode=commit_line")
+    switch = page.get_by_test_id("show-length-switch")
+    root = page.locator(".mantine-Switch-root").filter(has=switch)
+    assert "From the next session" in root.inner_text()
+    switch.click()
+    assert "From the next session" in root.inner_text()

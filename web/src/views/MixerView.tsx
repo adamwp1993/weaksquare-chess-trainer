@@ -229,7 +229,7 @@ export function MixerView({
             label="Show move count"
             description={
               showLength
-                ? "You see how many moves the solution has. Lichess counts these solves for less, because you knew the length."
+                ? "You see how many moves the solution has. Lichess counts these solves for less, because you knew the length. From the next session."
                 : "Hidden: you decide where your line ends. From the next session."
             }
             checked={showLength}

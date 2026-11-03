@@ -537,8 +537,14 @@ export function TrainerView({
             </Badge>
           )}
           {view?.already_played && (
-            <Badge color="gray" variant="light" style={{ textTransform: "none" }} data-testid="already-played">
-              Already played on Lichess: rating unaffected
+            <Badge
+              color="gray"
+              variant="light"
+              style={{ textTransform: "none", whiteSpace: "normal", height: "auto", lineHeight: 1.4, paddingBlock: 2 }}
+              title="You've played this puzzle before, so Lichess won't change your rating for it."
+              data-testid="already-played"
+            >
+              Already played: rating unaffected
             </Badge>
           )}
           {message && (

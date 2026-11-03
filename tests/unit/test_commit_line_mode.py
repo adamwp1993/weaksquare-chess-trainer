@@ -118,7 +118,7 @@ def test_illegal_or_empty_or_too_long_lines_are_refused() -> None:
 
 
 def test_length_cap_hidden_and_shown() -> None:
-    assert max_plies(LONG, length_shown=False) == min(MAX_PLIES, 2 * 5 + 10)
+    assert max_plies(LONG, length_shown=False) == MAX_PLIES  # never depends on the length (v0.5-B3)
     assert max_plies(LONG, length_shown=True) == 5
     s = mode.start(LONG, 0, length_shown=True)
     with pytest.raises(ValidationError):

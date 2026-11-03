@@ -100,7 +100,7 @@ After each puzzle, the result panel shows its **Lichess rating** change, e.g. **
 - **Already played: rating unaffected:** you've played this puzzle on Lichess before, and Lichess only rates your first try.
 - **Not rated by Lichess:** Lichess returned no change.
 
-A puzzle you've already played on Lichess also shows the badge **Already played on Lichess: rating unaffected** while you solve it.
+A puzzle you've already played on Lichess, or solved here and synced (or waiting to sync), also shows the badge **Already played: rating unaffected** while you solve it. *Changed in v0.5:* it used to say "on Lichess", and was cut off in a narrow window.
 
 The session bar adds **+34 this session**, the total of the changes Lichess returned this session. The rating trend over time is on the Stats page.
 
@@ -368,7 +368,7 @@ The **Mode** control at the top of the filters panel picks how you train. Your c
 | **Commit the line** | Calculation practice: you work out the whole line in your head, enter it on the board, and only then find out if it was right. |
 | **Spaced repetition** | Puzzles you missed come back on their review day until you've learned them. |
 
-**Switching modes while a session is running starts a new session** in the new mode, with your current filters and Rated setting, just like pressing Start. The puzzle you were on is left unfinished and isn't recorded.
+**Switching modes while a session is running starts a new session** in the new mode, with your current filters and Rated setting, just like pressing Start. The puzzle you were on is left unfinished and isn't recorded. If the new session can't start (for example, nothing is due for Spaced repetition), the app says why and your current session and mode carry on.
 
 ### Commit the line
 1. Choose **Commit the line**, then press **Start**. The opponent's first move plays as usual.
@@ -388,7 +388,7 @@ After Submit, **Your line** lists every move with ✓ or ✗ and, where yours wa
 - **You decide where the line ends.** If you stop before the end of the solution, your missing moves count as wrong. Moves you enter after the end of the solution are ignored.
 - Hint (it circles the piece that makes your first move) and Show answer count the puzzle as failed before you submit, as in Standard. After you submit they're free.
 
-**Show move count** (under the Mode control, this mode only, off by default) tells you how many moves the solution has, "Find 3 moves (both sides)", and stops you entering more. It applies from the next session you start.
+**Show move count** (under the Mode control, this mode only, off by default) tells you how many moves the solution has, "Find 3 moves (both sides)", and stops you entering more. It applies from the next session you start. With it off, you can enter up to 60 moves, whatever the puzzle.
 
 **Gotchas**
 - With **Show move count** on, Lichess counts your solves for less. Lichess weighs a solve by what you knew in advance, and knowing the length is a hint, so the app reports it truthfully (see [Your puzzle rating](#your-puzzle-rating)). With it off, solves count as they do in Standard.
@@ -407,7 +407,7 @@ Every puzzle you fail, in any mode, goes into the first of five review boxes. Th
 - When nothing is due, **Start** is greyed out until the next review day.
 - Review days are calendar days: a puzzle you miss in the evening is due the next morning.
 - Solving a puzzle in another mode doesn't move it up a box. Only reviews here do.
-- These puzzles are usually ones Lichess has already seen from you, so they show **Already played on Lichess: rating unaffected**. Lichess doesn't rate a puzzle twice.
+- These puzzles are usually ones Lichess has already seen from you, so they show **Already played: rating unaffected**. Lichess doesn't rate a puzzle twice.
 - You can change the boxes under **Settings → Training** (see [Training settings](#training-settings)).
 
 ### Depth ladder
@@ -420,6 +420,7 @@ The depth ladder is an **Order** choice (**Choose your puzzles → Order → Dep
 
 - Under **Order**, a line shows your level and how you're doing, for example "Short puzzles (2 moves), step 1 of 3 · 14 of 20 played, 79%". The session bar shows the same while you play, and **Level up!** appears on the result when you move up. The session carries on at the new level.
 - Your level is kept for each set of themes you choose (with **All themes** as a set of its own), so it carries over to your next session. **It never goes back down.**
+- A level with no puzzles for your filters is skipped. Mate in 2, for example, only has 2-move puzzles, so for it Short is already the top of the ladder.
 - The ladder sets **Number of moves** itself, so that control is greyed out. It can't be combined with **Mix by ratio**.
 - Because you know the length in advance, Lichess counts these solves like a themed session: for the theme that matched, or the length (Short / Long / Very long) when you chose All themes.
 - You can change the 80% and the 20 under **Settings → Training**. Try again (practice) runs don't count.

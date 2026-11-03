@@ -211,6 +211,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-02, v0.5: QA fixes (v0.5-B1 to B6)
+- Context: `qa/QA-v0.5.md` round 1 (PASS WITH ISSUES, six minor bugs).
+- Decision:
+  - **B2:** `core.ladder.status` takes the levels that have puzzles (`SessionService.ladder_levels`: one count per level under the current filters, done once at session start and for each preview). Empty levels are skipped going up, the last open level is the top (`LadderStatus.top` is now a field), and a recorded level that has emptied falls back to the nearest open level above, else below, with a fresh window. REQUIREMENTS FR-4.5 says so.
+  - **B3:** the hidden-length entry cap is a constant 60 plies, so reaching it says nothing about the solution.
+  - **B1:** a mode switch saves the mode only after its new session starts; otherwise the running session and mode stay and the reason shows.
+  - **B4/B5/B6:** no calculation badge without replies; the already-played badge wraps and says "Already played: rating unaffected"; Show move count says "From the next session" in both states.
+- Alternatives (B2): letting the level drop to a level with puzzles (contradicts "never drops"); refusing a theme set that can't fill every level (most single-motif sets can't).
+- Consequences: a ladder session start costs three extra counts (each well under the 500 ms target on the full DB).
+
 ### 2026-11-02, v0.5: Front end for the modes and the collapsible filters panel
 - Context: §6's Modes control, Commit the line's entry on the board, and FR-1.14 (Adam, v0.5 planning).
 - Decision:

@@ -22,6 +22,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **Hide the filters while you play:** **«** at the top of the filters panel (or **F**) folds it into a slim bar with your mode and a summary; the board gets bigger. **Show filters** brings it back unchanged, and the app remembers your choice. [FR-1.14]
 - **Settings → Training:** the depth ladder's threshold and window, and the Spaced-repetition review boxes. [FR-4.5] [FR-4.6]
 
+### Fixed
+- The **Already played: rating unaffected** badge (it said "on Lichess") is no longer cut off in the side column. [FR-6.11b]
+
 ## [v0.4] - 2026-11-02
 Candidates: v0.4-rc1 (2026-11-02), v0.4-rc2 (2026-11-02)
 

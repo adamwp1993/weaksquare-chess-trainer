@@ -131,11 +131,13 @@ export function CommitResult({ startFen, result }: { startFen: string; result: C
             {result.extra.length} more {result.extra.length === 1 ? "move" : "moves"} after the end of the solution (ignored).
           </Text>
         )}
-        <Group gap={6}>
-          <Badge variant="light" color="blue" style={{ textTransform: "none" }} data-testid="commit-calculation">
-            Replies predicted: {result.replies_correct} of {result.replies_total}
-          </Badge>
-        </Group>
+        {result.replies_total > 0 && ( // a one-move puzzle has no replies to predict (v0.5-B4)
+          <Group gap={6}>
+            <Badge variant="light" color="blue" style={{ textTransform: "none" }} data-testid="commit-calculation">
+              Replies predicted: {result.replies_correct} of {result.replies_total}
+            </Badge>
+          </Group>
+        )}
       </Stack>
     </Paper>
   );

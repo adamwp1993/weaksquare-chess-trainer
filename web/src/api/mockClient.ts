@@ -942,7 +942,7 @@ export class MockClient implements ApiClient {
       already_played: this.lichessHistory.has(puzzle.id),
       mode: s.mode,
       solution_plies: s.mode === "commit_line" && s.showLength ? puzzle.moves.length - 1 : null,
-      max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : Math.min(60, 2 * (puzzle.moves.length - 1) + 10)) : null,
+      max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : 60) : null,
     };
   }
 

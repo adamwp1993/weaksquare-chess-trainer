@@ -95,3 +95,28 @@ def test_bad_window(bad: object) -> None:
 
 def test_good_settings() -> None:
     assert validate_threshold(80) == 80 and validate_window(20) == 20 and validate_window(3) == 3
+
+
+# ---- Regression v0.5-B2: levels with no puzzles are skipped --------------------------------------
+
+
+def test_starts_at_the_first_level_with_puzzles() -> None:
+    s = status(K, None, [], 80, 20, available=[3, 4])
+    assert (s.level, s.top) == (3, False)
+
+
+def test_moves_up_past_an_empty_level() -> None:
+    s = status(K, 2, [True] * 20, 80, 20, available=[2, 4])
+    assert (s.level, s.top, s.played) == (4, True, 0)
+
+
+def test_the_last_level_with_puzzles_is_the_top() -> None:
+    s = status(K, 2, [True] * 20, 80, 20, available=[2])
+    assert (s.level, s.top, s.played, s.wins) == (2, True, 20, 20)  # nowhere to go: stays
+
+
+def test_a_recorded_level_that_emptied_uses_the_nearest_with_puzzles() -> None:
+    above = status(K, 3, [True] * 5, 80, 20, available=[2, 4])
+    assert (above.level, above.played) == (4, 0)  # its own window starts empty
+    below = status(K, 4, [True] * 5, 80, 20, available=[2, 3])
+    assert (below.level, below.top) == (3, True)

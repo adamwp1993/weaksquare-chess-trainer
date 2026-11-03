@@ -68,10 +68,9 @@ class CommitState:
 
 
 def max_plies(puzzle: Puzzle, length_shown: bool) -> int:
-    """How long a submitted line may be: the solution's length with Show move count, otherwise a
-    sanity cap that doesn't give the length away."""
-    n = len(puzzle.moves) - 1
-    return n if length_shown else min(MAX_PLIES, 2 * n + 10)
+    """How long a submitted line may be: the solution's length with Show move count, otherwise the
+    same fixed cap for every puzzle, so reaching it says nothing about the length (v0.5-B3)."""
+    return len(puzzle.moves) - 1 if length_shown else MAX_PLIES
 
 
 def grade(

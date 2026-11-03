@@ -5,6 +5,10 @@
   `ladder_key` on each attempt, with the level it was played at.
 - Current level = the highest level recorded for the key, moved up one when the last `window`
   attempts at that level reach `threshold` percent. It never drops.
+- Levels with no puzzles under the current filters are skipped (v0.5-B2): you start at the first
+  level that has puzzles, moving up goes to the next one that has, and the last one is the top. If
+  the recorded level has none any more (the other filters changed), the nearest level above it with
+  puzzles is used, or failing that the nearest below.
 """
 
 from __future__ import annotations
@@ -33,15 +37,12 @@ class LadderStatus:
     wins: int
     window: int
     threshold: int
+    top: bool = False  # no level above this one has puzzles
 
     @property
     def step(self) -> int:
         """1-based position on the ladder, for "Long (2/3)"."""
         return LEVELS.index(self.level) + 1
-
-    @property
-    def top(self) -> bool:
-        return self.level == LEVELS[-1]
 
 
 def ladder_key(spec: FilterSpec) -> str:
@@ -53,15 +54,30 @@ def ladder_key(spec: FilterSpec) -> str:
                       separators=(",", ":"), sort_keys=True)  # fmt: skip
 
 
-def status(key: str, max_recorded: int | None, recent: Sequence[bool], threshold: int, window: int) -> LadderStatus:
+def status(
+    key: str,
+    max_recorded: int | None,
+    recent: Sequence[bool],
+    threshold: int,
+    window: int,
+    available: Sequence[int] = LEVELS,
+) -> LadderStatus:
     """`max_recorded`: the highest level any attempt for `key` was played at (None: never climbed).
-    `recent`: the results of the last attempts at that level, newest last (only the last `window` count)."""
-    level = max_recorded if max_recorded in LEVELS else LEVELS[0]
+    `recent`: the results of the last attempts at that level, newest last (only the last `window` count).
+    `available`: the levels that have puzzles under the current filters (all of them if omitted)."""
+    open_levels = [lv for lv in LEVELS if lv in available] or [LEVELS[0]]  # none: the session says so
+    level = max_recorded if max_recorded in LEVELS else open_levels[0]
+    if level not in open_levels:
+        above = [lv for lv in open_levels if lv > level]
+        level = above[0] if above else max(open_levels)
+        recent = []  # a different level: its own window starts empty
+    higher = [lv for lv in open_levels if lv > level]
     counted = list(recent)[-window:]
     wins = sum(1 for r in counted if r)
-    if level != LEVELS[-1] and len(counted) >= window and wins * 100 >= threshold * window:
-        return LadderStatus(key, LEVELS[LEVELS.index(level) + 1], 0, 0, window, threshold)
-    return LadderStatus(key, level, len(counted), wins, window, threshold)
+    if higher and len(counted) >= window and wins * 100 >= threshold * window:
+        nxt = higher[0]
+        return LadderStatus(key, nxt, 0, 0, window, threshold, top=nxt == open_levels[-1])
+    return LadderStatus(key, level, len(counted), wins, window, threshold, top=not higher)
 
 
 def validate_threshold(value: Any) -> int:

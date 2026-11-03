@@ -31,7 +31,7 @@ from weaksquare.core.engine import (
 )
 from weaksquare.core.errors import ConflictError, NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.filters import FilterSpec
-from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LadderStatus, ladder_key
+from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LEVELS, LadderStatus, ladder_key
 from weaksquare.core.ladder import status as ladder_status
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.commit_line import CommitLineMode, CommitResult, CommitState, max_plies
@@ -189,7 +189,7 @@ class _Session:
     srs_ids: deque[str] = field(default_factory=deque)  # Spaced repetition: due puzzles left, in order
     ladder_base: FilterSpec | None = None  # the filters as chosen (order = depth_ladder); `spec` is the level's pool
     ladder: LadderStatus | None = None
-    level_up: bool = False  # the last recorded attempt moved the ladder up (reported once)
+    ladder_levels: list[int] = field(default_factory=list)  # levels with puzzles, counted at start
 
 
 @dataclass(frozen=True)
@@ -322,9 +322,11 @@ class SessionService:
             return self._start_srs(spec, rated)
         ladder = None
         base = None
+        ladder_levels: list[int] = []
         if spec.depth_ladder:
             base = spec
-            ladder = self.ladder_status(spec)
+            ladder_levels = self.ladder_levels(spec)
+            ladder = self.ladder_status(spec, ladder_levels)
             spec = spec.at_ladder_level(ladder.level)
         buckets = [spec.bucket(i) for i in range(len(spec.ratios))]
         if buckets:
@@ -338,7 +340,8 @@ class SessionService:
         sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), mode,
                                          (base or spec).to_json(), spec.queue_size)  # fmt: skip
         session = _Session(sid, spec, count, self._puzzles.version(), rated, mode=mode,
-                           show_length=show_length and mode == COMMIT, ladder_base=base, ladder=ladder)  # fmt: skip
+                           show_length=show_length and mode == COMMIT, ladder_base=base, ladder=ladder,
+                           ladder_levels=ladder_levels)  # fmt: skip
         if buckets:
             # An empty group is left out and the others share its slots (renormalized).
             session.buckets = buckets
@@ -387,11 +390,16 @@ class SessionService:
 
     # ---- Depth ladder (FR-4.5) -----------------------------------------------------------------------
 
-    def ladder_status(self, spec: FilterSpec) -> LadderStatus:
+    def ladder_levels(self, spec: FilterSpec) -> list[int]:
+        """The ladder levels that have puzzles under these filters (v0.5-B2: empty ones are skipped)."""
+        return [lv for lv in LEVELS if self._puzzles.count(spec.at_ladder_level(lv)) > 0]
+
+    def ladder_status(self, spec: FilterSpec, available: list[int] | None = None) -> LadderStatus:
         key = ladder_key(spec)
         window, threshold = self._prefs.ladder_window(), self._prefs.ladder_threshold()
         level, recent = self._attempts.ladder_history(key, window)
-        return ladder_status(key, level, recent, threshold, window)
+        levels = self.ladder_levels(spec) if available is None else available
+        return ladder_status(key, level, recent, threshold, window, levels)
 
     def pool_spec(self, spec: FilterSpec) -> FilterSpec:
         """What a session would draw from: the current ladder level's pool for a depth-ladder order."""
@@ -401,7 +409,7 @@ class SessionService:
         """Re-read the ladder after an attempt; on a level-up, draw from the new level from now on."""
         if s.ladder_base is None or s.ladder is None:
             return None
-        new = self.ladder_status(s.ladder_base)
+        new = self.ladder_status(s.ladder_base, s.ladder_levels)
         moved = new.level > s.ladder.level
         s.ladder = new
         if not moved:
