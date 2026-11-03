@@ -47,7 +47,7 @@ export function DangerVerdict({ fen, reveal }: { fen: string; reveal: DangerReve
       <Text size="sm" data-testid="danger-verdict">
         <b>{san}</b> was safe.
         {reveal.candidate_score && reveal.best_score
-          ? ` Stockfish rates it ${reveal.candidate_score} (its best line: ${reveal.best_score}).`
+          ? ` Stockfish rates it ${reveal.candidate_score}; its best move rates ${reveal.best_score}.`
           : ""}
       </Text>
     );

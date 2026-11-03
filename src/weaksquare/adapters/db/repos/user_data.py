@@ -208,7 +208,8 @@ class AttemptsRepo:
         return self._tally("a.session_id = ?", (session_id,))
 
     def all_time_tally(self) -> Tally:
-        return self._tally("1", ())
+        """Every attempt but Danger spotting's, like the Stats totals (v0.6-B6)."""
+        return self._tally("a.mode != 'danger_spotting'", ())
 
     def brief(self, attempt_id: int) -> AttemptBrief | None:
         with self._db.session() as conn:

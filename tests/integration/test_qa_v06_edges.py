@@ -28,7 +28,7 @@ def _engine() -> FakeEngine:
 # ---- Danger spotting: nothing gives the answer away before the end (FR-4.4) -------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="v0.6-B1: only safe candidates wait for an engine search")
+# Regression test for v0.6-B1 (fixed in QA round 1).
 def test_b1_loading_a_danger_puzzle_does_the_same_work_whatever_the_answer(api, paths) -> None:  # type: ignore[no-untyped-def]
     """The time a Danger puzzle takes to appear must not depend on whether its candidate is safe:
     otherwise a slow load means "Safe" and an instant one means "Unsafe"."""
@@ -103,25 +103,24 @@ def test_danger_is_refused_with_the_depth_ladder(api, paths) -> None:  # type: i
 
 
 def test_an_engine_failure_shows_the_blunder_and_owes_a_safe_one(api, paths) -> None:  # type: ignore[no-untyped-def]
+    # Since v0.6-B1 every load runs the search, so a failure can hit any puzzle: while the engine fails, every
+    # puzzle shows the blunder, and once a safe slot was drawn during that, the next puzzle is owed one.
     sid = _danger_session(api, paths)
-    kinds = []
-    for _ in range(12):
-        # fail every search until a safe slot was hit once, then work again
-        ok(api.next_puzzle(sid))
-        if FakeEngine.instances:
-            break
+    ok(api.next_puzzle(sid))
     eng = _engine()
     eng.fail = EngineError("crashed")
-    failed_at = len(eng.calls)
-    while len(eng.calls) == failed_at:
+    session = api._sessions._session(sid)
+    for _ in range(8):
         ok(api.next_puzzle(sid))
         st: DangerState = state(api, sid)
-        kinds.append(st.is_safe)
-    assert kinds[-1] is False  # the safe slot that failed shows the blunder…
+        assert not st.is_safe  # no verified safe move: the blunder
+        if session.owed_safe:
+            break
+    assert session.owed_safe, "no safe slot drawn in 8 failed loads (seeded rng)"
     eng.fail = None
     ok(api.next_puzzle(sid))
     st = state(api, sid)
-    assert st.is_safe  # …and the next one is owed a safe candidate
+    assert st.is_safe  # the owed safe candidate
 
 
 def test_a_danger_win_doesnt_hide_the_puzzle_from_exclude_solved_here(api, paths) -> None:  # type: ignore[no-untyped-def]
@@ -316,7 +315,7 @@ def test_the_sync_code_never_reads_mistake_reasons() -> None:
 # ---- builder concern: the refutation searched twice ---------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="v0.6-B3: the reason prompt and the panel search the same refutation twice")
+# Regression test for v0.6-B3 (fixed in QA round 1).
 def test_b3_reason_prompt_and_why_it_fails_share_one_refutation_search(api, paths, clock: FixedClock) -> None:  # type: ignore[no-untyped-def]
     from tests.fakes.engine import plant_managed_install
 
@@ -355,9 +354,7 @@ def test_b3_reason_prompt_and_why_it_fails_share_one_refutation_search(api, path
     assert chess.Board(first) if first else True
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.6-B5: Danger's 'Why your move fails' is scored for the blunderer, not for you"
-)
+# Regression test for v0.6-B5 (fixed in QA round 1).
 def test_b5_danger_wrong_refutation_is_explained_from_the_punishing_side(api, paths) -> None:  # type: ignore[no-untyped-def]
     sid = _danger_session(api, paths)
     st = _until(api, sid, False)

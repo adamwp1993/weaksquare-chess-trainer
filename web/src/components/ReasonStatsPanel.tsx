@@ -163,6 +163,7 @@ export function ReasonStatsPanel({ themes }: { themes: StatRow[] }) {
                   withLegend
                   legendProps={{ verticalAlign: "bottom", itemSorter: null }} // the legend follows the stack order, not A–Z
                   gridAxis="y"
+                  yAxisProps={{ allowDecimals: false, domain: [0, "auto"], tickCount: 5, interval: 0 }} // whole misses, every step labelled
                   barProps={{ radius: 2, stroke: "var(--mantine-color-body)", strokeWidth: 2 }}
                   series={keys.map((k, i) => ({ name: k, label: SHORT[k] ?? k, color: colors[i] }))}
                   data-testid="reasons-trend"

@@ -10,7 +10,7 @@ import { Board } from "../components/Board";
 import { CommitControls, CommitResult, entryBoard, entrySound } from "../components/CommitLine";
 import { DangerCall, DangerVerdict, sanLine } from "../components/DangerCall";
 import { IdeaResult, IdeaTags } from "../components/IdeaTags";
-import { ReasonChips } from "../components/ReasonChips";
+import { MAX_NOTE, ReasonChips } from "../components/ReasonChips";
 import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { AnalyzeButton, EnginePanel } from "../components/EnginePanel";
 import { RatingChange } from "../components/LichessStatus";
@@ -119,6 +119,8 @@ export function TrainerView({
   const [reasonChosen, setReasonChosen] = useState<ReasonKey | null>(null);
   const [reasonSkipped, setReasonSkipped] = useState(false);
   const [reasonBusy, setReasonBusy] = useState(false);
+  const [reasonNote, setReasonNote] = useState("");
+  const lastMode = useRef<PuzzleView["mode"] | null>(null);
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
@@ -199,10 +201,15 @@ export function TrainerView({
     setReasonPrompt(null);
     setReasonChosen(null);
     setReasonSkipped(false);
+    setReasonNote("");
+    // Danger spotting: Stockfish looks at every position before it appears (the same wait whatever the
+    // answer, v0.6-B1), so say so instead of leaving the last puzzle's result on screen.
+    if (lastMode.current === "danger_spotting") setMessage({ color: "gray", text: "Preparing the position…" });
     try {
       const next = await api.nextPuzzle(sessionId);
       refreshStats();
       setView(next);
+      lastMode.current = next?.mode ?? lastMode.current;
       if (!next) {
         setComplete(true);
         return;
@@ -635,11 +642,14 @@ export function TrainerView({
       () => undefined,
     );
   }, [lostAttempt, lineDone, reasonPrompt, sessionId]);
-  const chooseReason = async (reason: ReasonKey, note: string | null) => {
+  // The chip, and the note you've written so far (by click or by key 1–6: v0.6-B2).
+  const chooseReason = async (reason: ReasonKey) => {
     if (!reasonPrompt || reasonBusy) return;
+    const typed = reasonNote.trim();
+    const note = typed.length > MAX_NOTE ? "" : typed; // too long: save the reason; the box says why
     setReasonBusy(true);
     try {
-      await api.setMistakeReason(reasonPrompt.attempt_id, reason, note);
+      await api.setMistakeReason(reasonPrompt.attempt_id, reason, note || null);
       setReasonChosen(reason);
       api.getSessionStats(sessionId).then(setStats, () => undefined); // a misclick leaves the tally
     } catch (e) {
@@ -651,7 +661,7 @@ export function TrainerView({
   const showReasons = reasonPrompt !== null && !reasonSkipped;
   const reasonKey = (i: number) => () => {
     const r = showReasons ? reasonPrompt?.reasons[i] : undefined;
-    if (r) chooseReason(r.key, null);
+    if (r) chooseReason(r.key);
   };
 
   // Keyboard shortcuts (state/shortcuts.ts has the list). Each does nothing unless its button is enabled.
@@ -722,6 +732,8 @@ export function TrainerView({
                 prompt={reasonPrompt}
                 chosen={reasonChosen}
                 busy={reasonBusy}
+                note={reasonNote}
+                onNote={setReasonNote}
                 onChoose={chooseReason}
                 onSkip={() => setReasonSkipped(true)}
               />

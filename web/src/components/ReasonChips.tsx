@@ -21,17 +21,21 @@ export function ReasonChips({
   prompt,
   chosen,
   busy,
+  note,
+  onNote,
   onChoose,
   onSkip,
 }: {
   prompt: ReasonPrompt;
   chosen: ReasonKey | null;
   busy: boolean;
-  onChoose: (reason: ReasonKey, note: string | null) => void;
+  /** The note you're writing: kept by the trainer, so keys 1–6 save it too (v0.6-B2). */
+  note: string;
+  onNote: (note: string) => void;
+  onChoose: (reason: ReasonKey) => void;
   onSkip: () => void;
 }) {
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [note, setNote] = useState("");
+  const [noteOpen, setNoteOpen] = useState(note !== "");
   const tooLong = note.trim().length > MAX_NOTE;
   return (
     <Paper withBorder p="sm" radius="md" data-testid="reason-chips">
@@ -67,7 +71,7 @@ export function ReasonChips({
                 variant={picked ? "filled" : suggested ? "light" : "default"}
                 color={picked ? "blue" : suggested ? "yellow" : "gray"}
                 disabled={busy}
-                onClick={() => onChoose(r.key, noteOpen && !tooLong ? note.trim() || null : null)}
+                onClick={() => onChoose(r.key)}
                 rightSection={
                   suggested && !picked ? (
                     <Badge size="xs" color="yellow" variant="filled" style={{ textTransform: "none" }}>
@@ -96,12 +100,12 @@ export function ReasonChips({
               size="xs"
               placeholder="A short note (optional)"
               value={note}
-              onChange={(e) => setNote(e.currentTarget.value)}
+              onChange={(e) => onNote(e.currentTarget.value)}
               error={tooLong ? `Keep it under ${MAX_NOTE} characters.` : undefined}
               data-testid="reason-note"
             />
             {chosen && (
-              <Button size="xs" variant="light" disabled={busy || tooLong} onClick={() => onChoose(chosen, note.trim() || null)}
+              <Button size="xs" variant="light" disabled={busy || tooLong} onClick={() => onChoose(chosen)}
                       data-testid="reason-note-save">
                 Save note
               </Button>

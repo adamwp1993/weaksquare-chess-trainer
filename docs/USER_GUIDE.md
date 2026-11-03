@@ -440,7 +440,7 @@ When the puzzle ends you see **Ideas found 1 of 2 · 1 extra**: each of your tag
 - After the end, the result says which it was: a safe move with Stockfish's evaluation of it and of its best line, or the game's blunder and the move that punishes it. **Show answer** steps through the whole line.
 
 **Gotchas**
-- **About half the highlighted moves are safe.** The safe ones are checked by Stockfish when the puzzle loads: a move counts as safe if it's at most half a pawn worse than Stockfish's best move and doesn't allow a mate. That check takes about your engine think time, so a puzzle can take a moment to appear.
+- **About half the highlighted moves are safe.** The safe ones are checked by Stockfish when the puzzle loads: a move counts as safe if it's at most half a pawn worse than Stockfish's best move and doesn't allow a mate. Stockfish looks at every position before it appears, safe or not, so each puzzle takes about your engine think time to show ("Preparing the position…") and the wait never gives the answer away.
 - Before your call there's no Hint (it would give the answer away). **Show answer** before your call counts as a miss and tells you whether the move was safe.
 - **Results stay on this PC.** Nothing is sent to Lichess, so the **Rated** switch is greyed out. Danger-spotting results don't put puzzles into Spaced repetition and don't count for *Exclude solved here* or *Only my misses*.
 - The depth ladder isn't available in this mode or in Name the idea first.
@@ -508,7 +508,7 @@ After a failed puzzle, once it's over, a row of six chips appears below the boar
 
 1. Click a chip, or press its number. It's saved at once ("Saved").
 2. Optionally, **Add a note** (up to 200 characters) and **Save note**.
-3. Changed your mind? Pick another chip: the latest one counts. **Skip** hides the chips. You can always just go to the next puzzle.
+3. Changed your mind? Pick another chip: the latest one counts, and it keeps the note you wrote. **Skip** hides the chips. You can always just go to the next puzzle.
 
 **The suggested reason**
 The app highlights a likely reason with **Suggested**, but it's only saved if you click it:
@@ -522,7 +522,7 @@ A miss you tag **Misclick** is left out of your accuracy here: the session bar (
 
 **Gotchas**
 - You're asked after every miss in every mode, including Danger spotting, but not during **Try again** practice. The chips stay while you practise.
-- To stop being asked, set **Ask after a failed puzzle** to **Off** in Settings → Training. In a later version you'll also be able to be asked about your game mistakes only.
+- To stop being asked, set **Ask after a failed puzzle** to **Off** in Settings → Training.
 - Your reasons and notes stay on this PC.
 
 ## Keyboard shortcuts

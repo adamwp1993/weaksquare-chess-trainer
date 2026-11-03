@@ -396,3 +396,24 @@ def test_misclicks_are_not_in_the_ladder_window(api, clock: FixedClock) -> None:
     assert recent == [False]
     ok(api.set_mistake_reason(out["attempt_id"], "misclick"))
     assert attempts.ladder_history(key, 3) == (level, [])
+
+
+# Regression test for v0.6-B4 (QA round 1): the opponent's 500 ms animation isn't your think time.
+def test_b4_rushed_starts_after_the_opponent_move_has_played(api, clock: FixedClock) -> None:  # type: ignore[no-untyped-def]
+    sid = ok(api.start_session(OPEN))["session_id"]
+    _lose_by_wrong_first_move(api, sid, clock, 3.3)  # 3.3 s after loading = 2.8 s after the move appeared
+    assert ok(api.get_reason_prompt(sid))["suggested"] == "rushed"
+    sid2 = ok(api.start_session(OPEN))["session_id"]
+    _lose_by_wrong_first_move(api, sid2, clock, 3.6)  # 3.1 s of real think time: not rushed
+    assert ok(api.get_reason_prompt(sid2))["suggested"] != "rushed"
+
+
+# Regression test for v0.6-B6 (QA round 1): "All time" leaves Danger spotting out, like the Stats totals.
+def test_b6_all_time_matches_the_stats_totals(api, paths) -> None:  # type: ignore[no-untyped-def]
+    sid = _danger_session(api, paths)
+    _until(api, sid, True)
+    ok(api.call_danger(sid, "safe"))
+    bar = ok(api.get_session_stats(sid))
+    assert (bar["solved"], bar["all_time_solved"], bar["all_time_failed"]) == (1, 0, 0)
+    overall = ok(api.get_stats())["overall"]
+    assert overall["solved"] == bar["all_time_solved"] and overall["attempts"] == 0

@@ -39,7 +39,7 @@ def lose_first(page) -> None:  # type: ignore[no-untyped-def]
 # ---- reason chips -----------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="v0.6-B2: keys 1-6 save the reason without the note you wrote")
+# Regression test for v0.6-B2 (fixed in QA round 1).
 def test_b2_changing_the_reason_with_a_key_keeps_the_note(page) -> None:  # type: ignore[no-untyped-def]
     lose_first(page)
     page.get_by_test_id("reason-add-note").click()

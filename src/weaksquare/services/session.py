@@ -30,6 +30,7 @@ from weaksquare.core.chess_rules import PuzzleDataError
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import (
     REFUTATION_MIN_PLIES,
+    EngineError,
     EngineNotInstalled,
     refutation_plies,
     validate_fen,
@@ -39,7 +40,7 @@ from weaksquare.core.errors import AppError, ConflictError, NotFoundError, Stale
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LEVELS, LadderStatus, ladder_key
 from weaksquare.core.ladder import status as ladder_status
-from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
+from weaksquare.core.modes.base import OPPONENT_DELAY_MS, AttemptResult, Feedback, HelpKind, HelpResult
 from weaksquare.core.modes.commit_line import CommitLineMode, CommitResult, CommitState, max_plies
 from weaksquare.core.modes.danger import MODE as DANGER
 from weaksquare.core.modes.danger import MULTIPV as DANGER_MULTIPV
@@ -221,6 +222,7 @@ class _Current:
     analyses: dict[str, Analysis] = field(default_factory=dict)  # by FEN, for this puzzle
     reason: _ReasonBase | None = None  # set when the attempt was recorded as a loss
     suggested: str | None = None  # the last suggestion the prompt gave
+    refuting: threading.Event | None = None  # a refutation search is running; set when it's done (v0.6-B3)
 
 
 @dataclass
@@ -638,10 +640,12 @@ class SessionService:
         if isinstance(state, DangerState):
             return _ReasonBase(aid, "danger", state.decisive_ms, False, None, None, None,
                                state.call == "safe" and not state.is_safe)  # fmt: skip
-        # Decided by Submit (Commit the line): the think time is the whole entry.
-        decisive = (
-            result.time_ms if commit is not None else state.decisive_ms if isinstance(state, StandardState) else None
-        )
+        # Decided by Submit (Commit the line): the think time is the whole entry, from when the opponent's
+        # first move had played (v0.6-B4).
+        if commit is not None:
+            decisive: int | None = max(0, result.time_ms - OPPONENT_DELAY_MS)
+        else:
+            decisive = state.decisive_ms if isinstance(state, StandardState) else None
         return _ReasonBase(
             attempt_id=aid,
             source="puzzle",
@@ -734,19 +738,24 @@ class SessionService:
         (ARCHITECTURE §3 decision 12) looks at the raw position from the blunderer's side; a puzzle with
         no safe move shows the blunder and owes the next one a safe candidate."""
         blunder = puzzle.moves[0]
-        with self._rng_lock:
-            want = wants_safe(self._rng, s.owed_safe)
-        if not want:
-            return blunder, False, None
         engine = self._require_engine()
         board = validate_fen(puzzle.fen)  # FR-7.6: validated before the engine sees it
         mover: Any = "white" if board.turn == chess.WHITE else "black"
+        # The search runs for every puzzle, safe slot or not, so how long a puzzle takes to appear says
+        # nothing about the answer (v0.6-B1).
+        analysis: Analysis | None
         try:
             analysis = engine.analyse(board, mover, multipv=DANGER_MULTIPV)
         except EngineNotInstalled:
             raise
         except AppError as e:  # the engine failed once: show the blunder and owe a safe one
-            log.warning("danger spotting: no safe candidate for %s (%s)", puzzle.ref, e.message)
+            log.warning("danger spotting: no engine answer for %s (%s)", puzzle.ref, e.message)
+            analysis = None
+        with self._rng_lock:
+            want = wants_safe(self._rng, s.owed_safe)
+        if not want:
+            return blunder, False, None
+        if analysis is None:
             s.owed_safe = True
             return blunder, False, None
         lines = {line.pv[0]: line for line in analysis.lines if line.pv}
@@ -970,7 +979,13 @@ class SessionService:
 
     @staticmethod
     def _player(cur: _Current) -> Any:
-        return "white" if chess.Board(cur.state.start_fen).turn == chess.WHITE else "black"
+        """Whose side evals are worded from (FR-7.2): the side you played. In Danger spotting that's the
+        punishing side once you called the real blunder Unsafe and played on (v0.6-B5)."""
+        state = cur.state
+        mover = chess.Board(state.start_fen).turn
+        if isinstance(state, DangerState) and state.call == "unsafe" and not state.is_safe:
+            mover = not mover
+        return "white" if mover == chess.WHITE else "black"
 
     def get_refutation(self, session_id: int) -> Refutation:
         """The engine's answer to the move that lost this puzzle (Show answer, §7.2 step 2)."""
@@ -981,8 +996,26 @@ class SessionService:
                 return cur.refutation
             wrong = cur.state.first_wrong
             player = self._player(cur)
+            running = cur.refuting
+            if running is None and wrong is not None:
+                cur.refuting = threading.Event()
         if wrong is None:
             raise NotFoundError("There's no wrong move to refute in this puzzle.")
+        if running is not None:  # another caller is searching it: wait for that answer (v0.6-B3)
+            running.wait(60)
+            with s.lock:
+                if cur.refutation is not None:
+                    return cur.refutation
+            raise EngineError("Stockfish didn't answer. Try again.")
+        try:
+            return self._search_refutation(s, cur, wrong, player)
+        finally:
+            with s.lock:
+                done, cur.refuting = cur.refuting, None
+            if done is not None:
+                done.set()
+
+    def _search_refutation(self, s: _Session, cur: _Current, wrong: tuple[str, str], player: Any) -> Refutation:
         fen_before, uci = wrong
         board = validate_line(fen_before, [uci])  # FR-7.6: validated before the engine sees it
         engine = self._engine_or_raise()

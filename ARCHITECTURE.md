@@ -212,6 +212,19 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.6: QA fixes (v0.6-B1 to B8)
+- Context: `qa/QA-v0.6.md` round 1 (two majors, six minors).
+- Decision:
+  - **B1:** `_danger_candidate` runs the MultiPV search for **every** Danger puzzle, before the coin flip, so a puzzle's load time no longer tells safe from blunder (it did on 14 of 14 in the real app). The trainer says "Preparing the position…" while it waits.
+  - **B5:** `SessionService._player` words evals from the punishing side once you called the real blunder Unsafe (the refutation of a wrong punishing move, the engine panel and the analysis board after it).
+  - **B3:** one refutation search per puzzle: concurrent `get_refutation` calls (the reason prompt and the "Why your move fails" panel) wait on the running search (`_Current.refuting`).
+  - **B4:** think time for Rushed starts when the trainer has shown the position: `core/modes/base.py` `OPPONENT_DELAY_MS` / `REPLY_DELAY_MS`, equal to `TrainerView`'s animation delays (`tests/contract/test_trainer_delays.py`).
+  - **B6:** the session bar's "All time" leaves Danger spotting out, like the Stats totals.
+  - **B2:** the note you're writing lives in `TrainerView`, so keys 1–6 save it as clicks do; a note over 200 characters is left out and the reason still saved.
+  - **B7, B8:** the safe verdict's wording, whole-number evenly labelled y ticks on the reason trend (`interval: 0`), and no promise of an unshipped feature in the User Guide.
+- Alternatives (B1): padding blunder loads with a sleep (still a timing side channel under load; and the search may as well be real); prefetching (see the session entry).
+- Consequences: every Danger puzzle costs one engine search (about the think time) to appear.
+
 ### 2026-11-03, v0.6: Front end for Name the idea, Danger spotting and the reason chips
 - Context: the trainer view and the filters panel for FR-4.3, FR-4.4 and §7.3, and the Stats additions.
 - Decision:

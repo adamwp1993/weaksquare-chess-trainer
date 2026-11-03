@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from tests.e2e.conftest import play
@@ -122,7 +124,7 @@ def test_reason_chips_keys_note_change_and_misclick(page) -> None:  # type: igno
     page.get_by_test_id("stat-misclicks").filter(has_text="1 misclick").wait_for()
     assert page.get_by_test_id("stat-failed").inner_text() == "0"
     reasons = [c for c in calls(page) if c.startswith("reason:")]
-    assert reasons == ["reason:1=didntLook", "reason:1=didntLook:saw it too late", "reason:1=misclick"]
+    assert reasons == ["reason:1=didntLook", "reason:1=didntLook:saw it too late", "reason:1=misclick:saw it too late"]
 
 
 def test_skip_hides_the_chips_and_next_still_works(page) -> None:  # type: ignore[no-untyped-def]
@@ -171,3 +173,34 @@ def test_stats_reason_breakdown_and_mode_details(page) -> None:  # type: ignore[
     page.get_by_role("option", name="Danger spotting").click()
     page.wait_for_timeout(100)
     assert "reasonStats:all:danger_spotting" in calls(page)
+
+
+# Regression test for v0.6-B1 (QA round 1): the wait for the next Danger puzzle is announced, never silent.
+def test_b1_danger_says_it_is_preparing_the_next_position(page) -> None:  # type: ignore[no-untyped-def]
+    open_app(page, "?mode=danger_spotting")
+    start(page, 200)
+    page.evaluate(
+        """() => { const api = window.__mockApi; const next = api.nextPuzzle.bind(api);
+             api.nextPuzzle = (id) => new Promise((r) => setTimeout(() => r(next(id)), 600)); }"""
+    )
+    page.get_by_test_id("danger-safe").click()
+    page.get_by_test_id("next-button").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Preparing the position").wait_for()
+    page.get_by_test_id("danger-call").wait_for()
+
+
+# Regression test for v0.6-B7 (QA round 1): the safe verdict's wording and whole-number chart ticks.
+def test_b7_safe_verdict_wording_and_whole_ticks(page) -> None:  # type: ignore[no-untyped-def]
+    open_app(page, "?mode=danger_spotting")
+    start(page, 200)
+    page.get_by_test_id("danger-safe").click()
+    verdict = page.get_by_test_id("danger-verdict").inner_text()
+    assert "its best move rates" in verdict and "best line:" not in verdict
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("menuitem", name="Stats").click()
+    page.get_by_test_id("stats-reasons-tab").click()
+    page.get_by_test_id("reasons-trend-table").wait_for()
+    ticks = page.locator("[data-testid=reasons-trend] [class*=yAxis] text").all_text_contents()
+    values = [int(t) for t in ticks]
+    steps = {b - a for a, b in itertools.pairwise(values)}
+    assert len(values) >= 3 and len(steps) == 1, f"uneven y ticks: {values}"

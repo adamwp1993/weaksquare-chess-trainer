@@ -134,8 +134,16 @@ def test_engine_flow_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Pat
             assert page.get_by_test_id("engine-line").count() >= 1
             page.get_by_test_id("engine-start-eval").filter(has_text=re.compile("for you|mate|level")).wait_for()
             shot(page, "refutation-and-panel")
-            for _ in range(3):
-                page.get_by_role("button", name="Forward").click()
+            forward = page.get_by_role("button", name="Forward")
+            for _ in range(3):  # a short answer has fewer steps (the real app serves a random puzzle)
+                if forward.is_disabled():
+                    break
+                forward.click()
+            # The last step of a mate puzzle is the mate itself: the panel says so and has no lines (and the
+            # analysis board below needs a legal move). Step back off a finished game.
+            if chess.Board(board.get_attribute("data-fen")).is_game_over():
+                page.get_by_test_id("engine-panel").filter(has_text="Checkmate").wait_for(timeout=20_000)
+                page.get_by_role("button", name="Back", exact=True).click()
             page.get_by_test_id("engine-line").first.wait_for(timeout=20_000)
 
             # analysis board: a move, the eval, a legal arrow
@@ -143,7 +151,14 @@ def test_engine_flow_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Pat
             page.get_by_test_id("analysis-controls").wait_for()
             afen = board.get_attribute("data-fen")
             abo = chess.Board(afen)
-            play(page, next(iter(abo.legal_moves)).uci(), color)
+
+            # a move that doesn't end the game, so the engine has a line (and an arrow) to show
+            def ends(m: chess.Move) -> bool:
+                b = abo.copy()
+                b.push(m)
+                return b.is_game_over()
+
+            play(page, next(m for m in abo.legal_moves if not ends(m)).uci(), color)
             page.wait_for_function(
                 "() => document.querySelector('[data-testid=analysis-moves]').innerText !== 'Make a move on the board.'"
                 " && !document.querySelector('[data-testid=engine-thinking]')"
@@ -202,7 +217,9 @@ def test_engine_flow_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Pat
     assert "engine started: Stockfish 19" in log
     assert "Engine in use: Stockfish 19 (managed, sf_19) at " in log  # round 2: v0.4-B6
     assert "chess.engine" not in log and "<< " not in log and ">> " not in log  # no UCI DEBUG flood
-    assert " ERROR " not in log, [x for x in log.splitlines() if " ERROR " in x]
+    lines = log.splitlines()
+    context = [lines[max(0, i - 3) : i + 25] for i, x in enumerate(lines) if " ERROR " in x]
+    assert " ERROR " not in log, context
 
 
 @pytest.mark.skipif(os.environ.get("QA_V04_DOWNLOAD") != "1", reason="downloads ~80 MB: set QA_V04_DOWNLOAD=1")

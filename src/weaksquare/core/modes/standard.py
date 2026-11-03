@@ -18,7 +18,15 @@ import chess
 
 from weaksquare.core.chess_rules import is_acceptable, parse_move, start_position
 from weaksquare.core.errors import ConflictError, ValidationError
-from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult, HelpUsed
+from weaksquare.core.modes.base import (
+    OPPONENT_DELAY_MS,
+    REPLY_DELAY_MS,
+    AttemptResult,
+    Feedback,
+    HelpKind,
+    HelpResult,
+    HelpUsed,
+)
 from weaksquare.core.move_sounds import sound_for, sounds_for_line
 from weaksquare.core.puzzle import Puzzle
 
@@ -48,7 +56,7 @@ class StandardMode:
     def start(self, puzzle: Puzzle, now_ms: int) -> StandardState:
         board, _ = start_position(puzzle.fen, puzzle.moves)  # raises PuzzleDataError if the line is illegal
         return StandardState(puzzle=puzzle, board=board, next_index=1, started_ms=now_ms, start_fen=board.fen(),
-                             position_ms=now_ms)  # fmt: skip
+                             position_ms=now_ms + OPPONENT_DELAY_MS)  # fmt: skip
 
     def start_practice(self, puzzle: Puzzle, now_ms: int) -> StandardState:
         """FR-5.12 Try again (not scored): the same puzzle from the start, with the attempt already
@@ -109,7 +117,7 @@ class StandardMode:
         reply_sound = sound_for(state.board, reply)
         state.board.push(reply)
         state.next_index += 1
-        state.position_ms = now_ms
+        state.position_ms = now_ms + REPLY_DELAY_MS
         return Feedback("correct", reply.uci(), False, None, move_sound, reply_sound)
 
     def on_help(self, state: StandardState, kind: HelpKind, now_ms: int) -> HelpResult:
