@@ -105,11 +105,13 @@ Scope:
 ---
 
 ## v0.5: Training modes I
-- **Commit the line**, **Spaced repetition** (exact repeats), **Depth ladder** (FR-4.2, 4.5, 4.6).
-- Mode selector on the main page.
+- **Commit the line** (FR-4.2), with the solution length hidden by default and a **Show move count** switch; **Spaced repetition** with exact repeats (FR-4.6); **Depth ladder** as an **order** (FR-3.11, FR-4.5; changed from a mode at v0.5 planning).
+- **Modes** control at the top of the filters panel; switching mode starts a new session (§6).
+- **Collapsible filters panel** (FR-1.14, added at v0.5 planning).
+- Stats: accuracy **per mode** (FR-9.1).
 
-**Done when:** mode state-machine unit tests; SRS scheduling tests (box moves on win/loss).
-**Adam's manual test:** one session per mode; misses resurface on schedule (use a "fast-forward time" debug setting).
+**Done when:** mode state-machine unit tests (Commit grading, help before and after Submit); SRS scheduling tests (box moves on win/loss, graduation, misses from any mode, calendar-day due); depth-ladder level tests (window, threshold, never drops); the angle with the ladder and with Show move count; Playwright: one flow per mode, a mode switch starts a new session, no engine output before Submit, collapse/expand keeps the filters and survives a relaunch through the bridge.
+**Adam's manual test:** one session in each mode plus one Depth-ladder session; in Commit the line, try Show move count on and off; misses resurface on schedule (in a `--dev` run, use Settings → Debug → fast-forward time); switching mode starts a new session; hide the filters while playing, relaunch (still hidden), show them again (nothing changed).
 
 ---
 

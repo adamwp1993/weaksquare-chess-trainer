@@ -69,6 +69,7 @@ weaksquare-chess-trainer/
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
+│  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
@@ -157,7 +158,7 @@ weaksquare-chess-trainer/
 | Interface | Implementations | First version |
 |---|---|---|
 | `PuzzleSource` | `LichessDbSource` → `CustomPuzzleSource` | v0.1 → v0.8 |
-| `TrainingMode` | `Standard` → `CommitLine`, `SpacedRepetition`, `DepthLadder` → `NameIdea`, `DangerSpotting` | v0.1 → v0.5 / v0.6 |
+| `TrainingMode` | `Standard` (also serves Spaced repetition) → `CommitLine` → `NameIdea`, `DangerSpotting`. Depth ladder is a queue order (`core/ladder.py`), not a mode (v0.5 planning) | v0.1 → v0.5 → v0.6 |
 | `JobRunner` | thread-pool runner | v0.1 |
 | `SecretStore` | `KeyringSecretStore`, `FakeSecretStore` (tests) | v0.3 |
 | `LichessClient` | httpx implementation, fake | v0.3 |
