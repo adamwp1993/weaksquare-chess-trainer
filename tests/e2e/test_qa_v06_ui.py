@@ -236,3 +236,51 @@ def test_settings_and_stats_screens(page) -> None:  # type: ignore[no-untyped-de
     page.get_by_test_id("stats-reasons-tab").click()
     page.get_by_test_id("reasons-table").wait_for()
     shot(page, "stats-reasons")
+
+
+# ---- round 2 (B2 fix edges) ----------------------------------------------------------------------------
+
+
+def test_r2_a_note_typed_first_is_saved_by_a_key(page) -> None:  # type: ignore[no-untyped-def]
+    lose_first(page)
+    page.get_by_test_id("reason-add-note").click()
+    page.get_by_test_id("reason-note").fill("rushed it again")
+    page.get_by_test_id("puzzle-header").click()  # leave the field (a board click keeps focus in it)
+    page.keyboard.press("2")
+    page.get_by_test_id("reason-saved").wait_for()
+    assert [c for c in calls(page) if c.startswith("reason:")] == ["reason:1=missedResource:rushed it again"]
+
+
+def test_r2_an_over_long_note_with_a_key_saves_only_the_reason(page) -> None:  # type: ignore[no-untyped-def]
+    lose_first(page)
+    page.get_by_test_id("reason-add-note").click()
+    page.get_by_test_id("reason-note").fill("y" * 201)
+    page.get_by_test_id("puzzle-header").click()
+    page.keyboard.press("3")
+    page.get_by_test_id("reason-saved").wait_for()
+    assert [c for c in calls(page) if c.startswith("reason:")] == ["reason:1=miscalculated"]
+    assert "under 200" in page.get_by_test_id("reason-chips").inner_text()
+
+
+def test_r2_the_note_doesnt_carry_to_the_next_miss(page) -> None:  # type: ignore[no-untyped-def]
+    lose_first(page)
+    page.get_by_test_id("reason-add-note").click()
+    page.get_by_test_id("reason-note").fill("first puzzle")
+    page.get_by_test_id("reason-didntLook").click()
+    page.get_by_test_id("reason-saved").wait_for()
+    page.get_by_test_id("next-button").click()
+    page.get_by_test_id("puzzle-header").filter(has_text="Puzzle 2").wait_for()
+    page.wait_for_timeout(800)
+    board = page.get_by_test_id("board").get_attribute("data-fen")
+    import chess
+
+    b = chess.Board(board)
+    play(page, next(iter(b.legal_moves)).uci(), "white" if b.turn == chess.WHITE else "black")
+    page.wait_for_timeout(400)
+    if page.get_by_test_id("outcome").filter(has_text="Failed").count():
+        page.get_by_test_id("answer-button").click()
+        page.get_by_test_id("reason-chips").wait_for()
+        assert page.get_by_test_id("reason-note").count() == 0  # closed and empty again
+        page.keyboard.press("1")
+        page.wait_for_timeout(200)
+        assert [c for c in calls(page) if c.startswith("reason:")][-1].endswith("=didntLook")

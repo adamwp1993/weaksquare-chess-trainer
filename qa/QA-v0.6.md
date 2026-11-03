@@ -204,3 +204,69 @@ No clipped text or broken layout apart from B7. The vertical Modes control is co
 - **Reason suggestions with real timing:** a fast wrong move should suggest Rushed. Note that the 0.5 s opponent animation counts (B4).
 - **The weekly trend over real weeks:** QA used a fixed clock and the mock's data only.
 - **A misclick on a signed-in account:** check that the loss still appears in your Lichess puzzle history. QA verified this with the fake Lichess only.
+
+---
+
+# Round 2, 2026-11-03: re-verification
+
+Branch `v0.6` at `f8f6b97` ("Fix v0.6-B1..B8 (QA round 1)"). Same rules as round 1: no product code, docs or config changed; new or updated tests under `tests/` only. Real app with temp `WEAKSQUARE_DATA_DIR` folders only.
+
+## Verdict: **PASS WITH ISSUES** (minor only)
+
+All eight round-1 bugs are fixed, and I re-ran and checked each regression test against the behaviour. Both majors are fixed in the real app:
+- **B1:** across 3 real-app runs, every safe candidate took 1.36–2.42 s to appear. Guessing from load time was right 8, 8 and 6 times out of 14, which is chance.
+- **B5:** evals after a refutation are worded from the punishing side.
+
+One new minor, **B9**: a small residual of B1. In forced positions Stockfish finishes early, so a quick load still means "Unsafe" on the few puzzles where it happens.
+
+## Re-verification
+
+| Bug | Fix | Result | Evidence |
+|---|---|---|---|
+| B1 load time | the MultiPV search runs for every Danger puzzle before the coin flip; "Preparing the position…" | **FIXED** (B9 residual) | QA `test_b1_loading_a_danger_puzzle…` passes: {1} search per load for both kinds. New QA `test_qa_v06_round2.py::test_b1_every_load_is_one_multipv_search_of_the_raw_position` checks 12 loads: each is exactly one MultiPV-5 search of the raw FEN. Real app (`test_qa_v06_real_app.py`, 3 runs): safe loads 1.36–2.42 s, blunders mostly 1.36–1.41 s; guesses 8/14, 8/14, 6/14; the safe and blunder load-time ranges overlap (asserted). "Preparing the position" seen after 14 of 14 Next clicks. Builder e2e `test_b1_danger_says_it_is_preparing…` passes |
+| B5 eval side | `_player` flips to the punisher after a correct Unsafe | **FIXED** | QA `test_b5_…` passes; new `test_b5_engine_panel_after_a_refutation_is_for_the_punisher_and_after_a_safe_call_for_the_mover` checks the "start" analysis after a refutation (punisher) and after a wrong Safe on the blunder (the mover) |
+| B3 double search | `_Current.refuting` event | **FIXED** | QA `test_b3_…` passes (1 search). New: `test_b3_a_failed_shared_search_errors_both_callers_and_can_be_retried` (both callers get a clean error, neither hangs, the next ask searches again) and `test_b3_waiting_caller_after_moving_on_doesnt_hang` (prompt waiting while Next is pressed: all three return, the prompt is `ok`) |
+| B4 animation in think time | `OPPONENT_DELAY_MS` / `REPLY_DELAY_MS` in `core/modes/base.py`, contract test against `TrainerView` | **FIXED** | builder `test_b4_rushed_starts_after_the_opponent_move_has_played`, `test_trainer_delays.py`; new QA `test_b4_reply_delay_is_not_think_time_for_the_second_move` (3.2 s after the move = 2.9 s after the reply → Rushed), `test_b4_commit_submit_counts_from_after_the_opponent_move` (3.3 s → Rushed; it was not before the fix), `test_b4_danger_call_has_no_animation_offset` (3.2 s → no suggestion) |
+| B6 All time | `all_time_tally` excludes `danger_spotting` | **FIXED** | builder `test_b6_all_time_matches_the_stats_totals`; new QA `test_b6_all_time_still_counts_other_modes_and_misclicks_apart`; real app: Danger session bar "All time: 0 solved, 0 failed" |
+| B2 note dropped by keys | note state in `TrainerView` | **FIXED** | QA `test_b2_…` passes. New e2e: `test_r2_a_note_typed_first_is_saved_by_a_key`, `test_r2_an_over_long_note_with_a_key_saves_only_the_reason`, `test_r2_the_note_doesnt_carry_to_the_next_miss`; `test_a_201_character_note_is_refused_in_the_ui` still passes |
+| B7 wording / ticks | "Stockfish rates it X; its best move rates Y."; `interval: 0` | **FIXED** | builder `test_b7_…`; real app `qa-v06-real/danger-verdict.png`; `docs/img/stats-reasons.png` regenerates byte-identical |
+| B8 guide promise | sentence removed + contract test | **FIXED** | `test_mistake_reasons_chapter_promises_nothing_unshipped`; `check_docs --strict` clean |
+
+**The rewritten `test_an_engine_failure_shows_the_blunder_and_owes_a_safe_one` still tests the intent.** While the engine fails, every load shows the blunder. The test then checks that a safe slot drawn during the failure sets `owed_safe`, and that the first load after recovery is safe. It uses `session.owed_safe` directly rather than inferring it, which is fine.
+
+## Evidence: commands run (round 2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | builder: **1023 passed** (189 s); with the QA round-2 file: **1031 passed**, 330 deselected (203 s) |
+| `uv run pytest -m e2e` | **191 passed** (498 s), QA round-2 e2e included |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **24 passed, 1 failed, 1 skipped** (311 s). The failure was `test_qa_v05_real_app.py::test_v05_modes…` timing out on the Commit move count ("3 move") while the engine/fulldb chain was starting, so the machine was loaded. Run alone 3×: 3 passed. This is my v0.5 QA test's 150 ms entry pacing, not the app. The v0.4 real-app test passed in this run |
+| `uv run pytest -m engine` | **11 passed** |
+| `uv run pytest -m docs_screenshots` | **24 passed**, `docs/img` unchanged |
+| `uv run pytest -m fulldb` | **70 passed, 3 xfailed, 1 failed**. The failure was my `test_qa_v06_fulldb.py` asserting all-time misclicks == session misclicks; B6 intentionally changed that, so I updated the test. Re-run with the ladder and perf files: 7 passed, 2 xfailed |
+| ruff check / format, `mypy src`, typecheck, lint, pre-commit, `check_docs --strict`, `gen_types.py` | all clean; `types.ts` unchanged |
+
+## New bug
+
+**v0.6-B9 (minor): in forced positions a quick load still means "Unsafe".**
+- What happens: Stockfish ends its search long before the think time when the position is forced (it reaches maximum depth at once). That happens with one or two legal moves, or with a forced mate.
+- Those are exactly the positions with **no safe candidate**, so they always show the blunder.
+- Real Stockfish on the first 90 fixture puzzles at 1 s, MultiPV 5:
+  - 5 positions returned in 0.01–0.44 s, and all 5 had 0 safe candidates (legal moves: 1, 2, 1, 1, 29).
+  - 6 positions had no safe candidate in total.
+- Real app: blunders at 0.16 s and 0.12 s (run 1) and 0.86 s (run 3), against ≥ 1.36 s for everything else.
+- So on roughly 5% of puzzles a fast load gives "Unsafe" away. With one legal move the answer is mostly obvious from the board anyway.
+- Fix direction: hold `next_puzzle` until at least the think time has passed, or `Limit(time=…)` plus a minimum wall time.
+- Evidence: scratch script (real `StockfishEngine` over `fixture_rows()[:90]`) and the `QA-OBS danger loads` lines of `test_qa_v06_real_app.py`.
+
+Also noted: clicking the board doesn't move focus out of the note field (chessground keeps focus), so after typing a note, keys 1–6 type into it until you click elsewhere or press Tab. This is expected typing behaviour, documented by the round-2 e2e tests clicking the header.
+
+## Tests added or changed (round 2)
+- New `tests/integration/test_qa_v06_round2.py` (8): B1 one search per load; B3 failed shared search and Next mid-search; B4 reply delay, Commit, Danger; B5 engine panel side; B6 all-time with misclicks.
+- `tests/e2e/test_qa_v06_ui.py`: +3 `test_r2_…` (B2 edges).
+- `tests/smoke/test_qa_v06_real_app.py`: counts "Preparing the position" sightings and asserts the safe and blunder load-time ranges overlap.
+- `tests/fulldb/test_qa_v06_fulldb.py`: the all-time misclick assertion follows B6.
+
+## For Adam
+- B9: in your 20 Danger puzzles, an instant load is always the blunder; it should be rare (~1 in 20).
+- The rest of the round-1 list still applies.

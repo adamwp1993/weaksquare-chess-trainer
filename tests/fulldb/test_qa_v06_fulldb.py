@@ -68,7 +68,7 @@ def test_stats_with_reasons_on_five_thousand_attempts_is_fast(history) -> None: 
     s, a = attempts.session_tally(sid), attempts.all_time_tally()
     elapsed = time.perf_counter() - t0
     print(f"QA-OBS session + all-time tally: {elapsed:.3f}s")
-    assert s.misclicks > 0 and a.misclicks == s.misclicks
+    assert 0 < a.misclicks < s.misclicks  # all-time leaves Danger spotting out since v0.6-B6; this session has it
     assert elapsed < 0.5
 
 

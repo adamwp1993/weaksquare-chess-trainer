@@ -65,6 +65,7 @@ def test_v06_danger_reasons_and_name_the_idea_in_the_real_app(pw, tmp_path: Path
             shot(page, "mixer-danger")
             t0 = time.monotonic()
             page.get_by_role("button", name="Start").click()
+            preparing = 0
             loads: list[tuple[float, bool, bool]] = []  # (seconds to appear, guessed safe, really safe)
             for i in range(14):
                 page.get_by_test_id("danger-call").wait_for(timeout=60_000)
@@ -96,9 +97,17 @@ def test_v06_danger_reasons_and_name_the_idea_in_the_real_app(pw, tmp_path: Path
                     shot(page, "danger-verdict")
                 t0 = time.monotonic()
                 page.get_by_test_id("next-button").click()
+                msg = page.get_by_test_id("trainer-message")
+                preparing += int(msg.count() > 0 and "Preparing the position" in (msg.inner_text() or ""))
             print("\nQA-OBS danger loads (s, guessed safe, really safe):", loads)
             right = sum(g == r for _, g, r in loads)
             print(f"QA-OBS guessing from the load time alone: {right}/{len(loads)} right")
+            print(f"QA-OBS 'Preparing the position' seen after {preparing} of {len(loads)} Next clicks")
+            # Round 2 (v0.6-B1 fix): the load times of safe and blunder candidates overlap
+            safe_t = [t for t, _, r in loads[1:] if r]
+            blunder_t = [t for t, _, r in loads[1:] if not r]
+            if safe_t and blunder_t:
+                assert min(safe_t) <= max(blunder_t) and min(blunder_t) <= max(safe_t), (safe_t, blunder_t)
             rows = q(user_db, "SELECT DISTINCT mode, sync_status FROM attempts")
             assert rows == [("danger_spotting", "local")], rows
 
