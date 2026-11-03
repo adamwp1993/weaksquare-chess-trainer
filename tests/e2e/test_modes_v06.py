@@ -204,3 +204,18 @@ def test_b7_safe_verdict_wording_and_whole_ticks(page) -> None:  # type: ignore[
     values = [int(t) for t in ticks]
     steps = {b - a for a, b in itertools.pairwise(values)}
     assert len(values) >= 3 and len(steps) == 1, f"uneven y ticks: {values}"
+
+
+# Regression test for v0.6-B9 (QA round 2): a Danger puzzle never appears faster than the engine's think time,
+# even when the backend answers at once (a forced position: always the blunder).
+def test_b9_danger_puzzles_take_at_least_the_think_time(page) -> None:  # type: ignore[no-untyped-def]
+    open_app(page, "?mode=danger_spotting")
+    start(page, 0)
+    page.get_by_test_id("danger-call").wait_for()
+    page.get_by_test_id("danger-safe").click()
+    started = page.evaluate("performance.now()")
+    page.get_by_test_id("next-button").click()
+    page.get_by_test_id("trainer-message").filter(has_text="Preparing the position").wait_for()
+    page.get_by_test_id("danger-call").wait_for()
+    elapsed = page.evaluate("performance.now()") - started
+    assert elapsed >= 950, f"appeared after {elapsed:.0f} ms; the mock's think time is 1 s"

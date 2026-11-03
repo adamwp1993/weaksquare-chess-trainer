@@ -121,6 +121,7 @@ export function TrainerView({
   const [reasonBusy, setReasonBusy] = useState(false);
   const [reasonNote, setReasonNote] = useState("");
   const lastMode = useRef<PuzzleView["mode"] | null>(null);
+  const thinkMs = useRef<number | null>(null); // the engine's think time: every Danger load takes at least this
   const chess = useRef<Chess | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
@@ -205,8 +206,16 @@ export function TrainerView({
     // Danger spotting: Stockfish looks at every position before it appears (the same wait whatever the
     // answer, v0.6-B1), so say so instead of leaving the last puzzle's result on screen.
     if (lastMode.current === "danger_spotting") setMessage({ color: "gray", text: "Preparing the position…" });
+    const asked = performance.now();
     try {
       const next = await api.nextPuzzle(sessionId);
+      if (next?.mode === "danger_spotting") {
+        // Stockfish answers a forced position early, and those never have a safe move: so every Danger puzzle
+        // appears no sooner than a full search would take, or a quick load would mean "Unsafe" (v0.6-B9).
+        thinkMs.current ??= await api.getEngineSettings().then((e) => e.think_s * 1000, () => 0);
+        const wait = thinkMs.current - (performance.now() - asked);
+        if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      }
       refreshStats();
       setView(next);
       lastMode.current = next?.mode ?? lastMode.current;
