@@ -211,6 +211,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.6: Name the idea, Danger spotting and mistake reasons: modes, rules and storage
+- Context: FR-4.3, FR-4.4 and §7.3 (FR-5.6–5.10), with Adam's v0.6 planning decisions.
+- Decision:
+  - **Storage** (user.db `0005_reasons_modes.sql`, nullable columns only): `attempts.idea_tags` (JSON), `idea_found`, `idea_total`, `idea_extra`, `danger_candidate`, `danger_safe`, `danger_call`, plus the `mistake_reasons` table from REQUIREMENTS §4. Reasons are append-only too: choosing another chip adds a row and the latest row per `(source, ref_id)` counts, so the attempts log itself is never updated for a reason.
+  - **Name the idea** (`core/modes/name_idea.py`): `NameIdeaMode` subclasses `StandardMode` (its state adds the tags). `set_tags` must come before the first move. `grade_tags` compares your tags with `core.themes.motif_themes` (the Motifs, Advanced, Mate patterns and Special moves groups), whatever slot they're in. `IDEA_SETUP` / `IDEA_PAYOFF` only split the pickers.
+  - **Danger spotting** (`core/modes/danger.py`): its own state machine, `on_call(state, call)` then, after a correct Unsafe on the real blunder, one `on_move` for the refutation's first move. `safe_candidates` is pure over `ScoredMove`s (mover's side), so the 50 cp rule is unit-tested without an engine. Mate scores map to large values, and a mate against the mover is never safe. `wants_safe` keeps an "owed" safe slot when a puzzle had no safe move.
+  - **Reasons** (`core/reasons.py`): the reason set in FR-5.6 order (keys 1–6), and `suggest(ReasonContext)` with the FR-5.9 rules in a fixed order (rushed, miscalculated, missedResource, unknownPattern). `StandardState` gained `position_ms` / `decisive_ms` so "rushed" measures the deciding move's own think time.
+- Alternatives: putting a `reason` column on `attempts` and updating it (breaks decision 4's append-only log); grading idea tags by slot (Lichess has no role data to grade against); asking Stockfish for every Danger move list (only the safe slot needs the engine).
+- Consequences: Danger spotting and Name the idea plug into `SessionService`'s registry; Danger adds a call step to the trainer view, like Commit's Submit.
+
 ### 2026-11-03, after v0.5: The board re-measures itself on every press
 - Context: Adam, after signing off v0.5: a move only registered when he clicked the middle of a square. Chessground caches the board's screen position and re-measures only on a window resize, a scroll, or a change in the board's own size (its ResizeObserver). Content above the board (a notice, the session bar wrapping, the dev banner, the filters panel in a narrow window) can move the board without any of those, so clicks were mapped with the old position, off by up to the shift.
 - Decision: `components/Board.tsx`, the only chessground wrapper, clears chessground's cached bounds (`state.dom.bounds.clear()`) in a capture-phase `mousedown`/`touchstart` listener on its element, so chessground measures again just before it handles each press.

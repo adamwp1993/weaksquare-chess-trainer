@@ -24,13 +24,21 @@ class SyncFields:
 
 @dataclass(frozen=True)
 class ModeFields:
-    """What a v0.5 mode adds to an attempt: Commit the line's calculation accuracy (FR-4.2) and the
-    depth-ladder theme set and level it was played at (FR-4.5)."""
+    """What a mode adds to an attempt: Commit the line's calculation accuracy (FR-4.2) and the
+    depth-ladder theme set and level it was played at (FR-4.5), from v0.5; Name the idea's tags and
+    their score (FR-4.3) and Danger spotting's candidate and call (FR-4.4), from v0.6."""
 
     replies_correct: int | None = None
     replies_total: int | None = None
     ladder_key: str | None = None
     ladder_level: int | None = None
+    idea_tags: dict[str, list[str]] | None = None
+    idea_found: int | None = None
+    idea_total: int | None = None
+    idea_extra: int | None = None
+    danger_candidate: str | None = None
+    danger_safe: bool | None = None
+    danger_call: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,14 +110,18 @@ class AttemptsRepo:
                 "INSERT INTO attempts (puzzle_source, puzzle_id, session_id, mode, started_at, finished_at, win,"
                 " help_used, first_move_correct, line_correct, time_ms, puzzle_rating,"
                 " rated, angle, sync_status, sync_account, already_played,"
-                " replies_correct, replies_total, ladder_key, ladder_level)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " replies_correct, replies_total, ladder_key, ladder_level,"
+                " idea_tags, idea_found, idea_total, idea_extra, danger_candidate, danger_safe, danger_call)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ref.source, ref.id, session_id, mode, started_at, finished_at, int(result.win), result.help_used,
                  int(result.first_move_correct), int(result.line_correct), result.time_ms, puzzle_rating,
                  None if sync.rated is None else int(sync.rated), sync.angle, sync.status,
                  sync.account.lower() if sync.account else None,
                  None if sync.already_played is None else int(sync.already_played),
-                 extra.replies_correct, extra.replies_total, extra.ladder_key, extra.ladder_level),
+                 extra.replies_correct, extra.replies_total, extra.ladder_key, extra.ladder_level,
+                 None if extra.idea_tags is None else json.dumps(extra.idea_tags), extra.idea_found,
+                 extra.idea_total, extra.idea_extra, extra.danger_candidate,
+                 None if extra.danger_safe is None else int(extra.danger_safe), extra.danger_call),
             )  # fmt: skip
             return int(cur.lastrowid or 0)
 

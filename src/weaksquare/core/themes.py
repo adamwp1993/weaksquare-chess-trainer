@@ -156,3 +156,18 @@ def display_name(key: str) -> str:
 
 def is_valid_key(key: str) -> bool:
     return isinstance(key, str) and bool(THEME_KEY.match(key))
+
+
+# ---- Name the idea first (FR-4.3, v0.6) -----------------------------------------------------------
+# Your tags are graded against the puzzle's motif themes: its themes in these groups.
+IDEA_GROUPS: tuple[str, ...] = ("Motifs", "Advanced", "Mate patterns", "Special moves")
+# The two pickers. The split only helps you think (Lichess doesn't record which role a theme plays):
+# a tag counts wherever you put it.
+_SETUP_EXTRA = ("sacrifice", "capturingDefender", "discoveredAttack")
+IDEA_SETUP: tuple[str, ...] = tuple(k for k, _ in _CATALOG["Advanced"]) + _SETUP_EXTRA
+IDEA_PAYOFF: tuple[str, ...] = tuple(k for g in IDEA_GROUPS for k, _ in _CATALOG[g] if k not in IDEA_SETUP)
+
+
+def motif_themes(themes: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """The puzzle's themes that idea tags are graded against (unknown "Other" themes don't count)."""
+    return tuple(dict.fromkeys(t for t in themes if info(t).group in IDEA_GROUPS))
