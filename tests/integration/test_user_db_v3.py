@@ -41,7 +41,7 @@ def test_v2_attempts_become_local_and_are_never_queued(tmp_path: Path, clock: Fi
     conn.close()
 
     result = migrate(db_path, USER, clock, tmp_path / "backups")
-    assert (result.from_version, result.to_version) == (2, 3)
+    assert (result.from_version, result.to_version) == (2, len(load_migrations(USER)))
     assert result.backup is not None  # NFR-3
 
     db = Database(db_path, tmp_path / "no-puzzles.db")

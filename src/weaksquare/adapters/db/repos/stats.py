@@ -16,13 +16,13 @@ class StatsRepo:
             attached = conn.execute("SELECT 1 FROM pragma_database_list WHERE name = 'pz'").fetchone()
             if attached:
                 rows = conn.execute(
-                    "SELECT a.win, a.first_move_correct, a.line_correct, a.puzzle_rating, p.themes, p.length"
+                    "SELECT a.win, a.first_move_correct, a.line_correct, a.puzzle_rating, p.themes, p.length, a.mode"
                     " FROM attempts a LEFT JOIN pz.puzzles p"
                     " ON a.puzzle_source = 'lichess' AND p.id = a.puzzle_id"
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT win, first_move_correct, line_correct, puzzle_rating, NULL AS themes, NULL AS length"
+                    "SELECT win, first_move_correct, line_correct, puzzle_rating, NULL AS themes, NULL AS length, mode"
                     " FROM attempts"
                 ).fetchall()
         return [
@@ -33,6 +33,7 @@ class StatsRepo:
                 puzzle_rating=r[3],
                 themes=None if r[4] is None else tuple(r[4].split()),
                 length=r[5],
+                mode=r[6],
             )
             for r in rows
         ]

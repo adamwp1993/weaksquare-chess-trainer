@@ -82,6 +82,13 @@ class UiSettings:
     color_scheme: Literal["light", "dark", "auto"]  # FR-1.12; "auto" is Match system
     sounds: SoundSettings  # FR-1.13
     auto_check: bool  # FR-2.5: check for a newer puzzle database once a day
+    mode: Literal["standard", "commit_line", "spaced_repetition"]  # v0.5: the Modes control (§6)
+    show_length: bool  # Commit the line: Show move count (FR-4.2)
+    ladder_threshold: int  # FR-4.5, percent
+    ladder_window: int  # FR-4.5, attempts
+    srs_intervals: list[int]  # FR-4.6, days per box
+    filters_collapsed: bool  # FR-1.14
+    time_offset_days: int | None  # FR-4.6 fast-forward: --dev runs only (None in the real app)
 
 
 @dataclass(frozen=True)
@@ -119,6 +126,7 @@ class SessionInfo:
     match_count: int
     queue_size: int | None
     empty_buckets: list[int]  # ratio groups with no matching puzzles, left out of this session
+    mode: Literal["standard", "commit_line", "spaced_repetition"]  # v0.5 (§6)
 
 
 @dataclass(frozen=True)
@@ -133,6 +141,9 @@ class PuzzleView:
     rating: int
     opponent_sound: MoveSound  # FR-1.13
     already_played: bool  # Lichess has seen this puzzle from you: rating unaffected (badge)
+    mode: Literal["standard", "commit_line", "spaced_repetition"]
+    solution_plies: int | None  # Commit the line with Show move count only: moves to enter, both sides
+    max_plies: int | None  # Commit the line: the longest line Submit accepts
 
 
 @dataclass(frozen=True)
@@ -154,6 +165,59 @@ class AttemptRating:
 
 
 @dataclass(frozen=True)
+class LadderInfo:
+    """Depth ladder (FR-4.5): the level for a theme set, and its rolling window."""
+
+    level: int  # puzzle length: 2, 3 or 4 (4 = 4 or more)
+    label: str  # "Short", "Long", "Very long"
+    step: int  # 1-based position on the ladder…
+    steps: int  # …out of this many
+    played: int  # attempts at this level in the window
+    wins: int
+    window: int
+    threshold: int  # percent
+    top: bool
+
+
+@dataclass(frozen=True)
+class LadderPreview:
+    """For the mixer while Order is Depth ladder: the level a session would start at."""
+
+    ladder: LadderInfo
+    match_count: int  # puzzles at that level
+
+
+@dataclass(frozen=True)
+class SrsStatus:
+    """Spaced repetition (FR-4.6), for the mixer."""
+
+    due: int
+    next_due: str | None  # ISO date of the next review day after today
+    scheduled: int  # puzzles in a box, not graduated
+
+
+@dataclass(frozen=True)
+class PlyGrade:
+    played: str | None  # your move (UCI); None where your line stopped short
+    expected: str  # the solution's move
+    player: bool  # your move, or a predicted reply
+    correct: bool
+
+
+@dataclass(frozen=True)
+class CommitFeedback:
+    """Commit the line (FR-4.2): your submitted line, graded."""
+
+    grades: list[PlyGrade]
+    extra: list[str]  # your moves after the end of the solution: ignored
+    replies_correct: int
+    replies_total: int
+    win: bool
+    outcome: Outcome | None  # set when Submit decided the attempt
+    line_sounds: list[MoveSound]  # one per move you submitted
+
+
+@dataclass(frozen=True)
 class Outcome:
     """Sent once per puzzle, when the attempt is decided; themes are revealed here."""
 
@@ -165,6 +229,7 @@ class Outcome:
     puzzle_url: str
     attempt_id: int
     lichess: AttemptRating | None  # None when the attempt isn't synced (not a Lichess puzzle)
+    level_up: LadderInfo | None  # the depth ladder moved up with this attempt (FR-4.5)
 
 
 @dataclass(frozen=True)
@@ -201,6 +266,8 @@ class SessionStats:
     all_time_solved: int
     all_time_failed: int
     rating_change: int | None  # FR-6.11c: summed only from changes Lichess returned
+    mode: Literal["standard", "commit_line", "spaced_repetition"]
+    ladder: LadderInfo | None  # depth ladder (FR-4.5)
 
 
 @dataclass(frozen=True)
@@ -221,6 +288,7 @@ class StatsReport:
     by_length: list[StatRow]
     by_rating: list[StatRow]
     missing: int  # attempts on puzzles no longer in the database
+    by_mode: list[StatRow]  # v0.5 (FR-9.1)
 
 
 @dataclass(frozen=True)
@@ -355,9 +423,14 @@ EXPORTED: list[type] = [
     PuzzleView,
     ThemeLabel,
     AttemptRating,
+    LadderInfo,
     Outcome,
     MoveFeedback,
     HelpResponse,
+    PlyGrade,
+    CommitFeedback,
+    LadderPreview,
+    SrsStatus,
     SessionStats,
     StatRow,
     StatsReport,

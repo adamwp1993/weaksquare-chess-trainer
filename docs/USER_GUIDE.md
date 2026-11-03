@@ -100,7 +100,7 @@ After each puzzle, the result panel shows its **Lichess rating** change, e.g. **
 - **Already played: rating unaffected:** you've played this puzzle on Lichess before, and Lichess only rates your first try.
 - **Not rated by Lichess:** Lichess returned no change.
 
-A puzzle you've already played on Lichess also shows the badge **Already played on Lichess: rating unaffected** while you solve it.
+A puzzle you've already played on Lichess, or solved here and synced (or waiting to sync), also shows the badge **Already played: rating unaffected** while you solve it. *Changed in v0.5:* it used to say "on Lichess", and was cut off in a narrow window.
 
 The session bar adds **+34 this session**, the total of the changes Lichess returned this session. The rating trend over time is on the Stats page.
 
@@ -160,9 +160,9 @@ The banner's puzzle count comes from the database.lichess.org page, which can la
 - See [Your data and privacy](#your-data-and-privacy) for exactly what the check sends.
 
 ## Choosing your puzzles
-*Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets. Changed in v0.3: Exclude played on Lichess, and Rated.*
+*Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets. Changed in v0.3: Exclude played on Lichess, and Rated. Changed in v0.5: the Mode control, the Depth ladder order, and Hide filters.*
 
-The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match. The panel scrolls on its own, so the board stays in view.
+The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match. The panel scrolls on its own, so the board stays in view. At its top, **Mode** picks how you train (see [Training modes](#training-modes)).
 
 1. Pick **Themes**, or leave it at **All themes**. To mix themes in fixed shares instead, switch on **Mix by ratio** (below).
 2. Choose **ANY** (a puzzle needs at least one of your themes) or **ALL** (it needs every one).
@@ -188,11 +188,15 @@ The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The
 | **More filters → Openings** | Puzzles from the openings you choose. Type to search. Each opening family is listed with its variations; choosing **(any variation)** takes the whole family. Only puzzles that start before move 20 have an opening, so choosing one leaves out the rest. |
 | **More filters → Quality** | **Min popularity** (Lichess players' votes, from -100 to 100) and **Min plays**. They're on by default at 50 and 100, which leaves out puzzles players rated poorly or that few have played. Change either number, or empty a box and press **Enter** to turn it off. |
 | **More filters → Your history** | **Exclude solved here** (on by default) leaves out puzzles you've solved at least once in this app; ones you've only failed can still come up. **Exclude played on Lichess** (on by default, *added in v0.3*) leaves out puzzles in your Lichess history, which Lichess wouldn't rate again; it needs a Lichess sign-in. **Only my misses** gives you only puzzles whose last attempt here was a fail, so a puzzle drops out once you solve it. While it's on, the other two aren't needed and are greyed out. |
-| **Order** | **Random**; **Easy → hard** (lowest rating first); or **By theme**, which serves all the puzzles of your first chosen theme, then the next (with ratios: group by group). |
+| **Order** | **Random**; **Easy → hard** (lowest rating first); **By theme**, which serves all the puzzles of your first chosen theme, then the next (with ratios: group by group); or **Depth ladder** (*added in v0.5*), which starts you on short puzzles and moves you up as your accuracy allows (see [Depth ladder](#depth-ladder)). |
 
 No puzzle repeats within a session. Your filters are remembered the next time you open the app, and the count updates as you play, because solved puzzles drop out.
 
 ![The theme list with search and Select all / Clear](img/theme-picker.png)
+
+**Hiding the filters while you play** (*added in v0.5*): click **«** at the top of the panel (or press **F**) to fold it away. A slim bar takes its place with **» Show filters**, your mode, a summary of your filters and whether the session is Rated, and the board gets bigger. **Show filters** (or **F**) brings the panel back exactly as you left it. The app remembers whether it was hidden the next time you open it.
+
+![The filters panel hidden](img/filters-hidden.png)
 
 **Gotchas**
 - If the count says **0 puzzles match**, Start is disabled. Widen a filter. A common cause is ALL with two themes that never appear together, such as One-move and Very long.
@@ -221,7 +225,7 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Stats
-*Added in v0.2. Changed in v0.3: the Lichess rating trend.*
+*Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode.*
 
 Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
 
@@ -229,7 +233,7 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
 
 - **Puzzles played** and **Accuracy**: a puzzle counts as solved only with no wrong move and no help.
 - **First move right, line wrong**: of the puzzles where your first move was right, how often the rest of the line went wrong. Spotting the idea but miscalculating the follow-up shows up here, so a falling number means your calculation is improving.
-- **By theme**, **By length** (how many moves you make) and **By rating** (200-point bands, using the puzzle's rating when you played it) break the same numbers down. A puzzle with several themes counts once under each.
+- **By theme**, **By length** (how many moves you make), **By rating** (200-point bands, using the puzzle's rating when you played it) and **By mode** (*added in v0.5*: Standard, Commit the line, Spaced repetition) break the same numbers down. A puzzle with several themes counts once under each.
 - **Lichess puzzle rating** (*added in v0.3*): your rating over time, one point each time Lichess reported a new rating for your synced solves, and a table of the change in each session (newest first). Hover over the line to see a point's rating. It's empty until you sign in with Lichess and sync rated puzzles. The numbers are exactly what Lichess returned.
 
 **Gotchas**
@@ -353,6 +357,84 @@ In **⚙ Settings → Engine**:
 - If Stockfish ever stops unexpectedly, the app restarts it and says so. Try again.
 - If your own engine can't be found any more (the file was moved or deleted), the app says so and offers **Use the managed Stockfish**.
 
+## Training modes
+*Added in v0.5.*
+
+The **Mode** control at the top of the filters panel picks how you train. Your choice is remembered next time.
+
+| Mode | What it's for |
+|---|---|
+| **Standard** | The usual way: find the best move, the opponent replies automatically, and a wrong move is flagged at once. |
+| **Commit the line** | Calculation practice: you work out the whole line in your head, enter it on the board, and only then find out if it was right. |
+| **Spaced repetition** | Puzzles you missed come back on their review day until you've learned them. |
+
+**Switching modes while a session is running starts a new session** in the new mode, with your current filters and Rated setting, just like pressing Start. The puzzle you were on is left unfinished and isn't recorded. If the new session can't start (for example, nothing is due for Spaced repetition), the app says why and your current session and mode carry on.
+
+### Commit the line
+1. Choose **Commit the line**, then press **Start**. The opponent's first move plays as usual.
+2. Enter the whole line on the board: your move, the reply you expect, your next move, and so on. You move **both sides**. Nothing is checked and nothing replies for you; the board only refuses illegal moves.
+3. **Undo** takes back the last move you entered; **Clear** takes them all back.
+4. When you think the line is complete, press **Submit**.
+
+![Entering a line](img/commit-entry.png)
+
+After Submit, **Your line** lists every move with ✓ or ✗ and, where yours was wrong, the solution's move. Everything else is as in Standard: the themes, the rating change, **Show answer**, Stockfish and **Try again**.
+
+![A graded line](img/commit-result.png)
+
+**How it's scored**
+- **Solved** means every one of *your* moves matches the solution. As in Standard, any checkmating move counts where the solution mates.
+- The replies you predicted don't affect that. They're scored separately as **Replies predicted: 2 of 3**, your calculation accuracy.
+- **You decide where the line ends.** If you stop before the end of the solution, your missing moves count as wrong. Moves you enter after the end of the solution are ignored.
+- Hint (it circles the piece that makes your first move) and Show answer count the puzzle as failed before you submit, as in Standard. After you submit they're free.
+
+**Show move count** (under the Mode control, this mode only, off by default) tells you how many moves the solution has, "Find 3 moves (both sides)", and stops you entering more. It applies from the next session you start. With it off, you can enter up to 60 moves, whatever the puzzle.
+
+**Gotchas**
+- With **Show move count** on, Lichess counts your solves for less. Lichess weighs a solve by what you knew in advance, and knowing the length is a hint, so the app reports it truthfully (see [Your puzzle rating](#your-puzzle-rating)). With it off, solves count as they do in Standard.
+- A wrong prediction doesn't cost you the puzzle, but the moves you entered after it were played on *your* board, not the real one. The app still compares them with the solution's moves one by one.
+- Stockfish's **Why your move fails** only appears when your first wrong move was played in the real position, that is, when every move before it matched the solution.
+
+### Spaced repetition
+Every puzzle you fail, in any mode, goes into the first of five review boxes. That includes the puzzles you failed before v0.5. A puzzle in box 1 comes back the next day. Each time you solve it in **Spaced repetition** it moves up a box and waits longer: 1, 3, 7, 14, then 30 days. Solving it from the last box retires it. Failing it again, anywhere, puts it back in box 1.
+
+1. Choose **Spaced repetition**. The panel shows how many puzzles are due now and when the next one is.
+2. Press **Start**. You get the puzzles that are due, the most overdue first, and solve them as in Standard.
+
+![The panel in Spaced repetition](img/spaced-repetition.png)
+
+- **The filters don't apply** in this mode, so they're greyed out. Only the number of puzzles does.
+- When nothing is due, **Start** is greyed out until the next review day.
+- Review days are calendar days: a puzzle you miss in the evening is due the next morning.
+- Solving a puzzle in another mode doesn't move it up a box. Only reviews here do.
+- These puzzles are usually ones Lichess has already seen from you, so they show **Already played: rating unaffected**. Lichess doesn't rate a puzzle twice.
+- You can change the boxes under **Settings → Training** (see [Training settings](#training-settings)).
+
+### Depth ladder
+The depth ladder is an **Order** choice (**Choose your puzzles → Order → Depth ladder**), and it works in Standard and in Commit the line. It trains you to calculate deeper, one step at a time:
+
+1. You start on **short** puzzles (2 moves of yours).
+2. Once you've solved at least 80% of your last 20 at that level, you move up to **long** puzzles (3 moves), then **very long** ones (4 or more).
+
+![Order set to Depth ladder](img/depth-ladder.png)
+
+- Under **Order**, a line shows your level and how you're doing, for example "Short puzzles (2 moves), step 1 of 3 · 14 of 20 played, 79%". The session bar shows the same while you play, and **Level up!** appears on the result when you move up. The session carries on at the new level.
+- Your level is kept for each set of themes you choose (with **All themes** as a set of its own), so it carries over to your next session. **It never goes back down.**
+- A level with no puzzles for your filters is skipped. Mate in 2, for example, only has 2-move puzzles, so for it Short is already the top of the ladder.
+- The ladder sets **Number of moves** itself, so that control is greyed out. It can't be combined with **Mix by ratio**.
+- Because you know the length in advance, Lichess counts these solves like a themed session: for the theme that matched, or the length (Short / Long / Very long) when you chose All themes.
+- You can change the 80% and the 20 under **Settings → Training**. Try again (practice) runs don't count.
+
+### Training settings
+*Added in v0.5.* Under **⚙ → Settings → Training**:
+
+| Setting | What it does |
+|---|---|
+| **Move up at (%)** / **Over the last (puzzles)** | The depth ladder's threshold (80% by default, 10–100) and how many recent puzzles at your level it looks at (20 by default, 3–100). Saved when you leave the box. |
+| **Review boxes (days)** | Spaced repetition's boxes, as days separated by commas (1, 3, 7, 14, 30 by default). 2 to 10 boxes, each longer than the one before, up to 365 days. Press **Save**. |
+
+Changing either setting applies to everything you've already played: the app works your boxes and ladder levels out from your attempt history, rather than storing them separately.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 
@@ -364,6 +446,7 @@ In **⚙ Settings → Engine**:
 | **R** | Try again (not scored), once the puzzle is over (v0.4) |
 | **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4) |
 | **C** | Show or hide the letters and numbers around the board |
+| **F** | Hide or show the filters panel (v0.5) |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
@@ -373,7 +456,7 @@ Shortcuts do nothing while you're typing in a box or a dialog is open, and a key
 ## Appearance and sounds
 *Added in v0.2.*
 
-Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change how the app looks and sounds. *Changed in v0.4:* it also has an **Engine** section (see [Engine settings](#engine-settings)). *Changed in v0.3:* the same dialog starts with **Lichess account**, where you sign in or out (see [Signing in with Lichess](#signing-in-with-lichess-syncing-solves-offline-mode)). Every change applies at once and is saved on this PC, so the app starts the same way next time.
+Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change how the app looks and sounds. *Changed in v0.5:* it also has a **Training** section (see [Training settings](#training-settings)). *Changed in v0.4:* it also has an **Engine** section (see [Engine settings](#engine-settings)). *Changed in v0.3:* the same dialog starts with **Lichess account**, where you sign in or out (see [Signing in with Lichess](#signing-in-with-lichess-syncing-solves-offline-mode)). Every change applies at once and is saved on this PC, so the app starts the same way next time.
 
 ![The Settings dialog](img/settings.png)
 

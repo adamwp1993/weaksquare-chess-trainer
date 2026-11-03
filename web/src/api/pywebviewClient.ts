@@ -6,6 +6,7 @@ import {
   type BackendEvent,
   type EngineSettingsChange,
   type SettingValues,
+  type TrainingMode,
 } from "./ApiClient";
 import type {
   AccountStatus,
@@ -15,6 +16,9 @@ import type {
   Refutation,
   AttemptRating,
   BucketCounts,
+  CommitFeedback,
+  LadderPreview,
+  SrsStatus,
   ApiError,
   AppInfo,
   FilterSpec,
@@ -200,8 +204,24 @@ export class PywebviewClient implements ApiClient {
     return this.call<void>("delete_preset", name);
   }
 
-  startSession(spec: FilterSpec, rated: boolean) {
-    return this.call<SessionInfo>("start_session", spec, rated);
+  startSession(spec: FilterSpec, rated: boolean, mode: TrainingMode, showLength: boolean) {
+    return this.call<SessionInfo>("start_session", spec, rated, mode, showLength);
+  }
+
+  submitLine(sessionId: number, moves: string[]) {
+    return this.call<CommitFeedback>("submit_line", sessionId, moves);
+  }
+
+  getSrsStatus() {
+    return this.call<SrsStatus>("get_srs_status");
+  }
+
+  getLadderStatus(spec: FilterSpec) {
+    return this.call<LadderPreview>("get_ladder_status", spec);
+  }
+
+  setTimeOffset(days: number) {
+    return this.call<void>("set_time_offset", days);
   }
 
   nextPuzzle(sessionId: number) {

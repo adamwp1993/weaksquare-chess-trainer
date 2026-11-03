@@ -59,3 +59,22 @@ def test_empty() -> None:
     r = build_report([], str)
     assert r.overall.attempts == 0 and r.overall.accuracy is None and r.overall.line_wrong_rate is None
     assert r.by_theme == r.by_length == r.by_rating == [] and r.missing == 0
+
+
+def test_by_mode_in_control_order_with_missing_puzzles_counted() -> None:
+    import dataclasses
+
+    rows = [
+        dataclasses.replace(ROWS[0], mode="spaced_repetition"),
+        dataclasses.replace(ROWS[1], mode="commit_line"),
+        dataclasses.replace(ROWS[3], mode="commit_line"),
+        ROWS[2],
+        dataclasses.replace(ROWS[4], mode="spaced_repetition"),  # puzzle gone: still counts by mode
+    ]
+    r = build_report(rows, str.upper)
+    assert [(t.key, t.label, t.attempts, t.solved) for t in r.by_mode] == [
+        ("standard", "Standard", 1, 0),
+        ("commit_line", "Commit the line", 2, 1),
+        ("spaced_repetition", "Spaced repetition", 2, 1),
+    ]
+    assert build_report([], str).by_mode == []

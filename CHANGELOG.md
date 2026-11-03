@@ -13,6 +13,22 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.5] - 2026-11-03
+Candidates: v0.5-rc1 (2026-11-03)
+
+### Added
+- **Training modes:** a **Modes** control at the top of the filters panel picks how you train: **Standard** (as before), **Commit the line** or **Spaced repetition**. The app remembers your choice; changing it starts a new session. [FR-4.2] [FR-4.6]
+- **Commit the line:** enter the whole line, your moves and the replies you expect, with no feedback, then press **Submit**. Every one of your moves must match the solution to win; the replies you predicted are scored separately as calculation accuracy. The solution's length is hidden unless you turn on **Show move count** (solves then count for less on Lichess, because you knew the length). [FR-4.2]
+- **Spaced repetition:** puzzles you miss come back on a schedule (1, 3, 7, 14 and 30 days by default, editable in Settings). A miss in any mode, including your misses from earlier versions, starts a puzzle at the first box; solving it in Spaced repetition moves it up, and solving it from the last box retires it. [FR-4.6]
+- **Depth ladder:** a new **Order** option serves 2-move puzzles, then 3-move, then 4+ once you're accurate enough (80% over your last 20 at that level by default; both adjustable in Settings). Your level is kept for each set of themes and never drops. [FR-4.5] [FR-3.11]
+- **Stats by mode:** the Stats page has accuracy per training mode. [FR-9.1]
+- **Hide the filters while you play:** **«** at the top of the filters panel (or **F**) folds it into a slim bar with your mode and a summary; the board gets bigger. **Show filters** brings it back unchanged, and the app remembers your choice. [FR-1.14]
+- **Settings → Training:** the depth ladder's threshold and window, and the Spaced-repetition review boxes. [FR-4.5] [FR-4.6]
+
+### Fixed
+- The **Already played: rating unaffected** badge (it said "on Lichess") is no longer cut off in the side column. [FR-6.11b]
+- **Cancel** right after **Sign in with Lichess** now always cancels; very early, it could be missed and the sign-in kept waiting. [FR-6.1a]
+
 ## [v0.4] - 2026-11-02
 Candidates: v0.4-rc1 (2026-11-02), v0.4-rc2 (2026-11-02)
 

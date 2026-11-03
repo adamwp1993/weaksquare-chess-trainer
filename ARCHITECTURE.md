@@ -69,6 +69,7 @@ weaksquare-chess-trainer/
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
+│  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
@@ -157,7 +158,7 @@ weaksquare-chess-trainer/
 | Interface | Implementations | First version |
 |---|---|---|
 | `PuzzleSource` | `LichessDbSource` → `CustomPuzzleSource` | v0.1 → v0.8 |
-| `TrainingMode` | `Standard` → `CommitLine`, `SpacedRepetition`, `DepthLadder` → `NameIdea`, `DangerSpotting` | v0.1 → v0.5 / v0.6 |
+| `TrainingMode` | `Standard` (also serves Spaced repetition) → `CommitLine` → `NameIdea`, `DangerSpotting`. Depth ladder is a queue order (`core/ladder.py`), not a mode (v0.5 planning) | v0.1 → v0.5 → v0.6 |
 | `JobRunner` | thread-pool runner | v0.1 |
 | `SecretStore` | `KeyringSecretStore`, `FakeSecretStore` (tests) | v0.3 |
 | `LichessClient` | httpx implementation, fake | v0.3 |
@@ -209,6 +210,50 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-02, v0.5: QA fixes (v0.5-B1 to B9)
+- Context: `qa/QA-v0.5.md` rounds 1 and 2 (six minor bugs, then B7, a major slowdown caused by the B2 fix, and two minor test-tooling flakes).
+- Decision:
+  - **B2:** `core.ladder.status` takes the levels that have puzzles (`available`). Empty levels are skipped going up, the last open level is the top (`LadderStatus.top` is now a field), and a recorded level that has emptied falls back to the nearest open level above, else below, with a fresh window. REQUIREMENTS FR-4.5 says so.
+  - **B3:** the hidden-length entry cap is a constant 60 plies, so reaching it says nothing about the solution.
+  - **B1:** a mode switch saves the mode only after its new session starts; otherwise the running session and mode stay and the reason shows.
+  - **B4/B5/B6:** no calculation badge without replies; the already-played badge wraps and says "Already played: rating unaffected"; Show move count says "From the next session" in both states.
+  - **B7:** the first B2 fix counted every level, which took a depth-ladder count to about 0.9 s on the full DB. `SessionService.ladder_preview` now builds only the `available` list the decision needs. That's the count at the level you'd play (needed for the display anyway) plus whether anything is above it: in one scan with SUMs when themes are chosen (`count_level_and_above`), or a count plus a `LIMIT` existence check (`has_puzzles`) with All themes. The exact next open level (`levels_with_puzzles`) is looked up only when the window says you move up. After an attempt with no move up, the session reuses the levels it found at the start and runs no puzzle query. Full DB: 185–280 ms per preview, against the 500 ms target (`tests/fulldb/test_perf_v05.py`).
+  - **B8:** the docs screenshot spec ticks a theme in the picker it opened (by its `aria-controls` id) and waits for it to close.
+  - **B9:** `cancel_sign_in` also cancels the sign-in job, and the job checks for that once its listener is up, so a Cancel pressed just after Sign in isn't lost.
+- Alternatives (B2): letting the level drop to a level with puzzles (contradicts "never drops"); refusing a theme set that can't fill every level (most single-motif sets can't).
+- Consequences: an empty level costs a scan of the levels above it, inside the same query when themes are chosen. With All themes every level has puzzles, so the existence check returns at once.
+
+### 2026-11-02, v0.5: Front end for the modes and the collapsible filters panel
+- Context: §6's Modes control, Commit the line's entry on the board, and FR-1.14 (Adam, v0.5 planning).
+- Decision:
+  - The Modes control and Show move count live in `MixerView`; the modes list is `web/src/state/modes.ts`. In Spaced repetition the filters sit in a disabled `<fieldset>` (greyed, unreachable by keyboard), with the due line at the top; the queue size and Rated stay live.
+  - Commit entry (`TrainerView` + `components/CommitLine.tsx`) keeps the entered line in React state and checks legality with chess.js; the board is movable for both colors. Entered moves play sounds from `entrySound`, which mirrors `core/move_sounds.py`'s priority locally, because the moves only reach the backend at Submit (a bridge call per entered move just for its sound wasn't worth it). The graded line comes back from `submit_line`.
+  - Hide filters: `App` keeps `MixerView` mounted in a `display: none` grid column (so its state, counts and catalogs survive) and shows `FiltersStrip` across the top; the trainer column takes the full width and `Board` gets a larger `maxWidth` (`min(760px, 100vh − 240px)`) with the side panel centred beside it. The state is `ui.filters_collapsed` in `user.db`. **F** toggles it.
+  - The mock client implements every new method with the backend's rules (Commit grading, the ladder by theme-set key, SRS due puzzles until reviewed), with `?mode=`, `?srs=none` and `?dev=1` scenarios.
+- Alternatives: a vertical strip beside the board (too narrow for a readable summary); unmounting the panel while hidden (it would refetch everything and lose unsaved input).
+- Consequences: the trainer has a Commit branch; a later move-by-move mode needs none.
+
+### 2026-11-02, v0.5: Commit the line has its own entry point instead of `on_move`
+- Context: FR-4.2 grades a whole line at once; decision 6 assumed every mode is played move by move through `on_move`.
+- Decision: `CommitLineMode` (`core/modes/commit_line.py`) keeps `start`, `start_practice`, `on_help` and `give_up`, refuses `on_move` with `ConflictError`, and adds `on_submit(state, line)`. Grading is pure (`grade()`): your moves are compared with the solution's by index; a mating alternative (§4.2) is accepted only while every earlier move matched exactly, so the position is real, and it ends the line there. `first_wrong` (for Stockfish's refutation) is set only under the same condition. Calculation accuracy is stored on the attempt (`replies_correct`, `replies_total`, migration 0004). The front end checks legality only (chess.js) and the backend re-checks the line with python-chess. Bridge: `submit_line`; `PuzzleView.max_plies` (a sanity cap: 2× the solution + 10, at most 60) and `solution_plies` (only with Show move count, so the length never reaches the UI when it's hidden). Show move count makes `angle_for(..., length_known=True)` report the length theme when the themes are All (§8.3).
+- Alternatives: feeding the line through `on_move` one ply at a time (every reply would need "no validation" special cases in Standard's state machine); grading replies only up to the first wrong one (Adam's FR-4.2 scores predicted replies separately, so they're graded by index).
+- Consequences: the trainer view has a Commit branch, contrary to decision 6's "without changing the trainer view". Modes that are played move by move still plug in without UI changes.
+
+### 2026-11-02, v0.5: Spaced repetition and the depth ladder are worked out from the attempts log
+- Context: decision 4 says no feature keeps its own copy of the attempts. Adam chose that **every** miss, past ones included, enters the Leitner boxes, and that the depth ladder (now an **order**, not a mode) keeps its level per theme set and never drops.
+- Decision:
+  - **SRS** (`core/srs.py`): `schedule()` replays one puzzle's attempts (a loss anywhere → box 1; a win in `spaced_repetition` mode → up a box; a win from the last box → graduated). `AttemptsRepo.srs_rows()` reads every attempt of each Lichess puzzle with a loss, using `attempts_puzzle_win`. Due dates are local calendar days (`Clock.local_date`, new in the protocol), so an evening miss is due the next morning. An SRS session ignores the filters except the queue size, serves due puzzles most overdue first, holds puzzle **IDs** (looked up as served, so a re-import can't point it at another puzzle), never refills, and reports angle `mix`. It plays by `StandardMode`'s rules; only the recorded mode differs.
+  - **Ladder** (`core/ladder.py`): `ladder_key(spec)` = sorted themes + match mode (only with 2+ themes) + excluded themes. Attempts in a ladder session store `ladder_key` and `ladder_level` (migration 0004, indexed). The current level = the highest level recorded for the key, moved up one when the last *window* attempts at that level reach the *threshold*. The session draws from `spec.at_ladder_level(level)` (lengths = the level, random order), so the existing angle rule reports the matched theme or the length theme. On a level-up the queue is dropped and refilled from the new level. Ratios can't be combined with it (`FilterSpec.validate`).
+  - Settings go through `UiSettingsService`, which also implements the session's `TrainingPrefs` protocol.
+- Alternatives: an `srs_cards` table or a `ladder` table updated on every attempt (a second copy of the log, which could drift, and couldn't include misses from before v0.5 without a backfill).
+- Consequences: changing the box intervals or the ladder settings applies to the whole history at once. Both read a few thousand rows at most per call; the full-DB tests time them.
+
+### 2026-11-02, v0.5: The training mode is per session; fast-forward time is a dev-only clock
+- Context: the Modes control (§6), Adam's "switching mode starts a new session", and his manual test needing Spaced-repetition misses to come due without waiting days.
+- Decision: `start_session(spec, rated, mode, show_length)` records the mode on the session and every attempt; switching mode in the UI calls it again, exactly like Start (the old session is simply abandoned, with nothing recorded for an undecided puzzle, as before; pinned by a test). `adapters/system_clock.py` adds `OffsetClock`, a `SystemClock` whose `now()` is moved by whole days (`monotonic_ms` untouched). `app.py` builds it only for `--dev` runs and restores `debug.time_offset_days` at startup; the bridge's `set_time_offset` refuses outside `--dev`, and `set_setting` can't write that key.
+- Alternatives: a fake-time setting in the real app (attempts recorded with future timestamps would stay in your real history forever); offsetting only the SRS "today" (reviews done while fast-forwarded would then be due again at once).
+- Consequences: a dev data folder that has been fast-forwarded holds attempts with future timestamps; delete it to start clean.
 
 ### 2026-11-02, v0.4: Try again is a practice run that can't record (FR-5.12)
 - Context: Adam's manual test: after Show answer and the analysis board he wanted to retry the puzzle. Letting Reset clear the result was rejected, because the first result may already be on Lichess and stats must agree with it.

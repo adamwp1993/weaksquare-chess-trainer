@@ -20,7 +20,8 @@ from weaksquare.core.themes import is_valid_key
 
 MatchMode = Literal["any", "all"]
 Side = Literal["either", "white", "black"]
-Order = Literal["random", "easy_to_hard", "by_theme"]
+Order = Literal["random", "easy_to_hard", "by_theme", "depth_ladder"]  # depth_ladder: v0.5 (FR-4.5)
+ORDERS = ("random", "easy_to_hard", "by_theme", "depth_ladder")
 Source = Literal["lichess", "my", "both"]
 
 RATING_FLOOR = 0
@@ -125,6 +126,16 @@ class FilterSpec:
         spec.validate()
         return spec
 
+    @property
+    def depth_ladder(self) -> bool:
+        return self.order == "depth_ladder"
+
+    def at_ladder_level(self, level: int) -> FilterSpec:
+        """The pool for one depth-ladder level (FR-4.5): the ladder sets the move count itself, and
+        puzzles within a level come in random order. The angle rule then sees a narrowed move count,
+        which is the truth: you know the length in advance (§8.3)."""
+        return dataclasses.replace(self, lengths=(level,), order="random")
+
     # ---- rules --------------------------------------------------------------------------------
     def validate(self) -> None:
         for name, items in (("themes", self.themes), ("exclude_themes", self.exclude_themes)):
@@ -143,8 +154,10 @@ class FilterSpec:
             raise ValidationError("side must be 'either', 'white' or 'black'")
         if self.queue_size is not None and not 1 <= self.queue_size <= MAX_QUEUE:
             raise ValidationError(f"The number of puzzles must be between 1 and {MAX_QUEUE}.")
-        if self.order not in ("random", "easy_to_hard", "by_theme"):
-            raise ValidationError("order must be 'random', 'easy_to_hard' or 'by_theme'")
+        if self.order not in ORDERS:
+            raise ValidationError("order must be 'random', 'easy_to_hard', 'by_theme' or 'depth_ladder'")
+        if self.order == "depth_ladder" and self.ratios:
+            raise ValidationError("The depth ladder can't be combined with ratios: pick themes instead.")
         if len(self.openings) > MAX_OPENINGS or not all(_OPENING_TAG.match(o) for o in self.openings):
             raise ValidationError("openings contains an invalid opening")
         lo, hi = POPULARITY_RANGE

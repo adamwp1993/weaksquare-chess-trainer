@@ -60,6 +60,8 @@ The layer rules and full repo tree are in ARCHITECTURE.md §1–2. Docs:
   - `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` with `--remote-debugging-port` is set only by the smoke-test harness. The app refuses to start with it unless `--dev` is given (REQUIREMENTS.md SR-16).
   - `WEAKSQUARE_NO_DIALOGS=1` makes start-up errors print to the console without a message box. Tests set it.
   - `<data folder>\weaksquare.lock` stops a second copy from starting (NFR-1). Windows releases it when the app exits, even after a crash.
+- **Fast-forward time** (v0.5, `--dev` runs only): Settings → **Debug** → *Fast-forward* moves the app's clock ahead by whole days, so Spaced-repetition misses come due without waiting. It moves the timestamps of new attempts too, which is why it never exists in the real data folder. It's saved as `debug.time_offset_days` in the dev `user.db`; set it back to 0 to return to today.
+- Training settings (v0.5) are in `settings` too: `trainer.mode`, `commit.show_length`, `ladder.threshold`, `ladder.window`, `srs.intervals` and `ui.filters_collapsed`. Spaced-repetition boxes and depth-ladder levels have no table of their own: they're worked out from the `attempts` log each time (ARCHITECTURE.md §7).
 - Reset to a clean state for testing: close the app and delete the dev data folder, `%LOCALAPPDATA%\WeakSquare-dev`. Tests never need this, because each one gets a fresh temp folder.
 
 ## Database migrations
@@ -91,7 +93,13 @@ Each recipe is written when the first real example exists, using that example.
   3. **Tests:** extend `oracle_count` in `tests/integration/test_filter_count.py` with an independent version of the rule (plain SQL on the raw columns, or a set computed in Python), and let `random_spec` generate the field. The 40 random specs then cover it, on the fixture and with `-m fulldb`.
   4. **Bridge and UI:** run `uv run python scripts/gen_types.py`, add the field to `defaultFilters()` in `web/src/state/filters.ts` and to the mock's `matches()` in `web/src/api/mockClient.ts`, and add a control to `web/src/views/MixerView.tsx` (rarely used filters go in its **More filters** section).
   5. **Docs:** the User Guide's *Choosing your puzzles* table, and CHANGELOG.
-- Add a training mode: TODO(v0.5)
+- Add a training mode. Commit the line (v0.5) is the worked example:
+  1. **Rules (pure):** a module in `src/weaksquare/core/modes/` with a state dataclass and a mode class that follows the `TrainingMode` protocol in `core/modes/base.py`: `start`, `start_practice` (FR-5.12), `on_move`, `on_help` and `give_up`. The attempt is decided **once** (`AttemptResult`), and help before it's decided is a loss (FR-5.2). A mode that isn't played move by move adds its own entry point and refuses `on_move` with `ConflictError`, as `CommitLineMode.on_submit` does. A mode that only changes *which* puzzles you get, like Spaced repetition, reuses `StandardMode` and needs no class.
+  2. **Unit tests:** `tests/unit/test_commit_line_mode.py` is the pattern: a known puzzle, every way the attempt can be decided, help before and after the end, practice and give-up.
+  3. **Session:** add the name to `MODES` in `src/weaksquare/services/session.py`, start its state in `_start_state` and return its mode object from `_mode_for`. Anything the mode stores on the attempt goes in a new nullable `attempts` column (a user migration, see *Database migrations*), through `ModeFields` in `adapters/db/repos/user_data.py`. If the mode changes what the player knows in advance, check the angle rule (`angle_for` in `core/scoring.py`, REQUIREMENTS.md §8.3).
+  4. **Bridge:** add the name to the `mode` literal of `start_session`, `UiSettings`, `SessionInfo`, `PuzzleView` and `SessionStats` in `bridge/dto.py`, to `TRAINING_MODES` in `services/ui_settings.py` and to `MODE_LABELS` in `core/stats.py`. A new entry point is a new `@bridge_call` method plus a line in `tests/contract/test_bridge_allowlist.py`. Then run `uv run python scripts/gen_types.py` and implement the method in `web/src/api/mockClient.ts`.
+  5. **UI:** add it to the Modes control in `web/src/views/MixerView.tsx` (`MODES` in `web/src/state/modes.ts`) and, if it plays differently, a branch in `web/src/views/TrainerView.tsx`. Integration tests through the bridge (`tests/integration/test_modes_v05.py`) and a Playwright flow (`tests/e2e/test_modes.py`).
+  6. **Docs:** the User Guide's *Training modes* chapter, REQUIREMENTS.md §6, and CHANGELOG.
 - Add an LLM provider: TODO(v0.7)
 
 ## Dependencies

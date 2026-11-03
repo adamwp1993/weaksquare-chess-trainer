@@ -95,9 +95,15 @@ def test_about(page) -> None:  # type: ignore[no-untyped-def]
 
 
 def _pick(page, test_id: str, name: str) -> None:  # type: ignore[no-untyped-def]
+    """Tick one theme in a picker, then wait for its list to close, so the next picker's `.last`
+    checkbox can't be one from this list while it's still fading out (v0.5-B8)."""
     page.get_by_test_id(test_id).click()
-    page.get_by_role("checkbox", name=re.compile(f"^{name}")).last.check()
+    dropdown_id = page.get_by_test_id(test_id).get_attribute("aria-controls")
+    dropdown = page.locator(f"[id='{dropdown_id}']")
+    dropdown.wait_for()
+    dropdown.get_by_role("checkbox", name=re.compile(f"^{name}")).check()
     page.keyboard.press("Escape")
+    dropdown.wait_for(state="hidden")
 
 
 def test_presets(page) -> None:  # type: ignore[no-untyped-def]
@@ -290,3 +296,54 @@ def test_try_again(page) -> None:  # type: ignore[no-untyped-def]
     page.wait_for_timeout(700)
     page.mouse.move(1270, 890)
     shot(page, "try-again")
+
+
+def _mode(page, label: str) -> None:  # type: ignore[no-untyped-def]
+    page.get_by_test_id("mode-control").get_by_text(label, exact=True).click()
+
+
+def test_commit_the_line(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.5 (FR-4.2): a line entered on the board, then graded after Submit."""
+    page.goto(page.base_url + "/?mode=commit_line")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("commit-controls").wait_for()
+    page.wait_for_timeout(700)
+    for uci in ("d5c3", "b1b5", "c3d1"):
+        play(page, uci, "black")
+        page.wait_for_timeout(150)
+    page.mouse.move(1270, 890)
+    shot(page, "commit-entry")
+    page.get_by_test_id("commit-submit").click()
+    page.get_by_test_id("commit-result").wait_for()
+    panel_top(page)
+    shot(page, "commit-result")
+
+
+def test_spaced_repetition(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.5 (FR-4.6): the filters panel in Spaced repetition."""
+    page.goto(page.base_url + "/?mode=spaced_repetition")
+    page.get_by_test_id("srs-due").filter(has_text="due now").wait_for()
+    panel_top(page)
+    shot(page, "spaced-repetition")
+
+
+def test_depth_ladder(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.5 (FR-4.5): Order set to Depth ladder, with its status line."""
+    page.goto(page.base_url + "/")
+    page.get_by_label("Order").get_by_text("Depth ladder").click()
+    page.get_by_test_id("ladder-status").wait_for()
+    page.get_by_test_id("match-count").filter(has_text="at short").wait_for()
+    page.get_by_test_id("ladder-status").scroll_into_view_if_needed()
+    page.mouse.move(1270, 890)
+    shot(page, "depth-ladder")
+
+
+def test_filters_hidden(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.5 (FR-1.14): the filters panel hidden while you play."""
+    _start(page)
+    page.get_by_test_id("hide-filters").click()
+    page.get_by_test_id("filters-strip").wait_for()
+    page.get_by_test_id("filters-summary").filter(has_text="puzzles").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "filters-hidden")

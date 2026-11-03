@@ -104,3 +104,23 @@ def test_ratios_use_every_groups_themes_in_group_order() -> None:
 
 def test_no_selected_theme_matched_falls_back_to_length() -> None:
     assert angle_for(FilterSpec(themes=("skewer",)), ("fork", "long"), 3) == "long"
+
+
+# ---- v0.5: other ways of knowing the length in advance (§8.3) -------------------------------------
+
+
+def test_depth_ladder_reports_the_length_theme_when_themes_are_all() -> None:
+    ladder = FilterSpec(order="depth_ladder")
+    assert angle_for(ladder.at_ladder_level(2), FORK_PUZZLE, 2) == "short"
+    assert angle_for(ladder.at_ladder_level(4), ("veryLong",), 5) == "veryLong"
+
+
+def test_depth_ladder_with_themes_reports_the_matched_theme() -> None:
+    ladder = FilterSpec(themes=("fork",), order="depth_ladder")
+    assert angle_for(ladder.at_ladder_level(2), FORK_PUZZLE, 2) == "fork"
+
+
+def test_commit_show_move_count_counts_as_a_known_length() -> None:
+    assert angle_for(FilterSpec(), FORK_PUZZLE, 2, length_known=True) == "short"
+    assert angle_for(FilterSpec(themes=("fork",)), FORK_PUZZLE, 2, length_known=True) == "fork"
+    assert angle_for(FilterSpec(), FORK_PUZZLE, 2, length_known=False) == MIX

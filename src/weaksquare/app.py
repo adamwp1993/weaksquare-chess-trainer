@@ -25,7 +25,7 @@ from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleD
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
-from weaksquare.adapters.db.repos.user_data import AttemptsRepo, SessionsRepo, SettingsRepo, SyncFields
+from weaksquare.adapters.db.repos.user_data import AttemptsRepo, ModeFields, SessionsRepo, SettingsRepo, SyncFields
 from weaksquare.adapters.desktop import (
     Desktop,
     set_app_user_model_id,
@@ -47,7 +47,7 @@ from weaksquare.adapters.oauth_loopback import LoopbackCancelled, LoopbackListen
 from weaksquare.adapters.scheduler import TimerScheduler
 from weaksquare.adapters.secret_store import KeyringSecretStore, MemorySecretStore, SecretStore, service_name
 from weaksquare.adapters.stockfish import StockfishEngine, probe_engine
-from weaksquare.adapters.system_clock import SystemClock, make_rng
+from weaksquare.adapters.system_clock import OffsetClock, SystemClock, make_rng
 from weaksquare.bridge import dto
 from weaksquare.bridge.api import Api, attempt_rating
 from weaksquare.bridge.events import EventSink
@@ -298,7 +298,7 @@ def build_services(
         cpu_count or os.cpu_count() or 1,
     )
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields,
-                              engine=engine)  # fmt: skip
+                              engine=engine, prefs=ui_settings, mode_fields=ModeFields)  # fmt: skip
     presets = PresetService(PresetsRepo(db), clock)
     stats = StatsService(StatsRepo(db), attempts, sync_repo)
     db_update = UpdateCheckService(
@@ -344,7 +344,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     import webview  # imported late: a second launch exits without loading the GUI stack
 
-    clock = SystemClock()
+    # FR-4.6 fast-forward time exists only in --dev runs (the dev data folder): the real app's clock is never moved.
+    clock: SystemClock = OffsetClock() if args.dev else SystemClock()
     try:  # NFR-4: the banner names the engine; a custom engine is logged when it starts
         stockfish = build_engine_installer(paths, None, clock).describe()
     except Exception:
@@ -399,6 +400,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         history=services.history,
         engine=services.engine,
     )
+    if isinstance(clock, OffsetClock):
+        clock.set_offset_days(services.ui_settings.time_offset_days())
+        if clock.offset_days:
+            log.info("dev clock fast-forwarded by %d days", clock.offset_days)
     log.info("%s", engine_log_line(services.engine.status()))
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
 

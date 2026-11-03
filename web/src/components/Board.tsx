@@ -19,6 +19,8 @@ export interface BoardProps {
   hintSquare?: string | null;
   /** Show the file and rank letters around the board. */
   coordinates?: boolean;
+  /** CSS max width; 560 px unless the filters panel is hidden (FR-1.14). */
+  maxWidth?: number | string;
   /** Arrows [from, to], e.g. the engine's best move on the analysis board. Callers check legality first. */
   arrows?: [string, string][];
 }
@@ -52,6 +54,7 @@ export function Board({
   onMove,
   hintSquare = null,
   coordinates = true,
+  maxWidth = 560,
   arrows = NO_ARROWS,
 }: BoardProps) {
   const el = useRef<HTMLDivElement>(null);
@@ -112,7 +115,7 @@ export function Board({
   }, [fen, orientation, movable, lastMove, hintSquare, coordinates, arrows]);
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 560, aspectRatio: "1 / 1" }}>
+    <div style={{ position: "relative", width: "100%", maxWidth, aspectRatio: "1 / 1" }}>
       <div
         ref={el}
         data-testid="board"

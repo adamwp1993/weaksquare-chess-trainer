@@ -59,6 +59,10 @@ ALLOWLIST = {
     "get_refutation",
     "analyze_position",
     "retry_puzzle",  # FR-5.12 Try again (not scored)
+    "submit_line",  # v0.5: Commit the line (FR-4.2)
+    "get_srs_status",  # v0.5: Spaced repetition (FR-4.6)
+    "get_ladder_status",  # v0.5: depth ladder (FR-4.5)
+    "set_time_offset",  # v0.5: fast-forward time, --dev runs only
 }
 
 

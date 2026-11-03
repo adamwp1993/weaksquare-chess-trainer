@@ -241,8 +241,13 @@ class AccountService:
         return job
 
     def cancel_sign_in(self) -> None:
+        """Cancel works at any moment of the sign-in: the job is marked cancelled too, so a Cancel that
+        arrives before the loopback listener exists isn't lost (v0.5-B9)."""
         with self._lock:
             listener = self._listener
+            job = self._sign_in_job
+        if job is not None:
+            self._d.runner.cancel(job)
         if listener is not None:
             listener.cancel()
 
@@ -256,11 +261,15 @@ class AccountService:
             except OAuthError:
                 return False
 
+        cancel.raise_if_cancelled()
         listener = self._d.make_listener(accept)
         redirect = listener.start()
         with self._lock:
             self._listener = listener
         try:
+            if cancel.cancelled:  # Cancel arrived while the listener was starting (v0.5-B9)
+                listener.cancel()
+                raise JobCancelled()
             self._d.browser.open_in_browser(authorize_url(verifier=verifier, state=state, redirect_uri=redirect))
             progress(None, "Waiting for you to approve in your browser…")
             try:

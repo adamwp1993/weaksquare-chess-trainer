@@ -1,16 +1,23 @@
 """Training sessions: queue, puzzles, moves and attempts (FR-3.10–3.12, 3.14, FR-4.1, FR-5.1, 5.3, 5.5).
 
+v0.5: the training mode is chosen per session (§6): Standard, Commit the line (FR-4.2) or Spaced
+repetition (FR-4.6, a queue of due puzzles played with Standard's rules). The depth ladder (FR-4.5) is
+an order: the session draws from the current level and moves up when the window says so.
+
 Session state (queue, current puzzle, mode state) is kept in memory; every decided attempt is
 appended to `attempts` at once, so closing the app never loses a result.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import random
 import threading
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
 import chess
@@ -26,17 +33,25 @@ from weaksquare.core.engine import (
 )
 from weaksquare.core.errors import ConflictError, NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.filters import FilterSpec
+from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LEVELS, LadderStatus, ladder_key
+from weaksquare.core.ladder import status as ladder_status
 from weaksquare.core.modes.base import AttemptResult, Feedback, HelpKind, HelpResult
+from weaksquare.core.modes.commit_line import CommitLineMode, CommitResult, CommitState, max_plies
 from weaksquare.core.modes.standard import StandardMode, StandardState
 from weaksquare.core.move_sounds import MoveSound, sounds_for_line
 from weaksquare.core.puzzle import Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
-from weaksquare.core.scoring import angle_for
+from weaksquare.core.scoring import MIX, angle_for
+from weaksquare.core.srs import DEFAULT_INTERVALS, Card, Review, due_order, next_due, schedule
+from weaksquare.core.srs import MODE as SRS_MODE
 from weaksquare.services.engine import Analysis, EngineService
 
 log = logging.getLogger(__name__)
 
 MAX_BAD_PUZZLES = 20
+STANDARD, COMMIT = "standard", "commit_line"
+MODES = (STANDARD, COMMIT, SRS_MODE)  # the Modes control, in order (v0.5)
+State = StandardState | CommitState
 
 
 class PuzzleSource(Protocol):
@@ -60,6 +75,22 @@ class PuzzleSource(Protocol):
         """(rating, themes) per key, for ordering a queue."""
         ...
 
+    def has_puzzles(self, spec: FilterSpec) -> bool:
+        """Depth ladder: does anything match (an existence check that stops at the first match, v0.5-B7)."""
+        ...
+
+    def levels_with_puzzles(self, spec: FilterSpec, levels: Sequence[int]) -> list[int]:
+        """Depth ladder: which of these levels have any puzzle (existence checks)."""
+        ...
+
+    def count_level_and_above(self, spec: FilterSpec, level: int) -> tuple[int, int]:
+        """Depth ladder: the count at a level and above it, in one scan."""
+        ...
+
+    def key_map(self, ids: list[str]) -> dict[str, int]:
+        """Current key per puzzle ID (IDs a newer export dropped are missing). Spaced repetition (v0.5)."""
+        ...
+
 
 class Attempts(Protocol):
     def append(
@@ -72,11 +103,37 @@ class Attempts(Protocol):
         result: AttemptResult,
         puzzle_rating: int | None = None,
         sync: Any = None,
+        extra: Any = None,
     ) -> int: ...
 
     def session_tally(self, session_id: int) -> object: ...
 
     def all_time_tally(self) -> object: ...
+
+    def srs_rows(self) -> list[Any]: ...  # list[SrsRow]: puzzle_id, finished_at, mode, win
+
+    def ladder_history(self, key: str, window: int) -> tuple[int | None, list[bool]]: ...
+
+
+class TrainingPrefs(Protocol):
+    """The training settings (v0.5), from services/ui_settings.py."""
+
+    def srs_intervals(self) -> tuple[int, ...]: ...
+
+    def ladder_threshold(self) -> int: ...
+
+    def ladder_window(self) -> int: ...
+
+
+class _DefaultPrefs:
+    def srs_intervals(self) -> tuple[int, ...]:
+        return DEFAULT_INTERVALS
+
+    def ladder_threshold(self) -> int:
+        return DEFAULT_THRESHOLD
+
+    def ladder_window(self) -> int:
+        return DEFAULT_WINDOW
 
 
 class Sessions(Protocol):
@@ -114,7 +171,7 @@ PURPOSES = ("start", "panel", "board")
 
 @dataclass
 class _Current:
-    state: StandardState
+    state: State
     started_at: str
     refutation: Refutation | None = None
     analyses: dict[str, Analysis] = field(default_factory=dict)  # by FEN, for this puzzle
@@ -140,6 +197,13 @@ class _Session:
     bucket_counts: list[int] = field(default_factory=list)
     drawn: list[int] = field(default_factory=list)
     key_bucket: dict[int, int] = field(default_factory=dict)
+    # v0.5: the mode, and what it needs.
+    mode: str = STANDARD
+    show_length: bool = False  # Commit the line's Show move count (FR-4.2)
+    srs_ids: deque[str] = field(default_factory=deque)  # Spaced repetition: due puzzles left, in order
+    ladder_base: FilterSpec | None = None  # the filters as chosen (order = depth_ladder); `spec` is the level's pool
+    ladder: LadderStatus | None = None
+    ladder_levels: list[int] = field(default_factory=list)  # open levels known at start (see ladder_preview)
 
 
 @dataclass(frozen=True)
@@ -148,6 +212,7 @@ class SessionInfo:
     match_count: int
     queue_size: int | None
     empty_buckets: list[int] = field(default_factory=list)  # ratio groups with no puzzles: left out
+    mode: str = STANDARD
 
 
 @dataclass(frozen=True)
@@ -162,6 +227,9 @@ class PuzzleView:
     rating: int
     opponent_sound: MoveSound  # FR-1.13: the opponent's first move plays a sound too
     already_played: bool = False  # Lichess has seen it from you: rating unaffected (badge)
+    mode: str = STANDARD
+    solution_plies: int | None = None  # Commit the line with Show move count only: how many moves to enter
+    max_plies: int | None = None  # Commit the line: the longest line Submit accepts
 
 
 @dataclass(frozen=True)
@@ -173,12 +241,28 @@ class Outcome:
     rating: int
     attempt_id: int = 0
     lichess: Any = None  # RatingInfo: the Lichess rating change, or why there isn't one (FR-6.11b)
+    level_up: LadderStatus | None = None  # the depth ladder moved up with this attempt (FR-4.5)
 
 
 @dataclass(frozen=True)
 class MoveResult:
     feedback: Feedback
     outcome: Outcome | None
+
+
+@dataclass(frozen=True)
+class CommitOutcome:
+    result: CommitResult
+    outcome: Outcome | None  # set when Submit decided the attempt
+
+
+@dataclass(frozen=True)
+class SrsStatus:
+    """For the mixer in Spaced-repetition mode (FR-4.6)."""
+
+    due: int  # due today (puzzles still in the database)
+    next_due: str | None  # ISO date of the next one after today
+    scheduled: int  # in a box and not graduated
 
 
 @dataclass(frozen=True)
@@ -198,6 +282,14 @@ class SessionStats:
     all_time_solved: int
     all_time_failed: int
     rating_change: int | None = None  # FR-6.11c: the sum of the changes Lichess returned
+    mode: str = STANDARD
+    ladder: LadderStatus | None = None  # depth ladder (FR-4.5): the level and its window
+
+
+def _parse_time(text: str) -> datetime:
+    """`finished_at` as stored (ISO, UTC). Very old rows without an offset are read as UTC."""
+    t = datetime.fromisoformat(text)
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
 class SessionService:
@@ -211,6 +303,8 @@ class SessionService:
         sync: SyncHooks | None = None,
         queue_fields: Any = None,
         engine: EngineService | None = None,
+        prefs: TrainingPrefs | None = None,
+        mode_fields: Any = None,
     ) -> None:
         """`sync` queues every decided attempt for Lichess (v0.3); without it attempts stay local.
         `queue_fields` builds the repo's SyncFields (passed in so services don't import adapters)."""
@@ -223,20 +317,44 @@ class SessionService:
         self._clock = clock
         self._rng = rng
         self._rng_lock = threading.Lock()
-        self._mode = StandardMode()
+        self._prefs: TrainingPrefs = prefs or _DefaultPrefs()
+        # Builds the repo's ModeFields (passed in, like queue_fields, so services don't import adapters).
+        self._mode_fields = mode_fields or (lambda **kw: None)
+        self._standard = StandardMode()
+        self._commit = CommitLineMode()
         self._sessions: dict[int, _Session] = {}
 
-    def start(self, spec: FilterSpec, rated: bool = True) -> SessionInfo:
+    def _mode_for(self, s: _Session) -> Any:
+        return self._commit if s.mode == COMMIT else self._standard  # SRS plays by Standard's rules
+
+    def start(
+        self, spec: FilterSpec, rated: bool = True, mode: str = STANDARD, show_length: bool = False
+    ) -> SessionInfo:
+        if mode not in MODES:
+            raise ValidationError("Unknown training mode.")
+        if mode == SRS_MODE:
+            return self._start_srs(spec, rated)
+        ladder = None
+        base = None
+        ladder_levels: list[int] = []
+        if spec.depth_ladder:
+            base = spec
+            ladder, ladder_levels, _ = self.ladder_preview(spec)
+            spec = spec.at_ladder_level(ladder.level)
         buckets = [spec.bucket(i) for i in range(len(spec.ratios))]
         if buckets:
             count, bucket_counts = self._puzzles.count_with_buckets(spec)
         else:
             count, bucket_counts = self._puzzles.count(spec), []
         if count == 0:
+            if ladder is not None:
+                raise ValidationError("No puzzles match these filters at this ladder level. Widen them and try again.")
             raise ValidationError("No puzzles match these filters. Widen them and try again.")
-        sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), self._mode.name,
-                                         spec.to_json(), spec.queue_size)  # fmt: skip
-        session = _Session(sid, spec, count, self._puzzles.version(), rated)
+        sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), mode,
+                                         (base or spec).to_json(), spec.queue_size)  # fmt: skip
+        session = _Session(sid, spec, count, self._puzzles.version(), rated, mode=mode,
+                           show_length=show_length and mode == COMMIT, ladder_base=base, ladder=ladder,
+                           ladder_levels=ladder_levels)  # fmt: skip
         if buckets:
             # An empty group is left out and the others share its slots (renormalized).
             session.buckets = buckets
@@ -244,7 +362,116 @@ class SessionService:
             session.weights = [b.weight if n > 0 else 0 for b, n in zip(spec.ratios, bucket_counts, strict=True)]
             session.drawn = [0] * len(buckets)
         self._sessions[sid] = session
-        return SessionInfo(sid, count, spec.queue_size, [i for i, n in enumerate(bucket_counts) if n == 0])
+        return SessionInfo(sid, count, spec.queue_size, [i for i, n in enumerate(bucket_counts) if n == 0], mode)
+
+    # ---- Spaced repetition (FR-4.6) ------------------------------------------------------------------
+
+    def _cards(self) -> dict[str, Card]:
+        intervals = self._prefs.srs_intervals()
+        by_puzzle: dict[str, list[Review]] = {}
+        for r in self._attempts.srs_rows():
+            by_puzzle.setdefault(r.puzzle_id, []).append(Review(_parse_time(r.finished_at), r.mode, r.win))
+        cards: dict[str, Card] = {}
+        for pid, reviews in by_puzzle.items():
+            card = schedule(reviews, intervals, self._clock.local_date)
+            if card is not None:
+                cards[pid] = card
+        return cards
+
+    def _due_ids(self) -> tuple[list[str], dict[str, Card]]:
+        cards = self._cards()
+        due = due_order(cards, self._clock.local_date(self._clock.now()))
+        present = self._puzzles.key_map(due) if due else {}
+        return [pid for pid in due if pid in present], cards
+
+    def srs_status(self) -> SrsStatus:
+        due, cards = self._due_ids()
+        nxt = next_due(cards, self._clock.local_date(self._clock.now()))
+        return SrsStatus(len(due), nxt.isoformat() if nxt else None, sum(1 for c in cards.values() if not c.graduated))
+
+    def _start_srs(self, spec: FilterSpec, rated: bool) -> SessionInfo:
+        """The due puzzles, most overdue first. The filters don't apply, except the queue size."""
+        due, _ = self._due_ids()
+        if not due:
+            raise ValidationError("Nothing is due for review. Missed puzzles come back here on their review day.")
+        plain = FilterSpec(queue_size=spec.queue_size)  # reported as `mix`: nothing was chosen in advance
+        sid = self._sessions_repo.create(self._clock.now().isoformat(timespec="seconds"), SRS_MODE,
+                                         plain.to_json(), plain.queue_size)  # fmt: skip
+        session = _Session(sid, plain, len(due), self._puzzles.version(), rated, mode=SRS_MODE, srs_ids=deque(due))
+        self._sessions[sid] = session
+        return SessionInfo(sid, len(due), plain.queue_size, [], SRS_MODE)
+
+    # ---- Depth ladder (FR-4.5) -----------------------------------------------------------------------
+
+    def _promotes(self, level: int, recorded: int | None, recent: list[bool], window: int, threshold: int) -> bool:
+        counted = recent[-window:]
+        wins = sum(1 for r in counted if r)
+        return level == recorded and len(counted) >= window and wins * 100 >= threshold * window
+
+    def ladder_preview(self, spec: FilterSpec) -> tuple[LadderStatus, list[int], int]:
+        """Where a depth-ladder session with these filters is (FR-4.5): the status, the open levels it needs
+        (FR-4.5 skips empty ones, v0.5-B2) and the pool size at its level.
+
+        Kept within the live-count target on the full DB (v0.5-B7): the count at the level you'd play
+        (needed anyway) and whether anything is above it. With themes chosen that's one scan
+        (`count_level_and_above`); with All themes, a count plus an existence check above, which finds a
+        row at once. The exact next open level is looked up only when the window says you move up."""
+        key = ladder_key(spec)
+        window, threshold = self._prefs.ladder_window(), self._prefs.ladder_threshold()
+        recorded, recent = self._attempts.ladder_history(key, window)
+        start = recorded if recorded in LEVELS else LEVELS[0]
+        order = [lv for lv in LEVELS if lv >= start] + [lv for lv in reversed(LEVELS) if lv < start]
+        current, n, above = None, 0, None
+        for lv in order:  # the recorded level, or the nearest open one above it, else below
+            if spec.themes:
+                n, above_n = self._puzzles.count_level_and_above(spec, lv)
+                above = above_n > 0
+            else:
+                n = self._puzzles.count(spec.at_ladder_level(lv))
+            if n > 0:
+                current = lv
+                break
+        if current is None:
+            return ladder_status(key, None, [], threshold, window, []), [], 0
+        higher = [lv for lv in LEVELS if lv > current]
+        if higher and self._promotes(current, recorded, list(recent), window, threshold):
+            available = [current, *self._puzzles.levels_with_puzzles(spec, higher)]
+        elif higher and (
+            above
+            if above is not None
+            else self._puzzles.has_puzzles(dataclasses.replace(spec, lengths=tuple(higher), order="random"))
+        ):
+            available = [current, higher[0]]  # something above: not the top (which level only matters on a move up)
+        else:
+            available = [current]
+        st = ladder_status(key, recorded, recent, threshold, window, available)
+        if st.level != current:
+            n = self._puzzles.count(spec.at_ladder_level(st.level))
+        return st, available, n
+
+    def ladder_status(self, spec: FilterSpec) -> LadderStatus:
+        return self.ladder_preview(spec)[0]
+
+    def _after_ladder_attempt(self, s: _Session) -> LadderStatus | None:
+        """Re-read the ladder after an attempt; on a level-up, draw from the new level from now on. Without a
+        move up this costs no puzzle query (the open levels are known from the session's start)."""
+        if s.ladder_base is None or s.ladder is None:
+            return None
+        window, threshold = self._prefs.ladder_window(), self._prefs.ladder_threshold()
+        recorded, recent = self._attempts.ladder_history(s.ladder.key, window)
+        if self._promotes(s.ladder.level, recorded, list(recent), window, threshold):
+            new, s.ladder_levels, _ = self.ladder_preview(s.ladder_base)
+        else:
+            new = ladder_status(s.ladder.key, recorded, recent, threshold, window, s.ladder_levels)
+        moved = new.level > s.ladder.level
+        s.ladder = new
+        if not moved:
+            return None
+        s.spec = s.ladder_base.at_ladder_level(new.level)
+        s.queue.clear()
+        s.match_count = self._puzzles.count(s.spec)
+        log.info("session %d: the depth ladder moved up to %d moves", s.id, new.level)
+        return new
 
     def _session(self, session_id: int) -> _Session:
         s = self._sessions.get(session_id)
@@ -252,24 +479,32 @@ class SessionService:
             raise NotFoundError("That session has ended. Start a new one.")
         return s
 
-    def _record(self, s: _Session, result: AttemptResult) -> Outcome:
+    def _record(self, s: _Session, result: AttemptResult, commit: CommitResult | None = None) -> Outcome:
         assert s.current is not None
         p = s.current.state.puzzle
         sync_fields = None
         if self._sync is not None and self._queue_fields is not None and p.ref.source == "lichess":
             q = self._sync.fields_for(p.ref.id)
-            sync_fields = self._queue_fields(status="pending", rated=s.rated,
-                                             angle=angle_for(s.spec, p.themes, p.length),
+            # Spaced repetition ignores the filters: nothing was chosen in advance, so `mix` (§8.3).
+            angle = MIX if s.mode == SRS_MODE else angle_for(s.spec, p.themes, p.length, length_known=s.show_length)
+            sync_fields = self._queue_fields(status="pending", rated=s.rated, angle=angle,
                                              account=q.account, already_played=q.already_played)  # fmt: skip
-        aid = self._attempts.append(p.ref, s.id, self._mode.name, s.current.started_at,
+        extra = self._mode_fields(
+            replies_correct=commit.replies_correct if commit else None,
+            replies_total=commit.replies_total if commit else None,
+            ladder_key=s.ladder.key if s.ladder else None,
+            ladder_level=s.ladder.level if s.ladder else None,
+        )
+        aid = self._attempts.append(p.ref, s.id, s.mode, s.current.started_at,
                                     self._clock.now().isoformat(timespec="seconds"), result, p.rating,
-                                    sync_fields)  # fmt: skip
+                                    sync_fields, extra)  # fmt: skip
         info = None
         if sync_fields is not None and self._sync is not None:
             found = self._sync.attempt_ratings([aid])
             info = found[0] if found else None
             self._sync.recorded()
-        return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating, aid, info)
+        level_up = self._after_ladder_attempt(s)
+        return Outcome(result.win, p.ref.id, list(p.themes), list(p.moves[1:]), p.rating, aid, info, level_up)
 
     def next_puzzle(self, session_id: int) -> PuzzleView | None:
         """The next puzzle, or None when the session is complete. Moving on from an undecided
@@ -277,7 +512,7 @@ class SessionService:
         s = self._session(session_id)
         with s.lock:
             if s.current is not None:
-                result = self._mode.give_up(s.current.state, self._clock.monotonic_ms())
+                result = self._mode_for(s).give_up(s.current.state, self._clock.monotonic_ms())
                 if result is not None and not s.current.state.practice:
                     self._record(s, result)
                 s.current = None
@@ -285,12 +520,19 @@ class SessionService:
             for _ in range(MAX_BAD_PUZZLES):
                 if s.spec.queue_size is not None and s.served >= s.spec.queue_size:
                     return None
-                if not s.queue:
-                    self._refill(s)
-                if not s.queue:
-                    s.exhausted = True
-                    return None
-                key = s.queue.popleft()
+                if s.mode == SRS_MODE:
+                    key_or_none = self._next_srs_key(s)
+                    if key_or_none is None:
+                        s.exhausted = True
+                        return None
+                    key = key_or_none
+                else:
+                    if not s.queue:
+                        self._refill(s)
+                    if not s.queue:
+                        s.exhausted = True
+                        return None
+                    key = s.queue.popleft()
                 try:
                     puzzle = self._puzzles.get(key, s.db_version)
                 except StaleKeyError:  # the database was swapped after the check above (v0.2-B3)
@@ -299,7 +541,7 @@ class SessionService:
                 if puzzle is None:  # dropped by a re-import (FR-2.4): skip it
                     continue
                 try:
-                    state = self._mode.start(puzzle, self._clock.monotonic_ms())
+                    state = self._start_state(s, puzzle)
                 except PuzzleDataError:
                     log.warning("skipping puzzle %s: its moves aren't legal", puzzle.ref)
                     continue
@@ -307,10 +549,30 @@ class SessionService:
                 s.served_ids.append(puzzle.ref.id)
                 s.current = _Current(state, self._clock.now().isoformat(timespec="seconds"))
                 played = self._sync.played_before(puzzle.ref.id) if self._sync is not None else False
+                commit = isinstance(state, CommitState)
                 return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, puzzle.moves[0],
                                   "white" if state.board.turn else "black", puzzle.rating,
-                                  sounds_for_line(puzzle.fen, puzzle.moves[:1])[0], played)  # fmt: skip
+                                  sounds_for_line(puzzle.fen, puzzle.moves[:1])[0], played, s.mode,
+                                  len(puzzle.moves) - 1 if commit and s.show_length else None,
+                                  max_plies(puzzle, s.show_length) if commit else None)  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
+
+    def _start_state(self, s: _Session, puzzle: Puzzle, practice: bool = False) -> State:
+        now = self._clock.monotonic_ms()
+        if s.mode == COMMIT:
+            if practice:
+                return self._commit.start_practice(puzzle, now, s.show_length)
+            return self._commit.start(puzzle, now, s.show_length)
+        return self._standard.start_practice(puzzle, now) if practice else self._standard.start(puzzle, now)
+
+    def _next_srs_key(self, s: _Session) -> int | None:
+        """The next due puzzle still in the database (a re-import may have dropped some, FR-2.4)."""
+        while s.srs_ids:
+            pid = s.srs_ids.popleft()
+            key = self._puzzles.key_map([pid]).get(pid)
+            if key is not None:
+                return key
+        return None
 
     def _follow_reimport(self, s: _Session) -> None:
         """A puzzle-DB update was swapped in mid-session: queued keys now point at other puzzles.
@@ -320,6 +582,8 @@ class SessionService:
             return
         log.info("session %d: the puzzle database changed; rebuilding its queue", s.id)
         s.db_version = version
+        if s.mode == SRS_MODE:
+            return  # its queue is puzzle IDs, looked up as they're served
         s.queue.clear()
         s.served_keys = self._puzzles.keys_for_ids(s.served_ids)
         s.key_bucket.clear()
@@ -388,10 +652,25 @@ class SessionService:
         with s.lock:
             if s.current is None:
                 raise ValidationError("There's no puzzle in progress.")
-            feedback = self._mode.on_move(s.current.state, uci, self._clock.monotonic_ms())
+            feedback = self._mode_for(s).on_move(s.current.state, uci, self._clock.monotonic_ms())
             practice = s.current.state.practice  # Try again: never recorded (FR-5.12)
             outcome = self._record(s, feedback.attempt) if feedback.attempt and not practice else None
             return MoveResult(feedback, outcome)
+
+    def submit_line(self, session_id: int, moves: Any) -> CommitOutcome:
+        """Commit the line (FR-4.2): grade the whole submitted line. Recorded once, if it decided the attempt."""
+        s = self._session(session_id)
+        with s.lock:
+            if s.current is None:
+                raise ValidationError("There's no puzzle in progress.")
+            state = s.current.state
+            if not isinstance(state, CommitState):
+                raise ConflictError("Submit is for Commit the line: in this mode, play your moves on the board.")
+            result = self._commit.on_submit(state, moves, self._clock.monotonic_ms())
+            outcome = None
+            if result.attempt and not state.practice:
+                outcome = self._record(s, result.attempt, result)
+            return CommitOutcome(result, outcome)
 
     def request_help(self, session_id: int, kind: HelpKind) -> HelpOutcome:
         """Hint or Show answer (§7.2). Before the attempt is decided it's recorded as a loss."""
@@ -399,7 +678,7 @@ class SessionService:
         with s.lock:
             if s.current is None:
                 raise ValidationError("There's no puzzle in progress.")
-            result = self._mode.on_help(s.current.state, kind, self._clock.monotonic_ms())
+            result = self._mode_for(s).on_help(s.current.state, kind, self._clock.monotonic_ms())
             practice = s.current.state.practice
             outcome = self._record(s, result.attempt) if result.attempt and not practice else None
             return HelpOutcome(result, outcome)
@@ -503,7 +782,7 @@ class SessionService:
                 raise ConflictError("Finish the puzzle first: Try again is for after it's over.")
             puzzle = s.current.state.puzzle
             s.current = _Current(
-                self._mode.start_practice(puzzle, self._clock.monotonic_ms()),
+                self._start_state(s, puzzle, practice=True),
                 s.current.started_at,
                 analyses=s.current.analyses,  # same positions: the engine's answers still hold
             )
@@ -525,4 +804,6 @@ class SessionService:
             all_time_solved=a.solved,  # type: ignore[attr-defined]
             all_time_failed=a.failed,  # type: ignore[attr-defined]
             rating_change=self._sync.session_change(session_id) if self._sync is not None else None,
+            mode=s.mode,
+            ladder=s.ladder,
         )

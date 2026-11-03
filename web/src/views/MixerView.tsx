@@ -1,5 +1,6 @@
 import {
   Accordion,
+  ActionIcon,
   Button,
   Divider,
   Group,
@@ -14,7 +15,8 @@ import {
 } from "@mantine/core";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { FilterSpec, OpeningFamily, PuzzleDbStatus, ThemeGroup } from "../api/types";
+import type { TrainingMode } from "../api/ApiClient";
+import type { FilterSpec, LadderInfo, OpeningFamily, PuzzleDbStatus, SrsStatus, ThemeGroup } from "../api/types";
 import {
   HistoryControls,
   MoveCountSelect,
@@ -28,6 +30,7 @@ import {
 import { PresetMenu } from "../components/PresetMenu";
 import { RatioEditor } from "../components/RatioEditor";
 import { ThemePicker } from "../components/ThemePicker";
+import { MODES, modeLabel, shortDate } from "../state/modes";
 
 const COUNT_DEBOUNCE_MS = 250;
 // The panel scrolls on its own, so the page (and the board beside it) never does.
@@ -50,8 +53,26 @@ function moreSummary(spec: FilterSpec, lichess: boolean): string {
   return parts.join(" · ");
 }
 
+/** FR-1.14: the one-line summary the collapsed panel shows. */
+export function filtersSummary(
+  spec: FilterSpec, mode: TrainingMode, count: number | null, srs: SrsStatus | null, catalog: ThemeGroup[],
+): string {
+  if (mode === "spaced_repetition") return `${modeLabel(mode)} · ${srs ? `${srs.due} due` : "…"}`;
+  const names = new Map(catalog.flatMap((g) => g.themes.map((t) => [t.key, t.name] as const)));
+  const name = (k: string) => names.get(k) ?? k;
+  const parts: string[] = [modeLabel(mode)];
+  if (spec.ratios.length) parts.push(spec.ratios.map((r) => `${r.weight}% ${r.themes.map(name).join("/") || "…"}`).join(", "));
+  else if (spec.themes.length === 0) parts.push("All themes");
+  else parts.push(spec.themes.length <= 3 ? spec.themes.map(name).join(", ") : `${spec.themes.length} themes`);
+  if (spec.rating_min !== null || spec.rating_max !== null) parts.push(`${spec.rating_min ?? "…"}–${spec.rating_max ?? "…"}`);
+  if (spec.order === "depth_ladder") parts.push("depth ladder");
+  if (count !== null) parts.push(`${count.toLocaleString("en-US")} ${count === 1 ? "puzzle" : "puzzles"}`);
+  return parts.join(" · ");
+}
+
 // FR-3.1–3.13: the filter panel, ratios, order, presets, and a live match count (debounced;
-// stale answers dropped).
+// stale answers dropped). v0.5: the Modes control (§6), Show move count (FR-4.2), the Spaced
+// repetition due line (FR-4.6), the depth-ladder status (FR-4.5) and Hide filters (FR-1.14).
 export function MixerView({
   spec,
   onChange,
@@ -62,7 +83,21 @@ export function MixerView({
   rated,
   onRated,
   playedCount,
+  mode,
+  onMode,
+  showLength,
+  onShowLength,
+  onCollapse,
+  onSummary,
 }: {
+  mode: TrainingMode;
+  onMode: (mode: TrainingMode) => void;
+  showLength: boolean;
+  onShowLength: (on: boolean) => void;
+  /** FR-1.14: Hide filters. */
+  onCollapse: () => void;
+  /** FR-1.14: the collapsed strip's summary, kept current. */
+  onSummary: (text: string) => void;
   /** FR-1.9: the next session's Rated toggle (on at each launch, never saved). */
   rated: boolean;
   onRated: (on: boolean) => void;
@@ -81,6 +116,8 @@ export function MixerView({
   const [bucketCounts, setBucketCounts] = useState<number[] | null>(null);
   const [countError, setCountError] = useState<string | null>(null);
   const [counting, setCounting] = useState(false);
+  const [srs, setSrs] = useState<SrsStatus | null>(null);
+  const [ladder, setLadder] = useState<LadderInfo | null>(null);
   const requestId = useRef(0);
   const savedThemes = useRef<string[]>([]);
 
@@ -88,6 +125,25 @@ export function MixerView({
     api.getThemeCatalog().then(setCatalog, () => setCatalog([]));
     api.getOpeningCatalog().then(setOpenings, () => setOpenings([]));
   }, [dbStatus.imported_at]);
+
+  // FR-4.6: what's due, whenever you might have just missed (or reviewed) something.
+  useEffect(() => {
+    api.getSrsStatus().then(setSrs, () => setSrs(null));
+  }, [historyVersion, mode]);
+
+  // FR-4.5: where a depth-ladder session with these themes would start.
+  useEffect(() => {
+    if (spec.order !== "depth_ladder") return;
+    let live = true;
+    api.getLadderStatus(spec).then((p) => live && setLadder(p.ladder), () => live && setLadder(null));
+    return () => {
+      live = false;
+    };
+  }, [spec, historyVersion]);
+
+  useEffect(() => {
+    onSummary(filtersSummary(spec, mode, count, srs, catalog));
+  }, [spec, mode, count, srs, catalog, onSummary]);
 
   useEffect(() => {
     const id = ++requestId.current;
@@ -121,6 +177,9 @@ export function MixerView({
   const set = (patch: Partial<FilterSpec>) => onChange({ ...spec, ...patch });
   const bounds: [number, number] = [dbStatus.rating_min ?? 400, dbStatus.rating_max ?? 3400];
   const usingRatios = spec.ratios.length > 0;
+  const srsMode = mode === "spaced_repetition";
+  const ladderOrder = spec.order === "depth_ladder";
+  const modeInfo = MODES.find((m) => m.value === mode);
 
   const toggleRatios = (on: boolean) => {
     if (on) {
@@ -135,12 +194,75 @@ export function MixerView({
     <Paper withBorder radius="md" style={{ position: "sticky", top: "calc(56px + var(--mantine-spacing-md))" }}>
       <ScrollArea.Autosize mah={PANEL_MAX_HEIGHT} type="auto" offsetScrollbars data-testid="mixer-scroll">
       <Stack gap="md" p="md">
-        <Title order={4}>Choose your puzzles</Title>
+        <Group justify="space-between" wrap="nowrap">
+          <Title order={4}>Choose your puzzles</Title>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={onCollapse}
+            aria-label="Hide filters"
+            title="Hide filters (F)"
+            data-testid="hide-filters"
+          >
+            «
+          </ActionIcon>
+        </Group>
+        <Stack gap={4}>
+          <Text size="sm" fw={500}>
+            Mode
+          </Text>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={mode}
+            onChange={(v) => onMode(v as TrainingMode)}
+            data={MODES.map((m) => ({ value: m.value, label: m.label }))}
+            aria-label="Training mode"
+            data-testid="mode-control"
+          />
+          <Text size="xs" c="dimmed" data-testid="mode-description">
+            {modeInfo?.description}
+          </Text>
+        </Stack>
+        {mode === "commit_line" && (
+          <Switch
+            label="Show move count"
+            description={
+              showLength
+                ? "You see how many moves the solution has. Lichess counts these solves for less, because you knew the length. From the next session."
+                : "Hidden: you decide where your line ends. From the next session."
+            }
+            checked={showLength}
+            onChange={(e) => onShowLength(e.currentTarget.checked)}
+            data-testid="show-length-switch"
+          />
+        )}
+        {srsMode && (
+          <Stack gap={2}>
+            <Text fw={600} data-testid="srs-due">
+              {srs === null
+                ? "…"
+                : `${srs.due} ${srs.due === 1 ? "puzzle" : "puzzles"} due now${srs.next_due ? ` · next: ${shortDate(srs.next_due)}` : ""}`}
+            </Text>
+            <Text size="sm" data-testid="srs-note">
+              Spaced repetition serves the puzzles that are due, so the filters below don't apply (only the number of
+              puzzles does).
+            </Text>
+          </Stack>
+        )}
+        <fieldset
+          disabled={srsMode}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0, opacity: srsMode ? 0.45 : 1 }}
+          aria-disabled={srsMode}
+          data-testid="filters-fieldset"
+        >
+        <Stack gap="md">
         <PresetMenu spec={spec} onLoad={onChange} />
         <Switch
           label="Mix by ratio"
-          description="e.g. 50% forks, 30% pins, 20% one-movers"
+          description={ladderOrder ? "Can't be combined with the depth ladder." : "e.g. 50% forks, 30% pins, 20% one-movers"}
           checked={usingRatios}
+          disabled={ladderOrder}
           onChange={(e) => toggleRatios(e.currentTarget.checked)}
           data-testid="ratio-switch"
         />
@@ -188,7 +310,7 @@ export function MixerView({
           max={spec.rating_max}
           onChange={(rating_min, rating_max) => set({ rating_min, rating_max })}
         />
-        <MoveCountSelect value={spec.lengths} onChange={(lengths) => set({ lengths })} />
+        <MoveCountSelect value={spec.lengths} onChange={(lengths) => set({ lengths })} setByLadder={ladderOrder} />
         <SideSelect value={spec.side} onChange={(side) => set({ side })} />
         <Accordion variant="contained" chevronPosition="right">
           <Accordion.Item value="more">
@@ -220,9 +342,22 @@ export function MixerView({
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
-        <OrderSelect value={spec.order} endless={spec.queue_size === null} onChange={(order) => set({ order })} />
+        <OrderSelect
+          value={spec.order}
+          endless={spec.queue_size === null}
+          onChange={(order) => set({ order })}
+          ratios={usingRatios}
+          ladder={ladderOrder ? ladder : null}
+        />
+        </Stack>
+        </fieldset>
         <Divider />
         <Group justify="space-between" align="center">
+          {srsMode ? (
+            <Text size="sm" c="dimmed">
+              {srs && srs.due === 0 ? "Nothing to review yet." : "Ready to review."}
+            </Text>
+          ) : (
           <Group gap={6} data-testid="match-count">
             {counting && <Loader size="xs" />}
             {countError ? (
@@ -234,9 +369,11 @@ export function MixerView({
                 {count === null
                   ? "…"
                   : `${count.toLocaleString("en-US")} ${count === 1 ? "puzzle matches" : "puzzles match"}`}
+                {count !== null && ladderOrder && ladder ? ` at ${ladder.label.toLowerCase()}` : ""}
               </Text>
             )}
           </Group>
+          )}
         </Group>
         <QueueControls value={spec.queue_size} onChange={(queue_size) => set({ queue_size })} />
         <Switch
@@ -246,7 +383,12 @@ export function MixerView({
           onChange={(e) => onRated(e.currentTarget.checked)}
           data-testid="rated-switch"
         />
-        <Button onClick={onStart} loading={starting} disabled={count === 0 || countError !== null} data-testid="start">
+        <Button
+          onClick={onStart}
+          loading={starting}
+          disabled={srsMode ? !srs || srs.due === 0 : count === 0 || countError !== null}
+          data-testid="start"
+        >
           Start
         </Button>
       </Stack>
