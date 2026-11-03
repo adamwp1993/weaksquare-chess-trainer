@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.6-rc1 (2026-11-03)
 
 ### Added
 - **Name the idea first:** a new training mode. Before your first move you tag the idea (setup and payoff motifs), then solve as usual; afterwards you see which ideas you found, which you missed and which tags were extra. [FR-4.3]
