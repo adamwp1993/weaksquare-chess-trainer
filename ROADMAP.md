@@ -167,8 +167,44 @@ Scope:
 
 ---
 
+## v0.11: Whole-game coaching
+**Goal:** a Coach that reads your games like a tutor does: tactics, but also strategy, openings, endgames and time use, including weaknesses nobody listed in advance (REQUIREMENTS §10.11; Adam, 2026-11-03).
+- **Game digests** built from the v0.8 analysis: opening, key moments, castling and development, pawn structure, trades, endgame type, summarised time use and your mistake reasons (FR-10.52). A new migration stores them along with the new weakness kinds.
+- **Whole-game measures** in the free report: per opening, phases and conversion, endgame types, time use, king safety (FR-10.53).
+- **Open-ended LLM diagnosis** with the evidence rule: every weakness cites real games and plies, which the app checks and links to Game Review; anything with fewer than 3 games is tentative (FR-10.54, 10.55).
+- **Advanced analysis** (off by default): adds the games' SAN move lists, with a cost warning against a standard run and a game cap (FR-10.56). This is the FR-8.16 rule change.
+- Measurable findings become **tracked weaknesses**; the rest stay observations (FR-10.57). Each weakness gets something to do (FR-10.58).
+- **Lesson pointers:** the in-app drill first, then a curated map of stable free pages plus search links for YouTube, chess.com and a site of your choice. The LLM picks topics only and never writes URLs (FR-10.59).
+- **Include my notes**, opt-in, with a preview (FR-10.60).
+- **Docs:** a User Guide section on whole-game coaching, and the privacy section updated with exactly what a standard run, an Advanced run and Include my notes send.
+
+**Done when:**
+- Each digest field and whole-game measure has unit tests on fixture games: castling move, moves before castling, endgame-type classification, conversion from +2 and saves from −2, low-clock blunders.
+- The sample-size guard applies to every whole-game measure.
+- Prompt tests:
+  - a standard run's prompt has no full move lists
+  - an Advanced run's prompt has SAN only, with no headers, names, dates, URLs, clocks or comments
+  - notes appear only with Include my notes
+- Evidence-validation tests:
+  - an invented game label or ply is dropped
+  - a weakness with no valid evidence is dropped
+  - fewer than 3 cited games makes it tentative
+- Lesson links:
+  - every curated link's domain is in the allowlist
+  - a URL written by the LLM is never shown
+  - search links are built only by the app
+- The Advanced estimate is blocked by the per-run cap and the budget, and a checkpoint never uses Advanced.
+
+**Adam's manual test:**
+1. Run the Coach on 30 of your games, standard. Check whether the weaknesses it names (tactical and strategic) match your own sense of your games, then click through a few citations to the actual moves.
+2. Run the same games with Advanced. Compare the cost against the estimate, and see whether it found anything new.
+3. Open two lesson pointers.
+4. Run once with Include my notes, and check the preview.
+
+---
+
 ## v1.0: Fix tracking + release
-- **Checkpoints** every 10 eligible games plus Run now; weakness metrics and statuses with the sample-size guard; Progress page; optional auto AI summary (§10.8).
+- **Checkpoints** every 10 eligible games plus Run now; weakness metrics and statuses with the sample-size guard, including v0.11's whole-game weakness kinds; Progress page; optional auto AI summary (§10.8).
 - Release from source (NFR-8): a first-run wizard (puzzle DB download, Stockfish install, both through the existing install services), the setup script's Start-menu shortcut, and a GitHub Release from the `v1.0` tag with notes from CHANGELOG. No packaged `.exe`.
 - Polish pass: error states, empty states, performance on the full DB.
 - **Docs:** User Guide complete, including installing from source, updating and troubleshooting; README status reads "v1.0".
@@ -252,4 +288,4 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v2.0
 ---
 
 ## After v1.0 (parked ideas from review, not committed)
-Threat-scan habit trainer, "Is there a tactic?" mode, visualization mode, think-first lock and timers, conversion practice vs. Stockfish, Play from here, self-review-before-engine, "What if?" questions, opening trouble spots, adaptive difficulty, pattern-based SRS, daily session builder, confirm-move toggle, notes and pattern journal, CSV export, in-app Help panel that renders the User Guide, a packaged and code-signed installer if other people ask for one.
+Threat-scan habit trainer, "Is there a tactic?" mode, visualization mode, think-first lock and timers, conversion practice vs. Stockfish, Play from here, self-review-before-engine, "What if?" questions, adaptive difficulty, pattern-based SRS, daily session builder, confirm-move toggle, notes and pattern journal, CSV export, in-app Help panel that renders the User Guide, a packaged and code-signed installer if other people ask for one.

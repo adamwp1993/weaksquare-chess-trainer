@@ -49,7 +49,12 @@ An open-source (AGPL-3.0-or-later), single-user Windows desktop app for chess ta
 - **Scoring:** any help (hint, answer, explain) before completion is a loss. Follow the angle reporting rules in §8.3 exactly. Never inflate ratings.
 - **LLM output is untrusted:** validate every move and square before drawing, and render text escaped (never raw HTML).
 - **No hard-coded LLM model names** outside the provider defaults module. **No hard-coded prices.** Costs come from the `llm_prices` table.
-- **LLM spend guardrails are mandatory** (§9.3): pre-run estimate, per-run cap, monthly budget, hard `max_tokens` on every call. Never send raw PGNs (headers, clocks, comments) or batches of games to an LLM. Game Review may send **one** game's SAN move list, anonymized as You/Opponent. The Coach sends aggregates plus a few example positions, anonymized.
+- **LLM spend guardrails are mandatory** (§9.3): pre-run estimate, per-run cap, monthly budget, hard `max_tokens` on every call. Never send raw PGNs (headers, names, dates, URLs, clocks, comments) to an LLM. Game text is anonymized as You/Opponent and allowed only as FR-8.16 lists it:
+  - Game Review may send **one** game's SAN move list.
+  - The Coach sends aggregates and a few example positions. From v0.11 it also sends per-game digests (FR-10.52).
+  - The SAN move lists of a batch of games go only with **Advanced analysis**, which is off by default and confirmed per run (FR-10.56).
+  - Notes go only with **Include my notes** (FR-10.60).
+  - The LLM never writes a URL: lesson links are built by the app (FR-10.59).
 - **Fix tracking (§10.8):** a weakness's status is decided by its **game rate** over the rolling window against a frozen baseline, never by puzzle accuracy alone. Respect the sample-size guard. The Suggested preset never silently overwrites the user's manual filters.
 - **Stockfish (§9.1):** never commit, vendor or hard-code a download of the binary. Install it only through `services/engine_install.py` (pinned manifest, SHA-256 checked before extracting). Validate every position and move list with python-chess before sending it, because Stockfish 19 terminates on invalid input.
 - **One analysis pipeline:** Game Review (v0.8) builds `game_analysis`, and the Coach (v0.10) reuses it. Don't write a second analyzer.
