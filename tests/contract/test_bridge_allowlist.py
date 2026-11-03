@@ -58,6 +58,16 @@ ALLOWLIST = {
     "clear_custom_engine",
     "get_refutation",
     "analyze_position",
+    # v0.7: LLM settings and the cost guardrails
+    "get_llm_settings",
+    "set_llm_settings",
+    "set_llm_key",
+    "delete_llm_key",
+    "start_llm_key_test",
+    "list_llm_prices",
+    "save_llm_price",
+    "delete_llm_price",
+    "get_llm_spend",
     "retry_puzzle",  # FR-5.12 Try again (not scored)
     "submit_line",  # v0.5: Commit the line (FR-4.2)
     "get_srs_status",  # v0.5: Spaced repetition (FR-4.6)

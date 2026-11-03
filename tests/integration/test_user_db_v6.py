@@ -26,7 +26,7 @@ def test_v5_database_gains_empty_llm_tables_and_keeps_its_data(tmp_path: Path, c
     conn.close()
 
     result = migrate(db, USER, clock, tmp_path / "backups")
-    assert (result.from_version, result.to_version) == (5, 6)
+    assert result.from_version == 5 and result.to_version >= 6  # later versions add migrations on top
     assert result.backup is not None  # NFR-3
 
     conn = sqlite3.connect(db)

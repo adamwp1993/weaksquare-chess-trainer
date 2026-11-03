@@ -18,9 +18,13 @@ _REDACTIONS = [
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9_\-.~+/=]{8,}"), "Bearer [REDACTED]"),
     (re.compile(r"\bli[a-z]?_[A-Za-z0-9]{8,}"), "[REDACTED]"),
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}"), "[REDACTED]"),
+    (re.compile(r"(?i)(x-api-key\s*[:=]\s*)[^\s,'\"]+"), r"\1[REDACTED]"),  # Anthropic's key header (v0.7)
     (re.compile(r"(?i)\b(code|code_verifier|access_token|api_key|token)=([^&\s]+)"), r"\1=[REDACTED]"),
     # JSON bodies, e.g. a token-exchange response that ends up in an error or debug line.
-    (re.compile(r'(?i)"(code|code_verifier|access_token|api_key|token)"\s*:\s*"[^"]*"'), r'"\1": "[REDACTED]"'),
+    (
+        re.compile(r'(?i)"(code|code_verifier|access_token|api_key|x-api-key|token)"\s*:\s*"[^"]*"'),
+        r'"\1": "[REDACTED]"',
+    ),
 ]
 
 

@@ -31,6 +31,7 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
     from tests.fakes.desktop import FakeBrowser, FakeScheduler
     from tests.fakes.engine import FakeEngine, fake_probe
     from tests.fakes.lichess import FakeLichess
+    from tests.fakes.llm import fake_providers
     from weaksquare.adapters.secret_store import MemorySecretStore
 
     return {
@@ -41,6 +42,7 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
         "make_engine": FakeEngine,  # never a real process: tests that want one build it themselves
         "engine_probe": fake_probe,
         "cpu_count": 8,
+        "llm_providers": fake_providers(),  # never the real Anthropic or OpenAI
     }
 
 
@@ -72,6 +74,8 @@ def build_api(
         history=services.history,
         engine=services.engine,
         reasons=services.reasons,
+        llm_settings=services.llm_settings,
+        llm_usage=services.llm_usage,
     )
 
 

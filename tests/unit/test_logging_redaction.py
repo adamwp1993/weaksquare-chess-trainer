@@ -68,3 +68,12 @@ def test_banner_records_the_webview2_version(tmp_path: Path) -> None:
         handler.close()
     assert "WebView2 unknown" not in first
     assert f"WebView2 {webview2_version()}" in first
+
+
+def test_redacts_llm_api_keys() -> None:
+    """v0.7: Anthropic's x-api-key header and OpenAI/Anthropic keys anywhere in a line (SR-5, SR-10)."""
+    fake = "sk-ant-FAKE" + "abcd" * 6
+    for line in [f"x-api-key: {fake}", f"headers={{'x-api-key': '{fake}'}}", f'{{"x-api-key": "{fake}"}}',
+                 f"Authorization: Bearer sk-FAKE{'abcd' * 6}", f"key was {fake}"]:  # fmt: skip
+        out = redact(line)
+        assert "abcdabcd" not in out, out

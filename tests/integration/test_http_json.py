@@ -112,3 +112,41 @@ def test_stream_ndjson_yields_objects_and_skips_junk() -> None:
 def test_stream_ndjson_401() -> None:
     with pytest.raises(Unauthorized):
         list(client(lambda req: httpx.Response(401)).stream_ndjson("https://lichess.org/api/puzzle/activity"))
+
+
+def test_per_request_headers_and_error_codes() -> None:
+    """v0.7: extra headers (Anthropic's x-api-key) go on that request only, and a JSON error keeps just the
+    API's short code, never its message text (SR-7)."""
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        if req.url.path == "/fail":
+            return httpx.Response(400, json={"error": {"type": "invalid_request_error", "message": "echo sk-ant-x"}})
+        return httpx.Response(200, json={})
+
+    c = client(handler)
+    c.post_json("https://api.example/ok", {}, headers={"x-api-key": "sk-ant-FAKEkey"}, retry=False)
+    c.get_json("https://api.example/ok")
+    assert seen[0].headers["x-api-key"] == "sk-ant-FAKEkey" and "x-api-key" not in seen[1].headers
+    with pytest.raises(HttpError) as e:
+        c.post_json("https://api.example/fail", {}, retry=False)
+    assert e.value.error_code == "invalid_request_error" and "echo" not in str(e.value)
+
+
+def test_error_codes_that_dont_look_like_codes_are_dropped() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": "Has Spaces and sk-ant-secret", "type": 5}})
+
+    with pytest.raises(HttpError) as e:
+        client(handler).get_json("https://api.example/x", retry=False)
+    assert e.value.error_code is None
+
+
+def test_timeouts_are_flagged() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow")
+
+    with pytest.raises(HttpError) as e:
+        client(handler).post_json("https://api.example/x", {}, retry=False, timeout=1.0)
+    assert e.value.timeout and e.value.status is None

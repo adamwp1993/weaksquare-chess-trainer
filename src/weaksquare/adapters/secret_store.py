@@ -1,6 +1,6 @@
 """The ONLY module that imports keyring (SR-7; a pre-commit hook enforces it).
 
-Secrets (the Lichess token, later LLM keys) live only in Windows Credential Manager (SR-1, FR-6.5).
+Secrets (the Lichess token and, from v0.7, LLM API keys) live only in Windows Credential Manager (SR-1, FR-6.5).
 Callers fetch a secret per request and hand it straight to `adapters/http.py`; it never goes into a
 DTO, a log line or an exception message. Errors from keyring are re-raised without the value.
 
@@ -22,6 +22,10 @@ SERVICE_APP = "weaksquare"
 SERVICE_DEV = "weaksquare-dev"
 SERVICE_TEST = "weaksquare-test"
 LICHESS = "lichess"
+# v0.7: one LLM API key per provider, under the same per-data-folder service. The account name is the
+# provider's name, as `services/llm_settings.py` uses it.
+ANTHROPIC = "anthropic"
+OPENAI = "openai"
 
 # Credential Manager holds at most 2,560 bytes per secret, and keyring stores UTF-16, so 1,280
 # characters fit. Lichess tokens can grow without notice (FR-6.7 asks for at least 512).

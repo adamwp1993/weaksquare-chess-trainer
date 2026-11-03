@@ -421,3 +421,46 @@ export interface Refutation {
   score: string | null;
   game_over: string | null;
 }
+
+export interface LlmModelOption {
+  model: string;
+  explain_usd: number;
+}
+
+export interface LlmProviderInfo {
+  provider: "anthropic" | "openai";
+  label: string;
+  key_stored: boolean;
+  model: string;
+  models: LlmModelOption[];
+}
+
+export interface LlmSpend {
+  month: string;
+  spent_usd: number;
+  budget_usd: number;
+  level: "ok" | "warn" | "over";
+  configured: boolean;
+}
+
+export interface LlmSettings {
+  provider: "none" | "anthropic" | "openai";
+  reasoning: "low" | "medium" | "high";
+  run_cap_usd: number;
+  monthly_budget_usd: number;
+  providers: LlmProviderInfo[];
+  spend: LlmSpend;
+  key_check: "none" | "checking" | "ok" | "failed";
+  key_check_message: string | null;
+}
+
+export interface LlmPrice {
+  provider: "anthropic" | "openai";
+  model: string;
+  input_per_m: number;
+  output_per_m: number;
+  long_ctx_threshold: number | null;
+  long_input_per_m: number | null;
+  long_output_per_m: number | null;
+  as_of: string;
+}

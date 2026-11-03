@@ -25,6 +25,8 @@ REASONING_MULTIPLIER = {"low": 1, "medium": 2, "high": 4}
 
 # FR-8.14: the hard max_tokens per feature at Low reasoning.
 MAX_TOKENS = {"explain": 1500}
+# A typical prompt's size in characters, for the per-model cost shown in the model dropdown (FR-1.3).
+TYPICAL_PROMPT_CHARS = {"explain": 6000}
 # The typical output of one call, shown as the "about" figure next to the worst case (actual usage is logged).
 TYPICAL_OUTPUT_TOKENS = {"explain": 600}
 

@@ -512,6 +512,60 @@ class Refutation:
     game_over: str | None
 
 
+# ---- v0.7: LLM settings, the cost guardrails, Explain (FR-1.2–1.4, 1.10, §9) -------------------------
+# No key ever crosses (SR-1): only whether one is stored.
+LlmProviderName = Literal["anthropic", "openai"]
+
+
+@dataclass(frozen=True)
+class LlmModelOption:
+    model: str
+    explain_usd: float  # about what one Explain costs at the current reasoning level (FR-1.3)
+
+
+@dataclass(frozen=True)
+class LlmProviderInfo:
+    provider: LlmProviderName
+    label: str  # "Anthropic" / "OpenAI"
+    key_stored: bool
+    model: str  # the model picked for this provider; '' = none (nothing is pre-selected)
+    models: list[LlmModelOption]  # the price table's models for this provider, cheapest first
+
+
+@dataclass(frozen=True)
+class LlmSpend:
+    month: str  # YYYY-MM, local
+    spent_usd: float
+    budget_usd: float
+    level: Literal["ok", "warn", "over"]  # FR-1.10 / 8.13: warn at 80%, blocked at 100%
+    configured: bool  # a provider with a key: show the indicator
+
+
+@dataclass(frozen=True)
+class LlmSettings:
+    provider: Literal["none", "anthropic", "openai"]
+    reasoning: Literal["low", "medium", "high"]  # FR-8.15
+    run_cap_usd: float  # FR-8.12
+    monthly_budget_usd: float  # FR-8.13
+    providers: list[LlmProviderInfo]
+    spend: LlmSpend
+    # FR-1.6: the silent key check at launch ('none': no AI set up, or a key was saved since).
+    key_check: Literal["none", "checking", "ok", "failed"]
+    key_check_message: str | None
+
+
+@dataclass(frozen=True)
+class LlmPrice:
+    provider: LlmProviderName
+    model: str
+    input_per_m: float  # USD per 1M tokens
+    output_per_m: float
+    long_ctx_threshold: int | None  # the long-context tier applies above this many input tokens
+    long_input_per_m: float | None
+    long_output_per_m: float | None
+    as_of: str  # YYYY-MM-DD
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -563,4 +617,9 @@ EXPORTED: list[type] = [
     EngineLine,
     Analysis,
     Refutation,
+    LlmModelOption,
+    LlmProviderInfo,
+    LlmSpend,
+    LlmSettings,
+    LlmPrice,
 ]

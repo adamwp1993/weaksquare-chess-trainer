@@ -31,7 +31,7 @@ def test_v4_attempts_keep_their_data_and_get_null_v06_columns(tmp_path: Path, cl
     conn.close()
 
     result = migrate(db, USER, clock, tmp_path / "backups")
-    assert (result.from_version, result.to_version) == (4, 5)
+    assert result.from_version == 4 and result.to_version >= 5  # later versions add migrations on top
     assert result.backup is not None  # NFR-3
 
     conn = sqlite3.connect(db)

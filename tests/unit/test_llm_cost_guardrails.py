@@ -91,6 +91,13 @@ def test_spend_level_warns_at_80_percent() -> None:
     assert spend_level(0.0, 0.0) == "over"
 
 
+def test_thresholds_survive_float_sums() -> None:
+    spent = 0.02 + 0.02  # 0.04000000000000001 vs 0.8 * 0.05 = 0.04000000000000001 or a hair less
+    assert spend_level(spent, 0.05) == "warn"
+    assert check(0.0, 0.5, 0.1 + 0.2, 0.3) == "over_budget"  # 0.30000000000000004 vs 0.3
+    assert check(0.1 + 0.2, 0.3, 0.0, 5.0) == "ok"  # exactly the cap, give or take a float
+
+
 def test_month_key_is_the_local_calendar_month() -> None:
     assert month_key(date(2026, 11, 30)) == "2026-11"
     assert month_key(date(2026, 12, 1)) == "2026-12"

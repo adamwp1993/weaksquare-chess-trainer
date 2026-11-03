@@ -68,6 +68,7 @@ weaksquare-chess-trainer/
 │  │  ├─ lichess.py            # LichessClient protocol, result types, response parsers (v0.3)
 │  │  ├─ modes/                # TrainingMode protocol + one module per mode
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
+│  │  ├─ llm/                  # LLMProvider protocol, defaults (the only model names), cost, guardrails (v0.7)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
@@ -79,6 +80,8 @@ weaksquare-chess-trainer/
 │  │                           #         lichess_history.py (history import)
 │  │                           #   v0.4: engine_install.py (the Stockfish installer), engine.py (EngineService)
 │  │                           #   v0.6: reasons.py (saving mistake reasons)
+│  │                           #   v0.7: llm_settings.py (provider, key, prices, Test key), llm_usage.py
+│  │                           #         (the guardrail gate every LLM request goes through)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -97,7 +100,7 @@ weaksquare-chess-trainer/
 │  │  ├─ lichess.py            # LichessHttp (v0.3)   chesscom.py (v0.8)
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
-│  │  └─ llm/                  # LLMProvider protocol, anthropic.py, openai.py (v0.7)
+│  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)
 │  └─ jobs/runner.py           # background jobs: queue, progress, cancel
 ├─ web/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
@@ -118,7 +121,8 @@ weaksquare-chess-trainer/
 │  ├─ engine/                  # opt-in: the real Stockfish (-m engine) (v0.4)
 │  ├─ fakes/                   # fake Lichess client, listener, browser, scheduler (v0.3);
 │  │                           #   fake engine + a fake UCI engine subprocess (v0.4)
-│  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/);
+│  │                           #   fake LLM provider (v0.7)
+│  └─ fixtures/                # tiny puzzle CSV sample, scrubbed HTTP recordings (http/lichess_db/, http/llm/);
 │                              #   tools/ holds the dev-only generator and recorder scripts
 └─ scripts/                    # setup.py (one-command setup), fetch_puzzle_db.py, fetch_stockfish.py
                                #   (thin CLIs over services, download + hash check), check_docs.py,
@@ -211,6 +215,33 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-03, v0.7: Anthropic and OpenAI over `adapters/http.py`, no SDKs
+- Context: FR-8.1 needs both providers behind one interface, and ARCHITECTURE §3 decision 9 sends every external call through the one HTTP client.
+- Decision:
+  - **Raw JSON adapters:** `adapters/llm/anthropic.py` (`POST /v1/messages`, `anthropic-version: 2026-10-21`, `x-api-key`) and `adapters/llm/openai.py` (`POST /v1/responses`, Bearer key, `store: false`). They implement `core/llm/provider.py`'s `LLMProvider`.
+  - **Request shape:** structured output is a JSON schema (`output_config.format` / `text.format` strict). The reasoning setting becomes `output_config.effort` / `reasoning.effort`; there's no "off" because current Claude models such as Opus 5.5 refuse `thinking: disabled` (FR-8.15). `max_tokens` / `max_output_tokens` is always set (FR-8.14).
+  - **Never retried:** generation requests use `retry=False`, so a timeout that was still processed can't be billed twice.
+  - **Test key:** `GET /v1/models/{id}`, which is free (FR-1.4). The model ID is URL-quoted.
+  - **`http.py` additions:** per-request `headers=` and `timeout=`, `HttpError.timeout`, and `HttpError.error_code`. The error code is the API's short machine code from a JSON error body (`insufficient_quota`, `authentication_error`), kept only if it matches `[a-z][a-z0-9_]{0,39}`; the provider's message text is never kept or shown (SR-7).
+  - **Errors:** `adapters/llm/__init__.py` maps status and code to the readable kinds in `core/llm/provider.py` (FR-8.8). For example, OpenAI's 429 `insufficient_quota` is *quota*, not *rate limited*.
+  - **Redaction:** log redaction also covers `x-api-key` headers and JSON fields.
+  - **Fixtures:** the shapes come from Anthropic's docs and the openai-python SDK's types. `tests/fixtures/http/llm/` is hand-written until Adam's live run records real responses.
+- Alternatives: the `anthropic` and `openai` packages (two dependencies, their own HTTP stacks bypassing `http.py`'s User-Agent, timeouts and redaction, and their own retries, which could double-bill).
+- Consequences: provider API changes are ours to follow; the adapter tests pin the shapes. Adding a provider is one adapter file plus a `PROVIDERS` entry (Developer Guide recipe).
+
+### 2026-11-03, v0.7: The cost guardrails: price table, usage log, one gate for every request
+- Context: REQUIREMENTS §9.3 and Adam's v0.7 planning decisions (no model pre-selected; the budget blocks at 100%).
+- Decision:
+  - **user.db `0006`:** `llm_prices` (primary key provider + model, with an optional long-context tier), `llm_usage` (one row per response that reported usage, including truncated and refused ones, with `local_month`) and `llm_cache`.
+  - **Seeding:** the price table is seeded from `core/llm/defaults.py`, the only module that names models (a contract test checks `src/` and `web/src`, mock data aside). Seeding runs lazily and once per `SEED_VERSION`, adding missing rows only, so a row you edited or deleted stays as you left it.
+  - **`services/llm_usage.py`'s `run()` is the only way to call a provider.** It resolves the provider, model, key and price row (no price row, no request), estimates the request, applies `core/llm/guardrails.check`, sends it with `max_tokens_for(feature, reasoning)`, and logs the reported usage priced from the table.
+  - **The checks:** the budget is checked first (month spend ≥ budget blocks). Then the per-run cap is checked against the worst case: input estimated at characters ÷ 3, plus the full `max_tokens` of output.
+  - **One at a time:** requests are serialized under a lock, so the budget always sees fully-logged spend.
+  - **Local month:** the month is the local calendar month (`Clock.local_date`), stored on each row so SQL never does timezone math. Thresholds compare with a 1e-9 tolerance, so float sums like $0.02 + $0.02 still warn at exactly 80%.
+  - **Settings and keys:** settings are `llm.*` keys in `settings`. Keys are in `secret_store` under the account names `anthropic` / `openai`. The service accepts a key only if it has the provider's prefix (`sk-ant-` / `sk-`), so a key pasted for the wrong provider is caught, and it never returns a key, only *stored: yes/no*.
+- Alternatives: seed rows in the migration SQL (puts model names outside the defaults module, and a deleted row would be impossible to tell from a missing one); checking the budget against the worst case too (Adam chose "block only at 100%"); a provider tokenizer call for the estimate (OpenAI has none, and Anthropic's is an extra round trip).
+- Consequences: every later LLM feature (Game Review AI, the Coach) calls `run()` with its own `feature` and `MAX_TOKENS` entry and gets the guardrails for free.
 
 ### 2026-11-03, v0.6: QA fixes (v0.6-B1 to B10)
 - Context: `qa/QA-v0.6.md` rounds 1 (two majors, six minors) and 2 (B9, minor).

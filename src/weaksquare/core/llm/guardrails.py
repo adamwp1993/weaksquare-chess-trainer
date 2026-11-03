@@ -19,22 +19,25 @@ Verdict = Literal["ok", "over_cap", "over_budget"]
 SpendLevel = Literal["ok", "warn", "over"]
 
 MAX_DOLLARS = 1000.0  # sanity bound for the cap and budget fields
+# Costs are sums of small floats: $0.02 + $0.02 is a hair under 80% of $0.05. Thresholds compare with a
+# tolerance far below a thousandth of a cent, so exactly 80% warns and exactly 100% blocks.
+EPS = 1e-9
 
 
 def check(worst_case_usd: float, run_cap_usd: float, month_spent_usd: float, budget_usd: float) -> Verdict:
     """The budget comes first: at 100% nothing runs, whatever the cap."""
-    if month_spent_usd >= budget_usd:
+    if month_spent_usd >= budget_usd - EPS:
         return "over_budget"
-    if worst_case_usd > run_cap_usd:
+    if worst_case_usd > run_cap_usd + EPS:
         return "over_cap"
     return "ok"
 
 
 def spend_level(month_spent_usd: float, budget_usd: float) -> SpendLevel:
     """The spend indicator's color (FR-1.10, 8.13): a warning from 80%, blocked at 100%."""
-    if month_spent_usd >= budget_usd:
+    if month_spent_usd >= budget_usd - EPS:
         return "over"
-    if month_spent_usd >= WARN_FRACTION * budget_usd:
+    if month_spent_usd >= WARN_FRACTION * budget_usd - EPS:
         return "warn"
     return "ok"
 

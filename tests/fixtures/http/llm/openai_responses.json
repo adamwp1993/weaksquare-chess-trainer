@@ -1,0 +1,22 @@
+{
+  "object": "response",
+  "status": "completed",
+  "incomplete_details": null,
+  "output": [
+    {"type": "reasoning", "summary": []},
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {"type": "output_text", "text": "{\"summary\": \"The knight forks king and queen.\", \"steps\": [], \"key_ideas\": [\"fork\"]}", "annotations": []}
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1790,
+    "input_tokens_details": {"cached_tokens": 0},
+    "output_tokens": 455,
+    "output_tokens_details": {"reasoning_tokens": 64},
+    "total_tokens": 2245
+  }
+}
