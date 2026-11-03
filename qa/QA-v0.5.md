@@ -208,3 +208,64 @@ The doc changes for B1, B2 and B3 (User Guide, REQUIREMENTS FR-4.5, ARCHITECTURE
 ## For Adam's manual test (round 2 additions)
 - **Mate in 2 ladder:** with Order = Depth ladder and Mate in 2, the ladder line says it's the top, and sessions keep going.
 - **B7 slowdown:** with Order = Depth ladder on the full DB, the match count updates noticeably more slowly (about 1 s) than with Random.
+
+---
+
+# Round 3, 2026-11-03: re-verification
+
+Branch `v0.5` at `6795945` (fixes for B7, B8 and B9; the round-2 report and tests are committed in it). Independent QA, same rules: no product code, docs or config changed by QA; new tests only under `tests/`.
+
+## Verdict: **PASS WITH ISSUES** (minor only)
+
+B7, B8 and B9 are fixed. The fast ladder preview makes exactly the same decisions as the full per-level count rule across 54 filter × history combinations.
+
+Default, e2e and full-DB suites are green, and static checks, pre-commit and `check_docs --strict` are clean. Smoke has one pre-existing intermittent failure (B11), not v0.5 code.
+
+Two new minor issues:
+- **B10:** two rarer ladder-preview branches are still over 500 ms.
+- **B11:** the intermittent smoke failure above.
+
+## Re-verification
+
+| Bug | Fix checked | Result | Evidence |
+|---|---|---|---|
+| B7 ladder count speed | `SessionService.ladder_preview`, `count_level_and_above`, `has_puzzles`, `levels_with_puzzles`; one preview per bridge call | **FIXED** for the normal case | Full DB, fresh history (`test_qa_v05_ladder_levels_perf.py`, now against 0.5 s): All themes defaults **269 ms**, open 190, Fork+Pin ALL 224, Mate in 2 267, narrow rating 7. The builder's `test_perf_v05.py::test_ladder_count_at_a_level_is_fast` passes. **Correctness:** the new QA `test_qa_v05_round3.py::test_fast_preview_matches_the_full_count_rule` gives 54 passed. It covers 9 filter shapes (All themes open/default, Fork, Fork+Pin ALL, Mate in 2, Mate in 1, a narrow Fork, a narrow rating band, Only my misses) × 6 recorded histories (none; level 2, 3 and 4 with a full winning window or a mixed one), plus real solved/missed history for the hiding. Level, top, window and pool all match `core.ladder.status` over a full count per level, and `count_matches`/`get_ladder_status` return the same values. The builder's `test_levels_with_puzzles_matches_a_count_per_level` passes |
+| B8 screenshot picker | `_pick` ticks inside its own dropdown | **FIXED** | 3 regenerations: `presets.png` sha256 `ca30d7cd…` every time, and no git diff in `docs/` |
+| B9 sign-in cancel race | `cancel_sign_in` also cancels the job; `_sign_in` checks before and after the listener starts | **FIXED** | `test_cancel_sign_in` + `test_cancel_right_after_sign_in_is_never_lost` (20 immediate cancels each run) run 15×: **15/15 passed**. Before the fix: 1 in 5 failed. Code read: a Cancel after approval still completes the sign-in (as before), and `runner.cancel` on a finished job is a no-op |
+
+Observation (not a bug): when a theme set has no puzzles at **any** level (e.g. Mate in 1), the fast preview reports the window as 0 played, where the full rule would echo the recorded history. Nothing can start in that case, and the level and the 0 count agree, so it has no effect.
+
+## Evidence: commands run (round 3)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **860 passed**, 286 deselected (159 s). QA round-3 file run separately: 54 passed |
+| `uv run pytest -m e2e` | **159 passed** (424 s) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **1 failed, 23 passed, 1 skipped**. The failure is `test_qa_v04_real_app.py::test_engine_flow_in_the_real_app` (B11) |
+| `uv run pytest -m fulldb` | **66 passed, 1 xfailed** (490 s). QA round-3 worst-case file: 2 passed, 2 xfailed (B10) |
+| `ruff check`, `ruff format --check` (227 files), `mypy src`, `typecheck`, `lint` | all clean |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | `0 error(s), 0 warning(s) [version v0.5]` |
+| `uv run pytest -m docs_screenshots` ×3 | 21 passed each time; `docs/img` byte-identical to the commit |
+
+## New bugs (round 3)
+
+**v0.5-B10 (minor): two rarer ladder-preview branches are over 500 ms on the full DB.**
+- **Measured** (own `user.db` with 500 solved puzzles, two runs): All themes with a full winning window at Short, which looks up the exact next open level: **530–537 ms**. Mate in 2 with a recorded level 4 that the filters leave empty, which tries 4 → 3 → 2 with a scan each: **780–795 ms**. Fork promoting 3 → 4: 462–475 ms. All themes at the top: 224–265 ms.
+- **When the first branch happens:** after the window says you move up and before you've played a puzzle at the new level. The recorded level is still the old one, so every count in that gap takes the slow branch.
+- **When the second happens:** when other filters (rating, side, openings) empty the recorded level.
+- **Severity:** both are short-lived or rare, and close to the 550 ms already accepted for three-group ratios (ARCHITECTURE §7), hence minor.
+- **Evidence:** `tests/fulldb/test_qa_v05_round3_ladder_worst_case.py` (non-strict xfail on the two slow cases).
+
+**v0.5-B11 (minor, not v0.5 code): `test_qa_v04_real_app.py::test_engine_flow_in_the_real_app` fails intermittently.** It failed 3 times in 8 runs (1 in the full smoke run, 2 of 7 reruns, alone or together with `test_qa_v04_rc2_real_app.py`, which passed 7 of 7 reruns). There are two causes:
+- **Shutdown log line:** an `ERROR … pywebview: Error occurred in script` (from `evaluate_js`) appears when the test closes the window while a 5 s search is still pushing results. The test asserts there are no ERROR lines.
+- **Puzzle-dependent test step:** `Forward` is disabled when the randomly served puzzle has a short answer line, but the test clicks it 3 times.
+
+Neither path changed in v0.5. The builder's `test_try_again_in_the_real_app` flake didn't reproduce here (8 of 8 passed).
+
+## Tests added (round 3)
+- `tests/integration/test_qa_v05_round3.py` (54 parametrized): fast ladder preview == full-count rule, also through `count_matches` and `get_ladder_status`.
+- `tests/fulldb/test_qa_v05_round3_ladder_worst_case.py` (4, `fulldb`): timing of the promote, top and emptied-level branches (B10).
+
+## For Adam's manual test (round 3)
+- On the full DB with Order = Depth ladder, the match count should feel as quick as with Random (about 0.2–0.3 s). Right after a **Level up!**, before you play the next puzzle, it may take about half a second (B10).

@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.5-rc1 (2026-11-03)
 
 ### Added
 - **Training modes:** a **Modes** control at the top of the filters panel picks how you train: **Standard** (as before), **Commit the line** or **Spaced repetition**. The app remembers your choice; changing it starts a new session. [FR-4.2] [FR-4.6]
