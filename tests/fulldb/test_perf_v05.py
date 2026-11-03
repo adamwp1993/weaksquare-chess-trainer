@@ -31,15 +31,17 @@ def _service(source: LichessDbSource, clock: FixedClock) -> SessionService:
                           mode_fields=ModeFields)  # fmt: skip
 
 
-def test_ladder_count_at_a_level_is_fast(full_source: LichessDbSource) -> None:
+def test_ladder_preview_is_one_fast_request(full_source: LichessDbSource) -> None:
+    """Regression v0.5-B7: the level check used a count per level, so a depth-ladder count took ~0.9 s.
+    The whole request (levels + the level's pool) must meet the 500 ms live-count target."""
     service = _service(full_source, FixedClock())
-    spec = FilterSpec(themes=("fork",), order="depth_ladder")
-    t0 = time.perf_counter()
-    level = service.pool_spec(spec)
-    n = full_source.count(level)
-    elapsed = time.perf_counter() - t0
-    assert level.lengths == (2,) and n > 1000
-    assert elapsed < 0.5, f"ladder count took {elapsed:.3f}s"
+    for spec in (FilterSpec(order="depth_ladder"), FilterSpec(themes=("fork",), order="depth_ladder"),
+                 FilterSpec(themes=("mateIn2",), order="depth_ladder")):  # fmt: skip
+        t0 = time.perf_counter()
+        status, _, n = service.ladder_preview(spec)
+        elapsed = time.perf_counter() - t0
+        assert n == full_source.count(spec.at_ladder_level(status.level)) > 0
+        assert elapsed < 0.5, f"ladder preview for {spec.themes} took {elapsed:.3f}s"
 
 
 def test_srs_status_with_two_thousand_misses_is_fast(fulldb_path: Path, tmp_path: Path) -> None:

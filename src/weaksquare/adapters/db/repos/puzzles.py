@@ -249,6 +249,48 @@ class LichessDbSource:
             where = self.where(spec)
             return int(conn.execute(f"SELECT COUNT(*) FROM pz.puzzles p WHERE {where.sql}", where.params).fetchone()[0])
 
+    def has_puzzles(self, spec: FilterSpec) -> bool:
+        """Does anything match? An existence check, not a count: it stops at the first match (depth
+        ladder, v0.5-B2/B7). With Exclude solved/played, something matches when more rows match than the
+        hidden ones that match (a short id lookup), checked with `LIMIT hidden + 1`."""
+        hidden = hidden_ids_sql(spec)
+        base = self.where(unhidden(spec) if hidden else spec)
+        with self._db.session() as conn:
+            gone = 0
+            if hidden:
+                gone = int(conn.execute(
+                    f"SELECT COUNT(*) FROM pz.puzzles p WHERE p.id IN ({hidden}) AND {base.sql}", base.params
+                ).fetchone()[0])  # fmt: skip
+            found = conn.execute(
+                f"SELECT COUNT(*) FROM (SELECT 1 FROM pz.puzzles p WHERE {base.sql} LIMIT ?)", (*base.params, gone + 1)
+            ).fetchone()[0]
+        return int(found) > gone
+
+    def count_level_and_above(self, spec: FilterSpec, level: int) -> tuple[int, int]:
+        """Depth ladder (v0.5-B7): the count at `level` (4 = 4 or more) and how many puzzles are at higher
+        levels, in one scan. With themes selected this costs about one count; a count plus an existence
+        check above would scan the higher levels a second time when they're empty (e.g. Mate in 2).
+        `spec.lengths` is ignored; Exclude solved/played are subtracted, as in `count`."""
+        plain = dataclasses.replace(spec, lengths=(), order="random")
+        hidden = hidden_ids_sql(plain)
+        at = "p.length >= 4" if level >= 4 else f"p.length = {int(level)}"
+        sums = f"SUM({at}), SUM(p.length > {int(level)})" if level < 4 else f"SUM({at}), 0"
+        with self._db.session() as conn:
+            base = self.where(unhidden(plain) if hidden else plain)
+            cond = f"{base.sql} AND p.length >= {int(level)}"
+            row = conn.execute(f"SELECT {sums} FROM pz.puzzles p WHERE {cond}", base.params).fetchone()
+            here, above = int(row[0] or 0), int(row[1] or 0)
+            if hidden:
+                row = conn.execute(
+                    f"SELECT {sums} FROM pz.puzzles p WHERE p.id IN ({hidden}) AND {cond}", base.params
+                ).fetchone()
+                here, above = here - int(row[0] or 0), above - int(row[1] or 0)
+        return here, above
+
+    def levels_with_puzzles(self, spec: FilterSpec, levels: Sequence[int]) -> list[int]:
+        """Which depth-ladder levels (2, 3, 4 = 4 or more) have any puzzle under these filters."""
+        return [lv for lv in levels if self.has_puzzles(dataclasses.replace(spec, lengths=(lv,), order="random"))]
+
     def _hidden_keys(self, conn: sqlite3.Connection, spec: FilterSpec, hidden: str) -> set[int]:
         """Keys of the hidden puzzles that would otherwise match (for sampling, like count)."""
         base = self.where(unhidden(spec))

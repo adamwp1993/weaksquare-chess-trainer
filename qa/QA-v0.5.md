@@ -134,3 +134,77 @@ Screenshots in `tests/e2e/artifacts/qa-v05-*.png` (mock) and `tests/e2e/artifact
 - Ladder with the default 80% / 20 over a real session (QA used narrow windows).
 - B1: switch to Spaced repetition with nothing due mid-session, and decide the intended behaviour.
 - The feel of Commit-the-line entry on a long (4+) puzzle, including a promotion entered for either side (not exercised by any test).
+
+---
+
+# Round 2, 2026-11-02: re-verification
+
+Branch `v0.5` at `65f2a9c` (round-1 fixes B1–B6, with the QA report and tests committed). Independent QA, same rules as round 1: no product code, docs or config changed by QA; new tests only under `tests/`. The real app ran only with temp `WEAKSQUARE_DATA_DIR` folders this round.
+
+## Verdict: **FAIL** (one major: B7)
+
+All six round-1 bugs are fixed, each with a regression test that I re-ran and checked against the behaviour. Default, e2e and smoke are green (apart from the pre-existing flake B9).
+
+The B2 fix brought in one regression, B7 (**major**). With Order = Depth ladder, the live count now takes about 0.9 s on the full DB, over the 500 ms requirement. The builder's own full-DB test `test_perf_v05.py::test_ladder_count_at_a_level_is_fast` now fails every time.
+
+B8 and B9 are minor pre-existing flakes in the test and docs tooling, not v0.5 code. Once B7 is fixed, I expect PASS WITH ISSUES.
+
+## Re-verification of round-1 bugs
+
+| Bug | Fix checked | Result | Evidence |
+|---|---|---|---|
+| B1 failed mode switch | `changeMode` awaits `start()` and only then sets and saves the mode | **FIXED** | e2e `test_switching_to_spaced_repetition_with_nothing_due_mid_session`: the control stays on Standard and the badge still says Standard, the filters aren't greyed, no `setting:trainer.mode` call, and the reason is shown (screenshot `qa-v05-switch-to-srs-nothing-due.png`). Real app (`test_v05_modes_in_the_real_app`): nothing due → Standard carries on; once something is due, the switch starts the review session. Rapid switching still ends on the chosen mode (`test_rapid_mode_switching…`) |
+| B2 ladder dead end | `ladder.status(…, available)` and `SessionService.ladder_levels` | **FIXED** | New QA `test_qa_v05_round2.py::test_b2_mate_in_two_short_is_the_top_and_the_session_carries_on`: preview is level 2 with `top=True`; 4 wins → no level-up, session never ends early, still at level 2/top. `…mate_in_one…` still refuses with a reason (0 matches). Builder: `test_ladder.py` (4 new), `test_ladder_skips_levels_with_no_puzzles`. Full DB: Mate in 2 → `levels=[2]`, top |
+| B3 length leak | `max_plies` = 60 when the length is hidden | **FIXED** | New QA `test_b3_hidden_cap_is_60_for_every_puzzle` (5 puzzles → `{60}`; shown → the solution length); unit `test_hidden_length_cap…` updated |
+| B4 "0 of 0" | badge hidden when `replies_total == 0` | **FIXED** | e2e `test_one_move_commit_has_no_replies_line` |
+| B5 clipped badge | wraps, now reads "Already played: rating unaffected" | **FIXED** | e2e `test_already_played_badge_is_whole`; real app `qa-v05-real/collapsed.png` shows the whole badge. User Guide, REQUIREMENTS FR-6.11b and CHANGELOG `### Fixed` use the new wording |
+| B6 Show move count text | "From the next session" in both states | **FIXED** | e2e `test_show_move_count_says_it_applies_from_the_next_session_both_ways` |
+
+The doc changes for B1, B2 and B3 (User Guide, REQUIREMENTS FR-4.5, ARCHITECTURE §7 entry) match the behaviour.
+
+## Evidence: commands run (round 2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1 failed, 854 passed**. The failure is `test_account.py::test_cancel_sign_in`, which is flaky (B9) and fails about 1 run in 5 when run alone (re-run 5×: 4 passed, 1 failed). Adding the round-2 QA file: +3 passed |
+| `uv run pytest -m e2e` | **159 passed** (419 s) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **24 passed, 1 skipped** (232 s). The timing flakes the builder mentioned didn't show up in this run |
+| `uv run pytest -m fulldb` | **1 failed, 65 passed, 1 xfailed** (497 s). The failure is the builder's own `test_perf_v05.py::test_ladder_count_at_a_level_is_fast`, which is B7. Run alone 3×, it fails every time: 0.889 s, 0.887 s and 0.902 s against its 0.5 s limit; QA `test_qa_v05_ladder_levels_perf.py` 5 passed (timings under B7) |
+| `ruff check`, `ruff format --check`, `mypy src`, `typecheck`, `lint` | all clean (224 files formatted; mypy: no issues in 70 files) |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | `0 error(s), 0 warning(s) [version v0.5]` |
+| `uv run pytest -m docs_screenshots` | 21 passed, but `docs/img/presets.png` differs from the committed copy (B8). I restored the committed copy |
+
+## New bugs (round 2)
+
+**v0.5-B7 (major, introduced by the B2 fix): with Order = Depth ladder, the live match count takes about 0.75–1.0 s on the full DB, over the 500 ms target (REQUIREMENTS §4 "live match count … under 500 ms").**
+- **Cause:** `count_matches` → `pool_spec` → `ladder_status` → `ladder_levels` now runs 3 per-level `COUNT`s before the pool count. `get_ladder_status` repeats the same 4 counts for every filter change, so one edit costs about 8 full counts.
+- **Measured** (dev full DB, unloaded, two runs, levels + pool): All themes with default quality **975 ms**; All themes open 730 ms; Fork+Pin ALL 830 ms; Mate in 2 880 ms; narrow rating 20 ms. A single per-level count is 180–310 ms, so before the fix the same preview was about 200–310 ms.
+- **Expected:** the count stays under 500 ms, as it did before the fix.
+- **Suggested fix:** check whether a level has puzzles with an existence query (`LIMIT 1`) instead of `COUNT`, or compute the levels once per edit and share them between the two bridge calls.
+- **Docs:** ARCHITECTURE §7 says "each well under the 500 ms target", which is true for each count but not for the request as a whole.
+- **Evidence:** the builder's own `tests/fulldb/test_perf_v05.py::test_ladder_count_at_a_level_is_fast` fails every time (0.89 s against 0.5 s). `tests/fulldb/test_qa_v05_ladder_levels_perf.py` prints the timings per filter shape.
+
+**v0.5-B8 (minor, pre-existing docs tooling): `docs_screenshots` doesn't produce `presets.png` deterministically.**
+- **What differs:** in one version, ratio group 1 is "Fork + Discovered attack" (as at `11c9e9e`, and in my regeneration this round); in the other, "Fork" alone (as committed at `65f2a9c`).
+- **Likely cause:** `_pick` in `tests/e2e/test_docs_screenshots.py` uses `.last` on checkboxes while the first group's theme popover may still be in the DOM, so "Discovered attack" sometimes lands in group 1.
+- **Impact:** the caption isn't misleading, but "regenerate at every handoff" gives a diff.
+
+**v0.5-B9 (minor, pre-existing since v0.3): `tests/integration/test_account.py::test_cancel_sign_in` is flaky.**
+- **Test cause:** the test only waits for the listener if it already exists (`h.listeners.made and …started.wait(5)`). When the job thread hasn't created it yet, `cancel_sign_in()` runs first and is a no-op.
+- **Product side:** a Cancel pressed in the first milliseconds after Sign in would be lost the same way, because `AccountService.cancel_sign_in` does nothing while `_listener` is None.
+- **Effect:** it can turn `uv run pytest` and CI red at random.
+
+## Tests added (round 2)
+- `tests/integration/test_qa_v05_round2.py` (3): `test_b2_mate_in_two_short_is_the_top_and_the_session_carries_on`, `test_b2_mate_in_one_ladder_still_refuses_to_start_with_a_reason`, `test_b3_hidden_cap_is_60_for_every_puzzle`.
+- `tests/fulldb/test_qa_v05_ladder_levels_perf.py` (5, `fulldb`): the ladder preview path (level counts + pool) for five filter shapes, with printed timings (B7).
+
+## Scope / architecture / security (round 2)
+- The fix commit only touches files B1–B6 need.
+- `core/ladder.py` stays pure: `available` is passed in, and the counts happen in the service.
+- No new dependencies or migrations.
+- The secret scan is clean.
+
+## For Adam's manual test (round 2 additions)
+- **Mate in 2 ladder:** with Order = Depth ladder and Mate in 2, the ladder line says it's the top, and sessions keep going.
+- **B7 slowdown:** with Order = Depth ladder on the full DB, the match count updates noticeably more slowly (about 1 s) than with Random.

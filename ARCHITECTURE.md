@@ -211,15 +211,18 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
-### 2026-11-02, v0.5: QA fixes (v0.5-B1 to B6)
-- Context: `qa/QA-v0.5.md` round 1 (PASS WITH ISSUES, six minor bugs).
+### 2026-11-02, v0.5: QA fixes (v0.5-B1 to B9)
+- Context: `qa/QA-v0.5.md` rounds 1 and 2 (six minor bugs, then B7, a major slowdown caused by the B2 fix, and two minor test-tooling flakes).
 - Decision:
-  - **B2:** `core.ladder.status` takes the levels that have puzzles (`SessionService.ladder_levels`: one count per level under the current filters, done once at session start and for each preview). Empty levels are skipped going up, the last open level is the top (`LadderStatus.top` is now a field), and a recorded level that has emptied falls back to the nearest open level above, else below, with a fresh window. REQUIREMENTS FR-4.5 says so.
+  - **B2:** `core.ladder.status` takes the levels that have puzzles (`available`). Empty levels are skipped going up, the last open level is the top (`LadderStatus.top` is now a field), and a recorded level that has emptied falls back to the nearest open level above, else below, with a fresh window. REQUIREMENTS FR-4.5 says so.
   - **B3:** the hidden-length entry cap is a constant 60 plies, so reaching it says nothing about the solution.
   - **B1:** a mode switch saves the mode only after its new session starts; otherwise the running session and mode stay and the reason shows.
   - **B4/B5/B6:** no calculation badge without replies; the already-played badge wraps and says "Already played: rating unaffected"; Show move count says "From the next session" in both states.
+  - **B7:** the first B2 fix counted every level, which took a depth-ladder count to about 0.9 s on the full DB. `SessionService.ladder_preview` now builds only the `available` list the decision needs. That's the count at the level you'd play (needed for the display anyway) plus whether anything is above it: in one scan with SUMs when themes are chosen (`count_level_and_above`), or a count plus a `LIMIT` existence check (`has_puzzles`) with All themes. The exact next open level (`levels_with_puzzles`) is looked up only when the window says you move up. After an attempt with no move up, the session reuses the levels it found at the start and runs no puzzle query. Full DB: 185–280 ms per preview, against the 500 ms target (`tests/fulldb/test_perf_v05.py`).
+  - **B8:** the docs screenshot spec ticks a theme in the picker it opened (by its `aria-controls` id) and waits for it to close.
+  - **B9:** `cancel_sign_in` also cancels the sign-in job, and the job checks for that once its listener is up, so a Cancel pressed just after Sign in isn't lost.
 - Alternatives (B2): letting the level drop to a level with puzzles (contradicts "never drops"); refusing a theme set that can't fill every level (most single-motif sets can't).
-- Consequences: a ladder session start costs three extra counts (each well under the 500 ms target on the full DB).
+- Consequences: an empty level costs a scan of the levels above it, inside the same query when themes are chosen. With All themes every level has puzzles, so the existence check returns at once.
 
 ### 2026-11-02, v0.5: Front end for the modes and the collapsible filters panel
 - Context: §6's Modes control, Commit the line's entry on the board, and FR-1.14 (Adam, v0.5 planning).

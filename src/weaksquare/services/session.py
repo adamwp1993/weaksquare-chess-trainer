@@ -10,10 +10,12 @@ appended to `attempts` at once, so closing the app never loses a result.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import random
 import threading
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
@@ -71,6 +73,18 @@ class PuzzleSource(Protocol):
 
     def describe(self, keys: list[int]) -> dict[int, tuple[int, tuple[str, ...]]]:
         """(rating, themes) per key, for ordering a queue."""
+        ...
+
+    def has_puzzles(self, spec: FilterSpec) -> bool:
+        """Depth ladder: does anything match (an existence check that stops at the first match, v0.5-B7)."""
+        ...
+
+    def levels_with_puzzles(self, spec: FilterSpec, levels: Sequence[int]) -> list[int]:
+        """Depth ladder: which of these levels have any puzzle (existence checks)."""
+        ...
+
+    def count_level_and_above(self, spec: FilterSpec, level: int) -> tuple[int, int]:
+        """Depth ladder: the count at a level and above it, in one scan."""
         ...
 
     def key_map(self, ids: list[str]) -> dict[str, int]:
@@ -189,7 +203,7 @@ class _Session:
     srs_ids: deque[str] = field(default_factory=deque)  # Spaced repetition: due puzzles left, in order
     ladder_base: FilterSpec | None = None  # the filters as chosen (order = depth_ladder); `spec` is the level's pool
     ladder: LadderStatus | None = None
-    ladder_levels: list[int] = field(default_factory=list)  # levels with puzzles, counted at start
+    ladder_levels: list[int] = field(default_factory=list)  # open levels known at start (see ladder_preview)
 
 
 @dataclass(frozen=True)
@@ -325,8 +339,7 @@ class SessionService:
         ladder_levels: list[int] = []
         if spec.depth_ladder:
             base = spec
-            ladder_levels = self.ladder_levels(spec)
-            ladder = self.ladder_status(spec, ladder_levels)
+            ladder, ladder_levels, _ = self.ladder_preview(spec)
             spec = spec.at_ladder_level(ladder.level)
         buckets = [spec.bucket(i) for i in range(len(spec.ratios))]
         if buckets:
@@ -390,26 +403,66 @@ class SessionService:
 
     # ---- Depth ladder (FR-4.5) -----------------------------------------------------------------------
 
-    def ladder_levels(self, spec: FilterSpec) -> list[int]:
-        """The ladder levels that have puzzles under these filters (v0.5-B2: empty ones are skipped)."""
-        return [lv for lv in LEVELS if self._puzzles.count(spec.at_ladder_level(lv)) > 0]
+    def _promotes(self, level: int, recorded: int | None, recent: list[bool], window: int, threshold: int) -> bool:
+        counted = recent[-window:]
+        wins = sum(1 for r in counted if r)
+        return level == recorded and len(counted) >= window and wins * 100 >= threshold * window
 
-    def ladder_status(self, spec: FilterSpec, available: list[int] | None = None) -> LadderStatus:
+    def ladder_preview(self, spec: FilterSpec) -> tuple[LadderStatus, list[int], int]:
+        """Where a depth-ladder session with these filters is (FR-4.5): the status, the open levels it needs
+        (FR-4.5 skips empty ones, v0.5-B2) and the pool size at its level.
+
+        Kept within the live-count target on the full DB (v0.5-B7): the count at the level you'd play
+        (needed anyway) and whether anything is above it. With themes chosen that's one scan
+        (`count_level_and_above`); with All themes, a count plus an existence check above, which finds a
+        row at once. The exact next open level is looked up only when the window says you move up."""
         key = ladder_key(spec)
         window, threshold = self._prefs.ladder_window(), self._prefs.ladder_threshold()
-        level, recent = self._attempts.ladder_history(key, window)
-        levels = self.ladder_levels(spec) if available is None else available
-        return ladder_status(key, level, recent, threshold, window, levels)
+        recorded, recent = self._attempts.ladder_history(key, window)
+        start = recorded if recorded in LEVELS else LEVELS[0]
+        order = [lv for lv in LEVELS if lv >= start] + [lv for lv in reversed(LEVELS) if lv < start]
+        current, n, above = None, 0, None
+        for lv in order:  # the recorded level, or the nearest open one above it, else below
+            if spec.themes:
+                n, above_n = self._puzzles.count_level_and_above(spec, lv)
+                above = above_n > 0
+            else:
+                n = self._puzzles.count(spec.at_ladder_level(lv))
+            if n > 0:
+                current = lv
+                break
+        if current is None:
+            return ladder_status(key, None, [], threshold, window, []), [], 0
+        higher = [lv for lv in LEVELS if lv > current]
+        if higher and self._promotes(current, recorded, list(recent), window, threshold):
+            available = [current, *self._puzzles.levels_with_puzzles(spec, higher)]
+        elif higher and (
+            above
+            if above is not None
+            else self._puzzles.has_puzzles(dataclasses.replace(spec, lengths=tuple(higher), order="random"))
+        ):
+            available = [current, higher[0]]  # something above: not the top (which level only matters on a move up)
+        else:
+            available = [current]
+        st = ladder_status(key, recorded, recent, threshold, window, available)
+        if st.level != current:
+            n = self._puzzles.count(spec.at_ladder_level(st.level))
+        return st, available, n
 
-    def pool_spec(self, spec: FilterSpec) -> FilterSpec:
-        """What a session would draw from: the current ladder level's pool for a depth-ladder order."""
-        return spec.at_ladder_level(self.ladder_status(spec).level) if spec.depth_ladder else spec
+    def ladder_status(self, spec: FilterSpec) -> LadderStatus:
+        return self.ladder_preview(spec)[0]
 
     def _after_ladder_attempt(self, s: _Session) -> LadderStatus | None:
-        """Re-read the ladder after an attempt; on a level-up, draw from the new level from now on."""
+        """Re-read the ladder after an attempt; on a level-up, draw from the new level from now on. Without a
+        move up this costs no puzzle query (the open levels are known from the session's start)."""
         if s.ladder_base is None or s.ladder is None:
             return None
-        new = self.ladder_status(s.ladder_base, s.ladder_levels)
+        window, threshold = self._prefs.ladder_window(), self._prefs.ladder_threshold()
+        recorded, recent = self._attempts.ladder_history(s.ladder.key, window)
+        if self._promotes(s.ladder.level, recorded, list(recent), window, threshold):
+            new, s.ladder_levels, _ = self.ladder_preview(s.ladder_base)
+        else:
+            new = ladder_status(s.ladder.key, recorded, recent, threshold, window, s.ladder_levels)
         moved = new.level > s.ladder.level
         s.ladder = new
         if not moved:

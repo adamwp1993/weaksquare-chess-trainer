@@ -95,9 +95,15 @@ def test_about(page) -> None:  # type: ignore[no-untyped-def]
 
 
 def _pick(page, test_id: str, name: str) -> None:  # type: ignore[no-untyped-def]
+    """Tick one theme in a picker, then wait for its list to close, so the next picker's `.last`
+    checkbox can't be one from this list while it's still fading out (v0.5-B8)."""
     page.get_by_test_id(test_id).click()
-    page.get_by_role("checkbox", name=re.compile(f"^{name}")).last.check()
+    dropdown_id = page.get_by_test_id(test_id).get_attribute("aria-controls")
+    dropdown = page.locator(f"[id='{dropdown_id}']")
+    dropdown.wait_for()
+    dropdown.get_by_role("checkbox", name=re.compile(f"^{name}")).check()
     page.keyboard.press("Escape")
+    dropdown.wait_for(state="hidden")
 
 
 def test_presets(page) -> None:  # type: ignore[no-untyped-def]

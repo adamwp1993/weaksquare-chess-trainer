@@ -234,8 +234,10 @@ class Api:
 
     @bridge_call
     def count_matches(self, spec: dict) -> int:
-        # A depth-ladder order counts the current level's pool (FR-4.5).
-        return self._mixer.count(self._sessions.pool_spec(FilterSpec.from_json(spec)))
+        parsed = FilterSpec.from_json(spec)
+        if parsed.depth_ladder:  # the current level's pool (FR-4.5), from one scan (v0.5-B7)
+            return self._sessions.ladder_preview(parsed)[2]
+        return self._mixer.count(parsed)
 
     @bridge_call
     def count_buckets(self, spec: dict) -> dto.BucketCounts:
@@ -306,9 +308,8 @@ class Api:
     @bridge_call
     def get_ladder_status(self, spec: dict) -> dto.LadderPreview:
         """The level a depth-ladder session with these filters would start at, and its pool size (FR-4.5)."""
-        parsed = FilterSpec.from_json(spec)
-        st = self._sessions.ladder_status(parsed)
-        return dto.LadderPreview(ladder_info(st), self._mixer.count(parsed.at_ladder_level(st.level)))
+        st, _, count = self._sessions.ladder_preview(FilterSpec.from_json(spec))
+        return dto.LadderPreview(ladder_info(st), count)
 
     @bridge_call
     def submit_line(self, session_id: int, moves: list) -> dto.CommitFeedback:

@@ -24,6 +24,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ### Fixed
 - The **Already played: rating unaffected** badge (it said "on Lichess") is no longer cut off in the side column. [FR-6.11b]
+- **Cancel** right after **Sign in with Lichess** now always cancels; very early, it could be missed and the sign-in kept waiting. [FR-6.1a]
 
 ## [v0.4] - 2026-11-02
 Candidates: v0.4-rc1 (2026-11-02), v0.4-rc2 (2026-11-02)

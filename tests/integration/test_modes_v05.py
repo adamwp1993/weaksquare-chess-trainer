@@ -241,3 +241,30 @@ def test_fast_forward_moves_the_dev_clock_and_persists(paths, clock, fixture_puz
     assert ok(api.get_settings())["time_offset_days"] == 4
     assert api._ui_settings.time_offset_days() == 4  # app.py restores it on the next --dev launch
     assert err(api.set_time_offset(-1)) == "invalid_argument"
+
+
+def test_levels_with_puzzles_matches_a_count_per_level(api, paths) -> None:  # type: ignore[no-untyped-def]
+    """Regression v0.5-B7: the fast existence check per level agrees with counting each level, including
+    the history subtraction (Exclude solved) and other filters."""
+    from weaksquare.core.filters import FilterSpec
+
+    sid = ok(api.start_session(OPEN))["session_id"]
+    for _ in range(3):  # some history: solved and missed puzzles
+        ok(api.next_puzzle(sid))
+        solve(api, sid)
+    ok(api.next_puzzle(sid))
+    source = api._sessions._puzzles
+    specs = [
+        FilterSpec(),
+        FilterSpec(min_popularity=None, min_plays=None, exclude_played_on_lichess=False),
+        FilterSpec(themes=("fork", "pin"), match="any", rating_min=1000, rating_max=2000, side="white"),
+        FilterSpec(themes=("mateIn2",), exclude_themes=("endgame",), lengths=(1,)),  # lengths are ignored
+        FilterSpec(only_my_misses=True, min_popularity=None, min_plays=None),
+        FilterSpec(themes=("mateIn1",)),  # no 2+ move puzzles at all
+    ]
+    for spec in specs:
+        counts = {lv: source.count(spec.at_ladder_level(lv)) for lv in (2, 3, 4)}
+        assert source.levels_with_puzzles(spec, (2, 3, 4)) == [lv for lv in (2, 3, 4) if counts[lv] > 0], spec
+        for lv in (2, 3, 4):
+            above = sum(n for level, n in counts.items() if level > lv)
+            assert source.count_level_and_above(spec, lv) == (counts[lv], above), (spec, lv)

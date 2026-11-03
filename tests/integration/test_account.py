@@ -111,7 +111,7 @@ def test_timeout_and_denied(factory: ListenerFactory, state: str, code: str) -> 
 def test_cancel_sign_in() -> None:
     h = Harness(listeners=ListenerFactory(hold=True))
     job = h.svc.start_sign_in()
-    h.listeners.made and h.listeners.made[0].started.wait(5)
+    h.listeners.made and h.listeners.made[0].started.wait(5)  # may run before the listener exists (v0.5-B9)
     with pytest.raises(AppError):  # only one sign-in at a time
         h.svc.start_sign_in()
     h.svc.cancel_sign_in()
@@ -217,3 +217,13 @@ def test_sign_out_with_an_already_revoked_token() -> None:
     h.lichess.revoke_error = Unauthorized("x", status=401, retryable=False)
     h.svc.sign_out()
     assert h.secrets.get("lichess") is None
+
+
+def test_cancel_right_after_sign_in_is_never_lost() -> None:
+    """Regression v0.5-B9: a Cancel before the loopback listener existed did nothing, so the sign-in kept
+    waiting (and this module's test_cancel_sign_in failed about 1 run in 5)."""
+    for _ in range(20):
+        h = Harness(listeners=ListenerFactory(hold=True))
+        job = h.svc.start_sign_in()
+        h.svc.cancel_sign_in()  # immediately: usually before the job has made its listener
+        assert h.run(job).state == "cancelled"
