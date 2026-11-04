@@ -79,7 +79,8 @@ weaksquare-chess-trainer/
 │  │  ├─ tolerance.py          # the 30 cp engine tolerance (Retry, game puzzles) (v0.8)
 │  │  ├─ puzzle_files.py       # your own PGN / EPD / CSV puzzle files (v0.8)
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
-│  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
+│  │  ├─ tagging.py            # Lichess theme tags for a tactic line, via vendor/lichess_puzzler (v0.10)
+│  │  ├─ habits.py             # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
@@ -115,7 +116,9 @@ weaksquare-chess-trainer/
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)
-│  └─ jobs/runner.py           # background jobs: queue, progress, cancel
+│  ├─ jobs/runner.py           # background jobs: queue, progress, cancel
+│  └─ vendor/lichess_puzzler/  # Lichess's tagger (cook.py, util.py, model.py), AGPL-3.0, pinned; README.md
+│                              #   gives the commit and the patch (v0.10)
 ├─ web/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
 │  ├─ public/sounds/           # bundled sound sets + CREDITS.md (v0.2)
@@ -229,6 +232,15 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.10: The lichess-puzzler tagger is vendored; its generator's rules are ported
+- Context: FR-10.12 wants themes that match the puzzle DB exactly, and FR-10.41 wants Lichess-quality puzzles from your games. lichess-puzzler isn't on PyPI and isn't a package. Its tagger (`tagger/cook.py`, `util.py`, `model.py`) needs only python-chess; its generator needs MongoDB, a tablebase server, `zstandard` and 30-second searches.
+- Decision:
+  - **Vendor the tagger** at commit `8e24b6d5e2b9` under `src/weaksquare/vendor/lichess_puzzler/` with its AGPL-3.0 `LICENSE`, and record the commit and the patch in `vendor/README.md`. The patch makes the imports relative and drops the module-level `logging.basicConfig` and the `log()` helper. ruff skips `vendor/`, and mypy ignores its errors, so the files stay diffable against upstream. `tests/contract/test_vendored_tagger.py` keeps the imports to python-chess, typing and dataclasses, and checks that the pin is recorded.
+  - **`core/tagging.tag_line`** is the only caller. It builds the Lichess puzzle shape (the position before the opponent's move, that move, then the solver's line trimmed to end on a solver move), stops at the first illegal move, and keeps only the keys in `core/themes.py` (`themes.is_known`). The tagger's internal keys `coercion`, `collinearMove`, `overloading` and `simplification` aren't Lichess puzzle themes and are dropped. A puzzle with no previous move (an imported file) gets a null move in its place.
+  - **The generator's rules are ported** into `core/puzzle_gen.py` (Adam, v0.10 planning), not copied: they're small, and the code around them is the part we can't use.
+- Alternatives: a git dependency through uv (rejected: the repo has no package metadata); writing our own tagger (rejected: the themes must match the DB exactly); copying `generator.py` (rejected: its MongoDB, tablebase and server imports).
+- Consequences: an upstream tagger fix needs a manual re-vendor (Developer Guide, *Dependencies*). The combined work was already AGPL (REQUIREMENTS §15).
 
 ### 2026-11-04, v0.9: QA fixes (v0.9-B1 to B6)
 - Context: QA round 1 (`qa/QA-v0.9.md`), PASS WITH ISSUES: six minor bugs.

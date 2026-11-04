@@ -21,7 +21,7 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = [".claude", "scripts/check_docs.py"]  # check_docs.py is maintained by hand, outside ruff
+extend-exclude = [".claude", "scripts/check_docs.py", "src/weaksquare/vendor"]  # check_docs.py is maintained by hand; vendor/ is upstream code
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
@@ -32,6 +32,10 @@ python_version = "3.12"
 files = ["src"]
 ignore_missing_imports = true
 check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "weaksquare.vendor.*"
+ignore_errors = true  # upstream code, kept as close to the pinned commit as possible
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

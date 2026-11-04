@@ -117,6 +117,11 @@ Each recipe is written when the first real example exists, using that example.
 ## Dependencies
 Add a dependency only when the version plan lists it. Check the exact package name on PyPI or npm first, add it with `uv add` or `npm.cmd --prefix web install`, and commit `uv.lock` or `package-lock.json` with an ARCHITECTURE.md §7 entry. CI installs only from the lockfiles (`uv sync --locked`, `npm.cmd --prefix web ci`).
 
+**Vendored code.** `src/weaksquare/vendor/lichess_puzzler/` is Lichess's puzzle tagger, copied at a pinned commit because it isn't on PyPI (v0.10). To update it:
+1. Download `tagger/cook.py`, `tagger/util.py`, `tagger/model.py` and `LICENSE` from https://github.com/ornicar/lichess-puzzler at the new commit, into an empty folder outside the repo.
+2. Read the diff against the vendored files, then copy them in and re-apply the patch listed in `src/weaksquare/vendor/README.md`.
+3. Update the commit hash in that README, in `PIN` in `tests/contract/test_vendored_tagger.py` and in REQUIREMENTS.md §16, then run `uv run pytest tests/unit/test_tagging.py tests/contract/test_vendored_tagger.py`.
+
 ## Continuous integration
 `.github/workflows/ci.yml` runs on every push and pull request on a Windows runner: static checks, unit, integration and contract tests on the small fixture, and `check_docs.py`. The real-app smoke, full-DB and live tests run locally only.
 
