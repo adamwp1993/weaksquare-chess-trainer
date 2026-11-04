@@ -127,7 +127,7 @@ def start_mate_in_one(page, queue: str = "5") -> None:  # type: ignore[no-untype
     page.get_by_label("Search themes").fill("mate in 1")
     page.get_by_role("checkbox", name=re.compile("^Mate in 1")).check()
     page.keyboard.press("Escape")
-    page.get_by_label("Puzzles").fill(queue)
+    page.get_by_label("Puzzles", exact=True).fill(queue)
     page.get_by_role("button", name="Start").click()
     your_turn(page)
 
@@ -175,7 +175,7 @@ def test_themes_hidden_until_decided_and_skip_counts(page) -> None:  # type: ign
 def test_endless_session_has_no_total(page) -> None:  # type: ignore[no-untyped-def]
     ready(page)
     page.get_by_label("Endless").check()
-    assert page.get_by_label("Puzzles").is_disabled()
+    assert page.get_by_label("Puzzles", exact=True).is_disabled()
     page.get_by_role("button", name="Start").click()
     your_turn(page)
     header = page.get_by_test_id("puzzle-header").inner_text()

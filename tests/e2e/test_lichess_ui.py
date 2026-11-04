@@ -23,7 +23,7 @@ def solve_mate_in_one(page, query: str = "", rated: bool = True) -> None:  # typ
     page.goto(page.base_url + "/" + query)
     page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
     pick_theme(page, "themes-picker", "mate in 1", "Mate in 1")
-    page.get_by_label("Puzzles").fill("1")
+    page.get_by_label("Puzzles", exact=True).fill("1")
     if not rated:
         page.get_by_test_id("rated-switch").uncheck()
     page.get_by_role("button", name="Start").click()

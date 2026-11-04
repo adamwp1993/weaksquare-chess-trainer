@@ -306,7 +306,7 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
                 )}
               </Paper>
             )}
-            {review.analyzed && here && here.lines.length > 0 && (
+            {review.analyzed && !showing && here && here.lines.length > 0 && (
               <Paper withBorder p="sm" data-testid="review-lines">
                 <Text size="xs" c="dimmed" mb={4}>
                   Engine lines here ({here.mover} to move)
