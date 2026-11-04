@@ -293,3 +293,6 @@ The B9 fix keeps the suggestion's mode in `pendingMode` and applies it when `ses
 **Tests added in round 3** (`tests/e2e/test_qa_v010_ui.py`): `test_qa_r3_starting_again_after_the_run_uses_the_suggested_mode` (xfail B11), `test_qa_r3_a_mode_you_pick_mid_session_is_not_replaced_later` (xfail B11), `test_qa_r3_the_ai_coaching_box_with_its_model_picker`.
 
 **For Adam's manual test:** in the real app, change the model in the AI coaching box on a report that already has an answer, check the estimate is for the new model, and confirm **Ask … instead** sends exactly one request (Settings → AI spend for the Coach).
+
+## Builder's fixes after round 3 (2026-11-04)
+B11 fixed (QA's two tests are now plain tests); B12: screenshots regenerated. Tagged v0.10-rc2.

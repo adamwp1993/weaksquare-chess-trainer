@@ -12,7 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
-Candidates: v0.10-rc1 (2026-11-04)
+Candidates: v0.10-rc1 (2026-11-04), v0.10-rc2 (2026-11-04)
 
 ### Added
 - **Show best moves** in Game Review: a switch, off by default and remembered, that hides the best-move arrow, the engine lines, *better was …* and the AI's better lines, so you can look for the better move yourself first. The eval graph, the symbols, why your move fails and the AI's text stay. [FR-11.35]

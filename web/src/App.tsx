@@ -204,8 +204,15 @@ export function App() {
     (m === "name_idea" || m === "danger_spotting") && s.source !== "lichess" ? { ...s, source: "lichess" } : s;
 
   /** Starts a session; false if it couldn't (the error is shown). */
-  const start = async (asMode: TrainingMode = mode): Promise<boolean> => {
+  const start = async (requested?: TrainingMode): Promise<boolean> => {
     if (!spec) return false;
+    // v0.10-B11: a suggested mode held back while a session ran applies at the next Start too.
+    let asMode = requested ?? mode;
+    if (requested === undefined && pendingMode.current) {
+      asMode = pendingMode.current;
+      pendingMode.current = null;
+      setMode(asMode);
+    }
     setStarting(true);
     setStartError(null);
     setStartNotice(null);
@@ -233,6 +240,7 @@ export function App() {
   // If the new session can't start (e.g. nothing is due), the mode stays as it was and the running
   // session carries on, with the reason shown (v0.5-B1).
   const changeMode = async (next: TrainingMode) => {
+    pendingMode.current = null; // v0.10-B11: your own pick wins over a held-back suggestion
     if (sessionId !== null && !(await start(next))) return;
     if (spec && forMode(spec, next) !== spec) changeSpec(forMode(spec, next)); // the locked control shows Lichess DB
     setMode(next);

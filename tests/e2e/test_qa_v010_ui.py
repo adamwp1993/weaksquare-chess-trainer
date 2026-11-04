@@ -189,7 +189,6 @@ def _shown(page) -> str | None:  # type: ignore[no-untyped-def]
     return page.get_by_test_id("mode-control").locator("input:checked").get_attribute("value")  # type: ignore[no-any-return]
 
 
-@pytest.mark.xfail(strict=True, reason="v0.10-B11: the waiting mode is applied only on New session, not on Start")
 def test_qa_r3_starting_again_after_the_run_uses_the_suggested_mode(page) -> None:  # type: ignore[no-untyped-def]
     """The guide: the new mix's mode waits until that session ends. Pressing Start ends it too."""
     _run_then_session(page)
@@ -200,7 +199,6 @@ def test_qa_r3_starting_again_after_the_run_uses_the_suggested_mode(page) -> Non
     assert running == "Danger spotting", (running, _shown(page), stored)
 
 
-@pytest.mark.xfail(strict=True, reason="v0.10-B11: a mode you pick after the run is replaced by the waiting one")
 def test_qa_r3_a_mode_you_pick_mid_session_is_not_replaced_later(page) -> None:  # type: ignore[no-untyped-def]
     _run_then_session(page)
     page.get_by_test_id("mode-control").get_by_text("Commit the line", exact=True).click()  # your own choice
