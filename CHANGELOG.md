@@ -13,6 +13,15 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **My games:** one list of your Lichess and chess.com games, newest first, synced in the background when the app opens and with **Refresh** (metadata and PGNs only). Filter by platform, time control, result, color, status, rated, opponent, opening and date. Link chess.com by username, with **Verify**, in Settings → Games. [FR-11.23] [FR-11.24] [FR-11.25] [FR-11.26] [FR-11.27] [FR-11.28]
+- **Import a game:** paste a PGN, open a .pgn file (pick a game when it holds several), or paste a Lichess or chess.com game URL. The app asks which side you played when it can't tell. Variants are refused with a clear message, and importing a game you already have reuses its analysis. [FR-11.1] [FR-11.2] [FR-11.3] [FR-11.4] [FR-11.5] [FR-11.6] [FR-11.7]
+- **Game Review:** Stockfish grades every move on your PC, in the background and one game at a time, with progress and Cancel. The review has a move list with ?! ? ?? symbols, an eval graph you can click, a summary per side, your key moments (*played X, better was Y*), the engine's top lines at any move, and why a mistake fails, step by step. [FR-11.8] [FR-11.9] [FR-11.11] [FR-11.12] [FR-11.13] [FR-11.14] [FR-11.29] [FR-11.30] [FR-11.31]
+- **Retry your mistakes:** replay each of your mistakes and blunders without the answer; any move within 30 cp of the best counts. Results stay on this PC and show in Stats. [FR-11.15] [FR-11.22]
+- **Save as puzzle and My puzzles:** save any key moment as a puzzle, then train **My puzzles** on their own or mixed with Lichess puzzles (**Puzzles from: Lichess DB / My puzzles / Both**), in Standard, Commit the line and Spaced repetition. Puzzles from your games accept any move Stockfish rates within 30 cp of the best. They never sync to Lichess. [FR-11.16] [FR-3.15] [FR-10.43]
+- **Import puzzles from your own files:** PGN, EPD or CSV, as a labelled set with an import report; checked strictly like Lichess puzzles, any mate counting for mate-in-1. The file never leaves your PC. [FR-10.46] [FR-10.47] [FR-10.48] [FR-10.49] [FR-10.50]
+- **Why you missed it, in your games:** the reason chips on your game mistakes and Retry misses, and Stats → Why you missed can now show puzzles, your games, or both. [FR-5.7] [FR-9.7]
+
 ### Changed
 - **Why you missed it:** Settings → Training → **Ask why you missed** has a new choice, **Game Review only**, which asks about your mistakes in Game Review but not after puzzles. [FR-5.8]
 

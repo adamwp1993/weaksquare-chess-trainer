@@ -442,3 +442,53 @@ def test_explain_over_budget(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("explain-why").filter(has_text="budget").wait_for()
     page.mouse.move(1270, 890)
     shot(page, "explain-over-budget")
+
+
+# ---- v0.8: your games, Game Review, Retry, your own puzzles ---------------------------------------
+
+
+def test_my_games(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("games-table").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "my-games")
+
+
+def test_game_review(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("eval-graph").wait_for()
+    page.get_by_test_id("move-6").click()
+    page.mouse.move(1270, 890)
+    shot(page, "game-review", full_page=True)
+
+
+def test_retry_mode(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("retry-start").click()
+    play(page, "e1g1", "white")  # castling: a fine move, but not close enough to Nxd4 (a miss, with the chips)
+    page.get_by_test_id("retry-result").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "retry-mode")
+
+
+def test_import_puzzles_report(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_test_id("menu-import-puzzles").click()
+    page.get_by_test_id("import-puzzles-label").fill("My book")
+    page.get_by_test_id("import-puzzles-choose").click()
+    page.get_by_test_id("import-report").wait_for()
+    shot(page, "import-puzzles")
+
+
+def test_my_puzzles_source(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?mine=1")
+    page.get_by_test_id("source-select").get_by_text("My puzzles").click()
+    page.get_by_test_id("match-count").filter(has_text="1 puzzle").wait_for()
+    panel_top(page)
+    shot(page, "my-puzzles-source")

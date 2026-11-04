@@ -70,6 +70,12 @@ weaksquare-chess-trainer/
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
 │  │  ├─ llm/                  # LLMProvider protocol, defaults (the only model names), cost, guardrails (v0.7)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
+│  │  ├─ games.py              # PGN parsing, colors, URLs, time classes, Lichess game JSON, library types,
+│  │  │                        #   the LichessGamesClient / ChesscomClient protocols  (v0.8)
+│  │  ├─ chesscom.py           # chess.com archive games and months   (v0.8)
+│  │  ├─ game_review.py        # grading, Missed/Allowed, phases, key moments, side summary (v0.8)
+│  │  ├─ tolerance.py          # the 30 cp engine tolerance (Retry, game puzzles) (v0.8)
+│  │  ├─ puzzle_files.py       # your own PGN / EPD / CSV puzzle files (v0.8)
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
@@ -82,6 +88,9 @@ weaksquare-chess-trainer/
 │  │                           #   v0.6: reasons.py (saving mistake reasons)
 │  │                           #   v0.7: llm_settings.py (provider, key, prices, Test key), llm_usage.py
 │  │                           #         (the guardrail gate every LLM request goes through)
+│  │                           #   v0.8: games.py (library, sync, imports), analysis.py (the queue on the
+│  │                           #         background engine, Review settings), review.py (review, Retry,
+│  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -89,7 +98,9 @@ weaksquare-chess-trainer/
 │  │  │  ├─ puzzles_indexes.sql  # built after each puzzle import's bulk load
 │  │  │  ├─ migrations/puzzles/0001_init.sql …
 │  │  │  ├─ migrations/user/0001_init.sql …
-│  │  │  └─ repos/             # one repository per aggregate
+│  │  │  └─ repos/             # one repository per aggregate; v0.8: games.py, game_analysis.py,
+│  │  │                        #   custom_puzzles.py (+ CustomPuzzleSource, RetryRepo), puzzle_sources.py
+│  │  │                        #   (CombinedSource: Lichess DB + My puzzles)
 │  │  ├─ http.py               # shared httpx client: UA, timeouts, retry/backoff, redaction
 │  │  ├─ secret_store.py       # the ONLY module that imports keyring
 │  │  ├─ system_clock.py       # SystemClock + the seeded Random, built only in app.py
@@ -97,7 +108,7 @@ weaksquare-chess-trainer/
 │  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
 │  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
 │  │  ├─ stockfish.py          # StockfishEngine (python-chess UCI) + probe_engine  (v0.4)
-│  │  ├─ lichess.py            # LichessHttp (v0.3)   chesscom.py (v0.8)
+│  │  ├─ lichess.py            # LichessHttp (v0.3); lichess_games.py, chesscom.py (v0.8: serial lock, ETags)
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)

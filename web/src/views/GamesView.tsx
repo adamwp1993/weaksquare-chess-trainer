@@ -249,7 +249,7 @@ export function GamesView({ onReview, onImport }: { onReview: (gameId: number) =
                 <Table.Td>
                   <Checkbox size="xs" checked={selected.has(g.id)} onChange={() => toggle(g.id)} aria-label="Select game" />
                 </Table.Td>
-                <Table.Td>{gameDate(g.played_at)}</Table.Td>
+                <Table.Td style={{ whiteSpace: "nowrap" }}>{gameDate(g.played_at)}</Table.Td>
                 <Table.Td>{PLATFORM_LABEL[g.source]}</Table.Td>
                 <Table.Td>
                   {g.user_color ? cap(g.user_color) : "?"}
