@@ -64,7 +64,7 @@ def test_the_startup_page_shows_both_pickers(page) -> None:  # type: ignore[no-u
 
 
 def test_explain_this_move_on_your_mistake(page) -> None:  # type: ignore[no-untyped-def]
-    review(page)
+    review(page, "?ai=on&showbest=1")  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     page.get_by_test_id("move-5").click()  # Black's move: not yours, no button
     page.get_by_test_id("review-current").wait_for()
     assert page.get_by_test_id("move-explain-button").count() == 0
@@ -84,7 +84,7 @@ def test_explain_this_move_on_your_mistake(page) -> None:  # type: ignore[no-unt
 
 
 def test_explain_my_game_confirm_cancel_then_run(page) -> None:  # type: ignore[no-untyped-def]
-    review(page)
+    review(page, "?ai=on&showbest=1")  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     button = page.get_by_test_id("narrative-button")
     button.filter(has_text="≈ $").wait_for()
     button.click()

@@ -49,7 +49,7 @@ def test_analyze_selected_runs_in_the_background(page) -> None:  # type: ignore[
 
 
 def test_review_shows_graph_moments_lines_and_refutation(page) -> None:  # type: ignore[no-untyped-def]
-    games(page)
+    games(page, "?showbest=1")  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     page.get_by_test_id("review-1").click()
     page.get_by_test_id("review-view").wait_for()
     page.get_by_test_id("eval-graph").wait_for()
@@ -66,7 +66,7 @@ def test_review_shows_graph_moments_lines_and_refutation(page) -> None:  # type:
 
 
 def test_reasons_and_save_as_puzzle_on_a_key_moment(page) -> None:  # type: ignore[no-untyped-def]
-    games(page)
+    games(page, "?showbest=1")  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     page.get_by_test_id("review-1").click()
     moment = page.get_by_test_id("moment-6")
     moment.get_by_role("button", name="Played Nxe5??, better was Nxd4").click()
