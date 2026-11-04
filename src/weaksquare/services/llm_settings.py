@@ -1,5 +1,10 @@
-"""LLM settings (FR-1.2–1.4, 1.8, 8.9, 8.12, 8.13, 8.15): the provider, its model, the API key, the
+"""LLM settings (FR-1.2–1.4, 1.8, 1.15, 8.9, 8.12, 8.13, 8.15): the provider, its model, the API key, the
 reasoning level, the per-run cap, the monthly budget, the editable price table, and Test key.
+
+**A model per AI feature** (FR-1.15, v0.9): puzzle Explain keeps the v0.7 keys (`llm.provider`,
+`llm.model.<provider>`, `llm.reasoning`). Every other feature has `llm.feature.<feature>.provider`
+(`same` or unset: follow Explain's provider and model), `.model` and `.reasoning` (its own; default Low).
+Keys, the price table, the per-run cap and the monthly budget are shared (Adam, v0.9 planning).
 
 Keys go straight to `secret_store` (SR-1, SR-7): they're never stored in `settings`, never returned to the
 UI (only "a key is stored"), never logged and never put in an error message.
@@ -9,7 +14,7 @@ from __future__ import annotations
 
 import re
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any, Literal, Protocol
 
@@ -18,6 +23,7 @@ from weaksquare.core.llm.defaults import (
     DEFAULT_MONTHLY_BUDGET_USD,
     DEFAULT_REASONING,
     DEFAULT_RUN_CAP_USD,
+    FEATURES,
     PROVIDER_LABELS,
     PROVIDERS,
     REASONING_LEVELS,
@@ -35,6 +41,8 @@ REASONING_KEY = "llm.reasoning"
 RUN_CAP_KEY = "llm.run_cap_usd"
 BUDGET_KEY = "llm.monthly_budget_usd"
 SEED_KEY = "llm.prices_seed"
+FEATURE_KEY = "llm.feature.{}.{}"  # feature, provider / model / reasoning
+SAME = "same"  # a feature that follows Explain's provider and model
 KEY_TEST_JOB = "llm_key_test"
 LAUNCH_CHECK_JOB = "llm_launch_check"
 CheckState = Literal["none", "checking", "ok", "failed"]
@@ -85,6 +93,8 @@ class LlmConfig:
     run_cap_usd: float
     monthly_budget_usd: float
     keys: dict[str, bool]  # a key is stored for this provider (never the key itself)
+    feature: str = "explain"
+    follows_explain: bool = False  # FR-1.15: this feature uses Explain's provider and model
 
     @property
     def model(self) -> str:
@@ -136,7 +146,47 @@ class LlmSettingsService:
 
     # ---- settings -------------------------------------------------------------------------------------
 
-    def config(self) -> LlmConfig:
+    def config(self, feature: str = "explain") -> LlmConfig:
+        """The settings a feature's requests use: its provider, model and reasoning, plus the shared ones."""
+        base = self._explain_config()
+        if feature == "explain":
+            return base
+        if feature not in FEATURES:
+            raise ValueError(f"unknown AI feature {feature!r}")
+        own_provider, own_model, reasoning = self.feature_choice(feature)
+        if own_provider == SAME:
+            return replace(base, reasoning=reasoning, feature=feature, follows_explain=True)
+        models = {**base.models, own_provider: own_model}
+        return replace(base, provider=own_provider, models=models, reasoning=reasoning, feature=feature)
+
+    def feature_choice(self, feature: str) -> tuple[str, str, str]:
+        """(provider or 'same', model, reasoning) as saved for a non-Explain feature."""
+        provider = self._settings.get(FEATURE_KEY.format(feature, "provider"))
+        if provider not in PROVIDERS:
+            provider = SAME
+        model = self._settings.get(FEATURE_KEY.format(feature, "model"))
+        if provider == SAME or not isinstance(model, str) or (model and not MODEL_ID.fullmatch(model)):
+            model = ""
+        reasoning = self._settings.get(FEATURE_KEY.format(feature, "reasoning"))
+        if reasoning not in REASONING_LEVELS:
+            reasoning = DEFAULT_REASONING
+        return str(provider), model, str(reasoning)
+
+    def update_feature(self, feature: object, provider: object, model: object, reasoning: object) -> LlmConfig:
+        """Saves a non-Explain feature's choice: provider 'same' follows Explain (the model is then ignored)."""
+        if feature not in FEATURES or feature == "explain":
+            raise ValidationError("Unknown AI feature.")
+        if provider != SAME:
+            check_provider(provider)
+        if reasoning not in REASONING_LEVELS:
+            raise ValidationError("Reasoning must be low, medium or high.")
+        m = check_model(model) if provider != SAME else ""
+        self._settings.set(FEATURE_KEY.format(feature, "provider"), provider)
+        self._settings.set(FEATURE_KEY.format(feature, "model"), m)
+        self._settings.set(FEATURE_KEY.format(feature, "reasoning"), reasoning)
+        return self.config(str(feature))
+
+    def _explain_config(self) -> LlmConfig:
         provider = self._settings.get(PROVIDER_KEY)
         if provider not in PROVIDER_CHOICES:
             provider = NONE
@@ -240,10 +290,15 @@ class LlmSettingsService:
     # ---- the launch check (FR-1.6) ---------------------------------------------------------------------
 
     def start_launch_check(self) -> str | None:
-        """At start-up: test the configured provider's key in the background with the free model lookup.
-        The startup page shows its single Continue button only if this passes (or no AI is set up)."""
-        cfg = self.config()
-        if not cfg.configured:
+        """At start-up: test the configured providers' keys in the background with the free model lookup,
+        once per provider and model that a feature uses (FR-1.15). The startup page shows its single
+        Continue button only if this passes (or no AI is set up)."""
+        checks: list[tuple[str, str]] = []
+        for feature in FEATURES:
+            cfg = self.config(feature)
+            if cfg.configured and (cfg.provider, cfg.model) not in checks:
+                checks.append((cfg.provider, cfg.model))
+        if not checks:
             with self._check_lock:
                 self._check = ("none", None)
             return None
@@ -252,7 +307,9 @@ class LlmSettingsService:
 
         def job(progress: ProgressFn, token: CancelToken) -> str:
             try:
-                msg = self.test_key(cfg.provider, cfg.model)
+                msg = ""
+                for provider, model in checks:
+                    msg = self.test_key(provider, model)
             except JobFailed as e:
                 with self._check_lock:
                     self._check = ("failed", e.message)

@@ -8,20 +8,22 @@
    cut short or refused, because those are billed too.
 
 Requests run one at a time, so the budget is always checked against fully-logged spend.
-Explain (v0.7) is the only caller; Game Review AI (v0.9) and the Coach (v0.10) reuse it.
+Callers name the request **kind** (`explain`, `game_move`, `game_narrative`): it picks the `max_tokens` and
+the estimate, and its feature (FR-1.15, `FEATURE_OF`) picks the provider, model and reasoning, and is what
+the usage log records. Explain (v0.7) and Game Review AI (v0.9) call it; the Coach (v0.10) will too.
 """
 
 from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import AppError
 from weaksquare.core.llm.cost import Estimate, cost_usd, estimate, max_tokens_for
-from weaksquare.core.llm.defaults import PROVIDER_LABELS
+from weaksquare.core.llm.defaults import FEATURE_OF, PROVIDER_LABELS
 from weaksquare.core.llm.guardrails import SpendLevel, Verdict, check, month_key, spend_level
 from weaksquare.core.llm.provider import LLMError, LLMRequest, LLMResponse
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
@@ -35,6 +37,8 @@ class UsageRepo(Protocol):
 
     def spent_in(self, local_month: str) -> float: ...
 
+    def spent_by_feature(self, local_month: str) -> dict[str, float]: ...
+
 
 QuoteState = Verdict | str  # also 'not_configured', 'no_model', 'no_price'
 
@@ -45,6 +49,7 @@ class Spend:
     spent_usd: float
     budget_usd: float
     level: SpendLevel  # FR-1.10: ok / warn (80%) / over (100%)
+    by_feature: dict[str, float] = field(default_factory=dict)  # FR-1.15: this month's spend per feature
 
 
 @dataclass(frozen=True)
@@ -95,10 +100,12 @@ class LlmUsageService:
         cfg = cfg or self._settings.config()
         month = self._month()
         spent = self._usage.spent_in(month)
-        return Spend(month, spent, cfg.monthly_budget_usd, spend_level(spent, cfg.monthly_budget_usd))
+        return Spend(month, spent, cfg.monthly_budget_usd, spend_level(spent, cfg.monthly_budget_usd),
+                     self._usage.spent_by_feature(month))  # fmt: skip
 
-    def quote(self, feature: str, chars: int, cfg: LlmConfig | None = None) -> Quote:
-        cfg = cfg or self._settings.config()
+    def quote(self, kind: str, chars: int, cfg: LlmConfig | None = None) -> Quote:
+        """`cfg`, when given, must be the config of the kind's feature (callers pass it to avoid re-reading)."""
+        cfg = cfg or self._settings.config(FEATURE_OF[kind])
         provider, model = cfg.provider, cfg.model
 
         def blocked(state: str, **fmt: Any) -> Quote:
@@ -112,7 +119,7 @@ class LlmUsageService:
         price = self._settings.price(provider, model)
         if price is None:
             return blocked("no_price")
-        est = estimate(feature, cfg.reasoning, chars, price)
+        est = estimate(kind, cfg.reasoning, chars, price)
         spend = self.spend(cfg)
         verdict = check(est.worst_usd, cfg.run_cap_usd, spend.spent_usd, spend.budget_usd)
         if verdict != "ok":
@@ -120,11 +127,13 @@ class LlmUsageService:
                            cap=cfg.run_cap_usd)  # fmt: skip
         return Quote("ok", None, provider, model, est, cfg.run_cap_usd)
 
-    def run(self, feature: str, system: str, user: str, schema_name: str, schema: dict[str, Any]) -> RunResult:
-        """Check, send and log one request. Raises AppError when it's blocked or the provider fails."""
+    def run(self, kind: str, system: str, user: str, schema_name: str, schema: dict[str, Any]) -> RunResult:
+        """Check, send and log one request of `kind` (logged under its feature). Raises AppError when it's
+        blocked or the provider fails."""
         with self._lock:
-            cfg = self._settings.config()
-            q = self.quote(feature, prompt_chars(system, user, schema), cfg)
+            feature = FEATURE_OF[kind]
+            cfg = self._settings.config(feature)
+            q = self.quote(kind, prompt_chars(system, user, schema), cfg)
             if q.state != "ok":
                 raise AppError(q.message or "The request was blocked.", code=str(q.state))
             key = self._settings.key(cfg.provider)
@@ -138,7 +147,7 @@ class LlmUsageService:
                 user=user,
                 schema_name=schema_name,
                 schema=schema,
-                max_tokens=max_tokens_for(feature, cfg.reasoning),
+                max_tokens=max_tokens_for(kind, cfg.reasoning),
                 reasoning=cfg.reasoning,  # type: ignore[arg-type]
             )
             try:
