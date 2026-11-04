@@ -141,3 +141,33 @@ def test_v08_b7_long_engine_lines_are_shortened(page) -> None:  # type: ignore[n
     page.get_by_test_id("move-5").click()
     for text in page.get_by_test_id("review-lines").get_by_role("button").all_inner_texts():
         assert len(text.replace(" …", "").split()) <= 8
+
+
+def test_qa_r2_b8_a_saved_game_puzzle_without_stockfish_shows_the_strict_note(page) -> None:  # type: ignore[no-untyped-def]
+    """QA round 2 (v0.8-B8): Save a key moment with no engine installed, then drill it from My puzzles."""
+    page.goto(page.base_url + "/?engine=missing")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("save-6").click()
+    page.get_by_test_id("saved-note").filter(has_text="Saved to My puzzles").wait_for()
+    page.get_by_test_id("nav-puzzles").click()
+    page.get_by_test_id("source-select").get_by_text("My puzzles").click()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("puzzle-header").filter(has_text="my puzzle").wait_for()
+    page.get_by_test_id("strict-note").filter(has_text="only this puzzle's saved line counts").wait_for()
+    page.wait_for_timeout(1200)  # the board is set up after the usual short delay
+    shot(page, "r2-strict-note")
+
+
+def test_qa_r2_b4_the_source_follows_a_lichess_only_mode(page) -> None:  # type: ignore[no-untyped-def]
+    """QA round 2 (v0.8-B4): the shown source and the filters agree after the mode switch."""
+    page.goto(page.base_url + "/?mine=1")
+    page.get_by_test_id("source-select").get_by_text("My puzzles").click()
+    page.get_by_test_id("my-puzzles-filters").wait_for()
+    page.get_by_test_id("mode-control").get_by_text("Name the idea first", exact=True).click()
+    page.get_by_test_id("my-puzzles-filters").wait_for(state="detached")
+    assert page.get_by_test_id("lichess-only-note").count() == 0
+    page.get_by_test_id("mode-control").get_by_text("Standard", exact=True).click()
+    page.get_by_test_id("source-select").get_by_text("My puzzles").click()  # it can be chosen again
+    page.get_by_test_id("my-puzzles-filters").wait_for()
+    shot(page, "r2-source-after-mode")

@@ -253,3 +253,84 @@ Screenshots (gitignored) are in `tests/e2e/artifacts/qa-v08-*.png`: my-games, re
 - `uv run pytest -m e2e tests/e2e/test_qa_v08_ui.py`: **4 passed, 2 xfailed** (B4, B6), rc 0.
 - The QA smoke (`test_qa_v08_real_app.py`) and the QA engine test passed in the runs listed above.
 - `uv run ruff check .` and `ruff format --check` are clean with the QA files.
+
+---
+
+# Round 2: re-verification of commit `4f08bd4` (2026-11-04)
+
+## Verdict: **PASS WITH ISSUES** (3 new minor bugs, no blocker or major)
+
+All nine round-1 bugs are fixed. Each one was checked by running a test, and B4, B6, B7, B8 and B9 also by looking at the UI or the docs. Every suite is green, with no flakes this round.
+
+The re-test found three new **minor** bugs, all edge cases of the fixes:
+- **B10:** thresholds changed while a game is being analyzed don't reach that game.
+- **B11:** a mistyped chess.com username from a URL import is linked even when no game was found.
+- **B12:** a CSV with exactly 20,000 entries and a trailing blank line is reported as having more than 20,000.
+
+## Bugs re-tested
+
+| Bug | Result | Evidence |
+|---|---|---|
+| B1 thresholds regrade | **Fixed** | `test_qa_changed_thresholds_regrade_or_offer_analyze_again` passes. New: `test_qa_r2_regrading_after_an_analysis_matches_the_new_thresholds` (every stored row equals `regrade(row, new)`). User Guide and Developer Guide updated to match. The concurrent case is still open: B10 |
+| B2 cap reported | **Fixed** | `test_qa_entries_past_the_cap_are_reported`, `test_v08_b2_a_game_file_past_500_games_says_so`; new `test_qa_r2_a_csv_over_the_cap_says_so_once`. Edge case: B12 |
+| B3 unchecked Retry | **Fixed** | `test_qa_an_unchecked_retry_is_not_counted_as_a_miss`. The UI shows a yellow "…couldn't be checked without Stockfish, so it isn't counted" and no reason chips (`ReviewView.tsx` diff) |
+| B4 locked source | **Fixed** | `test_qa_a_lichess_only_mode_after_choosing_my_puzzles_can_start` passes. New `test_qa_r2_b4_the_source_follows_a_lichess_only_mode`: the My puzzles filters and the grey note disappear in Name the idea, and My puzzles can be picked again in Standard. Screenshot `qa-v08-r2-source-after-mode.png` |
+| B5 typed chess.com name | **Fixed** | `test_qa_the_username_given_for_a_chesscom_url_finds_your_color_and_is_kept`. Side effect of the fix: B11 |
+| B6 Lichess details on My puzzles | **Fixed** | `test_qa_a_my_puzzle_has_no_lichess_link_and_no_rated_promise`. Real-app screenshot `qa-v08-real-my-puzzle-outcome.png`: no link, no rating change, no empty Themes line, and Rated reads "Your own puzzles stay on this PC: they never count toward a rating." |
+| B7 clipped lines | **Fixed** | `test_v08_b7_long_engine_lines_are_shortened`. Real-app screenshot `qa-v08-real-review.png` (real Stockfish): lines of 8 moves with "…", nothing cut off |
+| B8 strict note | **Fixed** | `test_v08_b8_…`. New e2e `test_qa_r2_b8_a_saved_game_puzzle_without_stockfish_shows_the_strict_note` (Save a moment with `?engine=missing`, then drill it). Screenshot `qa-v08-r2-strict-note.png`: "Stockfish isn't installed, so only this puzzle's saved line counts." |
+| B9 docs wording | **Fixed** | User Guide → Reading the review now says "isn't penalized when the game was already lost before it (−5 or worse), or is still won after it (+5 or better). Dropping from +8 to +1 still counts." That matches `_is_decided` (a move from a lost position can't lose cp in practice) |
+
+## New bugs
+
+### v0.8-B10 (minor): thresholds changed while a game is being analyzed don't reach that game
+- **Steps:** analyze a game. While it's running, change Settings → Games → the thresholds.
+- **Expected:** once the analysis finishes, that game is graded with the thresholds in force.
+- **Actual:** `_analyze` reads the settings when it starts and writes the game at the end. The B1 regrade has already run on the stored rows by then, so this game keeps the old grades and stays *current*. It's stuck that way until the thresholds change again.
+- **Evidence:** `tests/integration/test_qa_v08_round2.py::test_qa_r2_thresholds_changed_while_a_game_is_analyzed_reach_that_game` (xfail strict: index 0 is `'good'` but should be `'blunder'`).
+
+### v0.8-B11 (minor): a mistyped chess.com username from a URL import stays linked
+- **Steps:** with no linked chess.com username, go to Import game → a chess.com URL → type a wrong name → Import. The job fails.
+- **Expected:** the name is linked only once it has found the game (or passed Verify).
+- **Actual:** `start_url_import` links it before the search, and the link stays after the job fails. The next sync on open then fails with "Your linked chess.com username wasn't found". If the typo is someone else's real account, the sync pulls their public games into your library instead.
+- **Evidence:** `test_qa_r2_a_username_whose_game_isnt_found_is_not_linked` (xfail strict: `chesscom_username == 'player_typo'`).
+
+### v0.8-B12 (minor): a CSV at the cap with a trailing blank line says "more than 20,000"
+- **Steps:** import a CSV with exactly 20,000 puzzles and a blank last line.
+- **Expected:** no cap message.
+- **Actual:** `parse_csv` counts blank rows before checking the cap, so the blank row trips it. The report then lists "the file has more than 20,000 entries: this one and the rest weren't read" and counts one skipped entry. EPD skips blank lines before counting, so it isn't affected.
+- **Evidence:** `test_qa_r2_a_csv_at_the_cap_with_a_trailing_blank_line_is_not_over_the_cap` (xfail strict, with a cap of 2).
+
+## Commands run (round 2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` (before my round-2 tests) | **1507 passed, 1 skipped** (245 s) |
+| `uv run pytest -m e2e` | **238 passed** (613 s) |
+| `uv run pytest -m engine` | **15 passed** (52 s) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0. **30 passed, 1 skipped** (412 s). The v0.4 shutdown flake didn't recur. QA `test_qa_v08_real_app.py` passed |
+| `uv run ruff check .`, `ruff format --check .`, `uv run mypy src` | clean / 326 files formatted / no issues in 102 files |
+| `npm.cmd --prefix web run typecheck`, `npm.cmd --prefix web run lint` (PowerShell, AllSigned) | rc 0 / rc 0 |
+| `python scripts/check_docs.py --strict` | 0 error(s), 0 warning(s) [version v0.8] |
+| `uv run python scripts/gen_types.py` | `types.ts` unchanged (`strict_without_engine` already in it) |
+| Final: `uv run pytest` + `uv run pytest -m e2e tests/e2e/test_qa_v08_ui.py`, round-2 QA tests included | see the addendum below |
+
+No `-m live`, no credentials. The fix commit touched no migration and added no dependency. It added one DTO field, `PuzzleView.strict_without_engine`, with `types.ts` regenerated.
+
+## Tests added (round 2)
+- `tests/integration/test_qa_v08_round2.py`:
+  - `test_qa_r2_regrading_after_an_analysis_matches_the_new_thresholds`
+  - `test_qa_r2_thresholds_changed_while_a_game_is_analyzed_reach_that_game` (xfail B10)
+  - `test_qa_r2_a_username_whose_game_isnt_found_is_not_linked` (xfail B11)
+  - `test_qa_r2_a_csv_at_the_cap_with_a_trailing_blank_line_is_not_over_the_cap` (xfail B12)
+  - `test_qa_r2_a_csv_over_the_cap_says_so_once`
+- `tests/e2e/test_qa_v08_ui.py`:
+  - `test_qa_r2_b8_a_saved_game_puzzle_without_stockfish_shows_the_strict_note`
+  - `test_qa_r2_b4_the_source_follows_a_lichess_only_mode`
+
+## Round 2 addendum
+- `uv run pytest`, round-2 QA tests included: **1509 passed, 1 skipped, 3 xfailed** (B10, B11, B12), 399 deselected, in 246 s, rc 0.
+- `uv run pytest -m e2e tests/e2e/test_qa_v08_ui.py`: **9 passed**, rc 0.
+- ruff check and ruff format are clean with the new files.
+
+**For Adam's manual test:** the round-1 list still applies. B4 and B6 are fixed, so in step 5 try Danger spotting after choosing My puzzles: it should start on Lichess DB. In step 3, if you type your chess.com name in the Import dialog, type it carefully (B11).
