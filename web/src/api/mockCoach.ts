@@ -54,6 +54,7 @@ export class MockCoach {
   private applied: string | null = null;
   private players: { subject: string; label: string; games: number }[] = [];
   private running: string | null = null;
+  private answers = new Map<number, CoachAi>(); // like coach_reports.llm_json: kept whatever model is chosen now
 
   constructor(
     params: URLSearchParams,
@@ -212,7 +213,7 @@ export class MockCoach {
 
   startAi(id: number): string {
     const r = this.get(id);
-    return this.h.startAi(this.kind(id), `coach:${id}`, (provider, model, cost) => ({
+    return this.h.startAi(this.kind(id), `coach:${id}`, (provider, model, cost) => this.keep(id, {
       summary: "Most of your losses come from forks you allow, about 13 per 10 games, usually because you didn't check your opponent's replies (E1). Fix that first; your pins come next.",
       weaknesses: [
         { key: "allowed:fork", label: "Allowed: Fork", explanation: "You allowed a knight fork 4 times; in 3 you said you didn't look.", drill: "Danger spotting with fork puzzles: name the threat before you move." },
@@ -226,7 +227,12 @@ export class MockCoach {
     })); // prettier-ignore
   }
 
+  private keep(id: number, x: CoachAi): CoachAi {
+    this.answers.set(id, x);
+    return x;
+  }
+
   ai(id: number): CoachAi | null {
-    return this.h.aiResult(`coach:${id}`);
+    return this.h.aiResult(`coach:${id}`) ?? this.answers.get(id) ?? null;
   }
 }

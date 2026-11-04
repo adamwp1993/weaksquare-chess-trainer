@@ -56,7 +56,7 @@ export function FeatureModelPicker({
     group: LABELS[p] + (settings.providers.find((x) => x.provider === p)?.key_stored ? "" : " (needs a key)"),
     items: f.options
       .filter((o) => o.provider === p)
-      .map((o) => ({ value: `${o.provider}|${o.model}`, label: `${o.model}  ·  about ${dollars(o.usd)} per game` })),
+      .map((o) => ({ value: `${o.provider}|${o.model}`, label: `${o.model}  ·  about ${dollars(o.usd)} per ${feature === "coach" ? "report" : "game"}` })),
   }));
   const own = f.choice !== SAME && f.choice !== "none" && !f.options.some((o) => `${o.provider}|${o.model}` === valueOf(f));
   const typed = (search ?? "").trim();

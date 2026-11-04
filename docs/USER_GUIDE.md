@@ -810,7 +810,7 @@ After each Coach run on your games, the app builds a **Suggested mix** and, if y
 
 ### AI coaching (optional)
 Under a report, **Get AI coaching** turns its numbers and a few example positions into a short summary, a note on each of your top 3–5 weaknesses with a drill, and 1–3 puzzle presets you can **Load** or **Save**.
-1. Set its model in **Settings → AI → Coach** (**Same as Explain** by default). A report is sent once, so a stronger model costs little.
+1. Pick its model right in the AI coaching box, or in **Settings → AI → Coach**: it's the same setting (**Same as Explain** by default). A report is sent once, so a stronger model costs little. If the report already has an answer from another model, **Ask <model> instead** asks the new one; the old answer stays until you do.
 2. Before a run, pick the **AI detail level**: **Summary** (about 5,000 input tokens, 12 example positions) or **Detailed** (about 20,000, 20 positions with the moves before each).
 3. Press **Get AI coaching**, read the estimate and press **Confirm**.
 

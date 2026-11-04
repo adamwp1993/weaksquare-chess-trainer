@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { CoachParams, TrainingMode } from "../api/ApiClient";
 import type { CoachAi, CoachPresetView, CoachReport, CoachReportSummary, CoachWeakness, FilterSpec, GameAiQuote } from "../api/types";
+import { FeatureModelPicker } from "../components/FeatureModelPicker";
 import { EstimateLines } from "../components/GameAiPanel";
 import { dollars, useLlmSettings } from "../state/llm";
 import { modeLabel } from "../state/modes";
@@ -219,11 +220,13 @@ function AiCoaching({
           <Title order={5}>AI coaching (optional)</Title>
           {feature && (
             <Text size="xs" c="dimmed">
-              {feature.effective_model || "no model"} · Settings → AI → Coach
+              {feature.effective_model || "no model"}
             </Text>
           )}
         </Group>
-        {!ai && (
+        {/* Adam, v0.10 manual test: the Coach's model is picked here too (the same setting as Settings → AI). */}
+        <FeatureModelPicker feature="coach" compact onError={setError} />
+        {(!ai || (feature?.effective_model && ai.model !== feature.effective_model)) && (
           <Group>
             <Button
               size="xs"
@@ -233,7 +236,7 @@ function AiCoaching({
               onClick={() => (quote?.state === "cached" ? run() : setConfirm(true))}
               data-testid="coach-ai-start"
             >
-              Get AI coaching
+              {ai ? `Ask ${feature?.effective_model} instead` : "Get AI coaching"}
             </Button>
             {quote && blocked && <Text size="xs" c="dimmed">{quote.message}</Text>}
           </Group>

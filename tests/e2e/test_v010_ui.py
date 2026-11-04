@@ -182,3 +182,21 @@ def test_b6_one_game_is_singular_in_saved_reports(page) -> None:  # type: ignore
     page.get_by_test_id("coach-run").click()
     page.get_by_test_id("coach-history").filter(has_text="1 game").wait_for(timeout=5000)
     assert "1 games" not in page.get_by_test_id("coach-history").inner_text()
+
+
+def test_manual_the_coach_model_is_picked_in_the_ai_coaching_box(page) -> None:  # type: ignore[no-untyped-def]
+    """Adam's v0.10 manual test: AI coaching has its own model picker, and a new model can be asked again."""
+    coach(page, "?ai=on&coach=report")
+    model = page.get_by_test_id("coach-ai").get_by_test_id("ai-feature-model-coach")
+    assert model.input_value() == "Same as Explain (claude-haiku-5-5)"
+    page.get_by_test_id("coach-ai-start").click()
+    page.get_by_test_id("coach-ai-confirm-button").click()
+    page.get_by_test_id("coach-ai-result").wait_for(timeout=5000)
+    assert page.get_by_test_id("coach-ai-start").count() == 0  # the saved answer is on this model
+    model.click()
+    page.get_by_role("option", name="claude-sonnet-5-5  ·  about").click()
+    page.get_by_test_id("coach-ai-start").filter(has_text="Ask claude-sonnet-5-5 instead").wait_for()
+    page.get_by_test_id("coach-ai-result").wait_for()  # the saved answer stays until you ask again
+    page.get_by_test_id("coach-ai-start").click()
+    page.get_by_test_id("coach-ai-confirm-button").click()
+    page.get_by_test_id("coach-ai-result").filter(has_text="claude-sonnet-5-5").wait_for(timeout=5000)
