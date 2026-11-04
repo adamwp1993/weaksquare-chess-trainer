@@ -89,7 +89,7 @@ def test_the_budget_and_the_cap_are_shared(rig: Rig) -> None:  # noqa: F811
 def test_update_feature_rejects_bad_input(rig: Rig) -> None:  # noqa: F811
     for args in [
         ("explain", "same", "", "low"),  # Explain is set with update()
-        ("coach", "same", "", "low"),  # not until v0.10
+        ("puzzles", "same", "", "low"),  # not a feature
         ("game_review", "gemini", "x", "low"),
         ("game_review", "openai", "bad model id!", "low"),
         ("game_review", "openai", "gpt-5.4", "max"),
