@@ -27,8 +27,21 @@ from typing import Any, Protocol
 
 from weaksquare.core.clock import Clock
 from weaksquare.core.coach import ErrorRow, GameInfo, PuzzleTheme, Report, build_report, trend
-from weaksquare.core.errors import NotFoundError, ValidationError
+from weaksquare.core.coach_llm import (
+    DETAILED_EXAMPLES,
+    SCHEMA,
+    SCHEMA_NAME,
+    SUMMARY_EXAMPLES,
+    SYSTEM_PROMPT,
+    Coaching,
+    ExamplePosition,
+    build_prompt,
+    fallback_preset,
+    validate,
+)
+from weaksquare.core.errors import AppError, NotFoundError, ValidationError
 from weaksquare.core.filters import MY_TIME_CLASSES, FilterSpec
+from weaksquare.core.game_review import MoveRow, saved_line
 from weaksquare.core.games import GameRecord, GameRow, LibraryFilter, detect_color, username_from, valid_username
 from weaksquare.core.lichess import Dashboard
 from weaksquare.core.stats import AttemptRow
@@ -166,6 +179,8 @@ class Puzzles(Protocol):
 
 
 class Reports(Protocol):
+    def set_llm(self, report_id: int, llm: dict[str, Any]) -> None: ...
+
     def add(
         self, created_at: str, subject: str, label: str, source: str, params: dict[str, Any],
         report: dict[str, Any], game_ids: list[int],
@@ -208,6 +223,10 @@ class Settings(Protocol):
     def set(self, key: str, value: Any) -> None: ...
 
 
+class AnalysisRows(Protocol):
+    def rows(self, game_id: int) -> list[MoveRow]: ...
+
+
 class GamePuzzleCount(Protocol):
     def coach_puzzles(self) -> list[tuple[int, int, int, str | None, str]]: ...
 
@@ -246,7 +265,13 @@ class CoachService:
         settings: Settings,
         clock: Clock,
         runner: JobRunner,
+        rows: AnalysisRows | None = None,
+        llm_settings: Any = None,
+        llm_usage: Any = None,
     ) -> None:
+        self._rows = rows
+        self._llm_settings = llm_settings
+        self._llm_usage = llm_usage
         self._library = library
         self._games = games
         self._analysis = analysis
@@ -486,6 +511,124 @@ class CoachService:
         prev = self._reports.previous(row.subject, row.id) if row.source_kind != "puzzles" else None
         cur = build_report_from_json(row.report)
         return row, (trend(cur, prev.report) if prev is not None and cur is not None else {})
+
+    # ------------------------------------------------------------ AI coaching (FR-10.21–10.25)
+
+    def _examples(self, row: Any, detail: str) -> list[ExamplePosition]:
+        """The report's example moments as anonymized positions: labels, never game ids (FR-10.21)."""
+        if self._rows is None:
+            return []
+        limit = DETAILED_EXAMPLES if detail == "detailed" else SUMMARY_EXAMPLES
+        picked: list[tuple[str, int, int]] = []
+        weaknesses = [w for w in row.report.get("weaknesses") or [] if isinstance(w, dict)]
+        rounds = max((len(w.get("examples") or []) for w in weaknesses), default=0)
+        for i in range(rounds):  # round-robin over the top weaknesses, worst moments first
+            for w in weaknesses:
+                ex = w.get("examples") or []
+                if i < len(ex) and len(picked) < limit:
+                    gid, ply = int(ex[i]["game_id"]), int(ex[i]["ply"])
+                    if all((g, p) != (gid, ply) for _, g, p in picked):
+                        picked.append((str(w.get("key")), gid, ply))
+        out: list[ExamplePosition] = []
+        cache: dict[int, list[MoveRow]] = {}
+        for n, (wkey, gid, ply) in enumerate(picked, start=1):
+            rows = cache.setdefault(gid, self._rows.rows(gid))
+            if not 0 <= ply < len(rows):
+                continue
+            r = rows[ply]
+            before = tuple(x.move_uci for x in rows[max(0, ply - 2) : ply])
+            out.append(
+                ExamplePosition(
+                    f"E{n}", wkey, r.fen_before, r.move_uci,
+                    saved_line(r.lines[0].pv) if r.lines and r.lines[0].pv else (), r.themes, r.cp_loss,
+                    before, rows[ply - len(before)].fen_before if before else None,
+                )
+            )  # fmt: skip
+        return out
+
+    def _ai_request(self, report_id: Any) -> tuple[Any, str, str, list[str]]:
+        if self._llm_settings is None or self._llm_usage is None:
+            raise AppError("AI coaching isn't available.", code="no_llm")
+        row, _ = self.report(report_id)
+        detail = str(row.params.get("detail") or "summary")
+        kind = "coach_detailed" if detail == "detailed" else "coach_summary"
+        user = build_prompt(row.report, self._examples(row, detail), detail)
+        keys = [
+            str(w.get("key"))
+            for g in ("missed", "allowed", "habits", "puzzles")
+            for w in row.report.get(g) or []
+            if isinstance(w, dict)
+        ]
+        return row, kind, user, keys
+
+    @staticmethod
+    def _cached(row: Any, cfg: Any) -> bool:
+        llm = row.llm
+        return bool(llm) and llm.get("provider") == cfg.provider and llm.get("model") == cfg.model
+
+    def quote_ai(self, report_id: Any) -> Any:
+        """FR-10.25: the estimate for Get AI coaching, checked against the cap and the budget."""
+        from weaksquare.services.game_explain import GameQuote  # one quote shape for every AI feature
+        from weaksquare.services.llm_usage import prompt_chars
+
+        row, kind, user, _ = self._ai_request(report_id)
+        cfg = self._llm_settings.config("coach")
+        spend = self._llm_usage.spend(cfg)
+        if self._cached(row, cfg):
+            return GameQuote("cached", None, cfg.provider, cfg.model, None, cfg.run_cap_usd, spend)
+        chars = prompt_chars(SYSTEM_PROMPT, user, SCHEMA)
+        q = self._llm_usage.quote(kind, chars, cfg)
+        return GameQuote(str(q.state), q.message, q.provider, q.model, q.estimate, q.run_cap_usd, spend)
+
+    def start_ai(self, report_id: Any) -> str:
+        """Run the AI coaching. The UI calls this only after you Confirm the estimate (FR-8.11)."""
+        quote = self.quote_ai(report_id)
+        if quote.state not in ("ok", "cached"):
+            raise AppError(quote.message or "AI coaching can't run now.", code=quote.state)
+
+        def run(progress: ProgressFn, cancel: CancelToken) -> str:
+            try:
+                return self._coach_ai(report_id, progress)
+            except AppError as e:
+                raise JobFailed(e.code, e.message, e.retryable) from None
+
+        return self._runner.submit("coach_ai", run)
+
+    def _coach_ai(self, report_id: Any, progress: ProgressFn) -> str:
+        row, kind, user, keys = self._ai_request(report_id)
+        cfg = self._llm_settings.config("coach")
+        if self._cached(row, cfg):
+            return "AI coaching (saved)."
+        progress(None, "Asking the AI to coach you…")
+        result = self._llm_usage.run(kind, SYSTEM_PROMPT, user, SCHEMA_NAME, SCHEMA)
+        r = result.response
+        if r.status == "truncated":
+            raise AppError(
+                "The answer was cut short (it hit the Coach's token limit), so nothing is shown. It was still "
+                "billed. Try again, or choose Low reasoning for the Coach in Settings → AI.",
+                code="llm_truncated",
+                retryable=True,
+            )
+        if r.status == "refused":
+            raise AppError("The model declined. Try another model.", code="llm_refused")
+        coaching = validate(r.text, keys, fallback_preset(row.report))
+        if coaching is None:
+            raise AppError(
+                "The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
+                code="llm_bad_answer",
+                retryable=True,
+            )
+        self._reports.set_llm(
+            row.id,
+            {**coaching.to_json(), "provider": result.provider, "model": result.model, "cost_usd": result.cost_usd},
+        )
+        return f"AI coaching for ${result.cost_usd:.4f}."
+
+    def ai_result(self, report_id: Any) -> tuple[Coaching, dict[str, Any]] | None:
+        row, _ = self.report(report_id)
+        if not row.llm:
+            return None
+        return Coaching.from_json(row.llm), {k: row.llm.get(k) for k in ("provider", "model", "cost_usd")}
 
     # ------------------------------------------------------------ the Suggested mix (FR-10.28–10.31)
 

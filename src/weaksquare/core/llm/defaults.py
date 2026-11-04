@@ -25,21 +25,39 @@ REASONING_MULTIPLIER = {"low": 1, "medium": 2, "high": 4}
 
 # FR-1.15 (v0.9): each AI feature has its own provider, model and reasoning level. The usage log records
 # the feature. A feature makes one or more kinds of request, each with its own limits.
-Feature = Literal["explain", "game_review"]
-FEATURES: tuple[Feature, ...] = ("explain", "game_review")
-FEATURE_LABELS = {"explain": "Puzzle Explain", "game_review": "Game Review"}
+Feature = Literal["explain", "game_review", "coach"]
+FEATURES: tuple[Feature, ...] = ("explain", "game_review", "coach")  # coach: v0.10
+FEATURE_LABELS = {"explain": "Puzzle Explain", "game_review": "Game Review", "coach": "Coach"}
 # Request kind -> the feature it belongs to (and is logged under).
-FEATURE_OF: dict[str, Feature] = {"explain": "explain", "game_move": "game_review", "game_narrative": "game_review"}
+FEATURE_OF: dict[str, Feature] = {
+    "explain": "explain",
+    "game_move": "game_review",
+    "game_narrative": "game_review",
+    "coach_summary": "coach",
+    "coach_detailed": "coach",
+}
 # The kind whose typical cost the feature's model dropdown shows.
-DROPDOWN_KIND: dict[Feature, str] = {"explain": "explain", "game_review": "game_narrative"}
+DROPDOWN_KIND: dict[Feature, str] = {"explain": "explain", "game_review": "game_narrative", "coach": "coach_summary"}
 
 # FR-8.14: the hard max_tokens per request kind at Low reasoning.
-MAX_TOKENS = {"explain": 1500, "game_move": 1500, "game_narrative": 4000}
+MAX_TOKENS = {"explain": 1500, "game_move": 1500, "game_narrative": 4000, "coach_summary": 2500, "coach_detailed": 5000}
 # A typical prompt's size in characters, for the per-model cost shown in the model dropdown (FR-1.3).
 # Explain my game is about 10k input tokens (FR-11.21).
-TYPICAL_PROMPT_CHARS = {"explain": 6000, "game_move": 6000, "game_narrative": 30000}
+TYPICAL_PROMPT_CHARS = {
+    "explain": 6000,
+    "game_move": 6000,
+    "game_narrative": 30000,
+    "coach_summary": 18000,  # FR-10.5: about 5k input tokens
+    "coach_detailed": 70000,  # about 20k
+}
 # The typical output of one call, shown as the "about" figure next to the worst case (actual usage is logged).
-TYPICAL_OUTPUT_TOKENS = {"explain": 600, "game_move": 600, "game_narrative": 3000}
+TYPICAL_OUTPUT_TOKENS = {
+    "explain": 600,
+    "game_move": 600,
+    "game_narrative": 3000,
+    "coach_summary": 1500,
+    "coach_detailed": 3000,
+}
 
 DEFAULT_RUN_CAP_USD = 0.50  # FR-8.12
 DEFAULT_MONTHLY_BUDGET_USD = 5.00  # FR-8.13

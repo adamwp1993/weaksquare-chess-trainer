@@ -560,7 +560,7 @@ class LlmFeature:
     """A model per AI feature (FR-1.15, v0.9). Explain's choice is `LlmSettings.provider` and the providers'
     models; every other feature can follow it ('same') or pick its own provider and model."""
 
-    feature: Literal["explain", "game_review"]
+    feature: Literal["explain", "game_review", "coach"]
     label: str
     choice: Literal["same", "anthropic", "openai", "none"]  # Explain: its provider; others: 'same' or their own
     model: str  # the feature's own model ('' when it follows Explain or none is picked)

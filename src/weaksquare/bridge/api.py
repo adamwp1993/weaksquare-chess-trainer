@@ -676,7 +676,7 @@ class Api:
     @bridge_call
     def set_llm_feature(
         self,
-        feature: Literal["game_review"],
+        feature: Literal["game_review", "coach"],
         provider: Literal["same", "anthropic", "openai"],
         model: str,
         reasoning: Literal["low", "medium", "high"],

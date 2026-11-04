@@ -233,6 +233,15 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.10: AI coaching on a report: allow-listed prompt, the Coach feature, stored on the report
+- Context: FR-10.21–10.25 and FR-1.15 (the Coach gets its own model).
+- Decision:
+  - **`core/coach_llm.py`**: `build_prompt` copies only allow-listed report fields (rates, severities, reasons, the gap table) and up to 12 (Summary) or 20 (Detailed) example positions labelled E1…, rebuilt as SAN from the stored analysis. Game ids, dates, labels and usernames never enter the prompt, whoever the report is about. `validate` keeps weakness notes only for keys that were sent (3–5), and presets through `preset_suggestion.validate_coach_preset` (up to 6 motif or mate themes, a valid range, move counts 1–4, a known mode, 5–100 puzzles); with none left, the report's deterministic preset is offered (`fallback_preset`).
+  - **The `coach` feature** in `core/llm/defaults.py`, with kinds `coach_summary` (2,500 `max_tokens`) and `coach_detailed` (5,000), typical prompts of about 5k and 20k tokens; `llm.feature.coach.*` keys, "Same as Explain" by default. The usage log records `coach`.
+  - **Stored on the report** (`coach_reports.llm_json`) with its provider and model: the same report and model shows again for free (`quote_ai` returns `cached`). A new model asks again.
+- Alternatives: `llm_cache` (rejected: the answer belongs to one saved report, and the report row already exists).
+- Consequences: v1.0's auto AI summary can reuse `build_prompt` at the Summary level.
+
 ### 2026-11-04, v0.10: The Coach run, the report and the Suggested mix
 - Context: §10.1–10.7 for v0.10, without checkpoints or statuses (v1.0).
 - Decision:

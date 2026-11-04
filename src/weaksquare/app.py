@@ -383,7 +383,7 @@ def build_services(
     analysis.add_listener(game_puzzles.after_analysis)  # one pipeline: any analysis makes puzzles (FR-10.39)
     coach = CoachService(
         games, games_repo, analysis, game_puzzles, custom_puzzles, CoachReportsRepo(db), stats, StatsRepo(db),
-        account, lichess, SettingsRepo(db), clock, runner,
+        account, lichess, SettingsRepo(db), clock, runner, analysis_repo, llm_settings, llm_usage,
     )  # fmt: skip
     return Services(
         db=db,
