@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.8-rc1 (2026-11-04)
 
 ### Added
 - **My games:** one list of your Lichess and chess.com games, newest first, synced in the background when the app opens and with **Refresh** (metadata and PGNs only). Filter by platform, time control, result, color, status, rated, opponent, opening and date. Link chess.com by username, with **Verify**, in Settings → Games. [FR-11.23] [FR-11.24] [FR-11.25] [FR-11.26] [FR-11.27] [FR-11.28]
