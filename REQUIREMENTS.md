@@ -353,6 +353,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   | Both | Minutes | Low | Gaps between puzzles and games (e.g. solving forks in puzzles but walking into them in games) |
 
 - **FR-10.3** **Accounts:** defaults to your **linked accounts** (§11.5), and you can override them per run. Lichess username and/or chess.com username. Accept either a plain username or a profile URL (`lichess.org/@/<user>`, `chess.com/member/<user>`).
+  - **Another player** (Adam, v0.10 planning): you can enter any Lichess or chess.com username and run the Coach on that player's public games. Their games are stored once and tagged with that player (a game you played against them counts for both of you). They stay out of My Games unless you pick them with the **Player** filter. Their run saves a report labeled with their name, and **Load preset** works from it. It never changes your Suggested mix (§10.7), creates no My puzzles (§10.9) and never counts in your stats or report trends. Optional AI coaching works for their report with the same guardrails (§9.3); the prompt never contains a username.
 - **FR-10.4** **Game filters:** count **25 / 50 / 100 / 200 (default 50)**; rated only (default on); time controls (default **rapid + classical**, since bullet and blitz mistakes come from the clock, not from tactics); color.
 - **FR-10.5** **Detail level** for LLM coaching: **Summary** (~5k input tokens: aggregates plus 10–15 example positions) or **Detailed** (~20k input tokens: aggregates plus your 20 worst moments with context).
 
@@ -362,8 +363,8 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.8** Cache games locally (`games`). Re-runs fetch only newer games.
 
 ### 10.3 Finding and tagging mistakes (local, free)
-- **FR-10.9** Analyze **only the user's moves**. Use Lichess's existing evals when the game has them; otherwise run a quick Stockfish pass (default ~0.15 s per position), then a deeper check on candidate mistakes.
-- **FR-10.10** **Thresholds** (configurable): mistake = eval drop of at least 100 cp; blunder = at least 200 cp or a mate swing. Skip the first 6 moves (opening book) and positions already decided (beyond ±500 cp).
+- **FR-10.9** The Coach reports on **the player's own moves** only. The analysis itself is the shared Game Review pipeline (§11.2, FR-10.26) at its think time (default 0.3 s per position), run locally even when Lichess already has evals (FR-11.3), so every game the Coach analyzed opens in Game Review without a re-analysis. *(Adam, v0.10 planning: replaces the earlier quick 0.15 s pass and the use of Lichess's evals.)*
+- **FR-10.10** **Thresholds** (configurable): mistake = eval drop of at least 100 cp; blunder = at least 200 cp or a mate swing. The Coach skips the first 6 moves (opening book) and positions already decided (beyond ±500 cp) when it aggregates and when it makes puzzles (§10.9); Game Review's grading is unchanged (v0.10 planning).
 - **FR-10.11** Each mistake is classified as:
   - **Missed:** you had a winning tactic. Its line comes from Stockfish's principal variation from your position.
   - **Allowed:** your move let the opponent win material or mate. Its line comes from Stockfish's principal variation after your move.
@@ -398,7 +399,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.26** The Coach **reuses the Game Review analysis pipeline** (§11.2) and its stored `game_analysis`. Games that were already reviewed aren't re-analyzed, and any game the Coach analyzed opens in Game Review with one click.
 
 ### 10.7 Suggested default puzzle mix
-- **FR-10.28** **First run:** after the first Coach run, the app builds a **Suggested** preset, and it becomes the default puzzle selection on the main page, labeled *"Suggested — from checkpoint #N, <date>"*. Before any Coach run exists, the default is a broad mix (all themes, all lengths, rating band around your Lichess puzzle rating or 1500).
+- **FR-10.28** **First run:** after the first Coach run, the app builds a **Suggested** preset, and it becomes the default puzzle selection on the main page, labeled *"Suggested — from checkpoint #N, <date>"*. Until checkpoints arrive (v1.0) the label reads *"Suggested — from Coach run #N, <date>"*, and weaknesses are ranked by game rate × severity without statuses (v0.10 planning). Before any Coach run exists, the default is a broad mix (all themes, all lengths, rating band around your Lichess puzzle rating or 1500).
 - **FR-10.29** **How the mix is built** (deterministic; the LLM may refine it, validated as in FR-10.23):
   - **Priority:** Regressed weaknesses first, then New/Training weaknesses ranked by game rate × severity, then Improving ones. Fixed weaknesses keep a small **maintenance share** (default 10%).
   - Each weakness contributes its related themes and drill mode (e.g. `ignoredThreat` → Danger spotting).
@@ -442,20 +443,20 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 
 ### 10.9 Puzzles from your games
 - **FR-10.39** **Created by the analysis:** when the Coach analyzes your games (default your last 50, up to 200, FR-10.4; checkpoints add only new games), it turns qualifying mistakes into puzzles in `custom_puzzles` with `origin = coach`. It's part of the same background job and the same pipeline (FR-10.26). Games already analyzed aren't analyzed again. Re-runs never create duplicates (one puzzle per game and ply). Everything stays local and never syncs to Lichess.
+  - *(Adam, v0.10 planning:)* puzzles are made after **any** analysis of your games (Coach runs, Analyze selected and Review), since it's one pipeline. Games analyzed before v0.10 get a one-time backfill from their stored analysis. Another player's games (FR-10.3) never make puzzles. A puzzle you saved by hand at the same ply is kept, and no Coach puzzle is added there.
 - **FR-10.40** **Severity level (user setting):** which mistakes become puzzles. **Blunders only** / **Mistakes and blunders** (default) / **Inaccuracies, mistakes and blunders**. The levels use the shared thresholds (FR-11.9).
   - Changing the level rebuilds the set from the stored `game_analysis`, with no new engine pass over the games. Only new candidates get the quality check (FR-10.41).
   - Narrowing the level **archives** the puzzles outside it, never deletes them, so their attempt history is kept. Widening restores them.
   - The same three choices are also a filter when training the My puzzles source (FR-3.15).
 - **FR-10.41** **Quality check:** a mistake becomes a puzzle only if it has a clear answer.
-  - The best move must be clearly better than the second best (default gap 150 cp, configurable), or be the only move that keeps the advantage.
+  - The rules are **ported from lichess-puzzler's generator** (`generator/generator.py`; Adam, v0.10 planning). The generator itself can't be reused, since it needs MongoDB, a tablebase server and 30-second searches. The best move must beat the second best by more than **0.7 in win chances** (Lichess's margin, configurable), or be the only move. Mate in one follows Lichess's mate-in-one rules.
   - The position must not already be decided (beyond ±500 cp before the move).
-  - The line extends while the solver's move stays the only good one, the way Lichess builds multi-move puzzles.
-  - Prefer reusing lichess-puzzler's generator logic (AGPL-3.0, already a dependency for tagging) over writing our own. Confirm this in the v0.10 plan.
+  - The line extends while the solver's move stays the only good one, the way Lichess builds multi-move puzzles: it's trimmed to end on the solver's move, and one-move advantage puzzles are dropped. Each extension position gets about 1 s on the background engine (configurable), not Lichess's 30 s.
   - Inaccuracies are kept only when they pass the same check, so the inaccuracy level may add few puzzles. The setting says so.
 - **FR-10.42** **Missed and Allowed:**
   - **Missed** (you had a tactic and didn't play it): you solve from your own position, as the side you played.
   - **Allowed** (your move let your opponent in): you solve **as your opponent**, from the position after your mistake, finding the punishment. The board is oriented for the side to move, and the puzzle is labelled *"Find what your opponent could have played."*
-  - Allowed positions can also feed Danger spotting (FR-4.4) once that mode exists.
+  - Danger spotting (FR-4.4) stays Lichess-only for My puzzles (FR-3.15), so Allowed positions don't feed it yet (v0.10 planning).
 - **FR-10.43** **Solving rules:** these come from engine analysis, not a verified single solution, so any move within 30 cp of the best (configurable, shared with Retry mode FR-11.15) counts. *(Built in v0.8 for puzzles saved from Game Review, FR-11.16; without Stockfish they fall back to the stored line.)* The interactive engine then continues the line from the move you played. Themes come from the lichess-puzzler tagger and stay hidden until the puzzle ends (FR-3.14). Any help before completion is a loss, as everywhere (§7.1).
 - **FR-10.44** **Training them:**
   - **My puzzles** works as a source on its own or mixed with Lichess puzzles, in every mode that supports it, including **Spaced repetition** (FR-4.6).
@@ -650,6 +651,7 @@ The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.0, each a stop-a
 
 The project is open source under **AGPL-3.0-or-later** from the first commit (`LICENSE` in the repo root).
 - **Why AGPL:** chessground is GPL-3.0 and the lichess-puzzler tagger (v0.10) is AGPL-3.0, so the combined work must be AGPL. Starting there avoids relicensing at v0.10.
+- **lichess-puzzler** isn't on PyPI, so its tagger (`tagger/cook.py`, `util.py`, `model.py`) is **vendored** under `src/weaksquare/vendor/lichess_puzzler/` at a pinned commit, with its AGPL-3.0 licence and a README giving the commit and the patch (v0.10 planning). Its generator's rules are ported, not copied (FR-10.41).
 - **Stockfish (GPL-3.0)** is downloaded by the user's own setup from the official release and never redistributed by this project, so the repo carries no Stockfish binary.
 - **Lichess puzzle database:** public domain (CC0). It's downloaded at setup, never committed.
 - **The About screen** shows the license and a link to the source code (NFR-7).
@@ -676,7 +678,7 @@ The project is open source under **AGPL-3.0-or-later** from the first commit (`L
 | chess.com PubAPI: read-only; monthly game archives; serial access unlimited, parallel requests may get 429; descriptive User-Agent with contact recommended; no per-move review labels | https://support.chess.com/en/articles/9650547-published-data-api |
 | chess.com PubAPI: no authentication; profile `GET /pub/player/{username}` (404 for unknown users); archives list `/pub/player/{username}/games/archives`; archive game fields `white`, `black`, `accuracies` (only if previously calculated), `url`, `fen`, `pgn`, `start_time` (daily only), `end_time`, `time_control`, `rules`, `eco`, `tournament`, `match` | https://www.chess.com/news/view/published-data-api |
 | chess.com OAuth ("Sign in with Chess.com") exists but requires applying for access, so it isn't self-service. The internal "callback" game endpoints aren't for general use, and heavy use risks an IP ban | chess.com developer forum threads; chess-web-api issue #10 |
-| lichess-puzzler: Lichess's open-source puzzle generator and tagger (`tagger/cook.py`, python-chess), AGPL-3.0 | https://github.com/ornicar/lichess-puzzler |
+| lichess-puzzler: Lichess's open-source puzzle generator and tagger (`tagger/cook.py`, python-chess), AGPL-3.0. Not on PyPI. The tagger needs only python-chess; the generator needs MongoDB, a tablebase server and `zstandard`. Pinned for v0.10 at `8e24b6d5e2b9` (2026-10-23) | https://github.com/ornicar/lichess-puzzler |
 | Stockfish 19 (tag `sf_19`, released 2026-09-05) ships universal binaries that detect CPU features and run the optimal code, replacing the separate AVX2/AVX-512 builds | https://stockfishchess.org/blog/2026/stockfish-19/ and https://github.com/official-stockfish/Stockfish/releases/tag/sf_19 |
 | Windows asset: `stockfish-windows-x86-64-universal.zip`, about 81 MB | SourceForge mirror of the sf_19 release |
 | Since Stockfish 19, an invalid position or illegal move prints `info string CRITICAL ERROR` and terminates the process | https://official-stockfish.github.io/docs/stockfish-wiki/UCI-Protocol-and-Stockfish-Commands.html |
