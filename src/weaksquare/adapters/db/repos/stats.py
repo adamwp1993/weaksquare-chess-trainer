@@ -30,6 +30,15 @@ class StatsRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
+    def game_reason_rows(self) -> list[AttemptRow]:
+        return game_reason_rows(self._db)
+
+    def retry_totals(self) -> tuple[int, int]:
+        return retry_totals(self._db)
+
+    def source_accuracy(self) -> list[tuple[str, int, int]]:
+        return source_accuracy(self._db)
+
     def attempt_rows(self) -> list[AttemptRow]:
         with self._db.session() as conn:
             attached = conn.execute("SELECT 1 FROM pragma_database_list WHERE name = 'pz'").fetchone()
@@ -66,3 +75,52 @@ class StatsRepo:
             )
             for r in rows
         ]
+
+
+# v0.8 (FR-9.7, puzzles vs games): your own game mistakes and Retry misses, each with its latest reason.
+_GAME_REASON = (
+    "(SELECT r.reason FROM mistake_reasons r WHERE r.source = 'game'"
+    " AND r.ref_id = ga.game_id || ':' || ga.ply ORDER BY r.id DESC LIMIT 1)"
+)
+_RETRY_REASON = (
+    "(SELECT r.reason FROM mistake_reasons r WHERE r.source = 'retry'"
+    " AND r.ref_id = CAST(t.id AS TEXT) ORDER BY r.id DESC LIMIT 1)"
+)
+
+
+def game_reason_rows(db: Database) -> list[AttemptRow]:
+    """Every inaccuracy, mistake and blunder of yours in an analyzed game (mode `game_review`) and every
+    Retry miss (mode `retry`), as loss rows for `reason_report`. A game move's week is the game's date."""
+    with db.session() as conn:
+        games = conn.execute(
+            f"SELECT {_GAME_REASON}, COALESCE(g.played_at, g.fetched_at) FROM game_analysis ga"
+            " JOIN games g ON g.id = ga.game_id"
+            " WHERE ga.classification IN ('inaccuracy', 'mistake', 'blunder')"
+            " AND (g.user_color = ga.mover OR g.user_color = 'both')"
+        ).fetchall()
+        retries = conn.execute(
+            f"SELECT {_RETRY_REASON}, t.created_at FROM retry_attempts t WHERE t.found = 0"
+        ).fetchall()
+    rows = [AttemptRow(False, False, False, None, None, None, "game_review", r[0], _time(r[1])) for r in games]
+    rows += [AttemptRow(False, False, False, None, None, None, "retry", r[0], _time(r[1])) for r in retries]
+    return rows
+
+
+def retry_totals(db: Database) -> tuple[int, int]:
+    """Retry mode (FR-11.15): (found, tried)."""
+    with db.session() as conn:
+        r = conn.execute("SELECT COALESCE(SUM(found), 0), COUNT(*) FROM retry_attempts").fetchone()
+    return int(r[0]), int(r[1])
+
+
+def source_accuracy(db: Database) -> list[tuple[str, int, int]]:
+    """(source, attempts, wins) per puzzle source, the way local accuracy counts them: no Danger spotting
+    and no misclicks (FR-5.10)."""
+    from weaksquare.adapters.db.repos.user_data import NOT_MISCLICK
+
+    with db.session() as conn:
+        rows = conn.execute(
+            f"SELECT a.puzzle_source, COUNT(*), COALESCE(SUM(a.win), 0) FROM attempts a"
+            f" WHERE a.mode != 'danger_spotting' AND {NOT_MISCLICK} GROUP BY a.puzzle_source ORDER BY a.puzzle_source"
+        ).fetchall()
+    return [(str(r[0]), int(r[1]), int(r[2])) for r in rows]

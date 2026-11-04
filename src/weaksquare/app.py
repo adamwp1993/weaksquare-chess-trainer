@@ -473,6 +473,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         llm_settings=services.llm_settings,
         llm_usage=services.llm_usage,
         explain=services.explain,
+        games=services.games,
+        analysis=services.analysis,
+        review=services.review,
+        puzzle_import=services.puzzle_import,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())
@@ -481,6 +485,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     log.info("%s", engine_log_line(services.engine.status()))
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
     services.llm_settings.start_launch_check()  # FR-1.6: and a stored AI key, with the free model lookup
+    services.games.sync_on_open()  # FR-11.27: new games from your linked accounts, in the background (v0.8)
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's

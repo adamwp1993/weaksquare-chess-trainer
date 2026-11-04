@@ -21,9 +21,20 @@ class FakeDesktop(Desktop):
     def __init__(self) -> None:
         super().__init__()
         self.opened: list[Path] = []
+        self.urls: list[str] = []
+        self.next_file: str | None = None  # v0.8: what the Open dialogs return
 
     def open_folder(self, path: Path) -> None:
         self.opened.append(path)
+
+    def open_in_browser(self, url: str) -> None:
+        self.urls.append(url)
+
+    def choose_pgn_file(self) -> str | None:
+        return self.next_file
+
+    def choose_puzzle_import_file(self) -> str | None:
+        return self.next_file
 
 
 def fake_service_kwargs(lichess: object | None = None) -> dict:
@@ -80,6 +91,10 @@ def build_api(
         llm_settings=services.llm_settings,
         llm_usage=services.llm_usage,
         explain=services.explain,
+        games=services.games,
+        analysis=services.analysis,
+        review=services.review,
+        puzzle_import=services.puzzle_import,
     )
 
 

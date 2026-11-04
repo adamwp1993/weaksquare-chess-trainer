@@ -151,6 +151,7 @@ class PuzzleView:
     solution_plies: int | None  # Commit the line with Show move count only: moves to enter, both sides
     max_plies: int | None  # Commit the line: the longest line Submit accepts
     candidate: str | None  # Danger spotting: the highlighted move (UCI); never says whether it's the blunder
+    source: Literal["lichess", "my"] = "lichess"  # v0.8: my = your own puzzle (no rating, no opponent move)
 
 
 @dataclass(frozen=True)
@@ -612,6 +613,223 @@ class Explanation:
     solution: list[str]  # UCI from start_fen, both sides
 
 
+# ---- v0.8: game library, Game Review, your own puzzles -------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReviewThresholds:
+    inaccuracy: int
+    mistake: int
+    blunder: int
+    decided: int  # positions beyond this aren't penalized (FR-11.9)
+
+
+@dataclass(frozen=True)
+class GamesSettings:
+    lichess_username: str | None  # linked automatically when you're signed in (FR-11.23)
+    chesscom_username: str | None  # linked by username (FR-11.24)
+    sync_on_open: bool
+    first_sync_days: int
+    first_sync_max: int
+    think_s: float  # per position (FR-11.8)
+    thresholds: ReviewThresholds
+    tolerance_cp: int  # Retry mode and puzzles saved from your games (FR-11.15, FR-10.43)
+    key_moments: int
+
+
+@dataclass(frozen=True)
+class ChesscomProfile:
+    username: str
+    name: str | None
+    url: str | None
+    joined: int | None
+
+
+@dataclass(frozen=True)
+class GameSummary:
+    """One row of My games (FR-11.25). Players are per color; `opponent` is from your side when known."""
+
+    id: int
+    source: Literal["lichess", "chesscom", "paste", "file"]
+    url: str | None
+    played_at: str | None
+    time_class: str | None
+    time_control: str | None
+    rated: bool | None
+    white: str | None
+    black: str | None
+    white_rating: int | None
+    black_rating: int | None
+    user_color: Literal["white", "black", "both"] | None
+    opponent: str | None
+    opponent_rating: int | None
+    user_rating: int | None
+    result: str
+    user_result: Literal["win", "loss", "draw"] | None
+    eco: str | None
+    opening: str | None
+    accuracy_user: float | None
+    accuracy_opponent: float | None
+    lichess_analyzed: bool  # the badge: Lichess already has computer analysis
+    analysis_status: Literal["none", "analyzed"]
+
+
+@dataclass(frozen=True)
+class GamePage:
+    games: list[GameSummary]
+    total: int
+
+
+@dataclass(frozen=True)
+class GameChoice:
+    index: int
+    label: str
+    error: str | None  # why this game can't be imported
+
+
+@dataclass(frozen=True)
+class GameImport:
+    """An import's result: a stored game, or (several games in a file) the list to pick from."""
+
+    game_id: int | None
+    created: bool
+    needs_color: bool  # ask which side you played (FR-11.5)
+    analyzed: bool  # a re-import found its analysis (FR-11.7)
+    choices: list[GameChoice]
+    token: str | None  # pass it to pick_imported_game with a choice's index
+
+
+@dataclass(frozen=True)
+class AnalysisQueue:
+    job_id: str | None  # the running analysis job, if any
+    current: int | None  # the game being analyzed
+    waiting: list[int]
+
+
+@dataclass(frozen=True)
+class ReviewLine:
+    score: str  # from the mover's side
+    pv: list[str]  # UCI
+    sans: list[str]
+
+
+@dataclass(frozen=True)
+class ReviewMove:
+    ply: int
+    san: str
+    uci: str
+    mover: Literal["white", "black"]
+    fen_before: str
+    classification: Literal["best", "good", "inaccuracy", "mistake", "blunder"] | None
+    symbol: str | None  # ?! ? ??
+    cp_loss: int | None
+    eval_white: int | None  # after the move, White's side, clamped to ±1000 (the eval graph)
+    eval_text: str | None
+    best_move: str | None
+    best_san: str | None
+    lines: list[ReviewLine]  # the top engine lines before the move (FR-11.14)
+    refutation: list[str]  # UCI after the move: the best reply line (FR-11.14)
+    kind: Literal["missed", "allowed", "other"] | None
+    phase: Literal["opening", "middlegame", "endgame"] | None
+    low_clock: bool | None
+    reason: str | None  # your mistake reason (FR-5.7)
+    suggested_reason: str | None
+    saved: bool  # already saved as a puzzle
+
+
+@dataclass(frozen=True)
+class PhaseSummary:
+    phase: Literal["opening", "middlegame", "endgame"]
+    moves: int
+    inaccuracies: int
+    mistakes: int
+    blunders: int
+    avg_cp_loss: float | None
+
+
+@dataclass(frozen=True)
+class SideSummary:
+    color: Literal["white", "black"]
+    moves: int
+    inaccuracies: int
+    mistakes: int
+    blunders: int
+    avg_cp_loss: float | None
+    platform_accuracy: float | None
+    phases: list[PhaseSummary]
+    low_clock_errors: int | None
+
+
+@dataclass(frozen=True)
+class GameReview:
+    game: GameSummary
+    start_fen: str
+    moves: list[ReviewMove]
+    analyzed: bool
+    current: bool  # analyzed at today's settings
+    summaries: list[SideSummary]  # White, then Black (FR-11.11)
+    key_moments: list[int]  # plies (FR-11.13)
+    retry_plies: list[int]  # your mistakes and blunders (FR-11.15)
+    ask_reasons: bool  # FR-5.8
+
+
+@dataclass(frozen=True)
+class RetryResult:
+    retry_id: int
+    found: bool
+    played_san: str
+    played_score: str
+    best_san: str | None
+    best_line: list[str]  # UCI: the answer, sent only with the result
+    reply_line: list[str]  # the engine's answer to your move, when it wasn't found
+    suggested_reason: str | None
+    engine_checked: bool
+
+
+@dataclass(frozen=True)
+class SavedPuzzle:
+    puzzle_id: int
+    created: bool
+
+
+@dataclass(frozen=True)
+class PuzzleImportError:
+    n: int  # entry number in the file, from 1
+    reason: str
+
+
+@dataclass(frozen=True)
+class PuzzleImportReport:
+    label: str
+    file_name: str
+    format: Literal["pgn", "epd", "csv"]
+    entries: int
+    added: int
+    duplicates: int
+    skipped: int
+    errors: list[PuzzleImportError]  # the first 500 skipped entries
+
+
+@dataclass(frozen=True)
+class PuzzleSet:
+    label: str
+    count: int
+
+
+@dataclass(frozen=True)
+class SourceAccuracy:
+    source: Literal["lichess", "my"]
+    attempts: int
+    wins: int
+
+
+@dataclass(frozen=True)
+class GameStats:
+    retry_found: int
+    retry_tried: int
+    sources: list[SourceAccuracy]
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -672,4 +890,24 @@ EXPORTED: list[type] = [
     ExplainAnnotation,
     ExplainStep,
     Explanation,
+    ReviewThresholds,
+    GamesSettings,
+    ChesscomProfile,
+    GameSummary,
+    GamePage,
+    GameChoice,
+    GameImport,
+    AnalysisQueue,
+    ReviewLine,
+    ReviewMove,
+    PhaseSummary,
+    SideSummary,
+    GameReview,
+    RetryResult,
+    SavedPuzzle,
+    PuzzleImportError,
+    PuzzleImportReport,
+    PuzzleSet,
+    SourceAccuracy,
+    GameStats,
 ]
