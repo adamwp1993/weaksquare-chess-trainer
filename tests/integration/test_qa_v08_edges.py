@@ -72,7 +72,7 @@ def test_qa_a_400_ply_game_imports_and_analyzes_completely(services, paths) -> N
     assert len(services.review.review(gid).moves) == 400
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B1: new grading thresholds never reach games already analyzed")
+# Regression test for v0.8-B1 (fixed in the QA fix loop).
 def test_qa_changed_thresholds_regrade_or_offer_analyze_again(services, paths) -> None:  # type: ignore[no-untyped-def]
     plant_managed_install(paths)  # "Stockfish 19", the engine the stored analysis names
     gid = services.games.import_pgn(SCHOLAR).game_id
@@ -93,7 +93,7 @@ def test_qa_changed_thresholds_regrade_or_offer_analyze_again(services, paths) -
 # ---------------------------------------------------------------- Retry and Save
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B3: without Stockfish an unchecked Retry move is counted as a miss")
+# Regression test for v0.8-B3 (fixed in the QA fix loop).
 def test_qa_an_unchecked_retry_is_not_counted_as_a_miss(services) -> None:  # type: ignore[no-untyped-def]
     gid = _analyzed_scholar(services)  # no Stockfish installed in this test
     r = services.review.retry_move(gid, 5, "h7h6")  # not in the stored lines, so it can't be checked
@@ -198,9 +198,7 @@ def test_qa_relinking_another_chesscom_user_starts_a_fresh_first_sync(rig: Rig) 
     assert any(etag is not None for _, etag in rig.chesscom.calls)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.8-B5: the chess.com username typed for a URL import is used once, then forgotten"
-)
+# Regression test for v0.8-B5 (fixed in the QA fix loop).
 def test_qa_the_username_given_for_a_chesscom_url_finds_your_color_and_is_kept(rig: Rig) -> None:  # noqa: F811
     rig.acct.id = None  # not signed in to Lichess: only the typed chess.com name says who you are
     job = rig.svc.start_url_import("https://www.chess.com/game/live/100000001", chesscom_username="player_a")
@@ -211,3 +209,26 @@ def test_qa_the_username_given_for_a_chesscom_url_finds_your_color_and_is_kept(r
     # Expected (FR-11.4 "ask once", FR-11.5): you just said you're player_a, who played Black in that game.
     assert not res.needs_color and rig.svc.get(res.game_id).user_color == "black"
     assert rig.svc.settings().chesscom_username == "player_a"
+
+
+def test_v08_b8_a_saved_game_puzzle_says_it_is_checked_strictly_without_stockfish(services) -> None:  # type: ignore[no-untyped-def]
+    """Regression test for v0.8-B8."""
+    from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzlesRepo
+    from weaksquare.core.filters import FilterSpec
+    from weaksquare.core.puzzle import NewCustomPuzzle
+
+    CustomPuzzlesRepo(services.db).add(
+        NewCustomPuzzle(fen="6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1", solution=("d1d8",), player_color="white",
+                        origin="manual", strict=False),
+        "2026-01-01T00:00:00+00:00",
+    )  # fmt: skip
+    sid = services.sessions.start(FilterSpec(source="my", exclude_solved_here=False)).session_id
+    assert services.sessions.next_puzzle(sid).strict_without_engine
+
+
+def test_v08_b2_a_game_file_past_500_games_says_so() -> None:
+    """Regression test for v0.8-B2 (game files)."""
+    from weaksquare.core.games import GameError, parse_pgn
+
+    out = parse_pgn('[White "a"]\n\n1. e4 *\n\n' * 4, max_games=3)
+    assert len(out) == 4 and isinstance(out[-1], GameError) and "more than 3 games" in out[-1].reason

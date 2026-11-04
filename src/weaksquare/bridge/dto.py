@@ -152,6 +152,7 @@ class PuzzleView:
     max_plies: int | None  # Commit the line: the longest line Submit accepts
     candidate: str | None  # Danger spotting: the highlighted move (UCI); never says whether it's the blunder
     source: Literal["lichess", "my"] = "lichess"  # v0.8: my = your own puzzle (no rating, no opponent move)
+    strict_without_engine: bool = False  # v0.8-B8: a puzzle from your games checked on its stored line (no Stockfish)
 
 
 @dataclass(frozen=True)

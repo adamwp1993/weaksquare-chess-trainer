@@ -62,6 +62,11 @@ class FileError(Exception):
         self.reason = reason
 
 
+def _too_many(n: int, max_entries: int) -> EntryError:
+    """v0.8-B2: the file holds more entries than the app reads; the rest aren't imported."""
+    return EntryError(n, f"the file has more than {max_entries:,} entries: this one and the rest weren't read")
+
+
 def validate_label(label: object) -> str:
     if not isinstance(label, str) or not label.strip():
         raise ValueError("Give the set a label, e.g. the book's title.")
@@ -145,8 +150,16 @@ def _replay(board: chess.Board, tokens: list[str]) -> list[chess.Move]:
 def parse_pgn_puzzles(text: str, max_entries: int = MAX_ENTRIES) -> list[Entry]:
     stream = io.StringIO(text.lstrip("﻿"))
     out: list[Entry] = []
-    while len(out) < max_entries:
+    while True:
         n = len(out) + 1
+        if len(out) >= max_entries:
+            try:
+                more = chess.pgn.read_game(stream)
+            except Exception:
+                more = None
+            if more is not None:
+                out.append(_too_many(n, max_entries))
+            break
         try:
             game = chess.pgn.read_game(stream)
         except Exception:
@@ -198,6 +211,7 @@ def parse_epd(text: str, max_entries: int = MAX_ENTRIES) -> list[Entry]:
             continue
         n += 1
         if n > max_entries:
+            out.append(_too_many(n, max_entries))
             break
         try:
             board = chess.Board()
@@ -249,6 +263,7 @@ def parse_csv(text: str, max_entries: int = MAX_ENTRIES) -> list[Entry]:
     out: list[Entry] = []
     for n, row in enumerate(reader, 1):
         if n > max_entries:
+            out.append(_too_many(n, max_entries))
             break
         if not any(c.strip() for c in row):
             continue

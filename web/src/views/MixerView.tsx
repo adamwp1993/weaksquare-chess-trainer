@@ -420,7 +420,11 @@ export function MixerView({
           description={
             dangerMode
               ? "Danger spotting stays on this PC: nothing is sent to Lichess."
-              : rated
+              : spec.source === "my"
+                ? "Your own puzzles stay on this PC: they never count toward a rating."
+                : spec.source === "both" && rated
+                  ? "Lichess puzzles count toward your Lichess puzzle rating; your own never do."
+                  : rated
                 ? "Solves count toward your Lichess puzzle rating."
                 : "Solves sync to Lichess as unrated."
           }

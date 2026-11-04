@@ -363,9 +363,10 @@ class ReviewService:
                 checked = False
         found = played is not None and within_tolerance(best, played, self._prefs.settings().tolerance_cp)
         loss = max(0, best.value() - played.value()) if played is not None else None
-        rid = self._retries.add(game_id, ply, move.uci(), found, loss, self._now())
+        # v0.8-B3: without Stockfish a move off the stored lines can't be graded: not a miss, not recorded.
+        rid = self._retries.add(game_id, ply, move.uci(), found, loss, self._now()) if checked else 0
         suggested = None
-        if not found:
+        if not found and checked:
             ctx = ReasonContext(
                 decisive_ms=think_ms,
                 rushed_ms=rushed_ms,

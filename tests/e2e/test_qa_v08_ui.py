@@ -99,7 +99,7 @@ def test_qa_my_puzzles_source_greys_lichess_filters_and_both_keeps_them(page) ->
     shot(page, "mixer-both")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B4: the locked source shows Lichess DB but My puzzles is still used")
+# Regression test for v0.8-B4 (fixed in the QA fix loop).
 def test_qa_a_lichess_only_mode_after_choosing_my_puzzles_can_start(page) -> None:  # type: ignore[no-untyped-def]
     page.goto(page.base_url + "/?mine=1")
     page.get_by_test_id("source-select").get_by_text("My puzzles").click()
@@ -114,7 +114,7 @@ def test_qa_a_lichess_only_mode_after_choosing_my_puzzles_can_start(page) -> Non
     assert page.get_by_text("Choose Lichess DB for this mode").count() == 0
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B6: My puzzles show Lichess-only details (Lichess link, Rated text)")
+# Regression test for v0.8-B6 (fixed in the QA fix loop).
 def test_qa_a_my_puzzle_has_no_lichess_link_and_no_rated_promise(page) -> None:  # type: ignore[no-untyped-def]
     page.goto(page.base_url + "/?mine=1")
     page.get_by_test_id("source-select").get_by_text("My puzzles").click()
@@ -131,3 +131,13 @@ def test_qa_a_my_puzzle_has_no_lichess_link_and_no_rated_promise(page) -> None: 
     # Your own puzzle isn't on Lichess, and it never counts toward your Lichess rating (FR-3.15).
     assert href is None, href
     assert "count toward your Lichess puzzle rating" not in rated_text
+
+
+def test_v08_b7_long_engine_lines_are_shortened(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression test for v0.8-B7: at most 8 moves of a line are shown, then an ellipsis."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("move-5").click()
+    for text in page.get_by_test_id("review-lines").get_by_role("button").all_inner_texts():
+        assert len(text.replace(" …", "").split()) <= 8

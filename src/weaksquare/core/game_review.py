@@ -10,7 +10,7 @@ For cp loss, scores are clamped to ±1000 and a mate counts as ±1000 (plan v0.8
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 import chess
@@ -229,6 +229,12 @@ def grade_game(
             )
         )
     return rows
+
+
+def regrade(row: MoveRow, th: Thresholds) -> MoveRow:
+    """The same move graded with other thresholds (v0.8-B1): only the stored evals are needed."""
+    loss, cls = grade(row.eval_before, row.eval_after, row.best_move == row.move_uci, th)
+    return replace(row, cp_loss=loss, classification=cls, kind=missed_or_allowed(row.eval_before, row.eval_after, cls))
 
 
 def white_eval(row: MoveRow) -> int:

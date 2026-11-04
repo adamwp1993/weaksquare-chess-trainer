@@ -286,6 +286,7 @@ class PuzzleView:
     max_plies: int | None = None  # Commit the line: the longest line Submit accepts
     candidate: str | None = None  # Danger spotting: the highlighted move (never says if it's the blunder)
     source: str = "lichess"  # v0.8: "my" for your own puzzles (no rating or opponent move first; never synced)
+    strict_without_engine: bool = False  # v0.8-B8: a puzzle from your games, checked on its stored line
 
 
 @dataclass(frozen=True)
@@ -725,7 +726,9 @@ class SessionService:
                                   "white" if state.board.turn else "black", puzzle.rating, sound, played,
                                   s.mode, len(puzzle.moves) - 1 if commit and s.show_length else None,
                                   max_plies(puzzle, s.show_length) if commit else None,
-                                  source=puzzle.ref.source)  # fmt: skip
+                                  source=puzzle.ref.source,
+                                  strict_without_engine=puzzle.tolerance and (self._engine is None or
+                                                        self._engine.status().state != "ready"))  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
 
     def _start_state(self, s: _Session, puzzle: Puzzle, practice: bool = False, prev: State | None = None) -> State:

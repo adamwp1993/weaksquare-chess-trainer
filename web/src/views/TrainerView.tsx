@@ -769,6 +769,11 @@ export function TrainerView({
           )}
         </div>
         <Stack gap="sm" style={{ flex: "0 0 260px" }}>
+          {view?.strict_without_engine && (
+            <Text size="xs" c="dimmed" data-testid="strict-note">
+              Stockfish isn't installed, so only this puzzle's saved line counts.
+            </Text>
+          )}
           {view && (
             <Text size="sm" c="dimmed" data-testid="puzzle-header">
               Puzzle {view.number}
@@ -807,7 +812,7 @@ export function TrainerView({
                 <Text fw={700} c={outcome.win ? "green" : "red"}>
                   {outcome.win ? "Solved" : "Failed"}
                 </Text>
-                <Text size="sm">Themes:</Text>
+                {outcome.themes.length > 0 && <Text size="sm">Themes:</Text>}
                 <Group gap={4} data-testid="outcome-themes">
                   {outcome.themes.map((t) => (
                     <Badge key={t.key} variant="light" style={{ textTransform: "none" }}>
@@ -823,10 +828,12 @@ export function TrainerView({
                     {outcome.level_up.top ? "+" : ""} moves)
                   </Badge>
                 )}
-                {!danger && <RatingChange info={rating} />}
+                {!danger && view?.source !== "my" && <RatingChange info={rating} />}
+                {view?.source !== "my" && (
                 <Anchor size="sm" href={outcome.puzzle_url} target="_blank" rel="noreferrer">
                   Open this puzzle on Lichess
                 </Anchor>
+                )}
               </Stack>
             </Paper>
           )}

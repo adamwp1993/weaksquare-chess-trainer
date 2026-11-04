@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -23,7 +23,7 @@ import chess
 
 from weaksquare.core.engine import EngineLine, EngineNotInstalled
 from weaksquare.core.errors import ValidationError
-from weaksquare.core.game_review import MoveRow, Thresholds, grade_game
+from weaksquare.core.game_review import MoveRow, Thresholds, grade_game, regrade
 from weaksquare.core.games import GameError, GameRow, low_clock, parse_single_pgn
 from weaksquare.core.tolerance import DEFAULT_TOLERANCE_CP, validate_tolerance
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
@@ -56,6 +56,8 @@ class AnalysisStore(Protocol):
     def replace(self, game_id: int, rows: Sequence[MoveRow], status: str, think_s: float, engine: str) -> None: ...
 
     def rows(self, game_id: int) -> list[MoveRow]: ...
+
+    def regrade(self, fn: Callable[[MoveRow], MoveRow]) -> int: ...
 
 
 class BackgroundEngine(Protocol):
@@ -156,6 +158,8 @@ class AnalysisService:
                 THRESHOLDS_KEY,
                 {"inaccuracy": t.inaccuracy, "mistake": t.mistake, "blunder": t.blunder, "decided": t.decided},
             )
+            # v0.8-B1: games already analyzed are regraded from their stored evals (no engine pass).
+            self._store.regrade(lambda row: regrade(row, t))
         if tolerance_cp is not None:
             try:
                 self._settings.set(TOLERANCE_KEY, validate_tolerance(tolerance_cp))

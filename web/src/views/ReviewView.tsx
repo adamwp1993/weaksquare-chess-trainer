@@ -118,18 +118,22 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
                 {m.symbol}. Find a better move: anything within the tolerance of the best counts.
               </Text>
               {result && (
-                <Alert color={result.found ? "green" : "red"} data-testid="retry-result">
+                <Alert color={result.found ? "green" : result.engine_checked ? "red" : "yellow"} data-testid="retry-result">
                   <Text size="sm" fw={600}>
-                    {result.found ? `Found: ${result.played_san} (${result.played_score})` : `Not quite: ${result.played_san} (${result.played_score})`}
+                    {result.found
+                      ? `Found: ${result.played_san} (${result.played_score})`
+                      : result.engine_checked
+                        ? `Not quite: ${result.played_san} (${result.played_score})`
+                        : `${result.played_san} couldn't be checked without Stockfish, so it isn't counted.`}
                   </Text>
                   <Text size="sm">
                     Best was {result.best_san ?? "?"}
                     {result.best_line.length > 1 ? `, then ${answerPositions(m.fen_before, result.best_line).slice(2).map((p) => p.san).join(" ")}` : ""}.
                   </Text>
-                  {!result.engine_checked && <Text size="xs">Install Stockfish to have other moves checked.</Text>}
+                  {!result.engine_checked && <Text size="xs">Install Stockfish to have moves like this checked.</Text>}
                 </Alert>
               )}
-              {result && !result.found && review.ask_reasons && (
+              {result && !result.found && result.engine_checked && review.ask_reasons && (
                 <ReasonChips
                   prompt={gamePrompt(result.suggested_reason as ReasonKey | null)}
                   chosen={null}
@@ -312,12 +316,13 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
                   Engine lines here ({here.mover} to move)
                 </Text>
                 {here.lines.map((l, i) => (
-                  <Group key={i} gap={6} wrap="nowrap">
+                  <Group key={i} gap={6} wrap="wrap">
                     <Text size="sm" w={56} fw={600}>
                       {l.score}
                     </Text>
                     <Button size="compact-xs" variant="subtle" onClick={() => setShowing({ fen: here.fen_before, line: l.pv, step: 1 })}>
-                      {l.sans.join(" ")}
+                      {l.sans.slice(0, 8).join(" ")}
+                      {l.sans.length > 8 ? " …" : ""}
                     </Button>
                   </Group>
                 ))}

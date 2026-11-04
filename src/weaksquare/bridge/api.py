@@ -375,6 +375,7 @@ class Api:
             v.max_plies,
             v.candidate,
             "my" if v.source == "my" else "lichess",
+            v.strict_without_engine,
         )
 
     @staticmethod

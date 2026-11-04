@@ -162,7 +162,7 @@ def parse_pgn(text: str, *, max_games: int = MAX_GAMES_LISTED) -> list[ParsedGam
         raise GameError(f"The PGN is larger than {MAX_PGN_BYTES // (1024 * 1024)} MB.")
     stream = io.StringIO(text.lstrip("﻿"))
     out: list[ParsedGame | GameError] = []
-    while len(out) < max_games:
+    while True:
         try:
             game = chess.pgn.read_game(stream)
         except Exception as e:  # python-chess raises on some malformed headers
@@ -173,6 +173,11 @@ def parse_pgn(text: str, *, max_games: int = MAX_GAMES_LISTED) -> list[ParsedGam
         # read_game returns an empty game for text that isn't PGN at all ("hello world"): not a game
         if not game.variations and not game.errors and _blank(game.headers):
             continue
+        if len(out) >= max_games:  # v0.8-B2: say so instead of dropping the rest silently
+            out.append(
+                GameError(f"The file has more than {max_games} games: only the first {max_games} are listed.", len(out))
+            )
+            break
         try:
             out.append(_one_game(len(out), game))
         except GameError as e:

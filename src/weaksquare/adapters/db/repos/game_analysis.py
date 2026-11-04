@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from weaksquare.adapters.db.connection import Database
 from weaksquare.core.engine import EngineLine
@@ -79,6 +79,26 @@ class GameAnalysisRepo:
             )
             for r in found
         ]
+
+    def regrade(self, fn: Callable[[MoveRow], MoveRow]) -> int:
+        """Apply `fn` to every stored move and save what changed (v0.8-B1). Returns the moves changed."""
+        with self._db.session() as conn:
+            games = [int(r[0]) for r in conn.execute("SELECT DISTINCT game_id FROM game_analysis")]
+        changed = 0
+        for gid in games:
+            updates = []
+            for r in self.rows(gid):
+                n = fn(r)
+                if (n.cp_loss, n.classification, n.kind) != (r.cp_loss, r.classification, r.kind):
+                    updates.append((n.cp_loss, n.classification, n.kind, gid, r.ply))
+            if updates:
+                with self._db.transaction() as conn:
+                    conn.executemany(
+                        "UPDATE game_analysis SET cp_loss = ?, classification = ?, kind = ? WHERE game_id = ? AND ply = ?",
+                        updates,
+                    )
+                changed += len(updates)
+        return changed
 
     def row(self, game_id: int, ply: int) -> MoveRow | None:
         rows = [r for r in self.rows(game_id) if r.ply == ply]

@@ -227,6 +227,21 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.8: QA fixes (v0.8-B1 to B9)
+- Context: `qa/QA-v0.8.md` round 1: FAIL, with one major bug (B4) and eight minor ones.
+- Decision:
+  - **B1:** changing the grading thresholds regrades every stored move from its stored evals (`core.game_review.regrade`, `GameAnalysisRepo.regrade`), with no engine pass.
+  - **B2:** a puzzle file over 20,000 entries, or a game file over 500 games, says so in the report or the list, instead of dropping the rest silently.
+  - **B3:** without Stockfish, a Retry move that isn't in the stored lines can't be graded. It's neither recorded nor counted, and it gets no reason chips.
+  - **B4:** Name the idea and Danger spotting always start on Lichess DB. The front end switches the source along with the mode, so the locked control and the session agree.
+  - **B5:** the chess.com username typed for a URL import is linked when none is, so it detects your color and isn't asked again.
+  - **B6:** My puzzles show no Lichess link, no rating change and no empty Themes line, and the Rated text says they never count.
+  - **B7:** Review shows at most 8 moves of an engine line, and the lines wrap.
+  - **B8:** a puzzle from your games says so when Stockfish is missing and only its saved line counts (`PuzzleView.strict_without_engine`).
+  - **B9:** the User Guide states the decided-position rule exactly.
+- Alternatives: B1, marking games *not current* to force a re-analysis (slow, and the evals don't change); B4, unlocking the control in those modes (they can't serve your puzzles).
+- Consequences: each bug has a regression test. QA's strict-xfail tests for B1–B6 now pass unmarked, and B2 (game files), B7 and B8 have their own.
+
 ### 2026-11-03, v0.8: My puzzles in the session: negative keys, no pre-move, the engine tolerance
 - Context: decision 3 promised `my:` puzzle refs. The session's queue holds integer keys into `puzzles.db`, every mode applies `moves[0]` (the opponent's move) first, and puzzles saved from games need the 30 cp tolerance (Adam, v0.8 planning).
 - Decision:

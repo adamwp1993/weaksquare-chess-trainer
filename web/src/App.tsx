@@ -145,6 +145,10 @@ export function App() {
     api.setSetting("ui.sounds", next).catch(() => undefined);
   }, []);
 
+  /** v0.8-B4: Name the idea and Danger spotting are Lichess-only, so they always use Lichess DB. */
+  const forMode = (s: FilterSpec, m: TrainingMode): FilterSpec =>
+    (m === "name_idea" || m === "danger_spotting") && s.source !== "lichess" ? { ...s, source: "lichess" } : s;
+
   /** Starts a session; false if it couldn't (the error is shown). */
   const start = async (asMode: TrainingMode = mode): Promise<boolean> => {
     if (!spec) return false;
@@ -152,7 +156,7 @@ export function App() {
     setStartError(null);
     setStartNotice(null);
     try {
-      const info = await api.startSession(spec, rated, asMode, showLength);
+      const info = await api.startSession(forMode(spec, asMode), rated, asMode, showLength);
       setSessionId(info.session_id);
       if (info.empty_buckets.length > 0) {
         const groups = info.empty_buckets
@@ -176,6 +180,7 @@ export function App() {
   // session carries on, with the reason shown (v0.5-B1).
   const changeMode = async (next: TrainingMode) => {
     if (sessionId !== null && !(await start(next))) return;
+    if (spec && forMode(spec, next) !== spec) changeSpec(forMode(spec, next)); // the locked control shows Lichess DB
     setMode(next);
     api.setSetting("trainer.mode", next).catch(() => undefined);
   };

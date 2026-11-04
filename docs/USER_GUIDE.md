@@ -618,7 +618,7 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 ### Reading the review
 ![Game Review](img/game-review.png)
 
-- **The board and the move list.** Step with the arrows below the board (or the **←** and **→** keys), or click a move. Your moves are in bold. The symbols mark inaccuracies (**?!**), mistakes (**?**) and blunders (**??**). Positions that were already won or lost (beyond ±5) aren't penalized.
+- **The board and the move list.** Step with the arrows below the board (or the **←** and **→** keys), or click a move. Your moves are in bold. The symbols mark inaccuracies (**?!**), mistakes (**?**) and blunders (**??**). A move isn't penalized when the game was already lost before it (−5 or worse), or is still won after it (+5 or better). Dropping from +8 to +1 still counts.
 - **The eval graph** shows who was better through the game, from White's side and capped at ±10. Click it to jump to a move.
 - **The summary** gives each side's inaccuracies, mistakes, blunders, average loss and the platform's accuracy.
 - **At any move,** a green arrow shows Stockfish's best move, and **Engine lines here** lists its top three lines. Click a line to step through it. After a bad move, **Why … fails: show me** steps through the punishment.
@@ -642,7 +642,7 @@ In **Settings → Games**:
 | **Analysis: seconds per position** | Stockfish's time per position (0.3 s by default). A higher value is slower but more accurate. New analyses use it, and a game analyzed at another setting shows **Analyze again**. |
 | **Key moments** | How many of your mistakes are listed (5). |
 | **Retry tolerance (cp)** | How close to the best move counts as found, in Retry and in puzzles saved from your games (30). |
-| **Inaccuracy / Mistake / Blunder from (cp)** | The grading thresholds (50, 100, 200). Losing a forced mate, or walking into one, is always a blunder. |
+| **Inaccuracy / Mistake / Blunder from (cp)** | The grading thresholds (50, 100, 200). Games you've already analyzed are regraded at once, with no new analysis. Losing a forced mate, or walking into one, is always a blunder. |
 
 ### Gotchas
 - **Analysis needs Stockfish.** Without it, **Analyze** says so. See [Installing Stockfish](#installing-stockfish).

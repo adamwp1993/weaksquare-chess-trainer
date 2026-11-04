@@ -147,6 +147,7 @@ export interface PuzzleView {
   max_plies: number | null;
   candidate: string | null;
   source: "lichess" | "my";
+  strict_without_engine: boolean;
 }
 
 export interface ThemeLabel {

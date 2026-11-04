@@ -200,7 +200,7 @@ def test_qa_an_epd_with_an_illegal_bm_is_reported_not_imported() -> None:
     assert isinstance(out[1], ImportedPuzzle) and out[1].solution == ("b1b8",)
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B2: entries past the 20,000-entry cap are dropped without a word")
+# Regression test for v0.8-B2 (fixed in the QA fix loop).
 def test_qa_entries_past_the_cap_are_reported() -> None:
     line = "6k1/5ppp/8/8/8/8/8/RR4K1 w - - bm Ra8#;"
     out = parse_epd("\n".join([line] * 5), max_entries=3)

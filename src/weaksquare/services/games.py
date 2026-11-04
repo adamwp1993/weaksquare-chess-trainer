@@ -503,6 +503,8 @@ class GameLibraryService:
                 raise ValidationError(
                     "To find a chess.com game, the app needs your chess.com username.", code="chesscom_username_needed"
                 )
+            if not self.settings().chesscom_username:
+                self.set_chesscom_username(username)  # v0.8-B5: asked once (FR-11.4), then linked
 
         with self._lock:
             self._next_token += 1
