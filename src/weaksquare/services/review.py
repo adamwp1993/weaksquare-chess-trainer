@@ -22,7 +22,7 @@ from typing import Any, Protocol
 import chess
 
 from weaksquare.core.clock import Clock
-from weaksquare.core.engine import EngineLine, score_for
+from weaksquare.core.engine import EngineLine, EngineNotInstalled, score_for, validate_fen
 from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.game_review import (
     ERRORS,
@@ -67,6 +67,8 @@ class InteractiveEngine(Protocol):
     ) -> Any: ...
 
     def status(self) -> Any: ...
+
+    def ticket(self, key: Any) -> int: ...
 
 
 class CustomPuzzles(Protocol):
@@ -400,6 +402,22 @@ class ReviewService:
             ),
             self._now(),
         )  # fmt: skip
+
+    # ------------------------------------------------------------ Analyze from here (v0.10, FR-11.34)
+
+    def analyze_position(self, game_id: int, fen: Any, purpose: Any = "board") -> Any:
+        """Eval and top lines for any position on the free analysis board opened from a game, on the
+        **interactive** engine (never the background one, ARCHITECTURE §3 decision 12). The position is
+        validated first (FR-7.6). Nothing here touches the game, its analysis or any stats."""
+        if purpose not in ("panel", "board"):
+            raise ValidationError("Unknown analysis purpose.")
+        game = self._game(game_id)
+        board = validate_fen(fen)
+        if self._engine.status().state != "ready":
+            raise EngineNotInstalled("Install Stockfish to analyze positions.")
+        color = game.user_color if game.user_color in ("white", "black") else ("white" if board.turn else "black")
+        key = ("review", game.id, purpose)
+        return self._engine.analyse(board, color, key=key, gen=self._engine.ticket(key))
 
     # ------------------------------------------------------------ reasons
 

@@ -298,6 +298,7 @@ export class MockClient implements ApiClient {
     time_offset_days: null,
     reasons_ask: "always",
     rushed_s: 3,
+    show_best: false,
   };
   private reasons = new Map<number, ReasonKey>(); // attempt id -> its latest reason (§7.3)
   private attemptSession = new Map<number, { session: number; win: boolean; mode: TrainingMode }>();

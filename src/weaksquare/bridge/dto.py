@@ -8,7 +8,7 @@ secret in a DTO (SR-1).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from weaksquare.core.filters import FilterSpec, RatioBucket
 from weaksquare.core.move_sounds import MoveSound
@@ -95,6 +95,7 @@ class UiSettings:
     time_offset_days: int | None  # FR-4.6 fast-forward: --dev runs only (None in the real app)
     reasons_ask: Literal["always", "game_review", "off"]  # FR-5.8: when to ask why you missed (game_review: v0.8)
     rushed_s: int  # FR-5.9: a deciding move faster than this suggests Rushed
+    show_best: bool = False  # v0.10, FR-11.35: Game Review shows the better move (default off)
 
 
 @dataclass(frozen=True)
@@ -726,6 +727,9 @@ class GamesSettings:
     thresholds: ReviewThresholds
     tolerance_cp: int  # Retry mode and puzzles saved from your games (FR-11.15, FR-10.43)
     key_moments: int
+    puzzle_level: Literal["blunders", "mistakes", "inaccuracies"] = "mistakes"  # v0.10, FR-10.40
+    puzzle_think_s: float = 1.0  # v0.10: per position while checking a puzzle's line (FR-10.41)
+    puzzle_job_id: str | None = None  # a level change that has new mistakes to check starts this job
 
 
 @dataclass(frozen=True)
@@ -1008,3 +1012,139 @@ EXPORTED: list[type] = [
     SourceAccuracy,
     GameStats,
 ]
+
+
+# ---- v0.10: the Coach (§10) ------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CoachExample:
+    game_id: int
+    ply: int
+    cp_loss: int
+
+
+@dataclass(frozen=True)
+class CoachWeakness:
+    key: str  # missed:<theme> / allowed:<theme> / habit:<habit> / puzzle:<theme>
+    kind: Literal["missed", "allowed", "habit", "puzzle"]
+    name: str
+    label: str
+    count: int
+    per10: float  # per 10 games (FR-10.38)
+    severity: int  # average eval lost, cp
+    score: float
+    themes: list[str]
+    mode: str | None
+    reasons: dict[str, int]  # latest mistake reason -> count (§7.3)
+    examples: list[CoachExample]
+    puzzle_accuracy: float | None
+    trend: float | None  # change in per10 against your previous report (FR-10.20); None: no previous
+
+
+@dataclass(frozen=True)
+class CoachGapRow:
+    theme: str
+    label: str
+    puzzle_accuracy: float | None
+    puzzle_attempts: int
+    missed_per10: float
+    allowed_per10: float
+
+
+@dataclass(frozen=True)
+class CoachPresetView:
+    """A preset to Load or Save (FR-10.24): the filters, the drill mode and why."""
+
+    name: str
+    spec: dict[str, Any]  # FilterSpec JSON
+    mode: str
+    why: list[str]
+
+
+@dataclass(frozen=True)
+class CoachReport:
+    id: int
+    created_at: str
+    subject_label: str
+    is_me: bool  # False: another player's report (FR-10.3)
+    source: Literal["puzzles", "games", "both"]
+    params: dict[str, Any]
+    games: int
+    first_played: str | None
+    last_played: str | None
+    per10: dict[str, float]
+    results: dict[str, int]
+    missed: list[CoachWeakness]
+    allowed: list[CoachWeakness]
+    habits: list[CoachWeakness]
+    puzzles: list[CoachWeakness]
+    gap: list[CoachGapRow]
+    reasons: dict[str, int]
+    low_clock_errors: int
+    preset: CoachPresetView | None
+    notes: list[str]
+
+
+@dataclass(frozen=True)
+class CoachReportSummary:
+    id: int
+    created_at: str
+    subject_label: str
+    is_me: bool
+    source: Literal["puzzles", "games", "both"]
+    games: int
+    top: list[str]  # the top weaknesses' labels
+
+
+@dataclass(frozen=True)
+class PlayerSubject:
+    """Another player you ran the Coach on (the Player filter in My Games)."""
+
+    subject: str  # <platform>:<username>
+    label: str
+    games: int
+
+
+@dataclass(frozen=True)
+class CoachDefaults:
+    params: dict[str, Any]  # the last run's settings (FR-10.2–10.5)
+    usernames: list[str]  # your linked accounts
+    players: list[PlayerSubject]
+    running_job: str | None  # a Coach run in progress
+
+
+@dataclass(frozen=True)
+class CoachAiNote:
+    key: str
+    label: str
+    explanation: str
+    drill: str
+
+
+@dataclass(frozen=True)
+class CoachAi:
+    summary: str
+    weaknesses: list[CoachAiNote]
+    presets: list[CoachPresetView]
+    fallback_preset: bool  # no AI preset survived validation: the report's own (FR-10.23)
+    discarded: int
+    provider: str
+    model: str
+    cost_usd: float
+
+
+@dataclass(frozen=True)
+class SuggestionView:
+    """The Suggested mix (FR-10.28–10.31)."""
+
+    report_id: int
+    number: int
+    created_at: str
+    label: str  # "Suggested — from Coach run #N, <date>"
+    spec: dict[str, Any]
+    mode: str
+    why: list[str]
+    pending: bool  # the banner: Apply / Compare / Dismiss
+    previous: dict[str, Any] | None  # your filters it would replace (Compare)
+    active: bool  # your current filters are this suggestion

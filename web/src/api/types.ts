@@ -125,6 +125,7 @@ export interface UiSettings {
   time_offset_days: number | null;
   reasons_ask: "always" | "game_review" | "off";
   rushed_s: number;
+  show_best: boolean;
 }
 
 export interface SessionInfo {
@@ -462,7 +463,7 @@ export interface LlmModelChoice {
 }
 
 export interface LlmFeature {
-  feature: "explain" | "game_review";
+  feature: "explain" | "game_review" | "coach";
   label: string;
   choice: "same" | "anthropic" | "openai" | "none";
   model: string;
@@ -601,6 +602,9 @@ export interface GamesSettings {
   thresholds: ReviewThresholds;
   tolerance_cp: number;
   key_moments: number;
+  puzzle_level: "blunders" | "mistakes" | "inaccuracies";
+  puzzle_think_s: number;
+  puzzle_job_id: string | null;
 }
 
 export interface ChesscomProfile {

@@ -328,6 +328,12 @@ class GamePuzzlesService:
         )  # fmt: skip
         return int(created)
 
+    def archive(self, puzzle_id: Any) -> None:
+        """FR-10.44: you archived this puzzle (`hidden`): kept with its attempts, never served or restored."""
+        if not isinstance(puzzle_id, int) or isinstance(puzzle_id, bool):
+            raise ValidationError("puzzle_id must be a whole number")
+        self._puzzles.set_status([puzzle_id], "hidden")
+
     def archive_outside_level(self) -> int:
         """Narrowing the level archives the Coach's puzzles outside it (never deletes them)."""
         keep = LEVELS[self.settings().level]

@@ -39,11 +39,13 @@ from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
 from weaksquare.services.analysis import AnalysisService
+from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
 from weaksquare.services.engine import EngineService
 from weaksquare.services.explain import ExplainService, ExplainView
 from weaksquare.services.game_explain import GameExplainService, GameQuote, NarrativeView
+from weaksquare.services.game_puzzles import GamePuzzlesService
 from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
@@ -105,7 +107,11 @@ class Api:
         review: ReviewService,
         puzzle_import: PuzzleImportService,
         game_explain: GameExplainService,
+        game_puzzles: GamePuzzlesService,
+        coach: CoachService,
     ) -> None:
+        self._game_puzzles = game_puzzles
+        self._coach = coach
         self._explain = explain
         self._game_explain = game_explain
         self._games = games
@@ -241,6 +247,7 @@ class Api:
             time_offset_days=self._time_offset(),
             reasons_ask=s.reasons_ask if s.reasons_ask in ("game_review", "off") else "always",  # type: ignore[arg-type]
             rushed_s=s.rushed_s,
+            show_best=s.show_best,
         )
 
     def _time_offset(self) -> int | None:
@@ -264,6 +271,7 @@ class Api:
             "ui.filters_collapsed",
             "reasons.ask",
             "reasons.rushed_s",
+            "review.show_best",
         ],
         value: Any,
     ) -> None:
@@ -753,14 +761,16 @@ class Api:
                               cfg.provider, cfg.model, ready, round(spent, 6), options)  # type: ignore[arg-type]  # fmt: skip
 
     # ---- v0.8: linked accounts and the game library (§11.5) --------------------------------------
-    def _games_settings_dto(self) -> dto.GamesSettings:
+    def _games_settings_dto(self, job: str | None = None) -> dto.GamesSettings:
         g = self._games.settings()
         r = self._analysis.settings()
+        p = self._game_puzzles.settings()
         t = r.thresholds
         return dto.GamesSettings(
             self._account.status().username, g.chesscom_username, g.sync_on_open, g.first_sync_days,
             g.first_sync_max, r.think_s, dto.ReviewThresholds(t.inaccuracy, t.mistake, t.blunder, t.decided),
-            r.tolerance_cp, r.key_moments,
+            r.tolerance_cp, r.key_moments, p.level,  # type: ignore[arg-type]
+            p.think_s, job,
         )  # fmt: skip
 
     @bridge_call
@@ -777,6 +787,8 @@ class Api:
         thresholds: dict | None = None,
         tolerance_cp: int | None = None,
         key_moments: int | None = None,
+        puzzle_level: Literal["blunders", "mistakes", "inaccuracies"] | None = None,
+        puzzle_think_s: float | None = None,
     ) -> dto.GamesSettings:
         self._games.set_settings(
             sync_on_open=sync_on_open, first_sync_days=first_sync_days, first_sync_max=first_sync_max
@@ -784,7 +796,136 @@ class Api:
         self._analysis.set_settings(
             think_s=think_s, thresholds=thresholds, tolerance_cp=tolerance_cp, key_moments=key_moments
         )
-        return self._games_settings_dto()
+        job = None
+        if puzzle_think_s is not None:
+            self._game_puzzles.set_settings(think_s=puzzle_think_s)
+        if puzzle_level is not None and puzzle_level != self._game_puzzles.settings().level:
+            self._game_puzzles.set_settings(level=puzzle_level)  # FR-10.40: archives/restores, no re-analysis
+            running = self._runner.active("game_puzzles")
+            job = running[0].id if running else None
+        return self._games_settings_dto(job)
+
+    # ---- v0.10: Game Review additions, your puzzles, the Coach ------------------------------------------
+    @bridge_call
+    def analyze_game_position(
+        self, game_id: int, fen: str, purpose: Literal["panel", "board"] = "board"
+    ) -> dto.Analysis:
+        """Analyze from here (FR-11.34): the interactive engine on any position of the free board."""
+        return analysis_dto(self._review.analyze_position(game_id, fen, purpose))
+
+    @bridge_call
+    def archive_my_puzzle(self, puzzle_id: int) -> None:
+        """FR-10.44: archive one of your puzzles you don't want. It's kept (with its attempts), never shown."""
+        self._game_puzzles.archive(puzzle_id)
+
+    @bridge_call
+    def get_coach_defaults(self) -> dto.CoachDefaults:
+        running = self._runner.active("coach_run")
+        players = [dto.PlayerSubject(s, _player_label(s), n) for s, n in self._games.players()]
+        return dto.CoachDefaults(
+            self._coach.last_params().to_json(), self._games.usernames(), players, running[0].id if running else None
+        )
+
+    @bridge_call
+    def start_coach_run(self, params: dict) -> str:
+        """A Coach run (§10): sync, analyze on the background engine, tag, puzzles, report. A job."""
+        return self._coach.start_run(params)
+
+    @bridge_call
+    def get_coach_run_result(self, job_id: str) -> int | None:
+        """The report a finished run saved."""
+        return self._coach.run_result(job_id)
+
+    @bridge_call
+    def list_coach_reports(self) -> list[dto.CoachReportSummary]:
+        out = []
+        for r in self._coach.reports():
+            rep = r.report
+            top = [str(w.get("label")) for w in (rep.get("weaknesses") or [])[:3] if isinstance(w, dict)]
+            out.append(
+                dto.CoachReportSummary(
+                    r.id, r.created_at, r.subject_label, r.subject == "me", r.source_kind,  # type: ignore[arg-type]
+                    int(rep.get("games") or 0), top,
+                )
+            )  # fmt: skip
+        return out
+
+    @bridge_call
+    def get_coach_report(self, report_id: int) -> dto.CoachReport:
+        row, trend = self._coach.report(report_id)
+        rep = row.report
+        has_prev = bool(trend)
+        preset = rep.get("preset")
+
+        def ws(group: str) -> list[dto.CoachWeakness]:
+            return [_weakness_dto(w, trend, has_prev) for w in rep.get(group) or [] if isinstance(w, dict)]
+
+        return dto.CoachReport(
+            row.id, row.created_at, row.subject_label, row.subject == "me", row.source_kind,  # type: ignore[arg-type]
+            row.params, int(rep.get("games") or 0), rep.get("first_played"), rep.get("last_played"),
+            dict(rep.get("per10") or {}), dict(rep.get("results") or {}),
+            ws("missed"), ws("allowed"), ws("habits"), ws("puzzles"),
+            [dto.CoachGapRow(**g) for g in rep.get("gap") or []], dict(rep.get("reasons") or {}),
+            int(rep.get("low_clock_errors") or 0),
+            _preset_dto("The report's mix", preset) if isinstance(preset, dict) else None,
+            [str(n) for n in rep.get("notes") or []],
+        )  # fmt: skip
+
+    @bridge_call
+    def get_coach_ai_quote(self, report_id: int) -> dto.GameAiQuote:
+        return _game_quote_dto(self._coach.quote_ai(report_id))
+
+    @bridge_call
+    def start_coach_ai(self, report_id: int) -> str:
+        """Get AI coaching (FR-10.21–10.25). The UI calls this only after you Confirm the estimate."""
+        return self._coach.start_ai(report_id)
+
+    @bridge_call
+    def get_coach_ai(self, report_id: int) -> dto.CoachAi | None:
+        found = self._coach.ai_result(report_id)
+        if found is None:
+            return None
+        c, meta = found
+        row, _ = self._coach.report(report_id)
+        labels = {
+            str(w.get("key")): str(w.get("label"))
+            for g in ("missed", "allowed", "habits", "puzzles")
+            for w in row.report.get(g) or []
+            if isinstance(w, dict)
+        }
+        return dto.CoachAi(
+            c.summary,
+            [dto.CoachAiNote(w.key, labels.get(w.key, w.key), w.explanation, w.drill) for w in c.weaknesses],
+            [dto.CoachPresetView(p.name, p.spec().to_json(), p.mode, []) for p in c.presets],
+            c.fallback_preset, c.discarded, str(meta.get("provider") or ""), str(meta.get("model") or ""),
+            float(meta.get("cost_usd") or 0.0),
+        )  # fmt: skip
+
+    @bridge_call
+    def get_suggestion(self) -> dto.SuggestionView | None:
+        return self._suggestion_dto(self._coach.suggestion())
+
+    @bridge_call
+    def apply_suggestion(self) -> dto.SuggestionView:
+        """Apply: the Suggested mix becomes your filters and mode (FR-10.31). No saved preset changes."""
+        view = self._suggestion_dto(self._coach.apply_suggestion())
+        assert view is not None
+        return view
+
+    @bridge_call
+    def dismiss_suggestion(self) -> dto.SuggestionView | None:
+        return self._suggestion_dto(self._coach.dismiss_suggestion())
+
+    def _suggestion_dto(self, s: Any) -> dto.SuggestionView | None:
+        if s is None:
+            return None
+        day = s.created_at[:10]
+        current = self._ui_settings.get().last_filters
+        active = current is not None and self._coach.is_suggested(current.to_json())
+        return dto.SuggestionView(
+            s.report_id, s.number, s.created_at, f"Suggested — from Coach run #{s.number}, {day}", s.spec, s.mode,
+            list(s.why), s.pending, s.previous, active,
+        )  # fmt: skip
 
     @bridge_call
     def verify_chesscom(self, username: str) -> dto.ChesscomProfile:
@@ -923,6 +1064,27 @@ def _explanation_dto(v: ExplainView) -> dto.Explanation:
                            round(v.cost_usd, 6), v.cached, v.start_fen, list(v.solution))  # fmt: skip
 
 
+def _player_label(subject: str) -> str:
+    platform, _, name = subject.partition(":")
+    return f"{name} ({'Lichess' if platform == 'lichess' else 'chess.com'})"
+
+
+def _weakness_dto(w: dict[str, Any], trend: dict[str, float], has_prev: bool) -> dto.CoachWeakness:
+    key = str(w.get("key"))
+    return dto.CoachWeakness(
+        key, w.get("kind"), str(w.get("name")), str(w.get("label")), int(w.get("count") or 0),  # type: ignore[arg-type]
+        float(w.get("per10") or 0.0), int(w.get("severity") or 0), float(w.get("score") or 0.0),
+        [str(t) for t in w.get("themes") or []], w.get("mode"), dict(w.get("reasons") or {}),
+        [dto.CoachExample(int(e["game_id"]), int(e["ply"]), int(e["cp_loss"])) for e in w.get("examples") or []],
+        w.get("puzzle_accuracy"), trend.get(key) if has_prev else None,
+    )  # fmt: skip
+
+
+def _preset_dto(name: str, p: dict[str, Any]) -> dto.CoachPresetView:
+    return dto.CoachPresetView(name, dict(p.get("spec") or {}), str(p.get("mode") or "standard"),
+                               [str(x) for x in p.get("why") or []])  # fmt: skip
+
+
 def _game_quote_dto(q: GameQuote) -> dto.GameAiQuote:
     e = q.estimate
     return dto.GameAiQuote(
@@ -975,7 +1137,7 @@ def _library_filter(f: dict) -> LibraryFilter:
     """FR-11.26 from the UI: unknown keys are refused, values are type-checked."""
     lists = {"platforms", "time_classes", "results", "colors", "statuses"}
     texts = {"opponent", "opening"}
-    known = lists | texts | {"rated", "date_from", "date_to", "limit", "offset"}
+    known = lists | texts | {"rated", "date_from", "date_to", "limit", "offset", "player"}
     unknown = set(f) - known
     if unknown:
         raise ValidationError(f"unknown library filter: {sorted(unknown)[0]}")
@@ -993,6 +1155,10 @@ def _library_filter(f: dict) -> LibraryFilter:
             if v is not None and not isinstance(v, bool):
                 raise ValidationError("rated must be true, false or null")
             kw[k] = v
+        elif k == "player":  # v0.10: you ('me') or another player's subject (FR-10.3)
+            if not isinstance(v, str) or not re.fullmatch(r"me|(lichess|chesscom):[A-Za-z0-9_-]{1,30}", v):
+                raise ValidationError("player must be 'me' or another player's subject")
+            kw[k] = v.lower() if v != "me" else v
         elif k in ("date_from", "date_to"):
             if v is not None and (not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)):
                 raise ValidationError(f"{k} must be a YYYY-MM-DD date")

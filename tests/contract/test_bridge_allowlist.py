@@ -12,6 +12,20 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.errors import BRIDGE_MARK
 
 ALLOWLIST = {
+    # v0.10
+    "analyze_game_position",
+    "archive_my_puzzle",
+    "get_coach_defaults",
+    "start_coach_run",
+    "get_coach_run_result",
+    "list_coach_reports",
+    "get_coach_report",
+    "get_coach_ai_quote",
+    "start_coach_ai",
+    "get_coach_ai",
+    "get_suggestion",
+    "apply_suggestion",
+    "dismiss_suggestion",
     "get_app_info",
     "open_folder",
     "log_frontend_error",

@@ -119,7 +119,7 @@ export class MockGames {
   private games: MockGame[];
   private nextGame = 10;
   private chesscom: string | null;
-  private settings = { sync_on_open: true, first_sync_days: 90, first_sync_max: 200, think_s: 0.3, thresholds: { inaccuracy: 50, mistake: 100, blunder: 200, decided: 500 }, tolerance_cp: 30, key_moments: 5 }; // prettier-ignore
+  private settings = { sync_on_open: true, first_sync_days: 90, first_sync_max: 200, think_s: 0.3, thresholds: { inaccuracy: 50, mistake: 100, blunder: 200, decided: 500 }, tolerance_cp: 30, key_moments: 5, puzzle_level: "mistakes" as "blunders" | "mistakes" | "inaccuracies", puzzle_think_s: 1.0 }; // prettier-ignore
   private urlResults = new Map<string, GameImport>();
   private reports = new Map<string, PuzzleImportReport>();
   private sets = new Map<string, number>();
@@ -150,7 +150,7 @@ export class MockGames {
   // ---- settings and accounts ----------------------------------------------------------------
   getSettings(): GamesSettings {
     const s = this.settings;
-    return { lichess_username: this.lichessUser(), chesscom_username: this.chesscom, ...s, thresholds: { ...s.thresholds } };
+    return { lichess_username: this.lichessUser(), chesscom_username: this.chesscom, ...s, thresholds: { ...s.thresholds }, puzzle_job_id: null };
   }
 
   setSettings(c: GamesSettingsChange): GamesSettings {

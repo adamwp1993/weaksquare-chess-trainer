@@ -79,6 +79,8 @@ export interface GamesSettingsChange {
   thresholds?: { inaccuracy: number; mistake: number; blunder: number; decided?: number };
   tolerance_cp?: number;
   key_moments?: number;
+  puzzle_level?: "blunders" | "mistakes" | "inaccuracies"; // v0.10, FR-10.40
+  puzzle_think_s?: number;
 }
 
 export type ReasonSource = "puzzles" | "games" | "all";

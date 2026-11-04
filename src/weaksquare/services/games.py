@@ -237,6 +237,10 @@ class GameLibraryService:
         self._settings.set(CHESSCOM_KEY, username)
         return username
 
+    def players(self) -> list[tuple[str, int]]:
+        """The other players you ran the Coach on, with their game counts (v0.10)."""
+        return self._repo.players()  # type: ignore[attr-defined, no-any-return]
+
     def usernames(self) -> list[str]:
         return [u for u in (self._account.account_id(), self.settings().chesscom_username) if u]
 
