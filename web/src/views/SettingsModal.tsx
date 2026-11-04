@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import type { AccountStatus, SoundSettings } from "../api/types";
 import { AccountPanel } from "../components/AccountPanel";
+import { AiSettingsPanel } from "../components/AiSettingsPanel";
 import { EngineSettingsPanel } from "../components/EngineSettingsPanel";
 import { DebugPanel, TrainingSettingsPanel } from "../components/TrainingSettingsPanel";
 import { sounds as player } from "../sound/player";
@@ -25,7 +26,8 @@ const SETS: { value: SoundSettings["set"]; label: string }[] = [
 ];
 
 // The gear settings (FR-1.8): your Lichess account, appearance (FR-1.12), sounds (FR-1.13), the engine
-// (FR-7.4, 7.5), training (v0.5: FR-4.5, 4.6) and, in --dev runs, Debug (fast-forward time), saved in
+// (FR-7.4, 7.5), training (v0.5: FR-4.5, 4.6), AI explanations and their cost (v0.7: FR-1.2–1.4, §9.3)
+// and, in --dev runs, Debug (fast-forward time), saved in
 // user.db through the bridge and applied at once. The same dialog opens from the gear and from ☰.
 export function SettingsModal({
   opened,
@@ -58,7 +60,7 @@ export function SettingsModal({
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Settings" size="md">
+    <Modal opened={opened} onClose={onClose} title="Settings" size="lg">
       <Stack gap="lg" data-testid="settings">
         <Stack gap="xs">
           <Title order={5}>Lichess account</Title>
@@ -134,6 +136,11 @@ export function SettingsModal({
         <Stack gap="xs">
           <Title order={5}>Training</Title>
           {opened && <TrainingSettingsPanel />}
+        </Stack>
+
+        <Stack gap="xs" data-testid="settings-ai">
+          <Title order={5}>AI explanations</Title>
+          {opened && <AiSettingsPanel full />}
         </Stack>
 
         <Stack gap="xs">

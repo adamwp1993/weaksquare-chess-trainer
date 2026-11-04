@@ -89,6 +89,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="with -m live: write scrubbed, anonymized copies of the real responses to tests/fixtures/http/lichess",
     )
+    parser.addoption(
+        "--record-llm",
+        action="store_true",
+        default=False,
+        help="with -m live: write a scrubbed copy of the real Explain response to tests/fixtures/http/llm (v0.7)",
+    )
 
 
 @pytest.fixture(scope="session")

@@ -216,6 +216,19 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.7: Front end for the AI settings, the spend indicator and Explain
+- Context: FR-1.2–1.4, 1.6, 1.8, 1.10 and FR-8.1–8.8 on screen.
+- Decision:
+  - **One store for the settings:** `web/src/state/llm.ts` keeps one copy of `LlmSettings` for the header's `SpendIndicator`, `AiSettingsPanel` (on the startup page and in Settings → AI), and `ExplainPanel`. Every setter's result is published, and finished `explain` / `llm_key_test` / `llm_launch_check` jobs refresh it. Nothing is kept in browser storage, and the store holds no key.
+  - **The key field** is a masked input that empties after **Save key**: the key crosses the bridge once, inward.
+  - **The model field** is a Mantine `Autocomplete`: the price table's models with their cost per Explain, or any typed ID.
+  - **Show me** reuses the trainer's existing line-preview stepper, extended with per-position `shapes` (drawn through `Board`'s new `shapes` prop on chessground's auto shapes) and `notes`.
+  - **The fast path (FR-1.6)** hides the full form unless the launch check failed.
+  - **The mock's AI side** is its own module, `web/src/api/mockLlm.ts`, with `?ai=on|warn|over|failed|nomodel` scenarios. Its explanations follow the real solution and always carry one discarded annotation, so the FR-8.4 note can be tested.
+  - **Text rendering:** the AI's text goes into React text nodes only; a test checks that the HTML in the mock's summary shows as text.
+- Alternatives: a modal confirm before each Explain (FR-8.11 says inline, no confirm); a separate board for the explanation (the stepper already exists).
+- Consequences: Game Review AI (v0.9) can reuse `ExplainPanel`'s pattern and the same stepper.
+
 ### 2026-11-03, v0.7: Explain: grounded facts, a strict schema, validation against the real position, a cache
 - Context: FR-8.1–8.8; Adam's v0.7 planning decisions (Explain requires Stockfish; it also works in Danger spotting).
 - Decision:

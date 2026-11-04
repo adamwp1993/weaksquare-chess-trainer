@@ -23,9 +23,18 @@ export interface BoardProps {
   maxWidth?: number | string;
   /** Arrows [from, to], e.g. the engine's best move on the analysis board. Callers check legality first. */
   arrows?: [string, string][];
+  /** Explain's annotations (v0.7, FR-8.5): arrows and circles, already validated by the backend (FR-8.4). */
+  shapes?: BoardShape[];
+}
+
+export interface BoardShape {
+  orig: string;
+  dest: string | null; // null: a circle
+  color: "green" | "red" | "blue" | "yellow";
 }
 
 const NO_ARROWS: [string, string][] = [];
+const NO_SHAPES: BoardShape[] = [];
 
 const PROMOTIONS: { piece: string; label: string }[] = [
   { piece: "q", label: "Queen" },
@@ -56,6 +65,7 @@ export function Board({
   coordinates = true,
   maxWidth = 560,
   arrows = NO_ARROWS,
+  shapes = NO_SHAPES,
 }: BoardProps) {
   const el = useRef<HTMLDivElement>(null);
   const cg = useRef<Api | null>(null);
@@ -118,10 +128,11 @@ export function Board({
         autoShapes: [
           ...(hintSquare ? [{ orig: hintSquare as Key, brush: "green" }] : []),
           ...arrows.map(([orig, dest]) => ({ orig: orig as Key, dest: dest as Key, brush: "paleBlue" })),
+          ...shapes.map((s) => ({ orig: s.orig as Key, dest: (s.dest ?? undefined) as Key | undefined, brush: s.color })),
         ],
       },
     });
-  }, [fen, orientation, movable, lastMove, hintSquare, coordinates, arrows]);
+  }, [fen, orientation, movable, lastMove, hintSquare, coordinates, arrows, shapes]);
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth, aspectRatio: "1 / 1" }}>
@@ -130,6 +141,7 @@ export function Board({
         data-testid="board"
         data-hint={hintSquare ?? ""}
         data-arrows={arrows.map(([a, b]) => a + b).join(" ")}
+        data-shapes={shapes.map((s) => `${s.color}:${s.orig}${s.dest ?? ""}`).join(" ")}
         data-fen={fen}
         style={{ width: "100%", height: "100%" }}
       />

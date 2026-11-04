@@ -2,9 +2,13 @@ import { Alert, Anchor, Button, Center, Loader, Paper, Stack, Text, Title } from
 import { useState } from "react";
 import type { AccountStatus } from "../api/types";
 import { AccountPanel, accountLine } from "../components/AccountPanel";
+import { AiSettingsPanel } from "../components/AiSettingsPanel";
+import { useLlmSettings } from "../state/llm";
 
-// The startup page (FR-1.1, 1.5–1.7): shown at every launch. With a sign-in that Lichess accepts,
-// it's a single "Continue as <name>" button (the fast path); you can always continue without one.
+// The startup page (FR-1.1–1.7): shown at every launch. With a sign-in that Lichess accepts, and either no
+// AI set up or an AI key that passed the silent check at launch, it's a single "Continue as <name>"
+// button (the fast path, FR-1.6); you can always continue without one. The full form adds the optional
+// AI provider, model and key (FR-1.2–1.4).
 export function StartupView({
   account,
   onContinue,
@@ -15,8 +19,10 @@ export function StartupView({
   onChanged: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const llm = useLlmSettings();
   const state = account?.state ?? "checking";
-  const fastPath = state === "signed_in" && !expanded;
+  const aiFailed = llm?.key_check === "failed";
+  const fastPath = state === "signed_in" && !expanded && !aiFailed;
 
   let continueLabel = "Continue without signing in";
   if (state === "signed_in") continueLabel = `Continue as ${account?.username}`;
@@ -44,12 +50,23 @@ export function StartupView({
           <Button size="md" onClick={onContinue} data-testid="startup-continue">
             {continueLabel}
           </Button>
+          {aiFailed && (
+            <Alert color="yellow" data-testid="startup-ai-failed">
+              Your AI key didn't work: {llm?.key_check_message} You can fix it below, or continue without AI explanations.
+            </Alert>
+          )}
           {fastPath ? (
             <Anchor component="button" size="sm" onClick={() => setExpanded(true)} data-testid="startup-more">
               Show all options
             </Anchor>
           ) : (
-            <AccountPanel account={account} onChanged={onChanged} compact />
+            <Stack gap="lg">
+              <AccountPanel account={account} onChanged={onChanged} compact />
+              <Stack gap={4}>
+                <Text fw={500}>AI explanations (optional)</Text>
+                <AiSettingsPanel />
+              </Stack>
+            </Stack>
           )}
         </Stack>
       </Paper>

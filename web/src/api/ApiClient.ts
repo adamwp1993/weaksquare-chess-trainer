@@ -3,6 +3,11 @@
 import type {
   AccountStatus,
   Analysis,
+  ExplainQuote,
+  Explanation,
+  LlmPrice,
+  LlmSettings,
+  LlmSpend,
   EngineSettings,
   EngineStatus,
   Refutation,
@@ -46,6 +51,29 @@ export class ApiCallError extends Error {
     this.code = error.code;
     this.retryable = error.retryable;
   }
+}
+
+/** v0.7: the AI settings saved together (FR-1.2–1.4, 8.12, 8.13, 8.15). `model` is for `provider`. */
+export interface LlmSettingsChange {
+  provider: "none" | "anthropic" | "openai";
+  model: string;
+  reasoning: "low" | "medium" | "high";
+  run_cap_usd: number;
+  monthly_budget_usd: number;
+}
+
+export type LlmProvider = "anthropic" | "openai";
+
+/** A row of the editable price table (FR-8.9); the long-context tier is all three or none. */
+export interface LlmPriceChange {
+  provider: LlmProvider;
+  model: string;
+  input_per_m: number;
+  output_per_m: number;
+  long_ctx_threshold?: number | null;
+  long_input_per_m?: number | null;
+  long_output_per_m?: number | null;
+  as_of?: string | null;
 }
 
 export type BackendEvent =
@@ -175,6 +203,26 @@ export interface ApiClient {
   getRefutation(sessionId: number): Promise<Refutation>;
   /** FR-7.2, 7.7: eval and top lines, only once the puzzle is over (the backend refuses earlier, FR-7.3). */
   analyzePosition(sessionId: number, fen: string, purpose: AnalysisPurpose): Promise<Analysis>;
+  // ---- LLM settings, the cost guardrails and Explain (v0.7) -------------------------------------
+  /** The AI settings, the price table's models with their cost per Explain, and this month's spend. Never a key. */
+  getLlmSettings(): Promise<LlmSettings>;
+  setLlmSettings(change: LlmSettingsChange): Promise<LlmSettings>;
+  /** Saves the key in Windows Credential Manager (SR-1). It never comes back. */
+  setLlmKey(provider: LlmProvider, key: string): Promise<LlmSettings>;
+  deleteLlmKey(provider: LlmProvider): Promise<LlmSettings>;
+  /** Test key (FR-1.4): the provider's free model lookup, as a job. Resolves with the job ID. */
+  startLlmKeyTest(provider: LlmProvider, model: string): Promise<string>;
+  listLlmPrices(): Promise<LlmPrice[]>;
+  saveLlmPrice(row: LlmPriceChange): Promise<LlmPrice[]>;
+  deleteLlmPrice(provider: LlmProvider, model: string): Promise<LlmPrice[]>;
+  /** FR-1.10: this month's spend against the budget. */
+  getLlmSpend(): Promise<LlmSpend>;
+  /** Can Explain run for the puzzle that just ended, and about what would it cost (FR-8.11)? */
+  getExplainQuote(sessionId: number): Promise<ExplainQuote>;
+  /** Explain the puzzle that just ended (§7.2 step 3), as a job. Then call getExplanation. */
+  startExplain(sessionId: number): Promise<string>;
+  /** The explanation for the puzzle on the board, or null. Its text is plain: render it escaped (FR-8.7). */
+  getExplanation(sessionId: number): Promise<Explanation | null>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

@@ -5,6 +5,7 @@ import type { TrainingMode } from "./api/ApiClient";
 import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
 import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
+import { SpendIndicator } from "./components/SpendIndicator";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
@@ -301,6 +302,7 @@ export function App() {
           <Title order={3}>WeakSquare Chess Trainer</Title>
           <Group gap="sm">
           {started && <LichessStatus account={account} sync={sync} />}
+          {started && <SpendIndicator onOpen={() => setSettingsOpen(true)} />}
           <ActionIcon variant="subtle" size="lg" aria-label="Settings" onClick={() => setSettingsOpen(true)} data-testid="gear">
             {"\u2699\uFE0E"}
           </ActionIcon>

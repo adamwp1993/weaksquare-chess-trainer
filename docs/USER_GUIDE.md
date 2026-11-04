@@ -41,6 +41,10 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your puzzle history:** the puzzles you've played on Lichess are read once, then only new ones.
     - **Signing out** tells Lichess to cancel your sign-in.
   - **Stockfish download** (v0.4): installing Stockfish (from setup, `fetch_stockfish.py` or the **Install Stockfish** button) downloads one file, the official Stockfish 19 Windows build, from github.com. Nothing about you is sent. The engine itself runs entirely on your PC and never uses the internet.
+  - **AI explanations** (v0.7), only if you set up an AI provider and press **Explain** (or **Test key**). They go over HTTPS to the provider you chose, api.anthropic.com or api.openai.com, with your API key. See [AI explanations and what they cost](#ai-explanations-and-what-they-cost).
+    - **Explain** sends one puzzle: its position (FEN), the solution moves, its themes, the moves you played, Stockfish's lines and its answer to your wrong move, and facts about which pieces attack and defend which squares. In Danger spotting it also sends the highlighted move and your call. It never sends the puzzle's ID or rating, your Lichess name, your settings or anything about other puzzles. OpenAI requests ask it not to keep the response for later retrieval (`store: false`); each provider's own data policy applies.
+    - **Test key**, and the silent check of a saved key at start-up, only ask the provider whether the model exists. That's free and sends no puzzle.
+    - What each request cost is kept in `user.db`, on this PC only.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
@@ -83,6 +87,7 @@ The app opens on a startup page every time.
 - **First time, or signed out:** the page says *Not signed in*. Click **Sign in with Lichess**, or **Continue without signing in**.
 - **Signed in:** one button, **Continue as *your name***. **Show all options** reveals **Sign out** and **Sign in as someone else**.
 - **Lichess can't be reached** (for example, no internet): your sign-in is kept and the button says **Continue offline as *your name***. Your solves are saved here and sync later.
+- *Changed in v0.7:* **AI explanations (optional)** appears under **Show all options** (and whenever you aren't signed in): the provider, model and API key. See [AI explanations and what they cost](#ai-explanations-and-what-they-cost). If you saved a key, the app checks it quietly at start-up; when the check fails, the page opens with all options and says why, so you can fix the key or carry on without AI.
 - **Your sign-in expired or was revoked** (Lichess sign-ins last about a year): the page says so and asks you to sign in again. If it happens while you're training, a banner with **Sign in again** appears above your puzzles; your solves wait until you do.
 
 ### Signing in
@@ -297,6 +302,7 @@ Once a puzzle is over, **Try again (not scored)** (or **R**) sets the board back
 - You can try again as often as you like. **Next puzzle** moves on as usual.
 
 ![Trying a puzzle again, not scored](img/try-again.png)
+- *Changed in v0.7:* the third step is **Explain**, an AI explanation of the puzzle, once it's over. See [AI explanations and what they cost](#ai-explanations-and-what-they-cost).
 - After a wrong move you can open the answer directly. *Changed in v0.4:* it then starts by showing why your wrong move fails, using Stockfish (see [Stockfish](#stockfish-why-a-move-fails-evals-and-the-analysis-board)).
 
 ## Stockfish: why a move fails, evals and the analysis board
@@ -524,6 +530,51 @@ A miss you tag **Misclick** is left out of your accuracy here: the session bar (
 - You're asked after every miss in every mode, including Danger spotting, but not during **Try again** practice. The chips stay while you practise.
 - To stop being asked, set **Ask after a failed puzzle** to **Off** in Settings → Training.
 - Your reasons and notes stay on this PC.
+
+## AI explanations and what they cost
+*Added in v0.7.*
+
+**Explain** asks an AI model (Anthropic's Claude or OpenAI's GPT) to explain the puzzle in plain words: the idea, why each move works, and, if you went wrong, why your move failed. The model isn't left to work out the chess on its own: the app sends it the solution, Stockfish's lines and the attack and defence facts on the key squares, then checks every move and square in the answer against the real position before showing it.
+
+It's optional and **you pay the provider directly** with your own API key. One Explain costs about a tenth of a cent with the cheapest models, and the app's budget and per-run cap keep the spending in check.
+
+### Setting it up
+1. Create an API key in your provider's console: console.anthropic.com (keys start with `sk-ant-`) or platform.openai.com (keys start with `sk-`).
+2. Open **⚙ Settings → AI explanations** (or **Show all options** on the startup page).
+3. Choose the **AI provider**.
+4. Pick a **Model**. Nothing is chosen for you. The list shows the models in the price table with about what one Explain costs. You can also type another model ID, but it needs a row in the price table before Explain will use it.
+5. Paste the key and click **Save key**. It goes into Windows Credential Manager and the field empties: the app never shows it again. **Remove key** deletes it.
+6. Click **Test key**. This asks the provider whether your key can use that model. It's free.
+
+![Settings → AI explanations](img/settings-ai.png)
+
+### Using Explain
+Once a puzzle is over (you finished the line, or used **Show answer**), the **Explain** button below Hint and Show answer shows the estimated cost, for example **Explain (≈ $0.0012)**.
+- Click it. After a few seconds the explanation appears: a summary, the key ideas, and a note for each move of the solution.
+- **Show me** steps through the solution on the board (**◀ Back** / **Forward ▶**, or ← / →), drawing the explanation's arrows and circles for each move, with its note underneath. It starts by itself when the explanation arrives. **Done** puts the board back.
+- If the explanation mentions a square or move that doesn't fit the position, it's left out, and the panel says *Some annotations were discarded*.
+- The model's text is shown exactly as written, as plain text.
+
+![An explanation, drawn on the board](img/explain.png)
+
+**Gotchas**
+- Explain needs **Stockfish** (see [Installing Stockfish](#installing-stockfish)): without it the button stays off.
+- It's only offered **once the puzzle is over**, so it never costs you a puzzle you could still solve. Using it after Show answer changes nothing: the puzzle was already failed.
+- It works in every training mode. In Danger spotting it also explains why the highlighted move was safe, or why it was the blunder.
+- **Saved explanations are free.** The same puzzle, with the same moves from you and the same model, shows **Explain (saved)** and costs nothing, even when this month's budget is used up. A different model gets its own explanation, so you can compare two.
+- If the answer comes back cut short, refused, or not in the expected form, nothing is shown and you can try again. A cut-short or refused answer is still billed by the provider, and it counts in your spend.
+
+### What it costs, and the limits
+Every cost comes from the **price table** and the token counts the provider reports.
+- **Spend indicator:** while an AI provider is set up, the top bar shows this month's spend against your budget, for example **AI $0.03 / $5.00**. It turns yellow at 80% of the budget and red at 100%. Click it to open the settings.
+- **Monthly budget** (default **$5.00**): when this month's spend reaches it, Explain is off until the next calendar month, or until you raise the budget. A request that starts just under the budget can take you a little over it.
+- **Per-run cap** (default **$0.50**): a request that *could* cost more than this, if the model used every token it's allowed, is blocked. It's there to catch an expensive model or a typo in the price table.
+- **Reasoning** (**Low** by default, **Medium** or **High**): how hard the model thinks before answering. Its thinking is billed as output, so Medium allows about twice the cost of Low and High about four times. The estimate and the cap allow for it.
+- **The price table** (at the bottom of **Settings → AI explanations**): USD per million input and output tokens for each model, plus the long-prompt tier for models that charge more for very long prompts. It starts with prices checked in October 2026. Prices change, so check them against your provider's pricing page. **Edit** fills the form with a row, **Save price** adds or replaces it, **Delete** removes it. Rows you change stay as you left them.
+
+![Explain blocked: the month's budget is used up](img/explain-over-budget.png)
+
+When Explain can't run, the reason shows under the button: no provider or key, no model picked, the model isn't in the price table, the per-run cap, or the monthly budget.
 
 ## Keyboard shortcuts
 *Added in v0.2.*

@@ -16,18 +16,23 @@
 // `?mode=commit_line|name_idea|danger_spotting|spaced_repetition` starts on that mode.
 // v0.6: Danger spotting alternates safe and blunder candidates (the first is safe); `?reasons=off`
 // starts with the mistake-reason question turned off.
+// v0.7: the AI settings and Explain live in mockLlm.ts (`?ai=on|warn|over|failed|nomodel`).
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
   ApiClient,
   BackendEvent,
   EngineSettingsChange,
+  LlmPriceChange,
+  LlmProvider,
+  LlmSettingsChange,
   ReasonKey,
   SettingValues,
   TrainingMode,
 } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
+import { type ExplainTarget, MockLlm } from "./mockLlm";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
   AccountStatus,
@@ -316,9 +321,11 @@ export class MockClient implements ApiClient {
   private signInFails = false;
   private revokeOffline = false;
   readonly calls: string[] = [];
+  private readonly llm: MockLlm;
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
+    this.llm = new MockLlm(params, (job) => this.emit(job), () => `job-${this.nextJob++}`);
     const scenario = params.get("scenario");
     // ?scheme=dark|auto starts the mock in that saved scheme; ?sounds=off with sounds off.
     const scheme = params.get("scheme");
@@ -723,6 +730,73 @@ export class MockClient implements ApiClient {
     await this.think();
     if (this.latest.get(purpose) !== gen) return { fen, lines: [], game_over: null, superseded: true };
     return mockAnalysis(fen, player);
+  }
+
+  // ---- v0.7: AI settings and Explain (mockLlm.ts) -------------------------------------------------
+  async getLlmSettings() {
+    return this.llm.settings();
+  }
+
+  async setLlmSettings(change: LlmSettingsChange) {
+    return this.llm.update(change);
+  }
+
+  async setLlmKey(provider: LlmProvider, key: string) {
+    return this.llm.setKey(provider, key);
+  }
+
+  async deleteLlmKey(provider: LlmProvider) {
+    return this.llm.deleteKey(provider);
+  }
+
+  async startLlmKeyTest(provider: LlmProvider, model: string) {
+    return this.llm.startKeyTest(provider, model);
+  }
+
+  async listLlmPrices() {
+    return this.llm.listPrices();
+  }
+
+  async saveLlmPrice(row: LlmPriceChange) {
+    return this.llm.savePrice(row);
+  }
+
+  async deleteLlmPrice(provider: LlmProvider, model: string) {
+    return this.llm.deletePrice(provider, model);
+  }
+
+  async getLlmSpend() {
+    return this.llm.getSpend();
+  }
+
+  private explainTarget(sessionId: number): ExplainTarget {
+    const c = this.session(sessionId).current;
+    if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
+    const p = c.puzzle;
+    const start = new Chess(p.fen);
+    start.move(uciToMove(p.moves[0]));
+    const s = this.session(sessionId);
+    const path = [s.mode, c.danger ? `call:${c.danger.call ?? "none"}` : "", c.firstWrong ? `wrong:${c.firstWrong[1]}` : ""].join("|");
+    return {
+      puzzleId: p.id,
+      path,
+      startFen: start.fen(),
+      solution: p.moves.slice(1),
+      finished: c.finished,
+      engineReady: this.engine.state === "ready",
+    };
+  }
+
+  async getExplainQuote(sessionId: number) {
+    return this.llm.quote(this.explainTarget(sessionId));
+  }
+
+  async startExplain(sessionId: number) {
+    return this.llm.start(sessionId, this.explainTarget(sessionId));
+  }
+
+  async getExplanation(sessionId: number) {
+    return this.llm.result(sessionId, this.session(sessionId).current?.puzzle.id ?? null);
   }
 
   async getAppInfo(): Promise<AppInfo> {
