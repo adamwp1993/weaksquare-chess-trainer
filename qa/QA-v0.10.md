@@ -194,3 +194,59 @@ Screenshots (gitignored), `tests/e2e/artifacts/qa-v010-*.png`: coach-empty, coac
 
 ## Builder's fixes after round 1 (2026-11-04)
 B1–B8 fixed, each with a regression test; QA's xfail tests are now plain tests. See ARCHITECTURE.md §7, "v0.10: QA fixes (v0.10-B1 to B8)". B2 was narrowed: only walking into a forced mate overrides Missed (QA's Missed engine test still passes).
+
+---
+
+## Round 2 (2026-11-04): re-verification of B1–B8 (commit `4f2ee0b`)
+
+### Final verdict: **PASS WITH ISSUES** (B1–B8 fixed; 2 new minor issues, B9 and B10)
+
+The fix commit touches `stats.py`, `review.py`, `game_review.py`, `bridge/api.py`, `App.tsx`, `ExplainPanel.tsx`, `CoachView.tsx`, `mockCoach.ts`, the User Guide, REQUIREMENTS, ARCHITECTURE §7 and tests. My round-1 tests are unchanged except that the xfail markers were removed (I checked the diff: no assertion was changed). No new dependency or migration.
+
+| Bug | Re-test | Result | Evidence |
+|---|---|---|---|
+| B1 other player's mistakes in your Stats | integration | **Fixed** | `test_qa_another_players_game_mistakes_stay_out_of_your_mistake_reason_stats` passes (`game_reason_rows` now joins `game_subjects` 'me'); builder `test_b1_another_players_game_records_nothing_as_yours` (no Retry, no reason chips, `set_game_reason` refused) |
+| B2 allowed mate classed Missed | engine + unit | **Fixed** | `tests/engine/test_qa_v010_real.py::test_qa_an_allowed_mate_in_a_real_game_is_solved_as_your_opponent` passes with real Stockfish (Allowed at ply 13, puzzle from the position after 7...Qh6, `d1d8`, solved as White, won); the Missed test still passes; `test_v010_b2_walking_into_mate_from_a_winning_position_is_allowed` |
+| B3 mix not reloaded after leaving the Coach page | e2e | **Fixed** (side effect: B9) | `test_qa_leaving_the_coach_page_during_a_run_still_applies_the_mix_on_screen` passes; new `test_qa_r2_the_mix_reloads_on_the_puzzles_page_with_its_mode` (label shown, Mixer mode Danger spotting) |
+| B4 explanation steps with Show best off | e2e | **Fixed** | `test_qa_show_best_off_hides_the_better_move_in_the_explanation_steps` passes ("The line is hidden while Show best moves is off."). Puzzle Explain always passes Show me, so its steps still show (checked: `ExplanationView` has two callers) |
+| B5 account choice | e2e | **Fixed** (docs: B10) | builder `test_b5_you_can_coach_one_of_your_accounts` (mock records `coachPlatforms:chesscom`); control visible in the regenerated `coach-report.png` |
+| B6 "1 games", guide sentence | e2e + docs | **Fixed** | builder `test_b6_one_game_is_singular_in_saved_reports`; the User Guide now explains the mate-in-one exception |
+| B7 theme-catalog crash before the import | integration | **Fixed** | `test_qa_the_theme_catalog_before_the_puzzle_db_exists_is_not_a_crash` passes (returns `[]`, no "crashed" log) |
+| B8 builder v0.9 smoke test | smoke | **Fixed** | `test_real_app_v09.py::test_game_review_model_in_the_real_app` passed in the full smoke run |
+
+### v0.10-B9 (minor): a Coach run that ends during a session changes the Mixer's mode but not the session's
+- **Steps:** Coach → **Run the Coach** → go to Puzzles → **Start** (Standard). Let the run finish (its suggestion's mode is Danger spotting, with untouched filters).
+- **Expected:** the Mixer and the running session agree on the mode. §6: changing the mode while a session runs starts a new session in that mode (`changeMode`); otherwise the shown mode stays the session's.
+- **Actual:** the B3 fix calls `reloadFilters()`, which runs `setMode(s.mode)` directly. The Mode control shows **Danger spotting** (and the Rated switch is greyed out with "Danger spotting stays on this PC") while the session bar says **Standard** and the puzzles go on as Standard and rated. The filters on the left also switch to the new mix under the running session. **Start** or a mode click brings the two back in step. Minor, and only while a session is running, but it's confusing (is my current puzzle rated?).
+- **Fix options:** while a session is running, reload only the label and banner and apply the new filters and mode when the session ends or at the next Start; or follow `changeMode`'s rule.
+- **Evidence:** `tests/e2e/test_qa_v010_ui.py::test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_step` (xfail strict: `('danger_spotting', 'Standard')`); `qa-v010-r2-mid-session.png`.
+
+### v0.10-B10 (minor, docs): the account choice and the hidden explanation line aren't in the User Guide, and the Coach screenshot is stale
+- **The Coach → Running the Coach, step 3** still lists only whose games, count, time controls, Rated only and color. The new **All my games / Lichess / chess.com** control (B5) isn't mentioned.
+- **`docs/img/coach-report.png`** was not regenerated after B5: `uv run pytest -m docs_screenshots` changes it (the new control appears above **Games**). I restored the committed file.
+- **Show best moves and Analyze from here → "Off hides"** doesn't list Explain this move's step-by-step line, which Off now hides (B4).
+- **Evidence:** `git status docs/` after `uv run pytest -m docs_screenshots` (only `coach-report.png`); `docs/USER_GUIDE.md` sections named above.
+
+### Observations (no bug filed)
+- **B2 and games analyzed earlier:** the stored `kind` of moves analyzed before the fix (v0.8/v0.9 games, or this branch's rc builds) isn't recomputed by the tag backfill, which only re-tags. They change only on a threshold change (regrade) or a re-analysis. Adam's dev folder has never run v0.10, so this matters only for games analyzed during the rc testing.
+- **Formatting churn:** the fix reformats `ExplainPanel.tsx` (and parts of `App.tsx`) to a narrower line width than the rest of `web/src`. Lint and typecheck pass; it's just a noisy diff.
+- `test_qa_v06_real_app.py::test_v06_danger_reasons_and_name_the_idea_in_the_real_app` timed out once in the full smoke run and passed 2 of 2 re-runs (it doesn't touch v0.10 code). Round 1's v0.5 smoke flake didn't recur.
+
+### Round-2 runs
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1717 passed, 1 skipped**, rc 0 (297 s) |
+| `uv run pytest -m engine` | **19 passed** (incl. both QA engine tests) |
+| `uv run pytest -m e2e` | **288 passed**, rc 0 (706 s). Then my 2 round-2 tests in `test_qa_v010_ui.py`: 10 passed, 1 xfailed (B9) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0; **34 passed, 1 skipped, 1 failed** (the v0.6 flake above, 2/2 on re-run). QA v0.10 smoke and the fixed v0.9 smoke passed |
+| `uv run pytest -m docs_screenshots` | 37 passed; `coach-report.png` drifts (B10) |
+| `uv run ruff check .`, `ruff format --check .`, `uv run mypy src` | clean; 374 files formatted; no issues in 119 files |
+| `npm.cmd --prefix web run typecheck` / `lint` (PowerShell AllSigned) | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [version v0.10] |
+| `-m fulldb` | not re-run: the fixes don't touch the puzzle DB or the filters (round 1: 72 passed, 3 xfailed, 1 known timing failure) |
+| `-m live` | not run (Adam's) |
+
+**Tests added in round 2** (`tests/e2e/test_qa_v010_ui.py`): `test_qa_r2_the_mix_reloads_on_the_puzzles_page_with_its_mode`, `test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_step` (xfail B9).
+
+**For Adam's manual test** (in addition to round 1): start a puzzle session while a Coach run is going and look at the Mode control and the Rated switch when it finishes (B9). Try **Lichess** / **chess.com** on the Coach page with both accounts linked.

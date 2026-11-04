@@ -140,3 +140,34 @@ def test_qa_settings_and_my_puzzles_screens(page) -> None:  # type: ignore[no-un
     page.get_by_test_id("gear").click()
     page.wait_for_timeout(500)
     shot(page, "settings", full=True)
+
+
+# ---- round 2 ----------------------------------------------------------------------------------------
+
+
+def test_qa_r2_the_mix_reloads_on_the_puzzles_page_with_its_mode(page) -> None:  # type: ignore[no-untyped-def]
+    """B3 fix: after a run that ended elsewhere, the Mixer shows the suggestion's filters and mode."""
+    coach(page)
+    page.get_by_test_id("coach-run").click()
+    page.get_by_test_id("nav-puzzles").click()
+    page.get_by_test_id("suggestion-label").wait_for(timeout=5000)
+    mode = page.get_by_test_id("mode-control").locator("input:checked").get_attribute("value")
+    assert mode == "danger_spotting", mode  # the mock report's mix
+    shot(page, "r2-mix-after-leaving")
+
+
+@pytest.mark.xfail(strict=True, reason="v0.10-B9: the B3 reload sets the Mixer's mode but not the running session's")
+def test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_step(page) -> None:  # type: ignore[no-untyped-def]
+    """B3 fix side effect: a run that ends while a Standard session is running."""
+    coach(page)
+    page.get_by_test_id("coach-run").click()
+    page.get_by_test_id("nav-puzzles").click()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("board").wait_for()
+    page.get_by_test_id("suggestion-label").wait_for(timeout=5000)
+    shown = page.get_by_test_id("mode-control").locator("input:checked").get_attribute("value")
+    running = page.get_by_test_id("session-mode").inner_text()
+    shot(page, "r2-mid-session", full=True)
+    # The Mixer and the running session must agree on the mode (§6: a mode change starts a new session).
+    labels = {"standard": "Standard", "danger_spotting": "Danger spotting", "commit_line": "Commit the line"}
+    assert labels.get(str(shown)) == running, (shown, running)
