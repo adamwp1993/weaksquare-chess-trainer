@@ -61,7 +61,7 @@ def test_v06_danger_reasons_and_name_the_idea_in_the_real_app(pw, tmp_path: Path
             page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
             page.get_by_test_id("mode-control").get_by_text("Danger spotting", exact=True).click()
             assert page.get_by_test_id("rated-switch").is_disabled()
-            page.get_by_label("Puzzles").fill("40")
+            page.get_by_label("Puzzles", exact=True).fill("40")
             shot(page, "mixer-danger")
             t0 = time.monotonic()
             page.get_by_role("button", name="Start").click()

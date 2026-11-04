@@ -38,7 +38,7 @@ def test_try_again_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Path,
     try:
         with attach(pw, app) as page:
             page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
-            page.get_by_label("Puzzles").fill("3")
+            page.get_by_label("Puzzles", exact=True).fill("3")
             page.get_by_role("button", name="Start").click()
             page.get_by_test_id("trainer-message").filter(has_text="Your turn").wait_for(timeout=30_000)
             board = page.get_by_test_id("board")

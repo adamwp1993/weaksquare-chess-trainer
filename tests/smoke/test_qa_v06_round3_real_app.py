@@ -75,7 +75,7 @@ def test_b9_forced_positions_wait_the_think_time_in_the_real_app(pw, tmp_path: P
             page.get_by_test_id("mode-control").get_by_text("Danger spotting", exact=True).click()
             matched = int(page.get_by_test_id("match-count").inner_text().split()[0])
             print("QA-OBS match:", matched)
-            page.get_by_label("Puzzles").fill(str(matched))
+            page.get_by_label("Puzzles", exact=True).fill(str(matched))
             page.get_by_role("button", name="Start").click()
             first = _loads(page, matched, "think 1 s (puzzle id, seconds)")
             forced = [t for pid, t in first[1:] if pid in FORCED]
