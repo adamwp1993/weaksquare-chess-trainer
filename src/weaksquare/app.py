@@ -79,6 +79,7 @@ from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
 from weaksquare.services.explain import ExplainService
+from weaksquare.services.game_explain import GameExplainService
 from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
@@ -208,6 +209,7 @@ class Services:
     games: GameLibraryService
     analysis: AnalysisService
     review: ReviewService
+    game_explain: GameExplainService
     puzzle_import: PuzzleImportService
 
     def close(self) -> None:
@@ -356,7 +358,8 @@ def build_services(
         lambda: clock.local_date(clock.now()),
     )
     llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
-    explain = ExplainService(sessions, llm_settings, llm_usage, LlmCacheRepo(db), runner, clock)
+    llm_cache = LlmCacheRepo(db)
+    explain = ExplainService(sessions, llm_settings, llm_usage, llm_cache, runner, clock)
     games = GameLibraryService(
         games_repo, AccountSyncRepo(db), SettingsRepo(db), runner, clock, account,
         lichess_games or LichessGames(http), chesscom or ChesscomGames(http), classify_game_error,
@@ -367,6 +370,8 @@ def build_services(
         games_repo, analysis_repo, analysis, analysis.is_current, engine, custom_puzzles, RetryRepo(db),
         MistakeReasonsRepo(db), ui_settings, clock,
     )  # fmt: skip
+    game_explain = GameExplainService(games_repo, analysis_repo, analysis, llm_settings, llm_usage, llm_cache, runner,
+                                      clock)  # fmt: skip
     return Services(
         db=db,
         http=http,
@@ -389,6 +394,7 @@ def build_services(
         games=games,
         analysis=analysis,
         review=review,
+        game_explain=game_explain,
         puzzle_import=puzzle_import,
     )
 

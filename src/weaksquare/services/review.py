@@ -31,6 +31,7 @@ from weaksquare.core.game_review import (
     Score,
     SideSummary,
     key_moments,
+    saved_line,
     side_summary,
     white_eval,
 )
@@ -40,7 +41,6 @@ from weaksquare.core.reasons import ReasonContext, is_forcing_reply, reason_info
 from weaksquare.core.tolerance import within_tolerance
 from weaksquare.services.analysis import ReviewSettings
 
-MAX_SAVED_PLAYER_MOVES = 3  # plan v0.8: a saved line is cut to at most 3 of your moves
 RETRY_CLASSES = ("mistake", "blunder")
 
 
@@ -185,15 +185,6 @@ def _line_view(fen: str, line: EngineLine, mover: str) -> LineView:
     cp, mate = score_for(line, "white" if mover == "white" else "black")
     sans = _sans(fen, line.pv)
     return LineView(_score_text(Score(cp, mate)), tuple(line.pv[: len(sans)]), sans)
-
-
-def saved_line(pv: Sequence[str], max_player_moves: int = MAX_SAVED_PLAYER_MOVES) -> tuple[str, ...]:
-    """The solution of a saved puzzle: the engine's best line from your position, cut to whole moves of
-    yours (it ends on your move) and at most `max_player_moves` of them."""
-    line = tuple(pv[: 2 * max_player_moves - 1])
-    if len(line) % 2 == 0:
-        line = line[:-1]
-    return line
 
 
 class ReviewService:

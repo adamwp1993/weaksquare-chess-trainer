@@ -91,6 +91,15 @@ Rules:
 - "summary": 2–3 sentences: the main idea and, if the player went wrong, why their move failed.
 - "key_ideas": 1–4 short tactic names (for example "deflection", "overloaded defender")."""
 
+# Explain this move (FR-11.17, v0.9): the same rules and schema, for a move from the player's own game. The
+# "solution" is Stockfish's best line from the position before the move.
+GAME_MOVE_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
+    "You are a chess coach explaining a tactics puzzle to the player who just tried it.",
+    "You are a chess coach explaining one move from the player's own game. The \"solution\" is Stockfish's "
+    "best line from the position before that move: explain why it is best and, if the player chose another "
+    "move, what was wrong with theirs.",
+)
+
 
 # ---- inputs (plain data from the session; no IDs, ratings or names) -------------------------------------
 
@@ -117,6 +126,19 @@ class DangerFact:
 
 
 @dataclass(frozen=True)
+class GameMoveFact:
+    """Explain this move (FR-11.17): what was played in the game. Evals are worded from the mover's side."""
+
+    move_number: int  # the full-move number, as in "14. Nf3"
+    played_san: str
+    classification: str  # best / good / inaccuracy / mistake / blunder
+    eval_before: str  # the best move's eval, e.g. "+1.2 for you"
+    eval_after: str  # after the played move
+    cp_loss: int
+    phase: str
+
+
+@dataclass(frozen=True)
 class ExplainInput:
     fen: str  # the puzzle's FEN: before the opponent's move (§4.2)
     moves: tuple[str, ...]  # UCI; moves[0] is the opponent's
@@ -126,6 +148,7 @@ class ExplainInput:
     entered_line: tuple[str, ...] | None = None  # Commit the line: what you submitted (UCI)
     solved: bool = False
     danger: DangerFact | None = None
+    game_move: GameMoveFact | None = None  # v0.9: a move from your own game (FR-11.17)
 
 
 # ---- the result -----------------------------------------------------------------------------------------
@@ -191,7 +214,7 @@ class Explanation:
 
 
 @dataclass
-class _Ply:
+class Ply:
     index: int
     side: Literal["you", "opponent"]
     board_before: chess.Board
@@ -199,13 +222,13 @@ class _Ply:
     san: str
 
 
-def _solution(inp: ExplainInput) -> tuple[chess.Board, list[_Ply]]:
+def _solution(inp: ExplainInput) -> tuple[chess.Board, list[Ply]]:
     board, _ = start_position(inp.fen, inp.moves)  # raises PuzzleDataError on a bad line
     start = board.copy()
     plies = []
     for i, uci in enumerate(inp.moves[1:]):
         move = chess.Move.from_uci(uci)
-        plies.append(_Ply(i, "you" if i % 2 == 0 else "opponent", board.copy(), move, board.san(move)))
+        plies.append(Ply(i, "you" if i % 2 == 0 else "opponent", board.copy(), move, board.san(move)))
         board.push(move)
     return start, plies
 
@@ -224,7 +247,7 @@ def _list(board: chess.Board, squares: Any) -> str:
     return ", ".join(names) if names else "nothing"
 
 
-def ply_facts(p: _Ply) -> str:
+def ply_facts(p: Ply) -> str:
     """Attack/defense facts for one solution move, from python-chess (FR-8.2)."""
     b = p.board_before
     mover = b.piece_at(p.move.from_square)
@@ -253,7 +276,7 @@ def ply_facts(p: _Ply) -> str:
     return "; ".join(parts)
 
 
-def _san_line(board: chess.Board, ucis: tuple[str, ...], limit: int = ENGINE_PLIES) -> str:
+def san_line(board: chess.Board, ucis: tuple[str, ...], limit: int = ENGINE_PLIES) -> str:
     b = board.copy()
     out = []
     for uci in ucis[:limit]:
@@ -297,8 +320,17 @@ def build_prompt(inp: ExplainInput) -> str:
             f"The player's call: {d.call or 'none (moved on)'}.",
             "Explain why the candidate was safe or why it loses, then the solution.",
         ]  # fmt: skip
+    elif inp.game_move:
+        g = inp.game_move
+        best = "the best move" if g.classification == "best" else g.classification
+        lines += [
+            f"Mode: Game Review. In the player's own game ({g.phase}, move {g.move_number}) they played "
+            f"{g.played_san} from this position: {best}, a loss of {g.cp_loss} centipawns.",
+            f"Eval with the best move: {g.eval_before}. Eval after {g.played_san}: {g.eval_after}.",
+            "The solution is Stockfish's best line from this position.",
+        ]
     elif inp.entered_line is not None:
-        lines.append(f"Mode: Commit the line. The player entered: {_san_line(start, inp.entered_line, 20)}")
+        lines.append(f"Mode: Commit the line. The player entered: {san_line(start, inp.entered_line, 20)}")
     if inp.refutation:
         r = inp.refutation
         b = chess.Board(r.fen_before)
@@ -306,26 +338,26 @@ def build_prompt(inp: ExplainInput) -> str:
         after = b.copy()
         after.push(wrong)
         lines.append(f"The player went wrong with {b.san(wrong)} (in FEN {r.fen_before}). Stockfish's refutation: "
-                     f"{_san_line(after, r.line)} ({r.score or 'game over'}).")  # fmt: skip
-    elif inp.danger is None:
+                     f"{san_line(after, r.line)} ({r.score or 'game over'}).")  # fmt: skip
+    elif inp.danger is None and inp.game_move is None:
         lines.append("The player solved it." if inp.solved else "The player didn't play a wrong move but used help.")
     if inp.engine_lines:
         lines += ["", "Stockfish's top lines from the position before your first move (evals from your side):"]
-        lines += [f"- {e.score}: {_san_line(start, e.pv)}" for e in inp.engine_lines]
+        lines += [f"- {e.score}: {san_line(start, e.pv)}" for e in inp.engine_lines]
     return "\n".join(lines)
 
 
 # ---- validation (FR-8.4) ------------------------------------------------------------------------------
 
 
-def _clean(value: Any, limit: int) -> str | None:
+def clean_text(value: Any, limit: int) -> str | None:
     if not isinstance(value, str):
         return None
     text = CONTROL.sub("", value).strip()
     return text[:limit] if text else None
 
 
-def _annotation(raw: Any) -> Annotation | None:
+def parse_annotation(raw: Any) -> Annotation | None:
     if not isinstance(raw, dict):
         return None
     kind, orig, dest, color = raw.get("type"), raw.get("from"), raw.get("to"), raw.get("color")
@@ -360,7 +392,7 @@ def _variation(board: chess.Board, raw: Any) -> tuple[tuple[str, ...], bool]:
     return tuple(out), False
 
 
-def _same_move(board: chess.Board, said: Any, move: chess.Move) -> bool:
+def same_move(board: chess.Board, said: Any, move: chess.Move) -> bool:
     if not isinstance(said, str):
         return False
     s = said.strip()
@@ -380,7 +412,7 @@ def validate(inp: ExplainInput, text: str) -> Explanation | None:
         return None
     if not isinstance(data, dict):
         return None
-    summary = _clean(data.get("summary"), MAX_SUMMARY)
+    summary = clean_text(data.get("summary"), MAX_SUMMARY)
     if summary is None:
         return None
     _, plies = _solution(inp)
@@ -396,14 +428,14 @@ def validate(inp: ExplainInput, text: str) -> Explanation | None:
             discarded += 1  # a ply the solution doesn't have, or a repeat
             continue
         p = plies[ply]
-        if not _same_move(p.board_before, raw.get("move"), p.move):
+        if not same_move(p.board_before, raw.get("move"), p.move):
             discarded += 1  # it's talking about some other move
             continue
-        step_text = _clean(raw.get("text"), MAX_TEXT) or ""
+        step_text = clean_text(raw.get("text"), MAX_TEXT) or ""
         annotations: list[Annotation] = []
         raw_ann = raw.get("annotations")
         for a in raw_ann if isinstance(raw_ann, list) else []:
-            ann = _annotation(a)
+            ann = parse_annotation(a)
             if ann is None or len(annotations) >= MAX_ANNOTATIONS:
                 discarded += 1
             else:
@@ -414,7 +446,7 @@ def validate(inp: ExplainInput, text: str) -> Explanation | None:
         discarded += dropped
         steps[ply] = Step(ply, p.side, p.san, p.move.uci(), step_text, tuple(annotations), variation)
     ideas_raw = data.get("key_ideas")
-    ideas = [i for i in (_clean(x, MAX_IDEA) for x in (ideas_raw if isinstance(ideas_raw, list) else [])) if i]
+    ideas = [i for i in (clean_text(x, MAX_IDEA) for x in (ideas_raw if isinstance(ideas_raw, list) else [])) if i]
     ideas = ideas[:MAX_IDEAS]
     return Explanation(summary, tuple(steps[k] for k in sorted(steps)), tuple(ideas), discarded)
 
