@@ -230,7 +230,7 @@ Entry format:
 ### 2026-11-03, v0.8: The game library and custom-puzzle schema (`user/0007_games.sql`)
 - Context: §4.3 sketched `games`, `account_sync`, `game_analysis` and `custom_puzzles`. v0.8 fills them in and adds Retry mode results.
 - Decision:
-  - **`games`** is keyed by `(source, source_game_id)` when the platform gives an id. Pastes and files are deduplicated by `moves_hash` (SHA-256 of the start FEN and the UCI moves) in the service, so identical moves reuse the stored analysis (FR-11.7).
+  - **`games`** is keyed by `(source, source_game_id)` when the platform gives an id. Pastes and files are deduplicated by `moves_hash` (SHA-256 of the start FEN and the UCI moves), so identical moves reuse the stored analysis (FR-11.7). Two platform games with different ids are never merged, even with identical moves (a short trap gets played many times); a platform copy adopts an earlier paste of the same moves.
   - Player names and ratings are stored per color (`white`, `black`, …) rather than as *user/opponent*, because your color can be unknown at import, and *Review both sides* exists.
   - `analysis_think_s` and `analysis_engine` record what the stored analysis used, so a game is never analyzed twice at the same settings (FR-11.31).
   - **`game_analysis`** keeps one row per ply with evals as `{"cp"}`/`{"mate"}` JSON from the mover's view. `themes` stays NULL until the v0.10 tagger.

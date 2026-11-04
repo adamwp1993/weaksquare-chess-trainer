@@ -13,9 +13,9 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
-from weaksquare.adapters.http import HttpClient, HttpError, RateLimited
+from weaksquare.adapters.http import HttpClient, HttpError, RateLimited, Unauthorized
 from weaksquare.core.chesscom import API_BASE
 from weaksquare.core.games import Archive, ChesscomProfile, valid_username
 
@@ -96,3 +96,18 @@ class ChesscomGames:
             return Archive(304, [], etag)
         games = data.get("games") if isinstance(data, dict) else None
         return Archive(status, [g for g in games if isinstance(g, dict)] if isinstance(games, list) else [], new_etag)
+
+
+def classify_game_error(e: BaseException) -> Literal["unauthorized", "network", "not_found", "gone", "other"]:
+    """Both game clients' errors, as the library service needs them (v0.8)."""
+    from weaksquare.adapters.lichess import is_network_error  # the same rule for both platforms
+
+    if isinstance(e, Unauthorized):
+        return "unauthorized"
+    if isinstance(e, ChesscomGone) or (isinstance(e, HttpError) and e.status == 410):
+        return "gone"
+    if isinstance(e, ChesscomNotFound) or (isinstance(e, HttpError) and e.status == 404):
+        return "not_found"
+    if is_network_error(e):
+        return "network"
+    return "other"

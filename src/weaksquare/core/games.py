@@ -428,6 +428,74 @@ def _int_text(v: str | None) -> int | None:
     return int(v) if v and v.isdigit() else None
 
 
+# ---------------------------------------------------------------- the library (rows and filters)
+
+
+@dataclass(frozen=True)
+class GameRow:
+    id: int
+    source: str
+    source_game_id: str | None
+    url: str | None
+    pgn: str
+    moves_hash: str
+    played_at: str | None
+    time_control: str | None
+    time_class: str | None
+    rated: bool | None
+    white: str | None
+    black: str | None
+    white_rating: int | None
+    black_rating: int | None
+    user_color: str | None
+    result: str
+    eco: str | None
+    opening: str | None
+    accuracy_white: float | None
+    accuracy_black: float | None
+    lichess_analyzed: bool
+    analysis_status: str
+    analysis_think_s: float | None
+    analysis_engine: str | None
+    extra: dict[str, Any]
+
+    @property
+    def user_result(self) -> str | None:
+        """win / loss / draw from your side, or None if your color or the result is unknown."""
+        if self.result == "1/2-1/2":
+            return "draw"
+        if self.user_color not in ("white", "black") or self.result not in ("1-0", "0-1"):
+            return None
+        return "win" if (self.result == "1-0") == (self.user_color == "white") else "loss"
+
+
+@dataclass(frozen=True)
+class LibraryFilter:
+    """FR-11.26. Empty fields don't filter. Dates are ISO `YYYY-MM-DD` (inclusive)."""
+
+    platforms: tuple[str, ...] = ()  # lichess / chesscom / paste / file
+    time_classes: tuple[str, ...] = ()
+    rated: bool | None = None
+    results: tuple[str, ...] = ()  # win / loss / draw (from your side)
+    colors: tuple[str, ...] = ()  # white / black
+    opponent: str = ""
+    opening: str = ""
+    date_from: str | None = None
+    date_to: str | None = None
+    statuses: tuple[str, ...] = ()  # none / analyzed
+    limit: int = 50
+    offset: int = 0
+
+
+@dataclass(frozen=True)
+class SyncState:
+    platform: str
+    username: str
+    last_sync_at: str | None
+    last_archive: str | None
+    etags: dict[str, str]
+
+
 # ---------------------------------------------------------------- clients (implemented in adapters/)
 
 
