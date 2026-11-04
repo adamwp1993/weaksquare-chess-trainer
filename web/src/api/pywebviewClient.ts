@@ -8,7 +8,10 @@ import {
   type LlmPriceChange,
   type LlmProvider,
   type LlmSettingsChange,
+  type GamesSettingsChange,
+  type LibraryFilters,
   type ReasonKey,
+  type ReasonSource,
   type SettingValues,
   type TrainingMode,
 } from "./ApiClient";
@@ -49,6 +52,17 @@ import type {
   UpdateOffer,
   ThemeGroup,
   UiSettings,
+  AnalysisQueue,
+  ChesscomProfile,
+  GameImport,
+  GamePage,
+  GameReview,
+  GameStats,
+  GamesSettings,
+  PuzzleImportReport,
+  PuzzleSet,
+  RetryResult,
+  SavedPuzzle,
 } from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -319,8 +333,8 @@ export class PywebviewClient implements ApiClient {
     return this.call<void>("set_mistake_reason", attemptId, reason, note);
   }
 
-  getReasonStats(theme: string | null, mode: TrainingMode | null) {
-    return this.call<ReasonStats>("get_reason_stats", theme, mode);
+  getReasonStats(theme: string | null, mode: TrainingMode | null, source: ReasonSource = "puzzles") {
+    return this.call<ReasonStats>("get_reason_stats", theme, mode, source);
   }
 
   requestHelp(sessionId: number, kind: "hint" | "answer") {
@@ -361,6 +375,111 @@ export class PywebviewClient implements ApiClient {
 
   getRatingHistory() {
     return this.call<RatingHistory>("get_rating_history");
+  }
+
+  getGamesSettings() {
+    return this.call<GamesSettings>("get_games_settings");
+  }
+
+  setGamesSettings(c: GamesSettingsChange) {
+    return this.call<GamesSettings>(
+      "set_games_settings",
+      c.sync_on_open ?? null,
+      c.first_sync_days ?? null,
+      c.first_sync_max ?? null,
+      c.think_s ?? null,
+      c.thresholds ?? null,
+      c.tolerance_cp ?? null,
+      c.key_moments ?? null,
+    );
+  }
+
+  verifyChesscom(username: string) {
+    return this.call<ChesscomProfile>("verify_chesscom", username);
+  }
+
+  setChesscomUsername(username: string | null) {
+    return this.call<GamesSettings>("set_chesscom_username", username);
+  }
+
+  startGamesSync() {
+    return this.call<string | null>("start_games_sync");
+  }
+
+  listGames(filters: LibraryFilters) {
+    return this.call<GamePage>("list_games", filters);
+  }
+
+  importGamePgn(text: string) {
+    return this.call<GameImport>("import_game_pgn", text);
+  }
+
+  chooseGameFile() {
+    return this.call<GameImport | null>("choose_game_file");
+  }
+
+  pickImportedGame(token: string, index: number) {
+    return this.call<GameImport>("pick_imported_game", token, index);
+  }
+
+  startGameUrlImport(url: string, chesscomUsername: string | null) {
+    return this.call<string>("start_game_url_import", url, chesscomUsername);
+  }
+
+  getGameUrlImport(jobId: string) {
+    return this.call<GameImport | null>("get_game_url_import", jobId);
+  }
+
+  setGameColor(gameId: number, color: "white" | "black" | "both") {
+    return this.call<void>("set_game_color", gameId, color);
+  }
+
+  openGameOnline(gameId: number) {
+    return this.call<void>("open_game_online", gameId);
+  }
+
+  analyzeGames(gameIds: number[], force: boolean) {
+    return this.call<string | null>("analyze_games", gameIds, force);
+  }
+
+  getAnalysisQueue() {
+    return this.call<AnalysisQueue>("get_analysis_queue");
+  }
+
+  getReview(gameId: number) {
+    return this.call<GameReview>("get_review", gameId);
+  }
+
+  retryMove(gameId: number, ply: number, uci: string, thinkMs: number | null) {
+    return this.call<RetryResult>("retry_move", gameId, ply, uci, thinkMs);
+  }
+
+  saveGamePuzzle(gameId: number, ply: number) {
+    return this.call<SavedPuzzle>("save_game_puzzle", gameId, ply);
+  }
+
+  setGameReason(gameId: number, ply: number, reason: ReasonKey, note: string | null) {
+    return this.call<void>("set_game_reason", gameId, ply, reason, note);
+  }
+
+  setRetryReason(retryId: number, reason: ReasonKey, note: string | null) {
+    return this.call<void>("set_retry_reason", retryId, reason, note);
+  }
+
+  getGameStats() {
+    return this.call<GameStats>("get_game_stats");
+  }
+
+  chooseAndImportPuzzles(label: string) {
+    return this.call<string | null>("choose_and_import_puzzles", label);
+  }
+
+  getPuzzleImportReport(jobId: string) {
+    return this.call<PuzzleImportReport | null>("get_puzzle_import_report", jobId);
+  }
+
+  listPuzzleSets() {
+    return this.call<PuzzleSet[]>("list_puzzle_sets");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {
