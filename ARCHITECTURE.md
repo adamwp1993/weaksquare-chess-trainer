@@ -273,7 +273,7 @@ Entry format:
   - **`http.py` additions:** per-request `headers=` and `timeout=`, `HttpError.timeout`, and `HttpError.error_code`. The error code is the API's short machine code from a JSON error body (`insufficient_quota`, `authentication_error`), kept only if it matches `[a-z][a-z0-9_]{0,39}`; the provider's message text is never kept or shown (SR-7).
   - **Errors:** `adapters/llm/__init__.py` maps status and code to the readable kinds in `core/llm/provider.py` (FR-8.8). For example, OpenAI's 429 `insufficient_quota` is *quota*, not *rate limited*.
   - **Redaction:** log redaction also covers `x-api-key` headers and JSON fields.
-  - **Fixtures:** the shapes come from Anthropic's docs and the openai-python SDK's types. `tests/fixtures/http/llm/` is hand-written until Adam's live run records real responses.
+  - **Fixtures:** the shapes come from Anthropic's docs and the openai-python SDK's types. `anthropic_messages.json` in `tests/fixtures/http/llm/` was recorded from Adam's live run (2026-11-03: the Anthropic request shape, `anthropic-version: 2026-10-21` and `output_config` confirmed against the real API). `openai_responses.json` stays hand-written until a live run with an OpenAI key.
 - Alternatives: the `anthropic` and `openai` packages (two dependencies, their own HTTP stacks bypassing `http.py`'s User-Agent, timeouts and redaction, and their own retries, which could double-bill).
 - Consequences: provider API changes are ours to follow; the adapter tests pin the shapes. Adding a provider is one adapter file plus a `PROVIDERS` entry (Developer Guide recipe).
 

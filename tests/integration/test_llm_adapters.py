@@ -62,8 +62,8 @@ def test_anthropic_request_shape_and_usage() -> None:
     assert body["system"] == "system text" and body["messages"] == [{"role": "user", "content": "user text"}]
     assert body["output_config"] == {"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}}
     assert "thinking" not in body and "temperature" not in body
-    assert (resp.input_tokens, resp.output_tokens, resp.status) == (1834, 412, "ok")
-    assert json.loads(resp.text)["key_ideas"] == ["fork"]
+    assert (resp.input_tokens, resp.output_tokens, resp.status) == (1671, 504, "ok")  # the recorded live response
+    assert [s["move"] for s in json.loads(resp.text)["steps"]] == ["Re6+", "Kh5", "Rh7#"]
     assert len(rec.requests) == 1
 
 
@@ -71,7 +71,7 @@ def test_anthropic_request_shape_and_usage() -> None:
 def test_anthropic_cut_short_and_refused(stop: str, status: str) -> None:
     body = fixture("anthropic_messages.json") | {"stop_reason": stop}
     resp = AnthropicProvider(client(Recorder(body=body))).generate(FAKE_ANTHROPIC_KEY, REQ)
-    assert resp.status == status and resp.input_tokens == 1834  # still billed: usage kept
+    assert resp.status == status and resp.input_tokens == 1671  # still billed: usage kept
 
 
 def test_anthropic_test_key_is_the_free_model_lookup() -> None:

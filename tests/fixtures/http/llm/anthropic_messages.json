@@ -2,8 +2,26 @@
   "type": "message",
   "role": "assistant",
   "content": [
-    {"type": "text", "text": "{\"summary\": \"The knight forks king and queen.\", \"steps\": [], \"key_ideas\": [\"fork\"]}"}
+    {
+      "type": "text",
+      "text": "{\"summary\":\"White has a mating net with the rook on the seventh rank and a rook check on the sixth. Re6+ forces the king to h5, and Rh7 is checkmate. The player used a hint, so the key is seeing that the king can only run to the h-file where the second rook delivers mate.\",\"steps\":[{\"ply\":0,\"move\":\"Re6+\",\"text\":\"Play Re6+ to check the king on g6 along the sixth rank. This drives the king away from the defence of the seventh rank and leaves it with only one safe square.\",\"annotations\":[{\"type\":\"arrow\",\"from\":\"e1\",\"to\":\"e6\",\"color\":\"green\"},{\"type\":\"circle\",\"from\":\"g6\",\"to\":null,\"color\":\"red\"}],\"variation\":[]},{\"ply\":1,\"move\":\"Kh5\",\"text\":\"The king has to step to h5, since the other squares are covered. Black has no other way to escape the check.\",\"annotations\":[{\"type\":\"circle\",\"from\":\"h5\",\"to\":null,\"color\":\"yellow\"}],\"variation\":[]},{\"ply\":2,\"move\":\"Rh7#\",\"text\":\"Rook from d7 to h7 gives checkmate on the h-file, with the king on h5 unable to escape. Look for the rook on the seventh rank cutting off the escape squares.\",\"annotations\":[{\"type\":\"arrow\",\"from\":\"d7\",\"to\":\"h7\",\"color\":\"green\"},{\"type\":\"circle\",\"from\":\"h5\",\"to\":null,\"color\":\"red\"}],\"variation\":[]}],\"key_ideas\":[\"check forcing king to a single square\",\"rook mate on the edge\"]}"
+    }
   ],
   "stop_reason": "end_turn",
-  "usage": {"input_tokens": 1834, "output_tokens": 412}
+  "usage": {
+    "input_tokens": 1671,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 504,
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "inference_geo": "global",
+    "speed": "standard"
+  }
 }

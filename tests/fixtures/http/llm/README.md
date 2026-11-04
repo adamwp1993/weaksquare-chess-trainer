@@ -8,4 +8,4 @@ Responses API as typed in the openai-python SDK) until the live test records rea
 the parsers read (`content`/`output`, `stop_reason`/`status`, `incomplete_details`, `usage`), so no
 IDs, headers or keys are stored (SR-12, SR-12a).
 
-Status: hand-written (not yet recorded).
+Status: anthropic_messages.json recorded from a live response (scrubbed); the other is hand-written.
