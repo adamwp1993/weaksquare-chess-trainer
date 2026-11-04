@@ -138,10 +138,22 @@ export function App() {
     loadSuggestion();
     api.getThemeCatalog().then(setCatalog, () => undefined);
   }, [loadSuggestion]);
+  // v0.10-B9: the mode follows the suggestion only between sessions. While one runs, the Mixer keeps
+  // showing the session's mode (§6: a mode change starts a new session); the new mode waits for its end.
+  const running = useRef(false);
+  const pendingMode = useRef<TrainingMode | null>(null);
+  useEffect(() => {
+    running.current = sessionId !== null;
+    if (sessionId === null && pendingMode.current) {
+      setMode(pendingMode.current);
+      pendingMode.current = null;
+    }
+  }, [sessionId]);
   const reloadFilters = useCallback(() => {
     api.getSettings().then((s) => {
       if (s.last_filters) setSpec(s.last_filters);
-      setMode(s.mode);
+      if (running.current) pendingMode.current = s.mode;
+      else setMode(s.mode);
     }, () => undefined); // prettier-ignore
     loadSuggestion();
   }, [loadSuggestion]);

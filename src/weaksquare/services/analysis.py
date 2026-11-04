@@ -188,6 +188,12 @@ class AnalysisService:
 
     # ------------------------------------------------------------ tags (v0.10)
 
+    def regrade_stored(self) -> int:
+        """Grade every stored move again at today's thresholds and rules (no engine). The v0.10 backfill
+        uses it so moves analyzed before v0.10 get the v0.10-B2 Missed/Allowed rule."""
+        th = self.settings().thresholds
+        return self._store.regrade(lambda row: regrade(row, th))
+
     def retag(self, game_ids: Sequence[int] | None = None, cancel: CancelToken | None = None) -> int:
         """Work out the themes and habits again from the stored analysis (no engine), for these games or
         every analyzed game. Used after a threshold change and as the v0.10 backfill. Returns the games

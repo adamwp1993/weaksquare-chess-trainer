@@ -651,7 +651,7 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 ![Show best moves off](img/review-show-best-off.png)
 
 **Show best moves** is a switch at the top of the review. It's **off** at first, so you can look for the better move yourself before the engine tells you. The app remembers your choice for every game and the next time you open it.
-- **Off hides** the best-move arrow, **Engine lines here**, *Better was …* under a move, *better was …* on the key moments, the arrows and better lines from **Show me** and **Show on the board** in the AI's notes, and Stockfish's panel in Analyze from here.
+- **Off hides** the best-move arrow, **Engine lines here**, *Better was …* under a move, *better was …* on the key moments, the arrows and better lines from **Show me** and **Show on the board** in the AI's notes, the step-by-step line of **Explain this move** (its summary stays), and Stockfish's panel in Analyze from here.
 - **Off still shows** the eval graph and the eval of each move, the **?!**, **?** and **??** symbols, **Why … fails: show me**, and the AI's text.
 - Turn it on and everything appears at once. Retry mode works the same either way.
 
@@ -777,8 +777,8 @@ The Coach looks across many of your games and finds what costs you most: the tac
    - **Puzzle history:** your puzzle results per theme, here and (when you're signed in) on Lichess. No engine time.
    - **Games:** your games, analyzed by Stockfish. It takes minutes of engine time the first time, but shows what actually costs you games, including tactics you allowed.
    - **Both:** both, plus a table of themes you solve as puzzles but still miss or allow in games.
-3. For games, choose **whose**: **You** (your linked accounts and imported games) or **Another player** (see below). Then how many of the latest games (25, 50, 100 or 200), the time controls (rapid and classical by default: bullet and blitz mistakes are mostly about the clock), **Rated only**, and the color.
-4. Press **Run the Coach**. It syncs your accounts, analyzes the games that aren't analyzed yet (one at a time, with the time left and **Cancel**), tags the mistakes, makes [puzzles from them](#puzzles-from-your-games), and writes the report. You can keep solving puzzles meanwhile.
+3. For games, choose **whose**: **You** (your linked accounts and imported games) or **Another player** (see below). For yourself, choose **All my games**, **Lichess** or **chess.com**. Then how many of the latest games (25, 50, 100 or 200), the time controls (rapid and classical by default: bullet and blitz mistakes are mostly about the clock), **Rated only**, and the color.
+4. Press **Run the Coach**. If you're in the middle of a puzzle session when it finishes, the new mix's mode waits until that session ends. It syncs your accounts, analyzes the games that aren't analyzed yet (one at a time, with the time left and **Cancel**), tags the mistakes, makes [puzzles from them](#puzzles-from-your-games), and writes the report. You can keep solving puzzles meanwhile.
 
 To coach a hand-picked set of games, tick them in **My games** and press **Send to Coach**. The Coach then uses exactly those games.
 

@@ -250,3 +250,6 @@ The fix commit touches `stats.py`, `review.py`, `game_review.py`, `bridge/api.py
 **Tests added in round 2** (`tests/e2e/test_qa_v010_ui.py`): `test_qa_r2_the_mix_reloads_on_the_puzzles_page_with_its_mode`, `test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_step` (xfail B9).
 
 **For Adam's manual test** (in addition to round 1): start a puzzle session while a Coach run is going and look at the Mode control and the Rated switch when it finishes (B9). Try **Lichess** / **chess.com** on the Coach page with both accounts linked.
+
+## Builder's fixes after round 2 (2026-11-04)
+B9 and B10 fixed with regression tests (QA's B9 test is now plain). The round-2 observation about old Missed/Allowed labels is fixed too: the backfill regrades stored moves before re-tagging (`test_r2_the_backfill_applies_the_b2_rule_to_old_analysis`).

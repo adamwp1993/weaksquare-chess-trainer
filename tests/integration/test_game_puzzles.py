@@ -223,3 +223,17 @@ def test_any_analysis_calls_the_puzzle_hook(services, paths) -> None:  # type: i
     gid = services.games.import_pgn(MATE).game_id
     assert _wait(services, services.analysis.queue([gid])) == "done"
     assert seen == [gid]
+
+
+def test_r2_the_backfill_applies_the_b2_rule_to_old_analysis(services) -> None:  # type: ignore[no-untyped-def]
+    """QA round 2 observation: a move stored as Missed by v0.9's rule, which walked into a mate, becomes
+    Allowed when the v0.10 backfill runs."""
+    from dataclasses import replace as dc_replace
+
+    _recorder(services)
+    rows = _rows()
+    rows[12] = dc_replace(rows[12], eval_after=Score(mate=-1), kind="missed")  # v0.9: Missed came first
+    gid = _game(services, rows)
+    job = services.game_puzzles.start_backfill()
+    assert job is not None and services.game_puzzles._runner.wait(job, 10).state == "done"
+    assert GameAnalysisRepo(services.db).rows(gid)[12].kind == "allowed"

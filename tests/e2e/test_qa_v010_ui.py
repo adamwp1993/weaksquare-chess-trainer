@@ -156,7 +156,6 @@ def test_qa_r2_the_mix_reloads_on_the_puzzles_page_with_its_mode(page) -> None: 
     shot(page, "r2-mix-after-leaving")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.10-B9: the B3 reload sets the Mixer's mode but not the running session's")
 def test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_step(page) -> None:  # type: ignore[no-untyped-def]
     """B3 fix side effect: a run that ends while a Standard session is running."""
     coach(page)

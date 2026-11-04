@@ -244,6 +244,7 @@ Entry format:
   - **B6:** "1 game" in Saved reports; the User Guide states Lichess's mate-in-one rule.
   - **B7:** `get_theme_catalog` returns no themes before a puzzle database exists, instead of crashing.
   - **B8:** the v0.9 smoke test reads the first two of the three AI features.
+  - **Round 2, B9:** while a puzzle session runs, a finished Coach run updates the filters but its mode waits for the session to end (App keeps it pending), so the Mixer and the session agree (§6). **B10:** the User Guide covers the account choice and the hidden explanation line; screenshots regenerated. Also from round 2: the one-time backfill regrades stored moves first (`AnalysisService.regrade_stored`), so games analyzed before v0.10 get the B2 rule.
 - Consequences: each fix has a regression test (QA's xfail tests now pass).
 
 ### 2026-11-04, v0.10: AI coaching on a report: allow-listed prompt, the Coach feature, stored on the report

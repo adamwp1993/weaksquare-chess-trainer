@@ -104,6 +104,8 @@ class Retagger(Protocol):
 
     def thresholds_decided(self) -> int: ...
 
+    def regrade_stored(self) -> int: ...
+
 
 @dataclass(frozen=True)
 class PuzzleSettings:
@@ -383,6 +385,7 @@ class GamePuzzlesService:
 
     def _backfill(self, progress: ProgressFn, cancel: CancelToken) -> str:
         progress(None, "Tagging your analyzed games")
+        self._retagger.regrade_stored()  # moves analyzed before v0.10 get today's Missed/Allowed rule (v0.10-B2)
         self._retagger.retag(cancel=cancel)
         progress(None, "Tagging your puzzles")
         self.tag_puzzles()
