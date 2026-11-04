@@ -37,6 +37,7 @@ import type {
 } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
+import { gameNarrative, moveExplanation } from "./mockGameAi";
 import { MockGames } from "./mockGames";
 import { type ExplainTarget, MockLlm } from "./mockLlm";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
@@ -76,6 +77,11 @@ import type {
   UpdateOffer,
   ThemeGroup,
   UiSettings,
+  Explanation,
+  GameNarrative,
+  GameReview,
+  LlmSettings,
+  ReviewMove,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -806,6 +812,64 @@ export class MockClient implements ApiClient {
 
   async getExplanation(sessionId: number) {
     return this.llm.result(sessionId, this.session(sessionId).current?.puzzle.id ?? null);
+  }
+
+  // ---- v0.9: a model per AI feature and Game Review AI ------------------------------------------
+  async setLlmFeature(feature: "game_review", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
+    return this.llm.setFeature(feature, choice, model, reasoning);
+  }
+
+  /** The analyzed move you may ask about (your own), as the backend checks it. */
+  private aiMove(gameId: number, ply: number): { review: GameReview; move: ReviewMove } {
+    const review = this.games.review(gameId);
+    const bad = (message: string) => new ApiCallError({ code: "invalid_argument", message, retryable: false });
+    if (!review.analyzed) throw bad("Analyze this game first: the AI explains Stockfish's analysis.");
+    if (!review.game.user_color) throw bad("Choose which side you played first.");
+    const move = review.moves[ply];
+    if (!move) throw bad("There's no such move in this game.");
+    if (review.game.user_color !== "both" && review.game.user_color !== move.mover) throw bad("Explain this move works on your own moves.");
+    if (!move.best_move) throw bad("The analysis has no best line for this move.");
+    return { review, move };
+  }
+
+  async getGameMoveQuote(gameId: number, ply: number) {
+    this.aiMove(gameId, ply);
+    return this.llm.gameQuote("game_move", `move:${gameId}:${ply}`);
+  }
+
+  async startGameMoveExplain(gameId: number, ply: number) {
+    const { move } = this.aiMove(gameId, ply);
+    return this.llm.startGame("game_move", `move:${gameId}:${ply}`, (provider, model, costUsd) => moveExplanation(move, provider, model, costUsd));
+  }
+
+  async getGameMoveExplanation(gameId: number, ply: number) {
+    this.aiMove(gameId, ply);
+    return this.llm.gameResult(`move:${gameId}:${ply}`) as Explanation | null;
+  }
+
+  private aiGame(gameId: number, n: number | null) {
+    const review = this.games.review(gameId);
+    if (!review.analyzed) throw new ApiCallError({ code: "invalid_argument", message: "Analyze this game first: the AI explains Stockfish's analysis.", retryable: false }); // prettier-ignore
+    const m = this.games.aiMoments(gameId, n);
+    return { review, ...m, what: `narrative:${gameId}:${m.n}:${m.plies.join(",")}` };
+  }
+
+  async getGameNarrativeQuote(gameId: number, n: number | null) {
+    return this.llm.gameQuote("game_narrative", this.aiGame(gameId, n).what);
+  }
+
+  async startGameNarrative(gameId: number, n: number | null) {
+    const g = this.aiGame(gameId, n);
+    return this.llm.startGame(
+      "game_narrative",
+      g.what,
+      (provider, model, costUsd) => gameNarrative(g.review, g.n, g.plies, provider, model, costUsd),
+      () => this.games.markAiReviewed(gameId),
+    );
+  }
+
+  async getGameNarrative(gameId: number, n: number | null) {
+    return this.llm.gameResult(this.aiGame(gameId, n).what) as GameNarrative | null;
   }
 
   // ---- v0.8: the game library, Game Review and your own puzzles (mockGames.ts) ----------------

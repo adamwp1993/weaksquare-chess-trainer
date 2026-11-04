@@ -1,15 +1,19 @@
 // v0.8 Game Review (FR-11.8–11.16): the board and move list with ?! ? ?? symbols, the eval graph, the
 // summary per side, key moments with mistake reasons and Save as puzzle, the engine's lines and the
 // refutation at any move (all from the stored analysis), and Retry mode on your mistakes.
+// v0.9 (§11.4): Explain this move on your moves, Explain my game with its Confirm dialog and the Game Review
+// model dropdown, the AI's notes on the key moments, and Train these.
 import { Alert, Badge, Button, Grid, Group, Paper, Progress, Radio, Stack, Table, Text, Title } from "@mantine/core";
 import { Chess } from "chess.js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
-import type { GameReview, RetryResult, ReviewMove } from "../api/types";
+import type { Explanation, GameMoment, GameNarrative, GameReview, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
 import { answerPositions, AnswerPlayer } from "../components/AnswerPlayer";
 import { Board, type BoardShape } from "../components/Board";
 import { EvalGraph } from "../components/EvalGraph";
+import { showMeFor } from "../components/ExplainPanel";
+import { GameNarrativePanel, MomentNote, MoveExplain } from "../components/GameAiPanel";
 import { ReasonChips } from "../components/ReasonChips";
 import { CLASS_COLOR, PLATFORM_LABEL, cap, gameDate, gamePrompt, moveLabel, resultLabel } from "../state/games";
 import { useShortcuts } from "../state/shortcuts";
@@ -23,11 +27,35 @@ function finalFen(start: string, moves: ReviewMove[]): string {
   return c.fen();
 }
 
-export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; onBack: () => void; coordinates: boolean }) {
+/** A line stepped through on the board; Show me adds each step's arrows and the AI's note (FR-8.5). */
+interface Showing {
+  fen: string;
+  line: string[];
+  step: number;
+  shapes?: BoardShape[][];
+  notes?: string[];
+}
+
+export function ReviewView({
+  gameId,
+  onBack,
+  coordinates,
+  autoExplain = false,
+  onTrain,
+}: {
+  gameId: number;
+  onBack: () => void;
+  coordinates: boolean;
+  /** Review + Explain my game (FR-11.29): analyze if needed, then open Explain my game's Confirm. */
+  autoExplain?: boolean;
+  onTrain?: (p: SuggestedPreset) => void;
+}) {
   const [review, setReview] = useState<GameReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0); // moves played on the board
-  const [showing, setShowing] = useState<{ fen: string; line: string[]; step: number } | null>(null);
+  const [showing, setShowing] = useState<Showing | null>(null);
+  const [notes, setNotes] = useState<Map<number, GameMoment>>(new Map());
+  const autoAnalyzed = useRef(false);
   const [job, setJob] = useState<string | null>(null);
   const analysis = useJob(job);
   const [color, setColor] = useState<"white" | "black" | "both">("white");
@@ -45,6 +73,17 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
   useEffect(() => {
     if (analysis && analysis.state !== "running") load();
   }, [analysis, load]);
+  // Review + Explain my game on a game that isn't analyzed yet: analyze it first (FR-11.29).
+  useEffect(() => {
+    if (!autoExplain || !review || review.analyzed || autoAnalyzed.current || review.game.user_color === null) return;
+    autoAnalyzed.current = true;
+    api.analyzeGames([gameId], false).then(setJob, (e: Error) => setError(e.message));
+  }, [autoExplain, review, gameId]);
+  const narrativeChanged = useCallback((x: GameNarrative | null) => setNotes(new Map((x?.moments ?? []).map((m) => [m.ply, m]))), []);
+  const showExplanation = useCallback((x: Explanation) => {
+    const s = showMeFor(x);
+    setShowing({ fen: x.start_fen, line: x.solution, step: 0, shapes: s.shapes, notes: s.notes });
+  }, []);
 
   const moves = useMemo(() => review?.moves ?? [], [review]);
   const end = useMemo(() => (review ? finalFen(review.start_fen, moves) : ""), [review, moves]);
@@ -165,7 +204,7 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
   const last = cursor > 0 ? moves[cursor - 1] : null; // the move just played
   const yours = (m: ReviewMove) => g.user_color === "both" || g.user_color === m.mover;
   const isError = (m: ReviewMove | null) => !!m && !!m.classification && m.classification in CLASS_COLOR;
-  const shapes: BoardShape[] = [];
+  const shapes: BoardShape[] = showing?.shapes?.[showing.step] ?? [];
   if (!showing && here?.best_move) shapes.push({ orig: here.best_move.slice(0, 2), dest: here.best_move.slice(2, 4), color: "green" });
   const lastMove = showing
     ? answerPositions(showing.fen, showing.line)[showing.step].lastMove
@@ -268,6 +307,11 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
             {showing ? (
               <Stack gap={4}>
                 <AnswerPlayer positions={answerPositions(showing.fen, showing.line)} step={showing.step} onStep={(s) => setShowing({ ...showing, step: s })} />
+                {showing.notes?.[showing.step] && (
+                  <Text size="xs" data-testid="review-show-note">
+                    {showing.notes[showing.step]}
+                  </Text>
+                )}
                 <Button size="xs" variant="subtle" onClick={() => setShowing(null)}>
                   Back to the game
                 </Button>
@@ -308,6 +352,7 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
                     Why {last.san} fails: show me
                   </Button>
                 )}
+                {yours(last) && <MoveExplain key={last.ply} gameId={gameId} ply={last.ply} onShowMe={showExplanation} />}
               </Paper>
             )}
             {review.analyzed && !showing && here && here.lines.length > 0 && (
@@ -332,6 +377,16 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Stack gap="md">
+            {g.user_color !== null && (
+              <GameNarrativePanel
+                gameId={gameId}
+                analyzed={review.analyzed}
+                autoConfirm={autoExplain}
+                onNarrative={narrativeChanged}
+                onJump={(p) => go(p + 1)}
+                onTrain={(p) => onTrain?.(p)}
+              />
+            )}
             {review.analyzed && <EvalGraph moves={moves} ply={cursor - 1} onPly={(p) => go(p + 1)} />}
             {review.analyzed && (
               <Table withTableBorder data-testid="review-summary">
@@ -403,6 +458,16 @@ export function ReviewView({ gameId, onBack, coordinates }: { gameId: number; on
                           </Button>
                         </Group>
                       </Group>
+                      {notes.has(p) && (
+                        <MomentNote
+                          m={notes.get(p)!}
+                          onShow={() => {
+                            const note = notes.get(p)!;
+                            const arrows = note.annotations.map((a) => ({ orig: a.orig, dest: a.dest, color: a.color }));
+                            setShowing({ fen: m.fen_before, line: note.better_uci, step: 0, shapes: [arrows], notes: [note.text] });
+                          }}
+                        />
+                      )}
                       {open && review.ask_reasons && yours(m) && (
                         <ReasonChips
                           prompt={gamePrompt(m.suggested_reason as ReasonKey | null)}

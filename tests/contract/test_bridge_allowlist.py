@@ -105,6 +105,13 @@ ALLOWLIST = {
     "choose_and_import_puzzles",  # v0.8: FR-10.46
     "get_puzzle_import_report",  # v0.8: FR-10.48
     "list_puzzle_sets",  # v0.8: FR-10.47
+    "set_llm_feature",  # v0.9: a model per AI feature (FR-1.15)
+    "get_game_move_quote",  # v0.9: Explain this move (FR-11.17)
+    "start_game_move_explain",  # v0.9
+    "get_game_move_explanation",  # v0.9
+    "get_game_narrative_quote",  # v0.9: Explain my game (FR-11.18)
+    "start_game_narrative",  # v0.9
+    "get_game_narrative",  # v0.9
 }
 
 

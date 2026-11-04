@@ -95,6 +95,7 @@ def build_api(
         analysis=services.analysis,
         review=services.review,
         puzzle_import=services.puzzle_import,
+        game_explain=services.game_explain,
     )
 
 

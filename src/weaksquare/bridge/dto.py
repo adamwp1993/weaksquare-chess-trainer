@@ -544,6 +544,32 @@ class LlmSpend:
 
 
 @dataclass(frozen=True)
+class LlmModelChoice:
+    """One model a feature's picker offers (FR-1.15): the price table's models of every provider."""
+
+    provider: LlmProviderName
+    model: str
+    usd: float  # about what one request of this feature costs at its reasoning level
+
+
+@dataclass(frozen=True)
+class LlmFeature:
+    """A model per AI feature (FR-1.15, v0.9). Explain's choice is `LlmSettings.provider` and the providers'
+    models; every other feature can follow it ('same') or pick its own provider and model."""
+
+    feature: Literal["explain", "game_review"]
+    label: str
+    choice: Literal["same", "anthropic", "openai", "none"]  # Explain: its provider; others: 'same' or their own
+    model: str  # the feature's own model ('' when it follows Explain or none is picked)
+    reasoning: Literal["low", "medium", "high"]
+    provider: Literal["none", "anthropic", "openai"]  # what its requests use now
+    effective_model: str
+    ready: bool  # a provider with a stored key and a model with a price row
+    spent_usd: float  # this month (FR-1.15)
+    options: list[LlmModelChoice]
+
+
+@dataclass(frozen=True)
 class LlmSettings:
     provider: Literal["none", "anthropic", "openai"]
     reasoning: Literal["low", "medium", "high"]  # FR-8.15
@@ -554,6 +580,7 @@ class LlmSettings:
     # FR-1.6: the silent key check at launch ('none': no AI set up, or a key was saved since).
     key_check: Literal["none", "checking", "ok", "failed"]
     key_check_message: str | None
+    features: list[LlmFeature]  # v0.9: Explain first, then Game Review
 
 
 @dataclass(frozen=True)
@@ -614,6 +641,66 @@ class Explanation:
     solution: list[str]  # UCI from start_fen, both sides
 
 
+# ---- v0.9: Game Review AI (§11.4) ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GameAiQuote:
+    """Whether Explain this move / Explain my game can run, and what it would cost (FR-8.11, 11.21)."""
+
+    # 'ok', 'cached' (free), or why not: 'not_configured', 'no_model', 'no_price', 'over_budget', 'over_cap'
+    state: str
+    message: str | None
+    provider: str
+    model: str
+    input_tokens: int | None  # the estimate (FR-8.11)
+    typical_output_tokens: int | None
+    max_output_tokens: int | None
+    typical_usd: float | None
+    worst_usd: float | None  # what the per-run cap is checked against (FR-8.12)
+    run_cap_usd: float
+    spent_usd: float  # this month, for "x% of what's left of your budget"
+    budget_usd: float
+
+
+@dataclass(frozen=True)
+class GameMoment:
+    ply: int
+    played_san: str
+    text: str
+    annotations: list[ExplainAnnotation]  # in the position before the move, validated
+    better_line: list[str]  # SAN from the position before the move; starts with Stockfish's best move
+    better_uci: list[str]
+
+
+@dataclass(frozen=True)
+class SuggestedPreset:
+    """FR-11.18: offered only; Train these applies it when you click it."""
+
+    themes: list[str]
+    names: list[str]
+    rating_min: int | None
+    rating_max: int | None
+
+
+@dataclass(frozen=True)
+class GameNarrative:
+    game_id: int
+    n: int
+    key_moments: list[int]  # the plies it covers
+    opening_summary: str
+    turning_point: int | None  # a ply
+    themes: list[str]
+    takeaways: list[str]
+    moments: list[GameMoment]
+    preset: SuggestedPreset | None
+    discarded: int  # > 0: "some annotations were discarded" (FR-8.4)
+    provider: str
+    model: str
+    cost_usd: float  # 0 when cached
+    cached: bool
+
+
 # ---- v0.8: game library, Game Review, your own puzzles -------------------------------------------
 
 
@@ -672,7 +759,7 @@ class GameSummary:
     accuracy_user: float | None
     accuracy_opponent: float | None
     lichess_analyzed: bool  # the badge: Lichess already has computer analysis
-    analysis_status: Literal["none", "analyzed"]
+    analysis_status: Literal["none", "analyzed", "ai_reviewed"]  # ai_reviewed: v0.9 (FR-11.25)
 
 
 @dataclass(frozen=True)
@@ -885,12 +972,18 @@ EXPORTED: list[type] = [
     LlmModelOption,
     LlmProviderInfo,
     LlmSpend,
+    LlmModelChoice,
+    LlmFeature,
     LlmSettings,
     LlmPrice,
     ExplainQuote,
     ExplainAnnotation,
     ExplainStep,
     Explanation,
+    GameAiQuote,
+    GameMoment,
+    SuggestedPreset,
+    GameNarrative,
     ReviewThresholds,
     GamesSettings,
     ChesscomProfile,

@@ -25,6 +25,7 @@ ERRORS: tuple[str, ...] = ("inaccuracy", "mistake", "blunder")
 SYMBOLS = {"inaccuracy": "?!", "mistake": "?", "blunder": "??"}
 CLAMP = 1000
 EDGE = 150  # Missed / Allowed: "a winning edge" (plan v0.8, refined in v0.10)
+MAX_SAVED_PLAYER_MOVES = 3  # plan v0.8: a saved line is cut to at most 3 of your moves
 
 
 @dataclass(frozen=True)
@@ -235,6 +236,15 @@ def regrade(row: MoveRow, th: Thresholds) -> MoveRow:
     """The same move graded with other thresholds (v0.8-B1): only the stored evals are needed."""
     loss, cls = grade(row.eval_before, row.eval_after, row.best_move == row.move_uci, th)
     return replace(row, cp_loss=loss, classification=cls, kind=missed_or_allowed(row.eval_before, row.eval_after, cls))
+
+
+def saved_line(pv: Sequence[str], max_player_moves: int = MAX_SAVED_PLAYER_MOVES) -> tuple[str, ...]:
+    """The solution of a saved puzzle: the engine's best line from your position, cut to whole moves of
+    yours (it ends on your move) and at most `max_player_moves` of them."""
+    line = tuple(pv[: 2 * max_player_moves - 1])
+    if len(line) % 2 == 0:
+        line = line[:-1]
+    return line
 
 
 def white_eval(row: MoveRow) -> int:

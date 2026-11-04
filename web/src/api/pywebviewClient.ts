@@ -19,6 +19,8 @@ import type {
   AccountStatus,
   Analysis,
   ExplainQuote,
+  GameAiQuote,
+  GameNarrative,
   Explanation,
   LlmPrice,
   LlmSettings,
@@ -200,6 +202,35 @@ export class PywebviewClient implements ApiClient {
   getExplanation(sessionId: number) {
     return this.call<Explanation | null>("get_explanation", sessionId);
   }
+  // ---- v0.9: a model per AI feature and Game Review AI -------------------------------------------
+  setLlmFeature(feature: "game_review", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
+    return this.call<LlmSettings>("set_llm_feature", feature, choice, model, reasoning);
+  }
+
+  getGameMoveQuote(gameId: number, ply: number) {
+    return this.call<GameAiQuote>("get_game_move_quote", gameId, ply);
+  }
+
+  startGameMoveExplain(gameId: number, ply: number) {
+    return this.call<string>("start_game_move_explain", gameId, ply);
+  }
+
+  getGameMoveExplanation(gameId: number, ply: number) {
+    return this.call<Explanation | null>("get_game_move_explanation", gameId, ply);
+  }
+
+  getGameNarrativeQuote(gameId: number, n: number | null) {
+    return this.call<GameAiQuote>("get_game_narrative_quote", gameId, n);
+  }
+
+  startGameNarrative(gameId: number, n: number | null) {
+    return this.call<string>("start_game_narrative", gameId, n);
+  }
+
+  getGameNarrative(gameId: number, n: number | null) {
+    return this.call<GameNarrative | null>("get_game_narrative", gameId, n);
+  }
+
 
   getAppInfo() {
     return this.call<AppInfo>("get_app_info");

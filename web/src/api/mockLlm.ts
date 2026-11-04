@@ -1,16 +1,28 @@
 // The mock client's AI side (v0.7): settings, the price table, the guardrails and Explain, with fixed data.
+// v0.9: a model per AI feature (FR-1.15) and Game Review AI (Explain this move, Explain my game).
 // Scenarios via the page URL:
 //   ?ai=on       Anthropic with a key and Claude Haiku 5.5 picked (default: no AI set up)
 //   ?ai=warn     as on, with 85% of the monthly budget used (the yellow indicator)
 //   ?ai=over     as on, with the budget used up (Explain blocked, cached results still free)
 //   ?ai=failed   as on, but the launch check failed (the startup page opens the full form)
 //   ?ai=nomodel  Anthropic with a key and no model picked
+//   ?ai=split    as on, with Game Review on its own model (Claude Sonnet 5.5)
 // The mock's explanations follow the puzzle's real solution and always include one discarded
 // annotation, so the "some annotations were discarded" note can be seen and tested.
 import { Chess } from "chess.js";
 import type { LlmPriceChange, LlmProvider, LlmSettingsChange } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
-import type { ExplainQuote, Explanation, Job, LlmPrice, LlmSettings, LlmSpend } from "./types";
+import type {
+  ExplainQuote,
+  Explanation,
+  GameAiQuote,
+  GameNarrative,
+  Job,
+  LlmFeature,
+  LlmPrice,
+  LlmSettings,
+  LlmSpend,
+} from "./types";
 
 const SEED: LlmPrice[] = [
   { provider: "anthropic", model: "claude-haiku-5-5", input_per_m: 0.1, output_per_m: 0.5, long_ctx_threshold: 100000, long_input_per_m: 0.5, long_output_per_m: 2.5, as_of: "2026-10-31" },
@@ -27,6 +39,16 @@ const PREFIX: Record<LlmProvider, string> = { anthropic: "sk-ant-", openai: "sk-
 const MULT = { low: 1, medium: 2, high: 4 } as const;
 const PROMPT_TOKENS = 2234; // (6,000 + 700 characters) / 3, as the backend estimates
 const ACTUAL = { input: 1834, output: 412 }; // what the mock's "provider" reports
+// v0.9: per request kind, as core/llm/defaults.py has them (prompt tokens = typical characters / 3).
+const KIND = {
+  explain: { prompt: 2000, typical: 600, max: 1500 },
+  game_move: { prompt: 2000, typical: 600, max: 1500 },
+  game_narrative: { prompt: 10000, typical: 3000, max: 4000 },
+} as const;
+const ACTUAL_GAME = { game_move: { input: 1900, output: 450 }, game_narrative: { input: 9400, output: 2600 } } as const;
+export type GameKind = "game_move" | "game_narrative";
+type Choice = "same" | LlmProvider;
+type Feature = "explain" | "game_review";
 
 const cost = (p: LlmPrice, input: number, output: number) => {
   const long = p.long_ctx_threshold !== null && input > p.long_ctx_threshold;
@@ -59,6 +81,10 @@ export class MockLlm {
   private keyCheckMessage: string | null = null;
   private cache = new Map<string, Explanation>();
   private results = new Map<number, { puzzleId: string; x: Explanation }>();
+  // v0.9: Game Review's own choice (FR-1.15), its spend, and its results keyed like the backend's cache.
+  private gr: { choice: Choice; model: string; reasoning: LlmSettings["reasoning"] } = { choice: "same", model: "", reasoning: "low" };
+  private spentBy: Record<Feature, number> = { explain: 0, game_review: 0 };
+  private gameCache = new Map<string, Explanation | GameNarrative>();
   readonly calls: string[] = [];
 
   constructor(
@@ -73,6 +99,7 @@ export class MockLlm {
       this.models.anthropic = ai === "nomodel" ? "" : "claude-haiku-5-5";
       this.keyCheck = "ok";
     }
+    if (ai === "split") this.gr = { choice: "anthropic", model: "claude-sonnet-5-5", reasoning: "low" };
     if (ai === "warn") this.spent = 4.25;
     if (ai === "over") this.spent = 5.0012;
     if (ai === "failed") {
@@ -110,7 +137,48 @@ export class MockLlm {
       spend: this.spend(),
       key_check: this.keyCheck,
       key_check_message: this.keyCheckMessage,
+      features: [this.feature("explain"), this.feature("game_review")],
     };
+  }
+
+  /** What a feature's requests use now: its provider, model and reasoning (FR-1.15). */
+  private effective(feature: Feature) {
+    const model = this.provider === "none" ? "" : this.models[this.provider];
+    if (feature === "explain") return { provider: this.provider, model, reasoning: this.reasoning };
+    if (this.gr.choice === "same") return { provider: this.provider, model, reasoning: this.gr.reasoning };
+    return { provider: this.gr.choice as LlmSettings["provider"], model: this.gr.model, reasoning: this.gr.reasoning };
+  }
+
+  private feature(feature: Feature): LlmFeature {
+    const e = this.effective(feature);
+    const k = KIND[feature === "explain" ? "explain" : "game_narrative"];
+    const order = (p: string) => (p === "anthropic" ? 0 : 1);
+    const priced = this.prices.some((p) => p.provider === e.provider && p.model === e.model);
+    return {
+      feature,
+      label: feature === "explain" ? "Puzzle Explain" : "Game Review",
+      choice: feature === "explain" ? this.provider : this.gr.choice,
+      model: feature === "explain" ? e.model : this.gr.model,
+      reasoning: e.reasoning,
+      provider: e.provider,
+      effective_model: e.model,
+      ready: e.provider !== "none" && this.keys[e.provider] && !!e.model && priced,
+      spent_usd: r6(this.spentBy[feature]),
+      options: [...this.prices]
+        .sort((a, b) => order(a.provider) - order(b.provider) || a.input_per_m - b.input_per_m || a.model.localeCompare(b.model))
+        .map((r) => ({ provider: r.provider, model: r.model, usd: r6(cost(r, k.prompt, k.typical * MULT[e.reasoning])) })),
+    };
+  }
+
+  setFeature(feature: string, choice: Choice, model: string, reasoning: LlmSettings["reasoning"]): LlmSettings {
+    if (feature !== "game_review") throw bad("Unknown AI feature.");
+    const m = model.trim();
+    if (choice !== "same" && m && !/^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,99}$/.test(m)) {
+      throw bad("That isn't a valid model ID (letters, digits and . _ : / @ - only, up to 100).");
+    }
+    this.gr = { choice, model: choice === "same" ? "" : m, reasoning };
+    this.calls.push(`llmFeature:${feature}:${choice}:${this.gr.model}:${reasoning}`);
+    return this.settings();
   }
 
   update(c: LlmSettingsChange): LlmSettings {
@@ -254,6 +322,7 @@ export class MockLlm {
         const price = this.prices.find((p) => p.provider === q.provider && p.model === q.model)!;
         x = explanationFor(t, q.provider, q.model, r6(cost(price, ACTUAL.input, ACTUAL.output)));
         this.spent += x.cost_usd;
+        this.spentBy.explain += x.cost_usd;
         this.cache.set(key, x);
       }
       this.results.set(sessionId, { puzzleId: t.puzzleId, x });
@@ -265,6 +334,79 @@ export class MockLlm {
   result(sessionId: number, puzzleId: string | null): Explanation | null {
     const r = this.results.get(sessionId);
     return r && r.puzzleId === puzzleId ? r.x : null;
+  }
+
+  // ---- Game Review AI (v0.9) ------------------------------------------------------------------------
+
+  private gameKey(what: string) {
+    const e = this.effective("game_review");
+    return `${what}|${e.provider}|${e.model}`;
+  }
+
+  gameQuote(kind: GameKind, what: string): GameAiQuote {
+    const e = this.effective("game_review");
+    const base: GameAiQuote = {
+      state: "ok", message: null, provider: e.provider, model: e.model, input_tokens: null, typical_output_tokens: null,
+      max_output_tokens: null, typical_usd: null, worst_usd: null, run_cap_usd: this.cap, spent_usd: r6(this.spent),
+      budget_usd: this.budget,
+    }; // prettier-ignore
+    const none = (state: string, message: string | null): GameAiQuote => ({ ...base, state, message });
+    if (e.provider === "none" || !this.keys[e.provider]) return none("not_configured", "Choose an AI provider and save its key in Settings → AI.");
+    if (!e.model) return none("no_model", "Pick a model in Settings → AI.");
+    if (this.gameCache.has(this.gameKey(what))) return none("cached", null);
+    const price = this.prices.find((p) => p.provider === e.provider && p.model === e.model);
+    if (!price) {
+      return none("no_price", `${e.model} has no row in the price table, so its cost can't be worked out. Add its prices in Settings → AI.`);
+    }
+    const k = KIND[kind];
+    const maxOut = k.max * MULT[e.reasoning];
+    const typicalOut = Math.min(k.typical * MULT[e.reasoning], maxOut);
+    const q: GameAiQuote = {
+      ...base, input_tokens: k.prompt, typical_output_tokens: typicalOut, max_output_tokens: maxOut,
+      typical_usd: r6(cost(price, k.prompt, typicalOut)), worst_usd: r6(cost(price, k.prompt, maxOut)),
+    }; // prettier-ignore
+    if (this.spent >= this.budget) {
+      const message = `You've used this month's AI budget ($${this.spent.toFixed(2)} of $${this.budget.toFixed(2)}). Raise it in Settings → AI, or wait until next month.`;
+      return { ...q, state: "over_budget", message };
+    }
+    if ((q.worst_usd ?? 0) > this.cap) {
+      const message = `This request could cost up to $${(q.worst_usd ?? 0).toFixed(4)}, more than your per-run cap of $${this.cap.toFixed(2)}. Raise the cap in Settings → AI.`;
+      return { ...q, state: "over_cap", message };
+    }
+    return q;
+  }
+
+  /** One Game Review request as a job: `make` builds the answer, `done` runs once it's stored. */
+  startGame(kind: GameKind, what: string, make: (provider: string, model: string, costUsd: number) => Explanation | GameNarrative, done?: () => void): string {
+    const q = this.gameQuote(kind, what);
+    if (q.state !== "ok" && q.state !== "cached") throw new ApiCallError({ code: q.state, message: q.message ?? "", retryable: false });
+    const id = this.newJobId();
+    const job = kind === "game_move" ? "game_move_explain" : "game_narrative";
+    const verb = kind === "game_move" ? "Explained" : "Game explained";
+    this.calls.push(`${kind}:${what}:${q.model}`);
+    this.emit({ id, kind: job, state: "running", progress: null, message: kind === "game_move" ? "Asking the AI…" : "Asking the AI about your game…", error_code: null }); // prettier-ignore
+    setTimeout(() => {
+      const key = this.gameKey(what);
+      const hit = this.gameCache.has(key);
+      let costUsd = 0;
+      if (!hit) {
+        const price = this.prices.find((p) => p.provider === q.provider && p.model === q.model)!;
+        costUsd = r6(cost(price, ACTUAL_GAME[kind].input, ACTUAL_GAME[kind].output));
+        this.spent += costUsd;
+        this.spentBy.game_review += costUsd;
+        this.gameCache.set(key, make(q.provider, q.model, costUsd));
+      } else {
+        const x = this.gameCache.get(key)!;
+        this.gameCache.set(key, { ...x, cached: true, cost_usd: 0 });
+      }
+      done?.();
+      this.emit({ id, kind: job, state: "done", progress: 1, message: hit ? `${verb} (saved).` : `${verb} for $${costUsd.toFixed(4)}.`, error_code: null }); // prettier-ignore
+    }, 600);
+    return id;
+  }
+
+  gameResult(what: string): Explanation | GameNarrative | null {
+    return this.gameCache.get(this.gameKey(what)) ?? null;
   }
 }
 

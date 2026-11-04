@@ -88,7 +88,8 @@ def run(tmp_path_factory, fixture_puzzles_db):  # type: ignore[no-untyped-def]
               mixer=s.mixer, sessions=s.sessions, presets=s.presets, stats=s.stats, ui_settings=s.ui_settings,
               db_update=s.db_update, account=s.account, sync=s.sync, history=s.history, engine=s.engine,
               reasons=s.reasons, llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain,
-              games=s.games, analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import)  # fmt: skip
+              games=s.games, analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import,
+              game_explain=s.game_explain)  # fmt: skip
     plant_managed_install(paths)
     model = LIVE_TEST_MODEL[provider]
     assert api.set_llm_settings(provider, model, "low", RUN_CAP, 0.05)["ok"]

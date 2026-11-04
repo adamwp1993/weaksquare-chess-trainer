@@ -8,7 +8,7 @@ import type { LlmSettings } from "../api/types";
 // in browser storage (ARCHITECTURE §3 decision 14), and no key is ever in it (SR-1).
 let current: LlmSettings | null = null;
 const listeners = new Set<(s: LlmSettings) => void>();
-const REFRESH_JOBS = new Set(["explain", "llm_key_test", "llm_launch_check"]);
+const REFRESH_JOBS = new Set(["explain", "llm_key_test", "llm_launch_check", "game_move_explain", "game_narrative"]);
 
 export function publishLlm(s: LlmSettings) {
   current = s;

@@ -152,6 +152,14 @@ class GamesRepo:
                 (status, think_s, engine, game_id),
             )
 
+    def mark_ai_reviewed(self, game_id: int) -> None:
+        """FR-11.25 (v0.9): Explain my game ran on the current analysis. Re-analysis sets it back to analyzed."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE games SET analysis_status = 'ai_reviewed' WHERE id = ? AND analysis_status = 'analyzed'",
+                (game_id,),
+            )
+
     def count(self) -> int:
         with self._db.session() as conn:
             return int(conn.execute("SELECT COUNT(*) FROM games").fetchone()[0])

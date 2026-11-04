@@ -2,7 +2,7 @@
 
 A Windows desktop app for chess tactics training on the Lichess puzzle database. Mix any combination of themes, ratings and puzzle lengths, solve on a board, sync solves to your Lichess account, get unstuck with Stockfish and optional AI explanations, and track whether the gaps in your play are actually closing.
 
-**Status:** in development. v0.8, your games (a library synced from Lichess and chess.com, plus PGN and URL import), Game Review with Stockfish on your PC (graded moves, eval graph, key moments, refutations), Retry your mistakes, Save as puzzle and importing your own puzzle files (the My puzzles source), is released (2026-11-04). v0.9 (Game Review AI) is next. Built version by version per [ROADMAP.md](ROADMAP.md). See [CHANGELOG.md](CHANGELOG.md) for what each version added.
+**Status:** in development. v0.9, Game Review AI (Explain this move, Explain my game with a cost estimate and Confirm, sending only the game's moves, never names or dates) and a model per AI feature, is released (2026-11-04). v0.10 (the Coach) is next. Built version by version per [ROADMAP.md](ROADMAP.md). See [CHANGELOG.md](CHANGELOG.md) for what each version added.
 
 ## Getting started
 The app runs from source on Windows 10 or 11. You need Git, Python 3.12 and Node.js LTS. Then:

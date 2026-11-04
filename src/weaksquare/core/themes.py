@@ -154,6 +154,11 @@ def display_name(key: str) -> str:
     return info(key).name
 
 
+def keys_in_groups(groups: tuple[str, ...]) -> tuple[str, ...]:
+    """The catalog's keys in these groups, in picker order."""
+    return tuple(k for g in GROUP_ORDER if g in groups for k, _ in _CATALOG.get(g, []))
+
+
 def is_valid_key(key: str) -> bool:
     return isinstance(key, str) and bool(THEME_KEY.match(key))
 

@@ -527,6 +527,24 @@ export class MockGames {
   }
 
   // ---- helpers ----------------------------------------------------------------------------------
+  // ---- v0.9: Game Review AI ------------------------------------------------------------------------
+  /** Explain my game finished on the current analysis (FR-11.25). Re-analysis sets it back to analyzed. */
+  markAiReviewed(gameId: number) {
+    const g = this.game(gameId);
+    if (g.summary.analysis_status === "analyzed") g.summary = { ...g.summary, analysis_status: "ai_reviewed" };
+  }
+
+  /** Your `n` largest errors in game order (the backend's top_moments); n null: the Key moments setting. */
+  aiMoments(gameId: number, n: number | null): { n: number; plies: number[] } {
+    const count = n ?? this.settings.key_moments;
+    if (!Number.isInteger(count) || count < 1 || count > 10) throw this.invalid("Explain my game covers 1 to 10 key moments.");
+    const v = this.review(gameId);
+    const yours = (m: ReviewMove) => v.game.user_color === "both" || v.game.user_color === m.mover;
+    const errs = v.moves.filter((m) => yours(m) && m.classification && ERRORS.has(m.classification));
+    const plies = [...errs].sort((a, b) => (b.cp_loss ?? 0) - (a.cp_loss ?? 0) || a.ply - b.ply).slice(0, count).map((m) => m.ply);
+    return { n: count, plies: plies.sort((a, b) => a - b) };
+  }
+
   private game(id: number): MockGame {
     const g = this.games.find((x) => x.summary.id === id);
     if (!g) throw new ApiCallError({ code: "not_found", message: "That game isn't in your library.", retryable: false });

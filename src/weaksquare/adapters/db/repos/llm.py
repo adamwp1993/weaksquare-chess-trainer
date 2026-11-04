@@ -100,6 +100,14 @@ class LlmUsageRepo:
             ).fetchone()
         return float(row[0])
 
+    def spent_by_feature(self, local_month: str) -> dict[str, float]:
+        """This month's spend per feature (FR-1.15): {feature: USD}, only features with requests."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT feature, SUM(cost_usd) FROM llm_usage WHERE local_month = ? GROUP BY feature", (local_month,)
+            ).fetchall()
+        return {str(r[0]): float(r[1]) for r in rows}
+
     def count(self) -> int:
         with self._db.session() as conn:
             return int(conn.execute("SELECT COUNT(*) FROM llm_usage").fetchone()[0])

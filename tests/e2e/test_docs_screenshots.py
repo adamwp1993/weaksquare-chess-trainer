@@ -465,6 +465,23 @@ def test_game_review(page) -> None:  # type: ignore[no-untyped-def]
     shot(page, "game-review", full_page=True)
 
 
+def test_game_review_ai(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.9 (FR-11.17, 11.18): Explain my game's narrative, a key moment's note and Explain this move."""
+    page.goto(page.base_url + "/?ai=on")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("narrative-button").filter(has_text="≈ $").click()
+    page.get_by_test_id("narrative-confirm-button").click()
+    page.get_by_test_id("narrative").wait_for()
+    page.get_by_test_id("move-6").click()
+    page.get_by_test_id("move-explain-button").filter(has_text="≈ $").click()
+    page.get_by_test_id("explanation").wait_for()
+    page.get_by_test_id("moment-note-6").wait_for()
+    page.evaluate("window.scrollTo(0, 0)")  # the header is fixed: a scrolled full-page shot would overlap it
+    page.mouse.move(1270, 890)
+    shot(page, "game-review-ai", full_page=True)
+
+
 def test_retry_mode(page) -> None:  # type: ignore[no-untyped-def]
     page.goto(page.base_url + "/")
     page.get_by_test_id("nav-games").click()
