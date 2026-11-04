@@ -75,7 +75,7 @@ def test_name_whitespace_is_tidied(services) -> None:  # type: ignore[no-untyped
 def test_unusable_stored_preset_is_reported_and_left_alone(services) -> None:  # type: ignore[no-untyped-def]
     with services.db.session() as conn:
         conn.execute(
-            "INSERT INTO presets VALUES ('From v0.8', 'from v0.8', '{\"source\": \"my\"}', 't', 't'),"
+            "INSERT INTO presets VALUES ('From v0.8', 'from v0.8', '{\"my_origins\": [\"coach\"]}', 't', 't'),"
             " ('Broken', 'broken', 'not json', 't', 't')"
         )
     by_name = {p.name: p for p in services.presets.list()}
@@ -83,7 +83,7 @@ def test_unusable_stored_preset_is_reported_and_left_alone(services) -> None:  #
     assert by_name["Broken"].spec is None and by_name["Broken"].error
     with services.db.session() as conn:
         assert conn.execute("SELECT filters_json FROM presets WHERE name = 'From v0.8'").fetchone()[0] == (
-            '{"source": "my"}'
+            '{"my_origins": ["coach"]}'  # coach puzzles arrive in v0.10
         )
 
 

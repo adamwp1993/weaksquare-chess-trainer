@@ -150,16 +150,18 @@ class AttemptsRepo:
             return int(cur.lastrowid or 0)
 
     def srs_rows(self) -> list[SrsRow]:
-        """Spaced repetition (FR-4.6): every attempt of each Lichess puzzle you've missed at least once,
-        oldest first per puzzle. The schedule is replayed from these (core/srs.py). Danger-spotting
-        results don't count (FR-4.4, v0.6); misclicks still do (FR-5.10)."""
+        """Spaced repetition (FR-4.6): every attempt of each puzzle you've missed at least once, oldest
+        first per puzzle. The schedule is replayed from these (core/srs.py). Danger-spotting results don't
+        count (FR-4.4, v0.6); misclicks still do (FR-5.10). Your own puzzles (v0.8) come back as
+        `my:<id>`; Lichess puzzles keep their bare ids."""
         with self._db.session() as conn:
             rows = conn.execute(
-                "SELECT puzzle_id, finished_at, mode, win FROM attempts"
-                " WHERE puzzle_source = 'lichess' AND mode != 'danger_spotting' AND puzzle_id IN"
-                " (SELECT puzzle_id FROM attempts WHERE puzzle_source = 'lichess' AND win = 0"
+                "SELECT CASE puzzle_source WHEN 'my' THEN 'my:' || puzzle_id ELSE puzzle_id END,"
+                " finished_at, mode, win FROM attempts"
+                " WHERE puzzle_source IN ('lichess', 'my') AND mode != 'danger_spotting' AND (puzzle_source, puzzle_id) IN"
+                " (SELECT puzzle_source, puzzle_id FROM attempts WHERE puzzle_source IN ('lichess', 'my') AND win = 0"
                 "  AND mode != 'danger_spotting')"
-                " ORDER BY puzzle_id, id"
+                " ORDER BY puzzle_source, puzzle_id, id"
             ).fetchall()
         return [SrsRow(r[0], r[1], r[2], bool(r[3])) for r in rows]
 

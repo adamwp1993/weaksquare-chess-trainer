@@ -119,7 +119,8 @@ def test_bridge_round_trip(services, paths, clock) -> None:  # type: ignore[no-u
     spec = {"themes": ["mateIn1"], "match": "any", "queue_size": 2}
     assert api.count_matches(spec)["data"] > 0
     assert api.count_matches({"themes": 5})["error"]["code"] == "invalid_argument"
-    assert api.count_matches({"source": "my"})["error"]["code"] == "unsupported_in_this_version"
+    assert api.count_matches({"source": "my"})["data"] == 0  # v0.8: My puzzles, none saved yet
+    assert api.count_matches({"source": "mine"})["error"]["code"] == "invalid_argument"
     sid = api.start_session(spec)["data"]["session_id"]
     view = api.next_puzzle(sid)["data"]
     assert "themes" not in view  # FR-3.14

@@ -34,14 +34,18 @@ class StatsRepo:
         with self._db.session() as conn:
             attached = conn.execute("SELECT 1 FROM pragma_database_list WHERE name = 'pz'").fetchone()
             if attached:
-                cols = _COLUMNS.format(themes="p.themes", length="p.length")
+                cols = _COLUMNS.format(themes="COALESCE(p.themes, c.themes)", length="COALESCE(p.length, c.length)")
                 rows = conn.execute(
                     f"SELECT {cols} FROM attempts a LEFT JOIN pz.puzzles p"
                     " ON a.puzzle_source = 'lichess' AND p.id = a.puzzle_id"
+                    " LEFT JOIN custom_puzzles c ON a.puzzle_source = 'my' AND c.id = CAST(a.puzzle_id AS INTEGER)"
                 ).fetchall()
             else:
-                cols = _COLUMNS.format(themes="NULL", length="NULL")
-                rows = conn.execute(f"SELECT {cols} FROM attempts a").fetchall()
+                cols = _COLUMNS.format(themes="c.themes", length="c.length")
+                rows = conn.execute(
+                    f"SELECT {cols} FROM attempts a"
+                    " LEFT JOIN custom_puzzles c ON a.puzzle_source = 'my' AND c.id = CAST(a.puzzle_id AS INTEGER)"
+                ).fetchall()
         return [
             AttemptRow(
                 win=bool(r[0]),

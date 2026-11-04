@@ -20,7 +20,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
-from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzlesRepo, RetryRepo
+from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzleSource, CustomPuzzlesRepo, RetryRepo
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
@@ -28,6 +28,7 @@ from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsa
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
+from weaksquare.adapters.db.repos.puzzle_sources import CombinedSource
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
 from weaksquare.adapters.db.repos.user_data import (
@@ -269,7 +270,7 @@ def build_services(
         runner,
         clock,
     )
-    puzzles = LichessDbSource(db)
+    puzzles = CombinedSource(LichessDbSource(db), CustomPuzzleSource(db))  # FR-3.15 (v0.8)
     attempts = AttemptsRepo(db)
     mixer = MixerService(puzzles)
     ui_settings = UiSettingsService(SettingsRepo(db))
@@ -333,8 +334,12 @@ def build_services(
         probe,
         cpu_count or os.cpu_count() or 1,
     )
+    games_repo = GamesRepo(db)
+    analysis_repo = GameAnalysisRepo(db)
+    analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner)
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields,
-                              engine=engine, prefs=ui_settings, mode_fields=ModeFields)  # fmt: skip
+                              engine=engine, prefs=ui_settings, mode_fields=ModeFields,
+                              tolerance_cp=lambda: analysis.settings().tolerance_cp)  # fmt: skip
     reasons = ReasonsService(attempts, MistakeReasonsRepo(db), clock, sessions.suggestion_for)
     presets = PresetService(PresetsRepo(db), clock)
     stats = StatsService(StatsRepo(db), attempts, sync_repo, clock)
@@ -352,13 +357,10 @@ def build_services(
     )
     llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
     explain = ExplainService(sessions, llm_settings, llm_usage, LlmCacheRepo(db), runner, clock)
-    games_repo = GamesRepo(db)
     games = GameLibraryService(
         games_repo, AccountSyncRepo(db), SettingsRepo(db), runner, clock, account,
         lichess_games or LichessGames(http), chesscom or ChesscomGames(http), classify_game_error,
     )  # fmt: skip
-    analysis_repo = GameAnalysisRepo(db)
-    analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner)
     custom_puzzles = CustomPuzzlesRepo(db)
     puzzle_import = PuzzleImportService(custom_puzzles, runner, clock)
     review = ReviewService(

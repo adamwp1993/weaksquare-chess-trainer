@@ -269,11 +269,15 @@ def build_prompt(inp: ExplainInput) -> str:
     """The user message: the facts only (SR-11). The system prompt is SYSTEM_PROMPT."""
     start, plies = _solution(inp)
     raw = chess.Board(inp.fen)
-    opp = chess.Move.from_uci(inp.moves[0])
     you = _side(start.turn)
+    if inp.moves and inp.moves[0]:
+        opp = chess.Move.from_uci(inp.moves[0])
+        before = f"The opponent has just played {raw.san(opp)}."
+    else:  # a puzzle of your own (v0.8): no opponent move first
+        before = "It's your move."
     lines = [
         f"You play {you}. Position before your first move (FEN): {start.fen()}",
-        f"The opponent has just played {raw.san(opp)}.",
+        before,
         f"Themes: {', '.join(inp.themes) if inp.themes else '(none given)'}",
         "",
         "Solution (ply: side SAN [UCI]):",

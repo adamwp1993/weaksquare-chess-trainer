@@ -186,7 +186,7 @@ def _check_in(w: Wired) -> None:
 
 def _solve_one(api: Api, sid: int) -> dict:
     view = data(api.next_puzzle(sid))
-    with api._sessions._puzzles._db.session() as c:
+    with api._sessions._puzzles._lichess._db.session() as c:
         moves = c.execute("SELECT moves FROM pz.puzzles WHERE id = ?", (view["puzzle_id"],)).fetchone()[0].split()
     fb = None
     for uci in moves[1::2]:

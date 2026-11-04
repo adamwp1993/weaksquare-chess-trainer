@@ -216,6 +216,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.8: My puzzles in the session: negative keys, no pre-move, the engine tolerance
+- Context: decision 3 promised `my:` puzzle refs. The session's queue holds integer keys into `puzzles.db`, every mode applies `moves[0]` (the opponent's move) first, and puzzles saved from games need the 30 cp tolerance (Adam, v0.8 planning).
+- Decision:
+  - **One source for the session and the mixer:** `adapters/db/repos/puzzle_sources.py` (`CombinedSource`) wraps `LichessDbSource` and `CustomPuzzleSource`. Your puzzles use the **negated** `custom_puzzles.id` as their key, so one queue and one served set hold both. Their keys never change, so they survive a puzzle-DB re-import. **Both** gives each slot to your pool with probability (your pool) / (both pools).
+  - **No pre-move:** a custom puzzle is an ordinary `Puzzle` whose `moves[0]` is `NO_PREMOVE` (empty). `start_position` then starts from the FEN itself. Lengths (`len(moves) // 2`), Commit the line, Show answer and the outcome's solution (`moves[1:]`) work unchanged. The front end already handles an empty opponent move (Danger spotting).
+  - **The tolerance lives in the session, not the mode:** before Standard mode sees a move on a tolerance puzzle, `SessionService._tolerate` asks the interactive engine (best line, then the position after your move). If your move is within the tolerance, the rest of the line is rewritten from your move with the engine's continuation, cut to end on your move. The mode then sees it as the expected move. Without Stockfish, or if the engine fails, the stored line is checked as it is. Commit the line always grades the stored line.
+  - **What reads attempts:** Spaced repetition replays `my:` attempts too (`srs_rows` names them `my:<id>`). The history filters use `MY_SOLVED` and `MY_MISSED` on the `my` source. Stats take a `my:` puzzle's length from `custom_puzzles`. A `my:` attempt is always `local` and stores no puzzle rating.
+  - **Lichess-only:** ratios, the non-random orders, Name the idea and Danger spotting (validated in `FilterSpec` and `SessionService.start`). No `SAVED_FILTERS_VERSION` bump is needed, because the new fields' defaults are what older presets mean.
+- Alternatives: a separate queue per source (every queue path would branch); synthesizing an opponent pre-move for custom puzzles (an imported book position has none); tolerance inside `StandardMode` (core does no I/O).
+- Consequences: a tolerance move costs one or two interactive searches (about the engine think time each). A wrong move on a tolerance puzzle is only wrong after the engine has looked.
+
 ### 2026-11-03, v0.8: The background engine and the analysis queue
 - Context: decision 12 reserved a second Stockfish process for game analysis, so the trainer never waits behind it. FR-11.31 asks for one job at a time and no repeat analysis at the same settings.
 - Decision:

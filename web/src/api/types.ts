@@ -61,6 +61,11 @@ export interface FilterSpec {
   ratios: RatioBucket[];
   exclude_played_on_lichess: boolean;
   source: "lichess" | "my" | "both";
+  my_origins: string[];
+  my_sets: string[];
+  my_kinds: string[];
+  my_phases: string[];
+  my_time_classes: string[];
 }
 
 export interface ThemeOption {
