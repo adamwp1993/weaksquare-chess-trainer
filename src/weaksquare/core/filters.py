@@ -28,6 +28,7 @@ MY_ORIGINS = ("manual", "import", "coach")  # coach: v0.10 (FR-10.39)
 MY_KINDS = ("missed", "allowed")
 MY_PHASES = ("opening", "middlegame", "endgame")
 MY_TIME_CLASSES = ("bullet", "blitz", "rapid", "classical", "daily")
+MY_SEVERITIES = ("blunder", "mistake", "inaccuracy")  # v0.10 (FR-10.40)
 MAX_SETS = 200
 
 RATING_FLOOR = 0
@@ -86,6 +87,9 @@ class FilterSpec:
     my_kinds: tuple[str, ...] = ()  # missed / allowed; empty = all
     my_phases: tuple[str, ...] = ()  # opening / middlegame / endgame; empty = all
     my_time_classes: tuple[str, ...] = ()  # bullet / blitz / rapid / classical / daily; empty = all
+    # --- v0.10 ------------------------------------------------------------------------------
+    my_severities: tuple[str, ...] = ()  # blunder / mistake / inaccuracy (FR-10.40); empty = all
+    my_share: int | None = None  # Both: % of slots from My puzzles (FR-10.44); None = by pool size
 
     @property
     def all_themes(self) -> bool:
@@ -188,14 +192,18 @@ class FilterSpec:
             ("my_kinds", self.my_kinds, MY_KINDS),
             ("my_phases", self.my_phases, MY_PHASES),
             ("my_time_classes", self.my_time_classes, MY_TIME_CLASSES),
+            ("my_severities", self.my_severities, MY_SEVERITIES),
         ):
             if not set(values) <= set(allowed) or len(set(values)) != len(values):
                 raise ValidationError(f"{name} must be distinct values from {', '.join(allowed)}")
         if len(self.my_sets) > MAX_SETS or not all(isinstance(x, str) and 0 < len(x) <= 60 for x in self.my_sets):
             raise ValidationError("my_sets contains an invalid set label")
+        if self.my_share is not None and not 0 <= self.my_share <= 100:
+            raise ValidationError("The share of your own puzzles must be between 0% and 100%.")
         if self.source != "lichess":
-            if self.ratios:
-                raise ValidationError("Ratios work with Lichess puzzles only. Choose Lichess DB as the source.")
+            if self.ratios and self.source == "my":
+                # v0.10: with Both, the ratios split the Lichess puzzles and My puzzles fill their share
+                raise ValidationError("Ratios need Lichess puzzles. Choose Lichess DB or Both as the source.")
             if self.order != "random":
                 raise ValidationError("With My puzzles, the order is random. Choose Lichess DB for the other orders.")
 
@@ -227,8 +235,9 @@ def _coerce(key: str, value: Any) -> Any:
         "my_kinds",
         "my_phases",
         "my_time_classes",
+        "my_severities",
     }
-    optional_ints = {"rating_min", "rating_max", "queue_size", "min_popularity", "min_plays"}
+    optional_ints = {"rating_min", "rating_max", "queue_size", "min_popularity", "min_plays", "my_share"}
     bools = {"exclude_solved_here", "exclude_played_on_lichess", "only_my_misses"}
     strings = {"match", "side", "order", "source"}
     if key in str_lists:

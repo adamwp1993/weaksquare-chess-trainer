@@ -181,6 +181,7 @@ class CustomPuzzleSource:
             ("kind", spec.my_kinds),
             ("phase", spec.my_phases),
             ("time_class", spec.my_time_classes),
+            ("severity", spec.my_severities),
         ):
             if values:
                 parts.append(f"c.{col} IN ({','.join('?' * len(values))})")

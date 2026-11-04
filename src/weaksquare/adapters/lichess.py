@@ -11,11 +11,13 @@ from weaksquare.core.lichess import (
     Account,
     ActivityEntry,
     BatchResult,
+    Dashboard,
     Solution,
     batch_body,
     parse_account,
     parse_activity,
     parse_batch,
+    parse_dashboard,
     valid_angle,
 )
 
@@ -64,6 +66,15 @@ class LichessHttp:
             entry = parse_activity(obj)
             if entry is not None:
                 yield entry
+
+    def dashboard(self, token: str, days: int) -> Dashboard:
+        """FR-10.15: per-theme results over the last `days` (scope puzzle:read, already granted)."""
+        if not isinstance(days, int) or not 1 <= days <= 90:
+            raise ValueError("days must be 1 to 90")
+        try:
+            return parse_dashboard(self._http.get_json(f"{self._base}/api/puzzle/dashboard/{days}", token=token))
+        except ValueError:
+            raise HttpError("Lichess returned an unexpected puzzle dashboard", retryable=False) from None
 
 
 def is_unauthorized(e: BaseException) -> bool:

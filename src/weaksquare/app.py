@@ -20,7 +20,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
-from weaksquare.adapters.db.repos.coach import CoachRepo
+from weaksquare.adapters.db.repos.coach import CoachRepo, CoachReportsRepo
 from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzleSource, CustomPuzzlesRepo, RetryRepo
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
@@ -76,6 +76,7 @@ from weaksquare.core.llm.provider import LLMProvider
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.analysis import AnalysisService
+from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
@@ -214,6 +215,7 @@ class Services:
     game_explain: GameExplainService
     puzzle_import: PuzzleImportService
     game_puzzles: GamePuzzlesService
+    coach: CoachService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -379,6 +381,10 @@ def build_services(
         games_repo, analysis_repo, CoachRepo(db), custom_puzzles, engine, SettingsRepo(db), analysis, clock, runner
     )
     analysis.add_listener(game_puzzles.after_analysis)  # one pipeline: any analysis makes puzzles (FR-10.39)
+    coach = CoachService(
+        games, games_repo, analysis, game_puzzles, custom_puzzles, CoachReportsRepo(db), stats, StatsRepo(db),
+        account, lichess, SettingsRepo(db), clock, runner,
+    )  # fmt: skip
     return Services(
         db=db,
         http=http,
@@ -404,6 +410,7 @@ def build_services(
         game_explain=game_explain,
         puzzle_import=puzzle_import,
         game_puzzles=game_puzzles,
+        coach=coach,
     )
 
 

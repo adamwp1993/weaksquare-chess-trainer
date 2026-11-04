@@ -66,6 +66,8 @@ export interface FilterSpec {
   my_kinds: string[];
   my_phases: string[];
   my_time_classes: string[];
+  my_severities: string[];
+  my_share: number | null;
 }
 
 export interface ThemeOption {

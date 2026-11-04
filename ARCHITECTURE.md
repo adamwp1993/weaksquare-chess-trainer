@@ -233,6 +233,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.10: The Coach run, the report and the Suggested mix
+- Context: §10.1–10.7 for v0.10, without checkpoints or statuses (v1.0).
+- Decision:
+  - **`services/coach.CoachService`** runs one `coach_run` job: your library after a sync (it waits on the `games_sync` job), or another player's games through `GameLibraryService.fetch_player_games` (stored under their subject; Lichess with your token when signed in, chess.com newest month first, one request at a time); then the analysis queue (it waits on the `game_analysis` job, with a time estimate from the queue's progress), `retag`, puzzles for your games, and the report. Jobs run on their own threads, so one job can wait on another; a cancelled Coach run cancels the job it's waiting on.
+  - **`core/coach.build_report`** aggregates the `game_errors` view by subject. Weakness keys are `missed:<theme>`, `allowed:<theme>`, `habit:<habit>` and `puzzle:<theme>` (puzzle history). Rates are per 10 games; severity is the average cp loss capped at 1000; the score is rate × severity / 100. Only themes in the Motifs, Advanced, Mates, Mate patterns and Special moves groups are weaknesses. Reports are stored as JSON in `coach_reports`, with the preset and notes; the trend compares with the subject's previous games report.
+  - **`core/suggested_mix.build_suggestion`**: ratio groups for the top 4 weaknesses by score, plus a `long`/`veryLong` group (10% exploration plus the share of multi-move Missed tactics, at most 50%). **FilterSpec** gains `my_severities` and `my_share`, and ratios are allowed with source Both (each group's slots go to My puzzles with probability `my_share`). Per-group move counts (`RatioBucket.lengths` in the plan) were dropped: they'd need a per-group length condition in the bucket-count SQL, and Lichess's length themes do the same job. The new fields default to "no restriction", so `SAVED_FILTERS_VERSION` stays 3.
+  - **Suggestion state** in `settings`: `mixer.suggested` (report id, run number, spec, mode, "why" lines, `pending`, the filters it would replace) and `mixer.suggested_applied`. A run replaces `mixer.filters` and `trainer.mode` only when the filters are the default or the last applied suggestion; otherwise `pending` shows the banner.
+- Alternatives: a `coach_suggestions` table (rejected: one current suggestion, a setting is enough); applying the LLM's preset to the mix (rejected for v0.10: Load preset is your click, FR-10.24).
+- Consequences: v1.0's checkpoints can reuse the run (minus the sync and the report UI) and replace the score ranking with statuses.
+
 ### 2026-11-04, v0.10: Puzzles from your games: a hook on the analysis job, checks cached per move
 - Context: FR-10.39–10.43 with Adam's planning answers (puzzles after any analysis; Lichess's rules).
 - Decision:

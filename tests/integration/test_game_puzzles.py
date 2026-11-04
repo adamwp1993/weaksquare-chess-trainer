@@ -5,6 +5,7 @@ positions are known exactly."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 import chess
 
@@ -55,6 +56,7 @@ def _rows(allowed_cls: str = "blunder") -> list[MoveRow]:
     rows[11] = _row(11, MISSED_PREV, "g6h6")
     rows[12] = _row(12, MISSED_FEN, "g1f1", cls="blunder", kind="missed", before=Score(mate=1), lines=MATE_IN_ONE)
     rows[14] = _row(14, ALLOWED_FEN, "d1a1", cls=allowed_cls, kind="allowed", after=Score(mate=-1))
+    rows[14] = replace(rows[14], refutation=("a8a1",))  # the pipeline stores the next position's best line
     after = chess.Board(ALLOWED_FEN)
     after.push_uci("d1a1")
     rows[15] = _row(15, after.fen(), "a8a1", lines=[EngineLine(None, -1, ("a8a1",)), EngineLine(0, None, ("g8f8",))])

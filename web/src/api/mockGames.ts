@@ -491,7 +491,8 @@ export class MockGames {
       const meta = p as MockPuzzle & { origin?: string; set_label?: string | null };
       return (
         (spec.my_origins.length === 0 || spec.my_origins.includes(meta.origin ?? "")) &&
-        (spec.my_sets.length === 0 || spec.my_sets.includes(meta.set_label ?? ""))
+        (spec.my_sets.length === 0 || spec.my_sets.includes(meta.set_label ?? "")) &&
+        (spec.my_severities.length === 0 || spec.my_severities.includes(meta.severity ?? ""))
       );
     });
   }
