@@ -198,3 +198,41 @@ No human-facing command uses a `.ps1` script, bare `npm` / `npx`, or venv activa
 3. **Real-money spend:** check the spend indicator against your provider console after a few Explains. Token counts are only verified against fixtures.
 4. **Offline start-up with a saved key:** check the wording is acceptable to you (see Observations).
 5. **Your windows:** check nothing of yours was closed by my WM_CLOSE script at about 20:19 (see Disclosure).
+
+---
+
+## Round 2 (2026-11-03): re-verification of B1–B7 at `951f48b`
+
+### Verdict: **PASS**
+All seven bugs are fixed and each one has a regression test. The full automated suite passes with no failures and no flaky re-runs needed. No new bugs.
+
+I closed the real app **by process ID only** (`close_pid.py` sends WM_CLOSE to the windows owned by that PID). I didn't use window titles anywhere this round.
+
+### Bugs re-tested
+| Bug | Fix | Result | Evidence |
+|---|---|---|---|
+| B1 null move in a variation | `_variation` refuses `Move.null()` and anything not in `legal_moves` | FIXED | `test_qa_null_move_in_a_variation_is_dropped` [`--`, `Z0`, `0000`, `@@@@`] pass. A direct probe also checked lines: `['Bxf7+','--']` is dropped (discarded 1); `['Bxf7+','Kxf7']`, `['O-O']` and a 4-move legal line are kept (discarded 0) |
+| B2 `sk-ant-` key accepted for OpenAI | the service refuses a key that matches a longer prefix of another provider; `set_test_token.py`'s OpenAI shape is `sk-(?!ant-)` | FIXED | `test_qa_an_anthropic_key_is_refused_as_an_openai_key`, `test_qa_wrong_provider_key_errors_never_echo_the_key`, unit `test_an_anthropic_key_is_not_an_openai_key` pass |
+| B3 impossible "as of" dates | `date.fromisoformat` check | FIXED | `test_qa_impossible_as_of_date_is_refused` passes; the 11 malformed-row cases still pass |
+| B4 emptied cap or budget saves $0 | `saveDollars`: an empty or non-finite value remounts the field and keeps the saved amount | FIXED | `test_qa_clearing_the_cap_field_does_not_silently_set_zero`. Two new round-2 tests: `test_qa_r2_emptied_budget_keeps_the_saved_amount`, and `test_qa_r2_a_typed_zero_cap_is_still_a_real_choice` (typing `0` still saves $0). 3 of 3 runs pass |
+| B5 the spend indicator opens at the top | `focusAi` scrolls Settings to *AI explanations* | FIXED | `test_qa_spend_indicator_opens_settings_at_the_ai_section` (the section's top is inside the viewport). 3 of 3 runs pass, so the 50 ms scroll timer didn't flake |
+| B6 the model list shows only the picked model | an `Autocomplete` filter shows every model while the field holds a priced model; typing narrows it | FIXED | `test_switching_models_without_clearing_the_field` (switch Haiku → Sonnet, then typing "opus" gives 1 option). 3 of 3 runs pass |
+| B7 version 0.6.0 | 0.7.0 in `__init__.py`, `pyproject.toml` and `web/package.json` (and their lockfiles); `test_versions_agree` derives the expected version from the newest `plans/v0.x.md` | FIXED | the contract test passes. The real `--dev` app's log banner says "WeakSquare 0.7.0 starting" (closed by PID → rc 0, "Shutting down", 0 ERROR lines). The README status line is left for the rc tag, as in earlier versions: accepted |
+
+### Full suite
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1250 passed**, 363 deselected (216 s); no xfails left |
+| `uv run pytest -m e2e` | **215 passed** (575 s) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0; **28 passed, 1 skipped** (361 s), including `test_real_app_v07.py` and `test_qa_v07_real_app.py` |
+| `uv run ruff check .` / `uv run ruff format --check .` / `uv run mypy src` | clean / 284 files formatted / no issues in 87 files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | gitleaks Passed; keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [v0.7] |
+| `uv run python -m weaksquare --dev` | 0.7.0 banner; closed by PID; rc 0 |
+
+### Notes
+- **B6 side effect:** a typed model ID that isn't in the price table narrows the list to nothing until you clear it. That's acceptable, since such a model can't be used until it has a price row anyway. Not a bug.
+- **Unchanged since round 1:** the round-1 observations (the offline wording of the start-up key check, the cache key not separating solved from shown-answer, the price table's missing provider column).
+- **Still pending Adam's run:** the live test and the unverified `anthropic-version` header and request shapes.
+- **Tests added this round:** two tests appended to `tests/e2e/test_qa_v07_ui.py` (`test_qa_r2_emptied_budget_keeps_the_saved_amount`, `test_qa_r2_a_typed_zero_cap_is_still_a_real_choice`).

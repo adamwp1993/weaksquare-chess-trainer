@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.7-rc1 (2026-11-03)
 
 ### Added
 - **AI explanations:** once a puzzle is over, **Explain** asks Claude (Anthropic) or GPT (OpenAI) to explain it in plain words: the idea, each move, and why your move failed. It's grounded in the solution, Stockfish's lines and the board's attack and defence facts, and every move and square it mentions is checked against the position before it's shown. **Show me** steps through the solution with its arrows and circles drawn on the board. It needs Stockfish and your own API key, and works in every mode, Danger spotting included. [FR-8.1] [FR-8.2] [FR-8.3] [FR-8.4] [FR-8.5] [FR-8.7] [FR-8.8]

@@ -103,3 +103,38 @@ def test_qa_screenshots_of_the_new_screens(page) -> None:  # type: ignore[no-unt
     start(page, "?ai=on")
     _explain(page)
     _shot(page, "explain-narrow")
+
+
+# ---- round 2 (v0.7-B4 edges) --------------------------------------------------------------------------
+
+
+def _reopen_value(page, testid: str) -> str:  # type: ignore[no-untyped-def]
+    page.keyboard.press("Escape")
+    page.get_by_test_id("gear").click()
+    field = page.get_by_test_id(testid)
+    field.scroll_into_view_if_needed()
+    return field.input_value()
+
+
+def test_qa_r2_emptied_budget_keeps_the_saved_amount(page) -> None:  # type: ignore[no-untyped-def]
+    start(page, "?ai=on")
+    page.get_by_test_id("gear").click()
+    budget = page.get_by_test_id("ai-budget")
+    budget.scroll_into_view_if_needed()
+    before = budget.input_value()
+    budget.fill("")
+    budget.blur()
+    page.wait_for_timeout(300)
+    assert _reopen_value(page, "ai-budget") == before
+
+
+def test_qa_r2_a_typed_zero_cap_is_still_a_real_choice(page) -> None:  # type: ignore[no-untyped-def]
+    """$0 must stay possible when typed on purpose (it blocks every Explain)."""
+    start(page, "?ai=on")
+    page.get_by_test_id("gear").click()
+    cap = page.get_by_test_id("ai-cap")
+    cap.scroll_into_view_if_needed()
+    cap.fill("0")
+    cap.blur()
+    page.wait_for_timeout(300)
+    assert _reopen_value(page, "ai-cap") == "0"
