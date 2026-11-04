@@ -1253,7 +1253,10 @@ export class MockClient implements ApiClient {
       max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : 60) : null,
       candidate: null,
       source: puzzle.source === "my" ? "my" : "lichess",
-      strict_without_engine: puzzle.source === "my" && puzzle.origin === "manual" && this.engine.state !== "ready",
+      strict_without_engine: puzzle.source === "my" && puzzle.origin !== "import" && this.engine.state !== "ready",
+      solve_as_opponent: puzzle.solve_as === "opponent",
+      game_id: puzzle.game_id ?? null,
+      game_ply: puzzle.ply ?? null,
     };
   }
 
@@ -1272,6 +1275,7 @@ export class MockClient implements ApiClient {
       number: s.served, puzzle_id: puzzle.id, fen: puzzle.fen, opponent_move: "",
       player_color: chess.turn() === "w" ? "white" : "black", rating: puzzle.rating, opponent_sound: null,
       already_played: false, mode: s.mode, solution_plies: null, max_plies: null, candidate, source: "lichess", strict_without_engine: false,
+      solve_as_opponent: false, game_id: null, game_ply: null,
     };
   }
 

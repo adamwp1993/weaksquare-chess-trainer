@@ -15,6 +15,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ### Added
 - **Theme tags on your mistakes:** your game mistakes, saved puzzles and imported puzzles get the same themes as Lichess puzzles (fork, pin, back-rank mate…), worked out on your PC by Lichess's own tagger. [FR-10.12] [FR-11.10] [FR-10.49]
+- **Puzzles from your games:** every analysis of one of your games turns your clear mistakes into puzzles in **My puzzles**, checked with Lichess's own rules for a puzzle with one answer. A mistake you **missed** is solved as you; one you **allowed** is solved as your opponent (*Find what your opponent could have played*). Choose which mistakes count in Settings → Games: blunders only, mistakes and blunders (default), or inaccuracies too. Changing it archives or restores puzzles without analyzing your games again, and games you analyzed before this version get their puzzles once, in the background. [FR-10.39] [FR-10.40] [FR-10.41] [FR-10.42] [FR-10.43]
 - **Habit tags on your game mistakes:** *hung a piece*, *missed a free capture*, *ignored a threat* and *moved a defender*, the most common club-level slips, checked on your PC. [FR-10.27]
 
 ## [v0.9] - 2026-11-04

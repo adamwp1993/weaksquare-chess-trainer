@@ -42,6 +42,9 @@ class Puzzle:
     game_url: str
     opening_tags: tuple[str, ...]
     tolerance: bool = False  # v0.8: solved with the engine tolerance (FR-10.43), not only the stored line
+    solve_as_opponent: bool = False  # v0.10: an Allowed puzzle from your games, solved as your opponent (FR-10.42)
+    game_id: int | None = None  # v0.10: the game it came from, for the link to Game Review (FR-10.44)
+    game_ply: int | None = None
 
     @property
     def has_premove(self) -> bool:

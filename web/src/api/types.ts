@@ -148,6 +148,9 @@ export interface PuzzleView {
   candidate: string | null;
   source: "lichess" | "my";
   strict_without_engine: boolean;
+  solve_as_opponent: boolean;
+  game_id: number | null;
+  game_ply: number | null;
 }
 
 export interface ThemeLabel {

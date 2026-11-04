@@ -233,6 +233,18 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.10: Puzzles from your games: a hook on the analysis job, checks cached per move
+- Context: FR-10.39–10.43 with Adam's planning answers (puzzles after any analysis; Lichess's rules).
+- Decision:
+  - **`services/game_puzzles.GamePuzzlesService`** is registered with `AnalysisService.add_listener`, so it runs inside the `game_analysis` job right after each game is stored, on the same background engine. A failure there is logged and never fails the analysis (except a missing engine). Wired in `app.py`, the only place that knows both.
+  - **`core/puzzle_gen.check_position`** takes the stored MultiPV 3 lines for the first position and an `analyse(board, multipv)` callback for the rest (the background engine at `coach.puzzle_think_s`, default 1.0 s). It ports `analyze_position`, `cook_mate`, `cook_advantage`, `is_valid_attack` and `is_valid_mate_in_one`, with the differences listed in its docstring (no tiers, the ±500 cp "decided" rule, a cap of 8 solver moves).
+  - **Positions:** Missed is solved from `fen_before` as the mover, with the eval before the opponent's previous move as Lichess's `prev_score`; Allowed from the next row's `fen_before` as the opponent (`solve_as = 'opponent'`), using that row's stored lines. Inaccuracies use the Missed/Allowed rule as if they were mistakes. Moves before ply 12 are skipped.
+  - **The cache:** `coach_candidates` keeps each verdict with a `check_key` (generator version, the analysis think time and engine, the puzzle think time and margin). A level change archives and restores from the cache (`status` `archived`), then checks only uncached mistakes in a `game_puzzles` job. `hidden` is reserved for puzzles you archive yourself.
+  - **The backfill** (`coach.backfill_version`): retags all stored analysis, tags untagged custom puzzles (saved ones with the previous move from the game, imported ones with a null move and no goal themes), then makes puzzles for your analyzed games. Without Stockfish it stops after tagging and tries again at the next launch.
+  - **The session** gets `solve_as_opponent`, `game_id` and `game_ply` on `PuzzleView` (the label and the link to Game Review).
+- Alternatives: a separate job after each analysis (rejected: it would race the next game for the background engine); re-checking on every level change (rejected: FR-10.40 says no engine pass).
+- Consequences: Review, Analyze selected and Coach runs all make puzzles with no extra wiring. A changed generator needs `GEN_VERSION` bumped.
+
 ### 2026-11-04, v0.10: The Coach schema (`user/0008_coach.sql`): whose games, tags, checks, reports
 - Context: the Coach can run on another player (FR-10.3, Adam), whose games must stay out of yours; the tagger and habits need storage; the puzzle quality check must not re-run on a level change (FR-10.40); reports are saved (FR-10.20).
 - Decision:

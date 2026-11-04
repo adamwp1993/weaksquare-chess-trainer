@@ -68,6 +68,28 @@ class CustomPuzzlesRepo:
             rows = conn.execute("SELECT ply FROM custom_puzzles WHERE game_id = ?", (game_id,)).fetchall()
         return {int(r[0]) for r in rows if r[0] is not None}
 
+    def at(self, game_id: int, ply: int) -> tuple[int, str, str] | None:
+        """(id, origin, status) of the puzzle saved or made at this move, if any."""
+        with self._db.session() as conn:
+            r = conn.execute(
+                "SELECT id, origin, status FROM custom_puzzles WHERE game_id = ? AND ply = ?", (game_id, ply)
+            ).fetchone()
+        return (int(r[0]), str(r[1]), str(r[2])) if r else None
+
+    def coach_puzzles(self) -> list[tuple[int, int, int, str | None, str]]:
+        """(id, game_id, ply, severity, status) of every puzzle the Coach made (FR-10.40)."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT id, game_id, ply, severity, status FROM custom_puzzles WHERE origin = 'coach'"
+                " AND game_id IS NOT NULL ORDER BY id"
+            ).fetchall()
+        return [(int(r[0]), int(r[1]), int(r[2]), r[3], str(r[4])) for r in rows]
+
+    def set_status(self, ids: list[int], status: str) -> None:
+        """active / archived (outside the severity level, FR-10.40) / hidden (you archived it, FR-10.44)."""
+        with self._db.transaction() as conn:
+            conn.executemany("UPDATE custom_puzzles SET status = ? WHERE id = ?", [(status, i) for i in ids])
+
     def untagged(self) -> list[tuple[int, str, tuple[str, ...], int | None, int | None]]:
         """(id, fen, solution, game_id, ply) of puzzles with no themes yet (the v0.10 backfill)."""
         with self._db.session() as conn:
@@ -187,7 +209,8 @@ class CustomPuzzleSource:
     def get(self, pid: int) -> Puzzle | None:
         with self._db.session() as conn:
             r = conn.execute(
-                "SELECT id, fen, solution_uci, themes, strict FROM custom_puzzles WHERE id = ? AND status = 'active'",
+                "SELECT id, fen, solution_uci, themes, strict, solve_as, game_id, ply FROM custom_puzzles"
+                " WHERE id = ? AND status = 'active'",
                 (pid,),
             ).fetchone()
         if r is None:
@@ -201,6 +224,9 @@ class CustomPuzzleSource:
             game_url="",
             opening_tags=(),
             tolerance=not bool(r[4]),
+            solve_as_opponent=r[5] == "opponent",
+            game_id=r[6],
+            game_ply=r[7],
         )
 
     def active(self, ids: list[int]) -> set[int]:

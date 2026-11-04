@@ -387,6 +387,9 @@ class Api:
             v.candidate,
             "my" if v.source == "my" else "lichess",
             v.strict_without_engine,
+            v.solve_as_opponent,
+            v.game_id,
+            v.game_ply,
         )
 
     @staticmethod

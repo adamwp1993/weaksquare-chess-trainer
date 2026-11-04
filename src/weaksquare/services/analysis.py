@@ -104,6 +104,14 @@ class AnalysisService:
         self._current: int | None = None
         self._job: str | None = None
         self._draining = False  # set under the lock: a game queued as the job exits starts a new one
+        self._listeners: list[Callable[[int, ProgressFn, CancelToken], None]] = []
+
+    def add_listener(self, fn: Callable[[int, ProgressFn, CancelToken], None]) -> None:
+        """Called in the analysis job after each game is stored (v0.10: puzzles from your games)."""
+        self._listeners.append(fn)
+
+    def thresholds_decided(self) -> int:
+        return self.settings().thresholds.decided
 
     # ------------------------------------------------------------ settings
 
@@ -307,3 +315,5 @@ class AnalysisService:
             rows = [regrade(r, now) for r in rows]
         rows = tag_game(rows)  # v0.10: themes and habits (FR-10.12, 10.27), from the analysis only
         self._store.replace(game.id, rows, "analyzed", st.think_s, engine)
+        for fn in self._listeners:
+            fn(game.id, lambda f, m: progress((done + 1) / total if f is None else f, m), cancel)
