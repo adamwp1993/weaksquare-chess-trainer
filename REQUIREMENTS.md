@@ -427,9 +427,16 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - **Regressed:** a Fixed or Improving weakness whose window rate climbs back to ≥ 90% of baseline. It's reopened and given top priority in the next Suggested mix.
 
   New weaknesses can appear at any checkpoint, ranked the same way.
-- **FR-10.36** **Overall game health per checkpoint** (context, not statuses): blunders, mistakes and inaccuracies per game; average centipawn loss overall and by phase; habit-tag rates; **mistake-reason mix** (share of process / calculation / knowledge / time, from §7.3); results; and rating on each platform.
+- **FR-10.36** **Overall game health per checkpoint** (context, not statuses): blunders, mistakes and inaccuracies **per 10 games** over the rolling window (FR-10.34); average centipawn loss overall and by phase; habit-tag rates; **mistake-reason mix** (share of process / calculation / knowledge / time, from §7.3); results; and rating on each platform.
 - **FR-10.37** **AI at checkpoints:** the engine and statistics part always runs automatically and is free. An optional setting, **Auto AI checkpoint summary** (default **off**), adds an LLM commentary on what improved, what didn't and why the mix changed, using the Summary detail level. When it's on, it runs without a Confirm prompt **only if** the estimate is under the per-run cap and within the monthly budget (§9.3). Otherwise it waits behind a **Get AI take** button with the usual estimate and Confirm. A Summary costs about $0.001 (Claude Haiku 5.5) to $0.07 (GPT-5.5) per checkpoint.
 - **FR-10.38** **Progress page:** one card per weakness, showing status, baseline vs. current game rate, a trend line across checkpoints (game rate and puzzle accuracy on the same chart), the **mistake-reason breakdown** for that weakness (e.g. *"Knight forks: 70% didn't look, 20% miscalculated"*), and click-through to the latest game examples. Plus a checkpoint history with the overall game-health trends, and an optional notification when a weakness changes status (*"Allowed forks: Improving → Fixed"*).
+  - **How the trends are drawn** (Adam, 2026-11-03):
+    - The game-health trends are **line charts**: blunders, mistakes and inaccuracies per 10 games on one chart, and average centipawn loss on its own.
+    - Every rate on the page, per weakness and overall, is **per 10 games**, never per game.
+    - Each line has **one point per checkpoint**, measured over the rolling window (the last 30 eligible games by default), not one point per game, so a single off game can't swing it.
+    - **A falling line means you're improving.** Each chart says so in its title or axis label.
+    - The weakness charts show the frozen baseline as a flat reference line.
+    - Points marked *not enough data yet* (FR-10.34) are drawn hollow.
 
 ---
 

@@ -206,7 +206,7 @@ Scope:
 ---
 
 ## v1.0: Fix tracking + release
-- **Checkpoints** every 10 eligible games plus Run now; weakness metrics and statuses with the sample-size guard, including v0.11's whole-game weakness kinds; Progress page; optional auto AI summary (§10.8).
+- **Checkpoints** every 10 eligible games plus Run now; weakness metrics and statuses with the sample-size guard, including v0.11's whole-game weakness kinds; Progress page with line charts per weakness and for overall game health (blunders, mistakes and inaccuracies per 10 games, one point per checkpoint over the rolling window; FR-10.38); optional auto AI summary (§10.8).
 - Release from source (NFR-8): a first-run wizard (puzzle DB download, Stockfish install, both through the existing install services), the setup script's Start-menu shortcut, and a GitHub Release from the `v1.0` tag with notes from CHANGELOG. No packaged `.exe`.
 - Polish pass: error states, empty states, performance on the full DB.
 - **Docs:** User Guide complete, including installing from source, updating and troubleshooting; README status reads "v1.0".
