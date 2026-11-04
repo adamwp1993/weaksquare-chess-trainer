@@ -150,9 +150,10 @@ Scope:
 
 ## v0.9: Game Review AI
 - Explain this move; **Explain my game** (narrative plus key moments) with the cost estimate and Confirm; SAN-only anonymized context; caching (FR-11.17–11.21).
+- **A model per AI feature** (FR-1.15; Adam, 2026-11-03): puzzle Explain and Game Review each get their own provider and model (e.g. Haiku for puzzles, Sonnet or Opus for games), sharing the keys, the price table and the monthly budget. The Coach plugs into the same setting in v0.10.
 
-**Done when:** an anonymization test (no names, URLs, dates or clocks in the prompt); cache-hit test; budget enforcement.
-**Adam's manual test:** Explain my game on a recent loss; check the explanations match the engine lines.
+**Done when:** an anonymization test (no names, URLs, dates or clocks in the prompt); cache-hit test; budget enforcement; each feature's request uses that feature's model and is logged under its feature.
+**Adam's manual test:** Explain my game on a recent loss; check the explanations match the engine lines. Set Haiku for puzzle Explain and a stronger model for Game Review, and check each feature uses its own.
 
 ---
 
@@ -160,7 +161,7 @@ Scope:
 - lichess-puzzler tagger and **habit tags** (FR-10.11–10.13, 10.27).
 - Multi-game aggregation reusing the v0.8 pipeline; puzzle-history source; free report; gap table (§10.1–10.5).
 - **Suggested default mix** with "Why this mix", the Apply/Compare/Dismiss banner, and reasons picking drill modes (§10.7).
-- Optional LLM coaching with validated presets (§10.6).
+- Optional LLM coaching with validated presets (§10.6), with its own provider and model in the per-feature setting from v0.9 (FR-1.15).
 - **Puzzles from your games** (§10.9, FR-10.39–10.45): the analysis turns qualifying mistakes into `custom_puzzles` (new migration), with a severity-level setting (Blunders only / Mistakes and blunders / plus inaccuracies). Includes a quality check, Missed solved as you and Allowed solved as your opponent, the 30 cp tolerance with engine continuation, My games filters, a share of these puzzles in the Suggested mix, and archive.
 
 **Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test); quality-check tests accept and reject known positions (unique best move, several equal moves, already-decided position); each severity level produces the right set from fixture analysis, and narrowing archives (never deletes) with attempts kept; re-runs create no duplicates; Missed and Allowed puzzles have the right side to move and orientation; an alternative move within tolerance is accepted, and the engine continues from it; changing the level runs no new game analysis (test).
