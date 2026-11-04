@@ -169,7 +169,7 @@ weaksquare-chess-trainer/
 | `LichessClient` | httpx implementation, fake | v0.3 |
 | `EngineClient` | `StockfishEngine`, fake | v0.4 |
 | `LLMProvider` | `AnthropicProvider`, `OpenAIProvider`, fake | v0.7 |
-| `GameSource` | `LichessGames`, `ChesscomGames`, `PgnImport` | v0.8 |
+| `LichessGamesClient`, `ChesscomClient` (`core/games.py`; the two APIs differ too much for one `GameSource`, v0.8 planning). Pastes and files are parsed by `core.games.parse_pgn` | `LichessGames`, `ChesscomGames`, fakes | v0.8 |
 | `Tagger` | `LichessPuzzlerTagger` + `HabitTagger` | v0.10 |
 
 ---
