@@ -14,8 +14,8 @@ from weaksquare.core.queue import sample_random
 
 _INSERT = (
     "INSERT INTO custom_puzzles (game_id, ply, fen, solution_uci, length, player_color, origin, set_label, name,"
-    " strict, kind, severity, cp_loss, phase, time_class, game_date, created_at)"
-    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    " strict, kind, severity, cp_loss, phase, time_class, game_date, created_at, themes, solve_as)"
+    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 )
 
 
@@ -23,6 +23,7 @@ def _values(p: NewCustomPuzzle, created_at: str) -> tuple[object, ...]:
     return (
         p.game_id, p.ply, p.fen, " ".join(p.solution), p.length, p.player_color, p.origin, p.set_label, p.name,
         int(p.strict), p.kind, p.severity, p.cp_loss, p.phase, p.time_class, p.game_date, created_at,
+        " ".join(p.themes) or None, p.solve_as,
     )  # fmt: skip
 
 
@@ -66,6 +67,19 @@ class CustomPuzzlesRepo:
         with self._db.session() as conn:
             rows = conn.execute("SELECT ply FROM custom_puzzles WHERE game_id = ?", (game_id,)).fetchall()
         return {int(r[0]) for r in rows if r[0] is not None}
+
+    def untagged(self) -> list[tuple[int, str, tuple[str, ...], int | None, int | None]]:
+        """(id, fen, solution, game_id, ply) of puzzles with no themes yet (the v0.10 backfill)."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT id, fen, solution_uci, game_id, ply FROM custom_puzzles WHERE themes IS NULL ORDER BY id"
+            ).fetchall()
+        return [(int(r[0]), str(r[1]), tuple(str(r[2]).split()), r[3], r[4]) for r in rows]
+
+    def set_themes(self, items: list[tuple[int, tuple[str, ...]]]) -> None:
+        """Store themes; an empty tuple is stored as '' so the puzzle isn't tagged again."""
+        with self._db.transaction() as conn:
+            conn.executemany("UPDATE custom_puzzles SET themes = ? WHERE id = ?", [(" ".join(t), i) for i, t in items])
 
     def sets(self) -> list[tuple[str, int]]:
         """Imported set labels with their active puzzle counts, by label."""

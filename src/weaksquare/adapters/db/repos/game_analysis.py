@@ -22,6 +22,18 @@ def _lines(text: str) -> tuple[EngineLine, ...]:
     return tuple(out)
 
 
+def _tags_json(tags: Sequence[str]) -> str | None:
+    return json.dumps(list(tags)) if tags else None
+
+
+def _tags(text: str | None) -> tuple[str, ...]:
+    try:
+        data = json.loads(text) if text else []
+    except ValueError:
+        return ()
+    return tuple(str(t) for t in data) if isinstance(data, list) else ()
+
+
 class GameAnalysisRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
@@ -34,13 +46,14 @@ class GameAnalysisRepo:
             conn.executemany(
                 "INSERT INTO game_analysis (game_id, ply, fen_before, move_uci, move_san, mover, eval_before,"
                 " eval_after, best_move, multipv_json, refutation_uci, cp_loss, classification, kind, phase,"
-                " low_clock, clock_s) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " low_clock, clock_s, themes, habits) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 [
                     (
                         game_id, r.ply, r.fen_before, r.move_uci, r.move_san, r.mover,
                         json.dumps(r.eval_before.to_json()), json.dumps(r.eval_after.to_json()), r.best_move,
                         _lines_json(r.lines), " ".join(r.refutation), r.cp_loss, r.classification, r.kind, r.phase,
                         None if r.low_clock is None else int(r.low_clock), r.clock_s,
+                        _tags_json(r.themes), _tags_json(r.habits),
                     )
                     for r in rows
                 ],
@@ -54,7 +67,7 @@ class GameAnalysisRepo:
         with self._db.session() as conn:
             found = conn.execute(
                 "SELECT ply, fen_before, move_uci, move_san, mover, eval_before, eval_after, best_move, multipv_json,"
-                " refutation_uci, cp_loss, classification, kind, phase, low_clock, clock_s"
+                " refutation_uci, cp_loss, classification, kind, phase, low_clock, clock_s, themes, habits"
                 " FROM game_analysis WHERE game_id = ? ORDER BY ply",
                 (game_id,),
             ).fetchall()
@@ -76,6 +89,8 @@ class GameAnalysisRepo:
                 phase=r[13],
                 low_clock=None if r[14] is None else bool(r[14]),
                 clock_s=r[15],
+                themes=_tags(r[16]),
+                habits=_tags(r[17]),
             )
             for r in found
         ]
@@ -99,6 +114,18 @@ class GameAnalysisRepo:
                     )
                 changed += len(updates)
         return changed
+
+    def set_tags(self, game_id: int, tags: Sequence[tuple[int, Sequence[str], Sequence[str]]]) -> None:
+        """Store (ply, themes, habits) for a game's moves (v0.10 tagging and its backfill)."""
+        with self._db.transaction() as conn:
+            conn.executemany(
+                "UPDATE game_analysis SET themes = ?, habits = ? WHERE game_id = ? AND ply = ?",
+                [(_tags_json(t), _tags_json(h), game_id, ply) for ply, t, h in tags],
+            )
+
+    def analyzed_games(self) -> list[int]:
+        with self._db.session() as conn:
+            return [int(r[0]) for r in conn.execute("SELECT DISTINCT game_id FROM game_analysis ORDER BY game_id")]
 
     def row(self, game_id: int, ply: int) -> MoveRow | None:
         rows = [r for r in self.rows(game_id) if r.ply == ply]

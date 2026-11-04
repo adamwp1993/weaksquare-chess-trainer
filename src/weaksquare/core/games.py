@@ -488,6 +488,7 @@ class LibraryFilter:
     date_from: str | None = None
     date_to: str | None = None
     statuses: tuple[str, ...] = ()  # none / analyzed / ai_reviewed (v0.9)
+    player: str = "me"  # v0.10: 'me', or another player's subject '<platform>:<username>' (FR-10.3)
     limit: int = 50
     offset: int = 0
 

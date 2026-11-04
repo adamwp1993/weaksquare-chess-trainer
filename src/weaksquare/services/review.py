@@ -38,6 +38,7 @@ from weaksquare.core.game_review import (
 from weaksquare.core.games import GameRow, parse_single_pgn
 from weaksquare.core.puzzle import Color, NewCustomPuzzle
 from weaksquare.core.reasons import ReasonContext, is_forcing_reply, reason_info, suggest, validate_note
+from weaksquare.core.tagging import best_line_themes
 from weaksquare.core.tolerance import within_tolerance
 from weaksquare.services.analysis import ReviewSettings
 
@@ -388,13 +389,14 @@ class ReviewService:
         if not row.lines or not row.lines[0].pv:
             raise ConflictError("There's no engine line to save for this move.", retryable=False)
         line = saved_line(row.lines[0].pv)
+        themes = best_line_themes(self._analysis.rows(game_id), ply)  # rows[ply] is this move (_row)
         return self._puzzles.add(
             NewCustomPuzzle(
                 fen=row.fen_before, solution=line, player_color=row.mover, origin="manual", strict=False,
                 game_id=game_id, ply=ply, kind=row.kind,
                 severity=row.classification if row.classification in ERRORS else None,
                 cp_loss=row.cp_loss, phase=row.phase, time_class=game.time_class,
-                game_date=(game.played_at or "")[:10] or None,
+                game_date=(game.played_at or "")[:10] or None, themes=themes,
             ),
             self._now(),
         )  # fmt: skip

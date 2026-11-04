@@ -91,6 +91,8 @@ class MoveRow:
     phase: str
     low_clock: bool | None
     clock_s: float | None
+    themes: tuple[str, ...] = ()  # v0.10: lichess-puzzler themes of a Missed / Allowed line (FR-10.12)
+    habits: tuple[str, ...] = ()  # v0.10: habit tags (FR-10.27)
 
 
 def _is_decided(before: int, after: int, th: Thresholds) -> bool:

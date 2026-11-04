@@ -233,6 +233,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.10: The Coach schema (`user/0008_coach.sql`): whose games, tags, checks, reports
+- Context: the Coach can run on another player (FR-10.3, Adam), whose games must stay out of yours; the tagger and habits need storage; the puzzle quality check must not re-run on a level change (FR-10.40); reports are saved (FR-10.20).
+- Decision:
+  - **`game_subjects(game_id, subject, color)`**: `subject` is `me` or `<platform>:<lowercase username>`. A game is stored once (the v0.8 dedupe rules) and can count for both. All games before v0.10 are backfilled as `me` with their `user_color`. `games.user_color` stays "your color" for your games; for a game that's only another player's, it holds that player's color (the side Game Review shows). When a game becomes yours, your color wins. `LibraryFilter.player` (default `me`) filters the library through it.
+  - **`game_analysis.habits`** (JSON list) next to the v0.8 `themes`, written by `GameAnalysisRepo.replace` and `set_tags`; `MoveRow` gains `themes` and `habits`.
+  - **`coach_candidates`** caches each quality check per (game, ply) with a `check_key` of the analysis and generator settings.
+  - **`coach_reports`** with `subject` and `subject_label`; the AI coaching is stored on its report (`llm_json`).
+  - **The `game_errors` view** (planned at v0.8): the graded errors of each subject's own moves.
+- Alternatives: a `players` table (rejected: the subject string is the key, and the label lives on the report); a separate table for other players' games (rejected: a game you played against them would be stored twice, with two analyses).
+- Consequences: every query of "your games" must filter on `subject = 'me'` (the library does; the Coach reads `game_errors` by subject).
+
 ### 2026-11-04, v0.10: The lichess-puzzler tagger is vendored; its generator's rules are ported
 - Context: FR-10.12 wants themes that match the puzzle DB exactly, and FR-10.41 wants Lichess-quality puzzles from your games. lichess-puzzler isn't on PyPI and isn't a package. Its tagger (`tagger/cook.py`, `util.py`, `model.py`) needs only python-chess; its generator needs MongoDB, a tablebase server, `zstandard` and 30-second searches.
 - Decision:

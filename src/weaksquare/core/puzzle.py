@@ -59,7 +59,7 @@ class NewCustomPuzzle:
     fen: str  # the position you solve (you are to move)
     solution: tuple[str, ...]  # UCI, ending on your move
     player_color: str
-    origin: str  # manual / import
+    origin: str  # manual / import / coach (v0.10)
     strict: bool
     game_id: int | None = None
     ply: int | None = None
@@ -71,6 +71,8 @@ class NewCustomPuzzle:
     phase: str | None = None
     time_class: str | None = None
     game_date: str | None = None
+    themes: tuple[str, ...] = ()  # v0.10: lichess-puzzler themes (FR-10.12, 10.43)
+    solve_as: str = "you"  # v0.10: 'opponent' for an Allowed puzzle from your games (FR-10.42)
 
     @property
     def length(self) -> int:
