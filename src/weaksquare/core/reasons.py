@@ -7,7 +7,7 @@ from a process gap (you knew it but didn't look).
 - `suggest` pre-highlights a likely reason (FR-5.9). It's only a suggestion: nothing is saved until
   you click a chip. The first rule that matches wins, in this order:
     1. `rushed`: the deciding move (or Submit, or the Danger-spotting call) came less than the
-       threshold after its position appeared
+       threshold after its position appeared, or a game move was made with a low clock (v0.8)
     2. `miscalculated`: your first move was right and a later one was wrong
     3. `missedResource`: Stockfish's refutation of your move starts with a check or a capture, or
        mates you; or, in Danger spotting, you called the real blunder Safe
@@ -25,7 +25,7 @@ from weaksquare.core.errors import ValidationError
 
 Reason = Literal["didntLook", "missedResource", "miscalculated", "unknownPattern", "rushed", "misclick"]
 GapType = Literal["process", "calculation", "knowledge", "time", "noise"]
-Source = Literal["puzzle", "danger"]  # 'game' and 'retry' arrive in v0.8
+Source = Literal["puzzle", "danger", "game", "retry"]  # game moves and Retry misses: v0.8
 
 
 @dataclass(frozen=True)
@@ -103,10 +103,11 @@ class ReasonContext:
     idea_found: int | None = None  # Name the idea: tags that were puzzle motifs…
     idea_total: int | None = None  # …and how many motifs the puzzle has (None or 0: no tag score)
     called_blunder_safe: bool = False  # Danger spotting: you called the real blunder Safe
+    low_clock: bool = False  # v0.8, a game move: made with under 10% of the starting time
 
 
 def suggest(ctx: ReasonContext) -> Reason | None:
-    if ctx.decisive_ms is not None and ctx.decisive_ms < ctx.rushed_ms:
+    if ctx.low_clock or (ctx.decisive_ms is not None and ctx.decisive_ms < ctx.rushed_ms):
         return "rushed"
     if ctx.first_right_later_wrong:
         return "miscalculated"

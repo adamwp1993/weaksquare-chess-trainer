@@ -43,3 +43,28 @@ class Puzzle:
     @property
     def length(self) -> int:
         return len(self.moves) // 2
+
+
+@dataclass(frozen=True)
+class NewCustomPuzzle:
+    """A puzzle of your own for `custom_puzzles` (v0.8): saved from Game Review or imported from a file."""
+
+    fen: str  # the position you solve (you are to move)
+    solution: tuple[str, ...]  # UCI, ending on your move
+    player_color: str
+    origin: str  # manual / import
+    strict: bool
+    game_id: int | None = None
+    ply: int | None = None
+    set_label: str | None = None
+    name: str | None = None
+    kind: str | None = None
+    severity: str | None = None
+    cp_loss: int | None = None
+    phase: str | None = None
+    time_class: str | None = None
+    game_date: str | None = None
+
+    @property
+    def length(self) -> int:
+        return (len(self.solution) + 1) // 2  # your moves

@@ -13,6 +13,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Changed
+- **Why you missed it:** Settings → Training → **Ask why you missed** has a new choice, **Game Review only**, which asks about your mistakes in Game Review but not after puzzles. [FR-5.8]
+
 ## [v0.7] - 2026-11-03
 Candidates: v0.7-rc1 (2026-11-03)
 

@@ -489,7 +489,7 @@ The depth ladder is an **Order** choice (**Choose your puzzles → Order → Dep
 |---|---|
 | **Move up at (%)** / **Over the last (puzzles)** | The depth ladder's threshold (80% by default, 10–100) and how many recent puzzles at your level it looks at (20 by default, 3–100). Saved when you leave the box. |
 | **Review boxes (days)** | Spaced repetition's boxes, as days separated by commas (1, 3, 7, 14, 30 by default). 2 to 10 boxes, each longer than the one before, up to 365 days. Press **Save**. |
-| **Ask after a failed puzzle** | *v0.6.* **Always** (the default) shows the [mistake-reason](#mistake-reasons) chips after each miss; **Off** never asks. |
+| **Ask why you missed** | *Changed in v0.8.* **Always** (the default) shows the [mistake-reason](#mistake-reasons) chips after each failed puzzle and on your mistakes in Game Review; **Game Review only** asks only there; **Off** never asks. |
 | **Suggest Rushed under (seconds)** | *v0.6.* A deciding move made faster than this (3 s by default, 1–30) gets **Rushed** suggested. Saved when you leave the box. |
 
 Changing either setting applies to everything you've already played: the app works your boxes and ladder levels out from your attempt history, rather than storing them separately.
@@ -528,7 +528,7 @@ A miss you tag **Misclick** is left out of your accuracy here: the session bar (
 
 **Gotchas**
 - You're asked after every miss in every mode, including Danger spotting, but not during **Try again** practice. The chips stay while you practise.
-- To stop being asked, set **Ask after a failed puzzle** to **Off** in Settings → Training.
+- To stop being asked, set **Ask why you missed** to **Off** in Settings → Training. **Game Review only** keeps the question for your game mistakes and stops it after puzzles.
 - Your reasons and notes stay on this PC.
 
 ## AI explanations and what they cost

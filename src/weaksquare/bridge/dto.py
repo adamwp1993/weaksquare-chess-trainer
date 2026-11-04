@@ -93,7 +93,7 @@ class UiSettings:
     srs_intervals: list[int]  # FR-4.6, days per box
     filters_collapsed: bool  # FR-1.14
     time_offset_days: int | None  # FR-4.6 fast-forward: --dev runs only (None in the real app)
-    reasons_ask: Literal["always", "off"]  # FR-5.8: ask why you missed a puzzle
+    reasons_ask: Literal["always", "game_review", "off"]  # FR-5.8: when to ask why you missed (game_review: v0.8)
     rushed_s: int  # FR-5.9: a deciding move faster than this suggests Rushed
 
 

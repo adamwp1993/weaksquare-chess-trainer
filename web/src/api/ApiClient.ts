@@ -96,7 +96,7 @@ export interface SettingValues {
   "srs.intervals": number[];
   "ui.filters_collapsed": boolean;
   // v0.6
-  "reasons.ask": "always" | "off";
+  "reasons.ask": "always" | "game_review" | "off";
   "reasons.rushed_s": number;
 }
 

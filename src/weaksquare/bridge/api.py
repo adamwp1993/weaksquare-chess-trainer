@@ -213,7 +213,7 @@ class Api:
             srs_intervals=list(s.srs_intervals),
             filters_collapsed=s.filters_collapsed,
             time_offset_days=self._time_offset(),
-            reasons_ask="off" if s.reasons_ask == "off" else "always",
+            reasons_ask=s.reasons_ask if s.reasons_ask in ("game_review", "off") else "always",  # type: ignore[arg-type]
             rushed_s=s.rushed_s,
         )
 

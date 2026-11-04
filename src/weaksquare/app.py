@@ -20,6 +20,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzlesRepo, RetryRepo
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
@@ -85,6 +86,7 @@ from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.reasons import ReasonsService
+from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
@@ -203,6 +205,7 @@ class Services:
     explain: ExplainService
     games: GameLibraryService
     analysis: AnalysisService
+    review: ReviewService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -352,7 +355,12 @@ def build_services(
         games_repo, AccountSyncRepo(db), SettingsRepo(db), runner, clock, account,
         lichess_games or LichessGames(http), chesscom or ChesscomGames(http), classify_game_error,
     )  # fmt: skip
-    analysis = AnalysisService(games_repo, GameAnalysisRepo(db), engine, SettingsRepo(db), runner)
+    analysis_repo = GameAnalysisRepo(db)
+    analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner)
+    review = ReviewService(
+        games_repo, analysis_repo, analysis, analysis.is_current, engine, CustomPuzzlesRepo(db), RetryRepo(db),
+        MistakeReasonsRepo(db), ui_settings, clock,
+    )  # fmt: skip
     return Services(
         db=db,
         http=http,
@@ -374,6 +382,7 @@ def build_services(
         explain=explain,
         games=games,
         analysis=analysis,
+        review=review,
     )
 
 

@@ -9,7 +9,7 @@ export function TrainingSettingsPanel() {
   const [threshold, setThreshold] = useState<number | null>(null);
   const [window, setWindow] = useState<number | null>(null);
   const [intervals, setIntervals] = useState("");
-  const [ask, setAsk] = useState<"always" | "off">("always");
+  const [ask, setAsk] = useState<"always" | "game_review" | "off">("always");
   const [rushed, setRushed] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -100,19 +100,23 @@ export function TrainingSettingsPanel() {
       </Text>
       <Group align="end" gap="md">
         <Stack gap={2}>
-          <Text size="sm">Ask after a failed puzzle</Text>
+          <Text size="sm">Ask why you missed</Text>
           <SegmentedControl
             size="xs"
             value={ask}
             onChange={(v) => {
-              const value = v as "always" | "off";
+              const value = v as "always" | "game_review" | "off";
               setAsk(value);
-              save(value === "always" ? "You'll be asked after each failed puzzle." : "You won't be asked.", () =>
-                api.setSetting("reasons.ask", value),
-              );
+              const said = {
+                always: "You'll be asked after each failed puzzle and on your game mistakes.",
+                game_review: "You'll be asked only in Game Review.",
+                off: "You won't be asked.",
+              }[value];
+              save(said, () => api.setSetting("reasons.ask", value));
             }}
             data={[
               { value: "always", label: "Always" },
+              { value: "game_review", label: "Game Review only" },
               { value: "off", label: "Off" },
             ]}
             aria-label="Ask why you missed"

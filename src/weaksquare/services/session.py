@@ -145,7 +145,7 @@ class TrainingPrefs(Protocol):
 
     def ladder_window(self) -> int: ...
 
-    def reasons_ask(self) -> str: ...  # v0.6 (FR-5.8): 'always' or 'off'
+    def reasons_ask(self) -> str: ...  # FR-5.8: 'always', 'game_review' (v0.8) or 'off'
 
     def rushed_s(self) -> int: ...  # v0.6 (FR-5.9)
 
@@ -907,7 +907,7 @@ class SessionService:
     def reason_prompt(self, session_id: int) -> ReasonPrompt | None:
         """Ask why you missed the puzzle: once it's over, after a recorded loss, unless the setting is Off
         (FR-5.7, 5.8). The suggestion (FR-5.9) uses Stockfish's refutation when the engine is installed."""
-        if self._prefs.reasons_ask() == "off":
+        if self._prefs.reasons_ask() != "always":  # "game_review" asks only in Game Review (v0.8)
             return None
         s = self._session(session_id)
         with s.lock:

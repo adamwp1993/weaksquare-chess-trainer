@@ -116,7 +116,7 @@ export interface UiSettings {
   srs_intervals: number[];
   filters_collapsed: boolean;
   time_offset_days: number | null;
-  reasons_ask: "always" | "off";
+  reasons_ask: "always" | "game_review" | "off";
   rushed_s: number;
 }
 
