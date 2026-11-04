@@ -20,11 +20,14 @@ import type {
   FilterSpec,
   PuzzleDbStatus,
   SoundSettings,
+  SuggestionView,
+  ThemeGroup,
   UpdateOffer,
 } from "./api/types";
 import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
 import { SpendIndicator } from "./components/SpendIndicator";
+import { SuggestionBanner } from "./components/SuggestionBanner";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
@@ -32,6 +35,7 @@ import { useLichess } from "./state/lichess";
 import { useJob } from "./state/useJob";
 import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
+import { CoachView } from "./views/CoachView";
 import { GamesView } from "./views/GamesView";
 import { ImportGameDialog } from "./views/ImportGameDialog";
 import { ImportPuzzlesDialog } from "./views/ImportPuzzlesDialog";
@@ -60,8 +64,14 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // v0.8: My games and Game Review are pages; the trainer stays mounted (hidden) so a session survives.
   const [page, setPage] = useState<
-    { kind: "trainer" } | { kind: "games" } | { kind: "review"; gameId: number; explain?: boolean }
+    | { kind: "trainer" }
+    | { kind: "games" }
+    | { kind: "coach" }
+    | { kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" }
   >({ kind: "trainer" });
+  const [sendIds, setSendIds] = useState<number[]>([]); // Send to Coach (FR-11.30)
+  const [suggestion, setSuggestion] = useState<SuggestionView | null>(null); // FR-10.28–10.31
+  const [catalog, setCatalog] = useState<ThemeGroup[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [puzzlesOpen, setPuzzlesOpen] = useState(false);
   const [settingsAi, setSettingsAi] = useState(false); // opened from the spend indicator
@@ -117,6 +127,29 @@ export function App() {
     saveTimer.current = window.setTimeout(() => {
       api.setSetting("mixer.filters", next).catch(() => undefined);
     }, SAVE_FILTERS_DEBOUNCE_MS);
+  }, []);
+
+  // v0.10: the Suggested mix and its banner. Reloaded after each Coach run of yours, and after Apply,
+  // since the backend may have replaced your filters (only when they were untouched, FR-10.31).
+  const loadSuggestion = useCallback(() => {
+    api.getSuggestion().then(setSuggestion, () => undefined);
+  }, []);
+  useEffect(() => {
+    loadSuggestion();
+    api.getThemeCatalog().then(setCatalog, () => undefined);
+  }, [loadSuggestion]);
+  const reloadFilters = useCallback(() => {
+    api.getSettings().then((s) => {
+      if (s.last_filters) setSpec(s.last_filters);
+      setMode(s.mode);
+    }, () => undefined); // prettier-ignore
+    loadSuggestion();
+  }, [loadSuggestion]);
+  const applySuggestion = useCallback(() => {
+    api.applySuggestion().then(reloadFilters, (e: Error) => setStartError(e.message));
+  }, [reloadFilters]);
+  const dismissSuggestion = useCallback(() => {
+    api.dismissSuggestion().then(setSuggestion, () => undefined);
   }, []);
 
   const toggleCoordinates = useCallback(() => {
@@ -280,13 +313,34 @@ export function App() {
           <GamesView
             onReview={(id, explain) => setPage({ kind: "review", gameId: id, explain })}
             onImport={() => setImportOpen(true)}
+            onSendToCoach={(ids) => {
+              setSendIds(ids);
+              setPage({ kind: "coach" });
+            }}
+          />
+        )}
+        {page.kind === "coach" && (
+          <CoachView
+            sendIds={sendIds}
+            onClearSend={() => setSendIds([])}
+            onReview={(id, ply) => setPage({ kind: "review", gameId: id, ply, from: "coach" })}
+            onLoad={(next, m) => {
+              // FR-10.24 Load preset: your click; saved presets don't change.
+              changeSpec(next);
+              setMode(m);
+              api.setSetting("trainer.mode", m).catch(() => undefined);
+              setPage({ kind: "trainer" });
+            }}
+            onRunDone={reloadFilters}
           />
         )}
         {page.kind === "review" && (
           <ReviewView
-            key={page.gameId}
+            key={`${page.gameId}:${page.ply ?? ""}`}
             gameId={page.gameId}
-            onBack={() => setPage({ kind: "games" })}
+            initialPly={page.ply}
+            backLabel={page.from === "coach" ? "← Coach" : "← My games"}
+            onBack={() => setPage({ kind: page.from === "coach" ? "coach" : "games" })}
             coordinates={coordinates}
             autoExplain={page.explain ?? false}
             onTrain={(p) => {
@@ -338,6 +392,17 @@ export function App() {
                 onUpdate={updateNow}
                 onNotNow={() => dismiss("not_now")}
                 onSkip={() => dismiss("skip")}
+              />
+            </Grid.Col>
+          )}
+          {suggestion && (suggestion.pending || suggestion.active) && (
+            <Grid.Col span={12}>
+              <SuggestionBanner
+                suggestion={suggestion}
+                currentMode={mode}
+                catalog={catalog}
+                onApply={applySuggestion}
+                onDismiss={dismissSuggestion}
               />
             </Grid.Col>
           )}
@@ -412,6 +477,7 @@ export function App() {
                 onHistoryChange={historyChanged}
                 coordinates={coordinates}
                 wide={collapsed}
+                onOpenGame={(id, ply) => setPage({ kind: "review", gameId: id, ply })}
               />
             )}
           </Grid.Col>
@@ -438,11 +504,19 @@ export function App() {
                 </Button>
                 <Button
                   size="xs"
-                  variant={page.kind !== "trainer" ? "light" : "subtle"}
+                  variant={page.kind === "games" || (page.kind === "review" && page.from !== "coach") ? "light" : "subtle"}
                   onClick={() => setPage({ kind: "games" })}
                   data-testid="nav-games"
                 >
                   My games
+                </Button>
+                <Button
+                  size="xs"
+                  variant={page.kind === "coach" || (page.kind === "review" && page.from === "coach") ? "light" : "subtle"}
+                  onClick={() => setPage({ kind: "coach" })}
+                  data-testid="nav-coach"
+                >
+                  Coach
                 </Button>
                 <Button
                   size="xs"

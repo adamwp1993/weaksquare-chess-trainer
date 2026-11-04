@@ -34,7 +34,7 @@ export function FeatureModelPicker({
   compact = false,
   onError,
 }: {
-  feature?: "game_review";
+  feature?: "game_review" | "coach";
   reasoning?: boolean;
   compact?: boolean;
   onError?: (message: string | null) => void;
@@ -116,7 +116,13 @@ export function FeatureModelPicker({
       <Select
         label={compact ? undefined : `${f.label} model`}
         aria-label={`${f.label} model`}
-        description={compact ? undefined : "Explain this move and Explain my game use it. One game is a much bigger request than one puzzle."}
+        description={
+          compact
+            ? undefined
+            : feature === "coach"
+              ? "Get AI coaching on a Coach report uses it. A report is sent once, so a stronger model costs little."
+              : "Explain this move and Explain my game use it. One game is a much bigger request than one puzzle."
+        }
         data={data}
         value={current.choice === SAME ? SAME : `${current.choice}|${current.model}`}
         allowDeselect={false}

@@ -44,12 +44,17 @@ interface Showing {
 export function ReviewView({
   gameId,
   onBack,
+  backLabel = "← My games",
+  initialPly,
   coordinates,
   autoExplain = false,
   onTrain,
 }: {
   gameId: number;
   onBack: () => void;
+  backLabel?: string;
+  /** v0.10: open at this move's position (a Coach example, a puzzle's link back to its game). */
+  initialPly?: number;
   coordinates: boolean;
   /** Review + Explain my game (FR-11.29): analyze if needed, then open Explain my game's Confirm. */
   autoExplain?: boolean;
@@ -57,7 +62,7 @@ export function ReviewView({
 }) {
   const [review, setReview] = useState<GameReview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cursor, setCursor] = useState(0); // moves played on the board
+  const [cursor, setCursor] = useState(initialPly ?? 0); // moves played on the board
   const [showing, setShowing] = useState<Showing | null>(null);
   const [notes, setNotes] = useState<Map<number, GameMoment>>(new Map());
   const autoAnalyzed = useRef(false);
@@ -255,7 +260,7 @@ export function ReviewView({
       <Group justify="space-between">
         <Group gap="sm">
           <Button variant="default" onClick={onBack} data-testid="review-back">
-            ← My games
+            {backLabel}
           </Button>
           <Title order={4}>
             {g.white ?? "?"} – {g.black ?? "?"}

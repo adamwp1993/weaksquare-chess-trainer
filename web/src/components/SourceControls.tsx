@@ -61,11 +61,26 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
         label="Origin"
         placeholder="All"
         data={[
+          { value: "coach", label: "From my games (made automatically)" },
           { value: "manual", label: "Saved from my games" },
           { value: "import", label: "Imported from a file" },
         ]}
         value={spec.my_origins}
         onChange={(my_origins) => onChange({ my_origins })}
+        data-testid="my-origins"
+      />
+      <MultiSelect
+        size="xs"
+        label="Severity"
+        placeholder="Any"
+        data={[
+          { value: "blunder", label: "Blunders" },
+          { value: "mistake", label: "Mistakes" },
+          { value: "inaccuracy", label: "Inaccuracies" },
+        ]}
+        value={spec.my_severities}
+        onChange={(my_severities) => onChange({ my_severities })}
+        data-testid="my-severities"
       />
       <MultiSelect
         size="xs"
@@ -104,7 +119,8 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
         onChange={(my_time_classes) => onChange({ my_time_classes })}
       />
       <Text size="xs" c="dimmed">
-        Your puzzles have no rating or themes yet, so those filters apply to Lichess puzzles only.
+        Your puzzles have no rating, and themes stay hidden until you've solved them, so the rating and theme filters
+        apply to Lichess puzzles only.
       </Text>
     </Stack>
   );

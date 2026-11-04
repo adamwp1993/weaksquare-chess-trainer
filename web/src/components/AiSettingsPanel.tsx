@@ -208,6 +208,14 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
         <FeatureModelPicker reasoning={full} onError={setError} />
       </Stack>
       {full && (
+        <Stack gap={4} mt="xs">
+          <Text size="sm" fw={600}>
+            Coach
+          </Text>
+          <FeatureModelPicker feature="coach" reasoning onError={setError} />
+        </Stack>
+      )}
+      {full && (
         <>
           <Group grow align="flex-start" key={inputsKey}>
             <NumberInput

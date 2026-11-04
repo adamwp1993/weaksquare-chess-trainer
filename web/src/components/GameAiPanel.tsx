@@ -103,7 +103,7 @@ export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: nu
 const N_OPTIONS = Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} key moment${i ? "s" : ""}` }));
 
 /** The Confirm dialog's numbers (FR-8.11): tokens, cost, the share of what's left of the budget, the cap. */
-export function EstimateLines({ q }: { q: GameAiQuote }) {
+export function EstimateLines({ q, sends }: { q: GameAiQuote; sends?: string }) {
   const left = Math.max(0, q.budget_usd - q.spent_usd);
   const share = left > 0 && q.typical_usd !== null ? Math.round((q.typical_usd / left) * 1000) / 10 : null;
   return (
@@ -117,8 +117,9 @@ export function EstimateLines({ q }: { q: GameAiQuote }) {
         {share !== null ? ` (${share}% of the ${dollars(left)} left in this month's budget)` : ""}.
       </Text>
       <Text size="xs" c="dimmed">
-        It fits under your per-run cap of {dollars(q.run_cap_usd)}. It sends this game's moves (SAN only) and Stockfish's
-        analysis of your key moments: no names, ratings, dates, links or clocks.
+        It fits under your per-run cap of {dollars(q.run_cap_usd)}.{" "}
+        {sends ??
+          "It sends this game's moves (SAN only) and Stockfish's analysis of your key moments: no names, ratings, dates, links or clocks."}
       </Text>
     </Stack>
   );
