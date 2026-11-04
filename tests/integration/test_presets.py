@@ -75,15 +75,15 @@ def test_name_whitespace_is_tidied(services) -> None:  # type: ignore[no-untyped
 def test_unusable_stored_preset_is_reported_and_left_alone(services) -> None:  # type: ignore[no-untyped-def]
     with services.db.session() as conn:
         conn.execute(
-            "INSERT INTO presets VALUES ('From v0.8', 'from v0.8', '{\"my_origins\": [\"coach\"]}', 't', 't'),"
+            "INSERT INTO presets VALUES ('From later', 'from later', '{\"my_origins\": [\"robot\"]}', 't', 't'),"
             " ('Broken', 'broken', 'not json', 't', 't')"
         )
     by_name = {p.name: p for p in services.presets.list()}
-    assert by_name["From v0.8"].spec is None and "can't be used" in (by_name["From v0.8"].error or "")
+    assert by_name["From later"].spec is None and "can't be used" in (by_name["From later"].error or "")
     assert by_name["Broken"].spec is None and by_name["Broken"].error
     with services.db.session() as conn:
-        assert conn.execute("SELECT filters_json FROM presets WHERE name = 'From v0.8'").fetchone()[0] == (
-            '{"my_origins": ["coach"]}'  # coach puzzles arrive in v0.10
+        assert conn.execute("SELECT filters_json FROM presets WHERE name = 'From later'").fetchone()[0] == (
+            '{"my_origins": ["robot"]}'  # an origin a later version might add
         )
 
 
