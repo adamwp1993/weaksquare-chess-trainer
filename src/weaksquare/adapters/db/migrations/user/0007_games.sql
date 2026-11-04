@@ -53,7 +53,8 @@ CREATE TABLE account_sync (
 
 -- One row per analyzed move (FR-11.9). Evals are JSON {"cp": n} or {"mate": n}, from the mover's view.
 -- `multipv_json` holds the top lines from `fen_before` (UCI, White-relative scores as the engine gives
--- them). `kind` is missed / allowed / other for the user's mistakes, NULL otherwise. `themes` stays NULL
+-- them). `refutation_uci` is the engine's best line after the move (the next position's top line, or the
+-- final position's for the last move). `kind` is missed / allowed / other for the user's mistakes, NULL otherwise. `themes` stays NULL
 -- until the v0.10 tagger (Adam, v0.8 planning).
 CREATE TABLE game_analysis (
     game_id        INTEGER NOT NULL REFERENCES games (id) ON DELETE CASCADE,
@@ -66,6 +67,7 @@ CREATE TABLE game_analysis (
     eval_after     TEXT NOT NULL,
     best_move      TEXT,
     multipv_json   TEXT NOT NULL,
+    refutation_uci TEXT NOT NULL DEFAULT '',
     cp_loss        INTEGER NOT NULL,
     classification TEXT NOT NULL,
     kind           TEXT,
