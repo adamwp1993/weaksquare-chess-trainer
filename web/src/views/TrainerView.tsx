@@ -6,7 +6,8 @@ import { ApiCallError, type ReasonKey } from "../api/ApiClient";
 import type { AttemptRating, CommitFeedback, Outcome, PuzzleView, ReasonPrompt, SessionStats } from "../api/types";
 import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
 import { AnswerPlayer, answerPositions, type AnswerPosition, type AnswerSegment } from "../components/AnswerPlayer";
-import { Board } from "../components/Board";
+import { Board, type BoardShape } from "../components/Board";
+import { ExplainPanel, type ExplainShowMe } from "../components/ExplainPanel";
 import { CommitControls, CommitResult, entryBoard, entrySound } from "../components/CommitLine";
 import { DangerCall, DangerVerdict, sanLine } from "../components/DangerCall";
 import { IdeaResult, IdeaTags } from "../components/IdeaTags";
@@ -63,6 +64,7 @@ function uciMove(uci: string) {
 // Danger spotting (v0.6, FR-4.4): no opponent move; call the highlighted move Safe or Unsafe, and after a
 // correct Unsafe the board turns to the punishing side for one move.
 // Mistake reasons (v0.6, §7.3): after a lost puzzle, once it's over, the reason chips (keys 1–6).
+// Explain (v0.7, §7.2 step 3): once it's over, with an AI key and Stockfish; Show me draws its arrows and circles.
 export function TrainerView({
   sessionId,
   onNewSession,
@@ -99,7 +101,15 @@ export function TrainerView({
   const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
   const [whyWrong, setWhyWrong] = useState<{ label: string; positions: AnswerPosition[] } | null>(null);
   // "Show me" (FR-7.7): an engine line stepped through on the board, over the position it came from.
-  const [preview, setPreview] = useState<{ from: string; label: string; positions: AnswerPosition[]; step: number } | null>(null);
+  // Explain's Show me (v0.7) uses the same stepper, with the explanation's shapes and notes per position.
+  const [preview, setPreview] = useState<{
+    from: string;
+    label: string;
+    positions: AnswerPosition[];
+    step: number;
+    shapes?: BoardShape[][];
+    notes?: string[];
+  } | null>(null);
   const [bestMove, setBestMove] = useState<string | null>(null);
   const [engine, refreshEngine] = useEngineStatus();
   const [helpBusy, setHelpBusy] = useState(false);
@@ -557,6 +567,14 @@ export function TrainerView({
   const linePreview = preview && preview.from === boardFen ? preview : null;
   const previewPos = linePreview ? linePreview.positions[linePreview.step] : null;
   const arrow = analysisPos && !previewPos ? legalArrow(analysisPos.fen, bestMove ?? undefined) : null;
+  const showExplain = useCallback(
+    (show: ExplainShowMe) => {
+      if (!boardFen) return;
+      setAnalysis(null);
+      setPreview({ from: boardFen, label: "Explanation", positions: show.positions, step: 0, shapes: show.shapes, notes: show.notes });
+    },
+    [boardFen],
+  );
   const showLine = (from: string, pv: string[]) =>
     setPreview({ from, label: `Showing: ${pvToSan(from, pv, pv.length)}`, positions: answerPositions(from, pv), step: 0 });
   const stepPreview = (to: number) => {
@@ -732,6 +750,7 @@ export function TrainerView({
               hintSquare={analysisPos ? null : hintSquare}
               coordinates={coordinates}
               arrows={arrow ? [arrow] : candidateArrow && !previewPos && !shown && !analysisPos ? [candidateArrow] : undefined}
+              shapes={previewPos && linePreview?.shapes ? linePreview.shapes[linePreview.step] : undefined}
               maxWidth={wide ? WIDE_BOARD : 560}
             />
           )}
@@ -885,6 +904,11 @@ export function TrainerView({
                     segments={[{ label: linePreview.label, from: 0 }]}
                     onStep={stepPreview}
                   />
+                  {linePreview.notes?.[linePreview.step] && (
+                    <Text size="xs" data-testid="line-preview-note">
+                      {linePreview.notes[linePreview.step]}
+                    </Text>
+                  )}
                   <Button size="xs" variant="light" color="gray" onClick={() => setPreview(null)} data-testid="line-preview-done">
                     Done
                   </Button>
@@ -917,6 +941,15 @@ export function TrainerView({
               Show answer
             </Button>
           </Group>
+          {view && (
+            <ExplainPanel
+              key={`${view.puzzle_id}:${view.number}:${practice ? "practice" : "first"}`}
+              sessionId={sessionId}
+              over={lineDone}
+              engineReady={engine?.state === "ready"}
+              onShowMe={showExplain}
+            />
+          )}
           {lineDone && (
             <Button
               variant="light"

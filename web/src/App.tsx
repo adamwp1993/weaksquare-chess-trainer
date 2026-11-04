@@ -5,6 +5,7 @@ import type { TrainingMode } from "./api/ApiClient";
 import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
 import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
+import { SpendIndicator } from "./components/SpendIndicator";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { defaultFilters } from "./state/filters";
@@ -34,6 +35,7 @@ export function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [coordinates, setCoordinates] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsAi, setSettingsAi] = useState(false); // opened from the spend indicator
   const [sounds, setSounds] = useState<SoundSettings>({ on: false, volume: 70, set: "sfx" });
   const [autoCheck, setAutoCheck] = useState(true);
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
@@ -301,6 +303,14 @@ export function App() {
           <Title order={3}>WeakSquare Chess Trainer</Title>
           <Group gap="sm">
           {started && <LichessStatus account={account} sync={sync} />}
+          {started && (
+            <SpendIndicator
+              onOpen={() => {
+                setSettingsAi(true);
+                setSettingsOpen(true);
+              }}
+            />
+          )}
           <ActionIcon variant="subtle" size="lg" aria-label="Settings" onClick={() => setSettingsOpen(true)} data-testid="gear">
             {"\u2699\uFE0E"}
           </ActionIcon>
@@ -335,7 +345,11 @@ export function App() {
       <ShortcutsHelp opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <SettingsModal
         opened={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false);
+          setSettingsAi(false);
+        }}
+        focusAi={settingsAi}
         coordinates={coordinates}
         onCoordinates={toggleCoordinates}
         sounds={sounds}

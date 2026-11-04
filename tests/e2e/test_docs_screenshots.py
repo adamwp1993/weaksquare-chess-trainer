@@ -405,3 +405,40 @@ def test_mistake_reasons(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("stats-reasons-tab").click()
     page.get_by_test_id("reasons-trend-table").wait_for()
     shot(page, "stats-reasons")
+
+
+def test_explain(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.7 (FR-8.1–8.5): Explain after a wrong move, with its arrows and circles on the board."""
+    _start(page, "?ai=on")
+    play(page, "h7h6", "black")
+    page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()
+    page.get_by_test_id("answer-button").click()
+    page.get_by_text("Explain (≈ $0.0").wait_for()
+    page.get_by_test_id("explain-button").click()
+    page.get_by_test_id("explanation").wait_for()
+    page.get_by_test_id("line-preview-note").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "explain", full_page=True)  # the explanation card sits below the help buttons
+
+
+def test_settings_ai(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.7 (FR-1.2–1.4, §9.3): Settings → AI explanations, with a provider, model and key set up."""
+    page.goto(page.base_url + "/?ai=on")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("gear").click()
+    section = page.get_by_test_id("settings-ai")
+    section.get_by_test_id("ai-model").wait_for()
+    section.evaluate(
+        "e => { e.scrollIntoView({block: 'start'}); e.closest('.mantine-Modal-content').scrollBy(0, -60); }"
+    )
+    page.mouse.move(1270, 890)
+    shot(page, "settings-ai")
+
+
+def test_explain_over_budget(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.7 (FR-1.10, 8.13): this month's budget used up: the red indicator and a blocked Explain."""
+    _start(page, "?ai=over")
+    _solve(page)
+    page.get_by_test_id("explain-why").filter(has_text="budget").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "explain-over-budget")

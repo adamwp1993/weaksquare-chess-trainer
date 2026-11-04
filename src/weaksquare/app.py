@@ -20,6 +20,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
+from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
@@ -49,6 +50,8 @@ from weaksquare.adapters.lichess import (
     is_unauthorized,
     retry_after,
 )
+from weaksquare.adapters.llm.anthropic import AnthropicProvider
+from weaksquare.adapters.llm.openai import OpenAIProvider
 from weaksquare.adapters.logging_setup import setup_logging
 from weaksquare.adapters.oauth_loopback import LoopbackCancelled, LoopbackListener, LoopbackTimeout
 from weaksquare.adapters.scheduler import TimerScheduler
@@ -61,12 +64,16 @@ from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineClient, EngineProbe, parse_manifest, platform_key
 from weaksquare.core.lichess import LichessClient
+from weaksquare.core.llm.provider import LLMProvider
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
+from weaksquare.services.explain import ExplainService
 from weaksquare.services.lichess_history import HistoryService
+from weaksquare.services.llm_settings import LlmSettingsService
+from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
@@ -184,6 +191,9 @@ class Services:
     scheduler: Any
     engine: EngineService
     reasons: ReasonsService
+    llm_settings: LlmSettingsService
+    llm_usage: LlmUsageService
+    explain: ExplainService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -210,6 +220,7 @@ def build_services(
     make_engine: Callable[[str, int, int], EngineClient] | None = None,
     engine_probe: EngineProbe | None = None,
     cpu_count: int | None = None,
+    llm_providers: dict[str, LLMProvider] | None = None,
 ) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
 
@@ -315,6 +326,16 @@ def build_services(
         http, clock, SettingsRepo(db), meta.read, runner,
         Urls(file=config.PUZZLE_DB_URL, sums=config.PUZZLE_SUMS_URL, page=config.PUZZLE_PAGE_URL),
     )  # fmt: skip
+    llm_settings = LlmSettingsService(
+        SettingsRepo(db),
+        secrets,
+        LlmPricesRepo(db),
+        llm_providers or {"anthropic": AnthropicProvider(http), "openai": OpenAIProvider(http)},
+        runner,
+        lambda: clock.local_date(clock.now()),
+    )
+    llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
+    explain = ExplainService(sessions, llm_settings, llm_usage, LlmCacheRepo(db), runner, clock)
     return Services(
         db=db,
         http=http,
@@ -331,6 +352,9 @@ def build_services(
         scheduler=scheduler,
         engine=engine,
         reasons=reasons,
+        llm_settings=llm_settings,
+        llm_usage=llm_usage,
+        explain=explain,
     )
 
 
@@ -411,6 +435,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         history=services.history,
         engine=services.engine,
         reasons=services.reasons,
+        llm_settings=services.llm_settings,
+        llm_usage=services.llm_usage,
+        explain=services.explain,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())
@@ -418,6 +445,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             log.info("dev clock fast-forwarded by %d days", clock.offset_days)
     log.info("%s", engine_log_line(services.engine.status()))
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
+    services.llm_settings.start_launch_check()  # FR-1.6: and a stored AI key, with the free model lookup
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's

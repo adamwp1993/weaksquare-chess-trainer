@@ -111,3 +111,28 @@ def test_store_factory_gets_the_test_entry() -> None:
 
     mod.main(["--delete"], store_factory=factory)
     assert seen == ["weaksquare-test"]
+
+
+def test_set_test_token_stores_an_ai_key_without_printing(capsys) -> None:  # type: ignore[no-untyped-def]
+    """v0.7: --llm stores the live Explain test's key under the provider's name in weaksquare-test."""
+    mod = _script()
+    store = MemorySecretStore()
+    key = "sk-ant-FAKE" + "abc123" * 3
+    assert mod.main(["--llm", "anthropic"], prompt=lambda _: key, store_factory=lambda service: store) == 0
+    assert store.get("anthropic") == key and store.get("lichess") is None
+    assert key not in capsys.readouterr().out
+    # an OpenAI-looking key isn't accepted as an Anthropic one, and junk isn't echoed
+    assert mod.main(["--llm", "anthropic"], prompt=lambda _: "sk-FAKE" + "x" * 20, store_factory=lambda s: store) == 1
+    assert mod.main(["--llm", "openai"], prompt=lambda _: "nope nope", store_factory=lambda s: store) == 1
+    assert "nope nope" not in capsys.readouterr().out
+    assert mod.main(["--llm", "anthropic", "--delete"], prompt=lambda _: "", store_factory=lambda s: store) == 0
+    assert store.get("anthropic") is None
+
+
+def test_an_anthropic_key_is_not_an_openai_key() -> None:
+    """v0.7-B2 (the script's side): sk-ant- also starts with OpenAI's sk-."""
+    mod = _script()
+    store = MemorySecretStore()
+    key = "sk-ant-FAKE" + "abc123" * 3
+    assert mod.main(["--llm", "openai"], prompt=lambda _: key, store_factory=lambda s: store) == 1
+    assert store.get("openai") is None

@@ -4,6 +4,7 @@ pyproject.toml and web/package.json; bump them together at each version."""
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -21,5 +22,9 @@ def test_versions_agree() -> None:
 
 
 def test_version_matches_the_branch_being_built() -> None:
-    """While v0.x is built, the app says 0.x.0 (v0.2-B7: v0.2 still said 0.1.0)."""
-    assert APP_VERSION == "0.6.0"
+    """While v0.x is built, the app says 0.x.0 (v0.2-B7: v0.2 still said 0.1.0). The version being built
+    is the newest plan in plans/, so this can't go stale between versions (v0.7-B7: v0.7 still said 0.6.0)."""
+    versions = [tuple(int(n) for n in m.groups()) for p in (ROOT / "plans").glob("v*.md")
+                if (m := re.fullmatch(r"v(\d+)\.(\d+)\.md", p.name))]  # fmt: skip
+    major, minor = max(versions)
+    assert f"{major}.{minor}.0" == APP_VERSION

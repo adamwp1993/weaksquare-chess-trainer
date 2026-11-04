@@ -5,6 +5,9 @@ import {
   type ApiClient,
   type BackendEvent,
   type EngineSettingsChange,
+  type LlmPriceChange,
+  type LlmProvider,
+  type LlmSettingsChange,
   type ReasonKey,
   type SettingValues,
   type TrainingMode,
@@ -12,6 +15,11 @@ import {
 import type {
   AccountStatus,
   Analysis,
+  ExplainQuote,
+  Explanation,
+  LlmPrice,
+  LlmSettings,
+  LlmSpend,
   EngineSettings,
   EngineStatus,
   Refutation,
@@ -118,6 +126,65 @@ export class PywebviewClient implements ApiClient {
 
   analyzePosition(sessionId: number, fen: string, purpose: AnalysisPurpose) {
     return this.call<Analysis>("analyze_position", sessionId, fen, purpose);
+  }
+
+  // ---- v0.7: LLM settings, guardrails, Explain --------------------------------------------------
+  getLlmSettings() {
+    return this.call<LlmSettings>("get_llm_settings");
+  }
+
+  setLlmSettings(c: LlmSettingsChange) {
+    return this.call<LlmSettings>("set_llm_settings", c.provider, c.model, c.reasoning, c.run_cap_usd, c.monthly_budget_usd);
+  }
+
+  setLlmKey(provider: LlmProvider, key: string) {
+    return this.call<LlmSettings>("set_llm_key", provider, key);
+  }
+
+  deleteLlmKey(provider: LlmProvider) {
+    return this.call<LlmSettings>("delete_llm_key", provider);
+  }
+
+  startLlmKeyTest(provider: LlmProvider, model: string) {
+    return this.call<string>("start_llm_key_test", provider, model);
+  }
+
+  listLlmPrices() {
+    return this.call<LlmPrice[]>("list_llm_prices");
+  }
+
+  saveLlmPrice(r: LlmPriceChange) {
+    return this.call<LlmPrice[]>(
+      "save_llm_price",
+      r.provider,
+      r.model,
+      r.input_per_m,
+      r.output_per_m,
+      r.long_ctx_threshold ?? null,
+      r.long_input_per_m ?? null,
+      r.long_output_per_m ?? null,
+      r.as_of ?? null,
+    );
+  }
+
+  deleteLlmPrice(provider: LlmProvider, model: string) {
+    return this.call<LlmPrice[]>("delete_llm_price", provider, model);
+  }
+
+  getLlmSpend() {
+    return this.call<LlmSpend>("get_llm_spend");
+  }
+
+  getExplainQuote(sessionId: number) {
+    return this.call<ExplainQuote>("get_explain_quote", sessionId);
+  }
+
+  startExplain(sessionId: number) {
+    return this.call<string>("start_explain", sessionId);
+  }
+
+  getExplanation(sessionId: number) {
+    return this.call<Explanation | null>("get_explanation", sessionId);
   }
 
   getAppInfo() {

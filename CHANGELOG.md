@@ -13,6 +13,14 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.7] - 2026-11-03
+Candidates: v0.7-rc1 (2026-11-03)
+
+### Added
+- **AI explanations:** once a puzzle is over, **Explain** asks Claude (Anthropic) or GPT (OpenAI) to explain it in plain words: the idea, each move, and why your move failed. It's grounded in the solution, Stockfish's lines and the board's attack and defence facts, and every move and square it mentions is checked against the position before it's shown. **Show me** steps through the solution with its arrows and circles drawn on the board. It needs Stockfish and your own API key, and works in every mode, Danger spotting included. [FR-8.1] [FR-8.2] [FR-8.3] [FR-8.4] [FR-8.5] [FR-8.7] [FR-8.8]
+- **AI settings:** choose a provider and model (nothing is pre-selected; the list shows each model's cost per Explain), save your API key to Windows Credential Manager, and check it with **Test key**, which is free. On the startup page, a saved key is checked quietly at launch. [FR-1.2] [FR-1.3] [FR-1.4] [FR-1.6] [FR-1.8]
+- **Spending limits:** an editable price table, a monthly budget (default $5, warns at 80%, stops at 100%), a per-run cap (default $0.50), a hard limit on every request's length, a reasoning setting (Low by default), and a spend indicator in the top bar. Explanations are saved, so showing one again is free. [FR-1.10] [FR-8.6] [FR-8.9] [FR-8.10] [FR-8.11] [FR-8.12] [FR-8.13] [FR-8.14] [FR-8.15]
+
 ## [v0.6] - 2026-11-03
 Candidates: v0.6-rc1 (2026-11-03)
 

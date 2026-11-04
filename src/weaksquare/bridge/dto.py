@@ -512,6 +512,106 @@ class Refutation:
     game_over: str | None
 
 
+# ---- v0.7: LLM settings, the cost guardrails, Explain (FR-1.2–1.4, 1.10, §9) -------------------------
+# No key ever crosses (SR-1): only whether one is stored.
+LlmProviderName = Literal["anthropic", "openai"]
+
+
+@dataclass(frozen=True)
+class LlmModelOption:
+    model: str
+    explain_usd: float  # about what one Explain costs at the current reasoning level (FR-1.3)
+
+
+@dataclass(frozen=True)
+class LlmProviderInfo:
+    provider: LlmProviderName
+    label: str  # "Anthropic" / "OpenAI"
+    key_stored: bool
+    model: str  # the model picked for this provider; '' = none (nothing is pre-selected)
+    models: list[LlmModelOption]  # the price table's models for this provider, cheapest first
+
+
+@dataclass(frozen=True)
+class LlmSpend:
+    month: str  # YYYY-MM, local
+    spent_usd: float
+    budget_usd: float
+    level: Literal["ok", "warn", "over"]  # FR-1.10 / 8.13: warn at 80%, blocked at 100%
+    configured: bool  # a provider with a key: show the indicator
+
+
+@dataclass(frozen=True)
+class LlmSettings:
+    provider: Literal["none", "anthropic", "openai"]
+    reasoning: Literal["low", "medium", "high"]  # FR-8.15
+    run_cap_usd: float  # FR-8.12
+    monthly_budget_usd: float  # FR-8.13
+    providers: list[LlmProviderInfo]
+    spend: LlmSpend
+    # FR-1.6: the silent key check at launch ('none': no AI set up, or a key was saved since).
+    key_check: Literal["none", "checking", "ok", "failed"]
+    key_check_message: str | None
+
+
+@dataclass(frozen=True)
+class LlmPrice:
+    provider: LlmProviderName
+    model: str
+    input_per_m: float  # USD per 1M tokens
+    output_per_m: float
+    long_ctx_threshold: int | None  # the long-context tier applies above this many input tokens
+    long_input_per_m: float | None
+    long_output_per_m: float | None
+    as_of: str  # YYYY-MM-DD
+
+
+@dataclass(frozen=True)
+class ExplainQuote:
+    """Whether Explain can run for the puzzle that just ended, and roughly what it costs (FR-8.11)."""
+
+    # 'ok', 'cached' (free), or why not: 'not_configured', 'no_model', 'no_price', 'over_budget', 'over_cap'
+    state: str
+    message: str | None
+    provider: str
+    model: str
+    typical_usd: float | None  # the "about" figure on the button
+    worst_usd: float | None  # every output token used: what the per-run cap is checked against
+
+
+@dataclass(frozen=True)
+class ExplainAnnotation:
+    kind: Literal["arrow", "circle"]
+    orig: str  # a square, validated (FR-8.4)
+    dest: str | None  # arrows only
+    color: Literal["green", "red", "blue", "yellow"]
+
+
+@dataclass(frozen=True)
+class ExplainStep:
+    ply: int  # 0 = your first move
+    side: Literal["you", "opponent"]
+    san: str
+    uci: str
+    text: str  # plain text: show it escaped, never as HTML (FR-8.7)
+    annotations: list[ExplainAnnotation]
+    variation: list[str]  # SAN, checked legal from the position after this move
+
+
+@dataclass(frozen=True)
+class Explanation:
+    summary: str
+    steps: list[ExplainStep]  # validated; a ply may be missing if its step was discarded
+    key_ideas: list[str]
+    discarded: int  # > 0: "some annotations were discarded" (FR-8.4)
+    provider: str
+    model: str
+    cost_usd: float  # 0 when cached
+    cached: bool
+    start_fen: str  # the position your first move is played in: Show me starts here
+    solution: list[str]  # UCI from start_fen, both sides
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -563,4 +663,13 @@ EXPORTED: list[type] = [
     EngineLine,
     Analysis,
     Refutation,
+    LlmModelOption,
+    LlmProviderInfo,
+    LlmSpend,
+    LlmSettings,
+    LlmPrice,
+    ExplainQuote,
+    ExplainAnnotation,
+    ExplainStep,
+    Explanation,
 ]

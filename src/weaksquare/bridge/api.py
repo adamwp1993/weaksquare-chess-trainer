@@ -21,6 +21,8 @@ from weaksquare.core.clock import Clock
 from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.ladder import LEVEL_NAMES, LEVELS, LadderStatus
+from weaksquare.core.llm.cost import estimate
+from weaksquare.core.llm.defaults import PROVIDER_LABELS, PROVIDERS, TYPICAL_PROMPT_CHARS, PriceRow
 from weaksquare.core.reasons import REASONS
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
@@ -28,7 +30,10 @@ from weaksquare.services.account import AccountService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
 from weaksquare.services.engine import EngineService
+from weaksquare.services.explain import ExplainService
 from weaksquare.services.lichess_history import HistoryService
+from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
+from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
@@ -76,7 +81,13 @@ class Api:
         history: HistoryService,
         engine: EngineService,
         reasons: ReasonsService,
+        llm_settings: LlmSettingsService,
+        llm_usage: LlmUsageService,
+        explain: ExplainService,
     ) -> None:
+        self._explain = explain
+        self._llm_settings = llm_settings
+        self._llm_usage = llm_usage
         self._engine = engine
         self._reasons = reasons
         self._account = account
@@ -545,6 +556,119 @@ class Api:
     ) -> dto.Analysis:
         """Eval and top lines after the puzzle (FR-7.2, 7.7). `purpose` keys latest-wins per view."""
         return analysis_dto(self._sessions.analyze(session_id, fen, purpose))
+
+    # ---- LLM settings and the cost guardrails (FR-1.2–1.4, 1.8, 1.10, §9.3) --------------------------
+    # A key comes in once, from the masked field, and goes straight to Credential Manager. Nothing here
+    # returns a key, and @bridge_call logs only the method name (SR-1, SR-7).
+    @bridge_call
+    def get_llm_settings(self) -> dto.LlmSettings:
+        return self._llm_dto()
+
+    @bridge_call
+    def set_llm_settings(
+        self,
+        provider: Literal["none", "anthropic", "openai"],
+        model: str,
+        reasoning: Literal["low", "medium", "high"],
+        run_cap_usd: float,
+        monthly_budget_usd: float,
+    ) -> dto.LlmSettings:
+        self._llm_settings.update(provider, model, reasoning, run_cap_usd, monthly_budget_usd)
+        return self._llm_dto()
+
+    @bridge_call
+    def set_llm_key(self, provider: Literal["anthropic", "openai"], key: str) -> dto.LlmSettings:
+        self._llm_settings.set_key(provider, key)
+        return self._llm_dto()
+
+    @bridge_call
+    def delete_llm_key(self, provider: Literal["anthropic", "openai"]) -> dto.LlmSettings:
+        self._llm_settings.delete_key(provider)
+        return self._llm_dto()
+
+    @bridge_call
+    def start_llm_key_test(self, provider: Literal["anthropic", "openai"], model: str) -> str:
+        """Test key (FR-1.4): the provider's free model lookup, as a job. Returns the job ID."""
+        return self._llm_settings.start_key_test(provider, model)
+
+    @bridge_call
+    def list_llm_prices(self) -> list[dto.LlmPrice]:
+        return [_price_dto(p) for p in self._llm_settings.prices()]
+
+    @bridge_call
+    def save_llm_price(
+        self,
+        provider: Literal["anthropic", "openai"],
+        model: str,
+        input_per_m: float,
+        output_per_m: float,
+        long_ctx_threshold: int | None = None,
+        long_input_per_m: float | None = None,
+        long_output_per_m: float | None = None,
+        as_of: str | None = None,
+    ) -> list[dto.LlmPrice]:
+        self._llm_settings.save_price(provider, model, input_per_m, output_per_m, long_ctx_threshold,
+                                      long_input_per_m, long_output_per_m, as_of)  # fmt: skip
+        return [_price_dto(p) for p in self._llm_settings.prices()]
+
+    @bridge_call
+    def delete_llm_price(self, provider: Literal["anthropic", "openai"], model: str) -> list[dto.LlmPrice]:
+        self._llm_settings.delete_price(provider, model)
+        return [_price_dto(p) for p in self._llm_settings.prices()]
+
+    @bridge_call
+    def get_llm_spend(self) -> dto.LlmSpend:
+        return self._spend_dto(self._llm_settings.config())
+
+    # ---- Explain (§7.2 step 3, FR-8.1–8.8) ----------------------------------------------------------
+    @bridge_call
+    def get_explain_quote(self, session_id: int) -> dto.ExplainQuote:
+        q = self._explain.quote(session_id)
+        e = q.estimate
+        return dto.ExplainQuote(q.state, q.message, q.provider, q.model, round(e.typical_usd, 6) if e else None,
+                                round(e.worst_usd, 6) if e else None)  # fmt: skip
+
+    @bridge_call
+    def start_explain(self, session_id: int) -> str:
+        """Explain the puzzle that just ended, as a job. Returns the job ID; then call get_explanation."""
+        return self._explain.start(session_id)
+
+    @bridge_call
+    def get_explanation(self, session_id: int) -> dto.Explanation | None:
+        v = self._explain.result(session_id)
+        if v is None:
+            return None
+        x = v.explanation
+        steps = [
+            dto.ExplainStep(s.ply, s.side, s.san, s.uci, s.text,
+                            [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in s.annotations],  # type: ignore[arg-type]
+                            list(s.variation))
+            for s in x.steps
+        ]  # fmt: skip
+        return dto.Explanation(x.summary, steps, list(x.key_ideas), x.discarded, v.provider, v.model,
+                               round(v.cost_usd, 6), v.cached, v.start_fen, list(v.solution))  # fmt: skip
+
+    def _spend_dto(self, cfg: LlmConfig) -> dto.LlmSpend:
+        s = self._llm_usage.spend(cfg)
+        return dto.LlmSpend(s.month, round(s.spent_usd, 6), s.budget_usd, s.level, cfg.configured)
+
+    def _llm_dto(self) -> dto.LlmSettings:
+        cfg = self._llm_settings.config()
+        prices = self._llm_settings.prices()
+        providers = []
+        for p in PROVIDERS:
+            options = [
+                dto.LlmModelOption(r.model, round(estimate("explain", cfg.reasoning, TYPICAL_PROMPT_CHARS["explain"], r).typical_usd, 6))
+                for r in sorted((r for r in prices if r.provider == p), key=lambda r: (r.input_per_m, r.model))
+            ]  # fmt: skip
+            providers.append(dto.LlmProviderInfo(p, PROVIDER_LABELS[p], cfg.keys[p], cfg.models[p], options))
+        return dto.LlmSettings(cfg.provider, cfg.reasoning, cfg.run_cap_usd, cfg.monthly_budget_usd,  # type: ignore[arg-type]
+                               providers, self._spend_dto(cfg), *self._llm_settings.launch_check())  # fmt: skip
+
+
+def _price_dto(p: PriceRow) -> dto.LlmPrice:
+    return dto.LlmPrice(p.provider, p.model, p.input_per_m, p.output_per_m, p.long_ctx_threshold,  # type: ignore[arg-type]
+                        p.long_input_per_m, p.long_output_per_m, p.as_of)  # fmt: skip
 
 
 def _labels(keys: tuple[str, ...]) -> list[dto.ThemeLabel]:
