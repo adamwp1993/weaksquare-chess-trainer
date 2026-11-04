@@ -464,3 +464,42 @@ export interface LlmPrice {
   long_output_per_m: number | null;
   as_of: string;
 }
+
+export interface ExplainQuote {
+  state: string;
+  message: string | null;
+  provider: string;
+  model: string;
+  typical_usd: number | null;
+  worst_usd: number | null;
+}
+
+export interface ExplainAnnotation {
+  kind: "arrow" | "circle";
+  orig: string;
+  dest: string | null;
+  color: "green" | "red" | "blue" | "yellow";
+}
+
+export interface ExplainStep {
+  ply: number;
+  side: "you" | "opponent";
+  san: string;
+  uci: string;
+  text: string;
+  annotations: ExplainAnnotation[];
+  variation: string[];
+}
+
+export interface Explanation {
+  summary: string;
+  steps: ExplainStep[];
+  key_ideas: string[];
+  discarded: number;
+  provider: string;
+  model: string;
+  cost_usd: number;
+  cached: boolean;
+  start_fen: string;
+  solution: string[];
+}

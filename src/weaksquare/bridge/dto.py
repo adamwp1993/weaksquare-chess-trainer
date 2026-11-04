@@ -566,6 +566,52 @@ class LlmPrice:
     as_of: str  # YYYY-MM-DD
 
 
+@dataclass(frozen=True)
+class ExplainQuote:
+    """Whether Explain can run for the puzzle that just ended, and roughly what it costs (FR-8.11)."""
+
+    # 'ok', 'cached' (free), or why not: 'not_configured', 'no_model', 'no_price', 'over_budget', 'over_cap'
+    state: str
+    message: str | None
+    provider: str
+    model: str
+    typical_usd: float | None  # the "about" figure on the button
+    worst_usd: float | None  # every output token used: what the per-run cap is checked against
+
+
+@dataclass(frozen=True)
+class ExplainAnnotation:
+    kind: Literal["arrow", "circle"]
+    orig: str  # a square, validated (FR-8.4)
+    dest: str | None  # arrows only
+    color: Literal["green", "red", "blue", "yellow"]
+
+
+@dataclass(frozen=True)
+class ExplainStep:
+    ply: int  # 0 = your first move
+    side: Literal["you", "opponent"]
+    san: str
+    uci: str
+    text: str  # plain text: show it escaped, never as HTML (FR-8.7)
+    annotations: list[ExplainAnnotation]
+    variation: list[str]  # SAN, checked legal from the position after this move
+
+
+@dataclass(frozen=True)
+class Explanation:
+    summary: str
+    steps: list[ExplainStep]  # validated; a ply may be missing if its step was discarded
+    key_ideas: list[str]
+    discarded: int  # > 0: "some annotations were discarded" (FR-8.4)
+    provider: str
+    model: str
+    cost_usd: float  # 0 when cached
+    cached: bool
+    start_fen: str  # the position your first move is played in: Show me starts here
+    solution: list[str]  # UCI from start_fen, both sides
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -622,4 +668,8 @@ EXPORTED: list[type] = [
     LlmSpend,
     LlmSettings,
     LlmPrice,
+    ExplainQuote,
+    ExplainAnnotation,
+    ExplainStep,
+    Explanation,
 ]

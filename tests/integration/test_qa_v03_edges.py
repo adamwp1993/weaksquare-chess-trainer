@@ -148,7 +148,7 @@ class Wired:
                        puzzle_db=s.puzzle_db, mixer=s.mixer, sessions=s.sessions, presets=s.presets, stats=s.stats,
                        ui_settings=s.ui_settings, db_update=s.db_update, account=s.account, sync=s.sync,
                        history=s.history, engine=s.engine, reasons=s.reasons,
-                       llm_settings=s.llm_settings, llm_usage=s.llm_usage)  # fmt: skip
+                       llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain)  # fmt: skip
 
     def settle(self) -> None:
         for _ in range(10):

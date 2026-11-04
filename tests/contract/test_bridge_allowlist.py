@@ -68,6 +68,9 @@ ALLOWLIST = {
     "save_llm_price",
     "delete_llm_price",
     "get_llm_spend",
+    "get_explain_quote",
+    "start_explain",
+    "get_explanation",
     "retry_puzzle",  # FR-5.12 Try again (not scored)
     "submit_line",  # v0.5: Commit the line (FR-4.2)
     "get_srs_status",  # v0.5: Spaced repetition (FR-4.6)

@@ -76,6 +76,7 @@ def build_api(
         reasons=services.reasons,
         llm_settings=services.llm_settings,
         llm_usage=services.llm_usage,
+        explain=services.explain,
     )
 
 

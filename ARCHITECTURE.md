@@ -216,6 +216,27 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.7: Explain: grounded facts, a strict schema, validation against the real position, a cache
+- Context: FR-8.1–8.8; Adam's v0.7 planning decisions (Explain requires Stockfish; it also works in Danger spotting).
+- Decision:
+  - **When:** `SessionService.explain_facts` gathers the facts only once the puzzle is over (`_finished`, the same gate as the engine, FR-7.3) and only with Stockfish ready.
+  - **Scoring:** the ladder puts Explain after Show answer, which already decided the attempt, so Explain never changes a result (`help_used = 'explain'` stays unused).
+  - **The facts (`core/explain.py`, an allowlist, SR-11):**
+    - the position and side, the opponent's move, and the solution in SAN and UCI per ply;
+    - the themes (display names);
+    - python-chess facts per ply: the piece, any capture, check or mate, what the moved piece attacks, and who attacked and defended the square;
+    - Stockfish's top 3 from the solving position (evals worded from the solving side, also in Danger spotting) and the refutation of your wrong move;
+    - Commit the line's entered line, and Danger spotting's candidate, call and truth.
+    - Never the puzzle ID, its rating or any setting (a test checks the ID).
+  - **Schema:** strict-mode shaped for both providers: every property required, `to` nullable, no extra properties. Each step echoes its ply's `move`, and an optional `variation` of SAN moves gives the legality check (FR-8.4) something to replay.
+  - **Validation drops and counts** a step whose move isn't the solution's at that ply (or a ply that doesn't exist, or a repeat), any variation with an illegal move (the whole variation), any annotation with a bad square, kind or color, and annotations over 6. It also caps text and strips control characters.
+  - **Text:** HTML in the text is kept as text: the UI renders it escaped (FR-8.7).
+  - **The quote** builds the prompt without the engine plus a 700-character allowance, so the price on the button costs no search.
+  - **The run:** a job that searches, calls `LlmUsageService.run`, and validates. Truncated, refused or unparseable answers are errors (the usage is still logged, since they were billed), and nothing is cached for them.
+  - **The cache** holds the validated result, keyed by SHA-256 of (puzzle ref, mode + call/entered line + wrong move, provider, model), as FR-8.6 lists. A result is shown only while its puzzle is on the board.
+- Alternatives: letting the LLM name arbitrary moves in free text (unverifiable); Show me drawing the LLM's own move list (it could disagree with the solution); keying the cache on the prompt text (engine output varies run to run, so it would never hit).
+- Consequences: Game Review AI (v0.9) can reuse the schema-and-validate pattern with its own facts builder.
+
 ### 2026-11-03, v0.7: Anthropic and OpenAI over `adapters/http.py`, no SDKs
 - Context: FR-8.1 needs both providers behind one interface, and ARCHITECTURE §3 decision 9 sends every external call through the one HTTP client.
 - Decision:

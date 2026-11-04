@@ -20,7 +20,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
-from weaksquare.adapters.db.repos.llm import LlmPricesRepo, LlmUsageRepo
+from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
@@ -70,6 +70,7 @@ from weaksquare.services.account import AccountDeps, AccountService, AccountStat
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
+from weaksquare.services.explain import ExplainService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
@@ -192,6 +193,7 @@ class Services:
     reasons: ReasonsService
     llm_settings: LlmSettingsService
     llm_usage: LlmUsageService
+    explain: ExplainService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -333,6 +335,7 @@ def build_services(
         lambda: clock.local_date(clock.now()),
     )
     llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
+    explain = ExplainService(sessions, llm_settings, llm_usage, LlmCacheRepo(db), runner, clock)
     return Services(
         db=db,
         http=http,
@@ -351,6 +354,7 @@ def build_services(
         reasons=reasons,
         llm_settings=llm_settings,
         llm_usage=llm_usage,
+        explain=explain,
     )
 
 
@@ -433,6 +437,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         reasons=services.reasons,
         llm_settings=services.llm_settings,
         llm_usage=services.llm_usage,
+        explain=services.explain,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

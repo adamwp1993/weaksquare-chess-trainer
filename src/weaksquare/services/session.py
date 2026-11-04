@@ -26,7 +26,7 @@ from typing import Any, Literal, Protocol
 
 import chess
 
-from weaksquare.core.chess_rules import PuzzleDataError
+from weaksquare.core.chess_rules import PuzzleDataError, start_position
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import (
     REFUTATION_MIN_PLIES,
@@ -37,6 +37,7 @@ from weaksquare.core.engine import (
     validate_line,
 )
 from weaksquare.core.errors import AppError, ConflictError, NotFoundError, StaleKeyError, ValidationError
+from weaksquare.core.explain import CacheKeyParts, DangerFact, EngineLineFact, ExplainInput, RefutationFact
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LEVELS, LadderStatus, ladder_key
 from weaksquare.core.ladder import status as ladder_status
@@ -56,12 +57,13 @@ from weaksquare.core.modes.danger import (
 from weaksquare.core.modes.name_idea import IdeaScore, IdeaTags, NameIdeaMode, NameIdeaState
 from weaksquare.core.modes.standard import StandardMode, StandardState
 from weaksquare.core.move_sounds import MoveSound, sounds_for_line
-from weaksquare.core.puzzle import Puzzle, PuzzleRef
+from weaksquare.core.puzzle import Color, Puzzle, PuzzleRef
 from weaksquare.core.queue import allocate, order_by_theme, order_easy_to_hard, refill_size, theme_group
 from weaksquare.core.reasons import DEFAULT_RUSHED_S, ReasonContext, is_forcing_reply, suggest
 from weaksquare.core.scoring import MIX, angle_for
 from weaksquare.core.srs import DEFAULT_INTERVALS, Card, Review, due_order, next_due, schedule
 from weaksquare.core.srs import MODE as SRS_MODE
+from weaksquare.core.themes import display_name
 from weaksquare.services.engine import Analysis, EngineService
 
 log = logging.getLogger(__name__)
@@ -1072,6 +1074,53 @@ class SessionService:
                 if s.current is cur:
                     cur.analyses[board.fen()] = result
         return result
+
+    # ---- Explain (v0.7, FR-8.2): the grounded facts for the puzzle that just ended -------------------
+
+    def explain_facts(self, session_id: int, with_engine: bool = True) -> tuple[ExplainInput, CacheKeyParts]:
+        """The allowlisted facts for Explain and its cache key. Only once the puzzle is over (FR-7.3), and
+        only with Stockfish (Adam, v0.7 planning). `with_engine=False` skips the searches: the quote only
+        needs the prompt's size."""
+        s = self._session(session_id)
+        with s.lock:
+            cur = self._finished(s)
+            state = cur.state
+            puzzle = state.puzzle
+        engine = self._engine_or_raise()
+        if engine.status().state != "ready":
+            raise EngineNotInstalled("Explain needs Stockfish. Install it first.")
+        themes = tuple(display_name(t) for t in puzzle.themes)
+        danger = None
+        entered: tuple[str, ...] | None = None
+        path: tuple[str, ...] = (s.mode,)
+        if isinstance(state, DangerState):
+            danger = DangerFact(state.candidate, state.is_safe, state.call)
+            path += ("call", state.call or "none")
+        elif isinstance(state, CommitState):
+            entered = tuple(state.played)
+            path += ("line", *entered)
+        if state.first_wrong is not None:
+            path += ("wrong", state.first_wrong[1])
+        attempt = state.attempt
+        solved = state.first_wrong is None and not state.hinted and bool((attempt and attempt.win) or state.practice)
+        lines: tuple[EngineLineFact, ...] = ()
+        refutation = None
+        if with_engine:
+            board, _ = start_position(puzzle.fen, puzzle.moves)
+            you: Color = "white" if board.turn == chess.WHITE else "black"  # the solving side, also in Danger spotting
+            analysis = engine.analyse(board, you)
+            lines = tuple(EngineLineFact(x.score, x.pv) for x in analysis.lines)
+            if state.first_wrong is not None:
+                r = self.get_refutation(session_id)
+                refutation = RefutationFact(r.fen_before, r.wrong_move, r.line, r.score)
+        inp = ExplainInput(puzzle.fen, puzzle.moves, themes, lines, refutation, entered, solved, danger)
+        return inp, CacheKeyParts(str(puzzle.ref), path)
+
+    def current_puzzle(self, session_id: int) -> str | None:
+        """The puzzle on the board (as text), so a late Explain result can't land on the next puzzle."""
+        s = self._session(session_id)
+        with s.lock:
+            return str(s.current.state.puzzle.ref) if s.current else None
 
     def retry(self, session_id: int) -> None:
         """FR-5.12 Try again (not scored): replay the current puzzle from its start, once it's over.

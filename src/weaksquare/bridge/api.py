@@ -30,6 +30,7 @@ from weaksquare.services.account import AccountService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
 from weaksquare.services.engine import EngineService
+from weaksquare.services.explain import ExplainService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
@@ -82,7 +83,9 @@ class Api:
         reasons: ReasonsService,
         llm_settings: LlmSettingsService,
         llm_usage: LlmUsageService,
+        explain: ExplainService,
     ) -> None:
+        self._explain = explain
         self._llm_settings = llm_settings
         self._llm_usage = llm_usage
         self._engine = engine
@@ -616,6 +619,34 @@ class Api:
     @bridge_call
     def get_llm_spend(self) -> dto.LlmSpend:
         return self._spend_dto(self._llm_settings.config())
+
+    # ---- Explain (§7.2 step 3, FR-8.1–8.8) ----------------------------------------------------------
+    @bridge_call
+    def get_explain_quote(self, session_id: int) -> dto.ExplainQuote:
+        q = self._explain.quote(session_id)
+        e = q.estimate
+        return dto.ExplainQuote(q.state, q.message, q.provider, q.model, round(e.typical_usd, 6) if e else None,
+                                round(e.worst_usd, 6) if e else None)  # fmt: skip
+
+    @bridge_call
+    def start_explain(self, session_id: int) -> str:
+        """Explain the puzzle that just ended, as a job. Returns the job ID; then call get_explanation."""
+        return self._explain.start(session_id)
+
+    @bridge_call
+    def get_explanation(self, session_id: int) -> dto.Explanation | None:
+        v = self._explain.result(session_id)
+        if v is None:
+            return None
+        x = v.explanation
+        steps = [
+            dto.ExplainStep(s.ply, s.side, s.san, s.uci, s.text,
+                            [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in s.annotations],  # type: ignore[arg-type]
+                            list(s.variation))
+            for s in x.steps
+        ]  # fmt: skip
+        return dto.Explanation(x.summary, steps, list(x.key_ideas), x.discarded, v.provider, v.model,
+                               round(v.cost_usd, 6), v.cached, v.start_fen, list(v.solution))  # fmt: skip
 
     def _spend_dto(self, cfg: LlmConfig) -> dto.LlmSpend:
         s = self._llm_usage.spend(cfg)
