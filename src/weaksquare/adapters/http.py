@@ -93,6 +93,13 @@ class HeadInfo:
     size: int | None  # bytes, from Content-Length
 
 
+@dataclass(frozen=True)
+class CachedJson:
+    status: int  # 200 (fresh) or 304 (unchanged since the ETag sent)
+    data: Any
+    etag: str | None
+
+
 def _iso_date(header: str | None) -> str | None:
     if not header:
         return None
@@ -212,6 +219,26 @@ class HttpClient:
                 return r.json()
             except ValueError:
                 raise HttpError(f"{url} returned a response that isn't JSON", status=r.status_code) from None
+
+        return self._with_retry(url, go, retries=None if retry else 0, retry_429=False)
+
+    def get_json_cached(self, url: str, etag: str | None, *, retry: bool = True) -> CachedJson:
+        """A GET with `If-None-Match` (v0.8, chess.com's ETag caching, FR-10.7): HTTP 304 comes back as
+        `status=304` with no data instead of an error. 429 is never retried here; the caller backs off."""
+
+        def go() -> CachedJson:
+            headers = {"Accept": "application/json"}
+            if etag:
+                headers["If-None-Match"] = etag
+            r = self._client.get(url, headers=headers)
+            if r.status_code == 304:
+                return CachedJson(304, None, etag)
+            self._check(r, url)
+            try:
+                data = r.json() if r.content.strip() else None
+            except ValueError:
+                raise HttpError(f"{url} returned a response that isn't JSON", status=r.status_code) from None
+            return CachedJson(r.status_code, data, r.headers.get("etag"))
 
         return self._with_retry(url, go, retries=None if retry else 0, retry_429=False)
 

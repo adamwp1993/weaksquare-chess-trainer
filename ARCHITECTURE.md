@@ -216,6 +216,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.8: Game clients: chess.com serialized by a lock, ETags in `http.py`, hand-written fixtures
+- Context: chess.com's Published-Data API answers parallel requests with 429 and asks for ETag caching (FR-10.7). Lichess exports your own games fastest with your token. Neither API had a client yet.
+- Decision:
+  - `adapters/chesscom.py` (`ChesscomGames`) holds **one lock around every request**, so calls from any thread go out one at a time. It accepts only `api.chess.com/pub/…` URLs (FR-11.32), waits on 429 (`Retry-After`, else a doubling backoff, 4 tries), and maps 404 to `ChesscomNotFound` and 410 to `ChesscomGone`.
+  - `HttpClient.get_json_cached(url, etag)` sends `If-None-Match` and returns a 304 as data, not an error.
+  - `adapters/lichess_games.py` (`LichessGames`) streams `/api/games/user/{u}` as ndjson and fetches single games from `/game/export/{id}` as JSON, both with the documented flags.
+  - There's no single `GameSource` protocol: `core/games.py` has `LichessGamesClient` and `ChesscomClient`, because the two APIs share nothing but the PGN.
+  - The fixtures under `tests/fixtures/http/chesscom/` and `lichess_games/` are generated from the API docs with legal PGNs, until Adam's live recorder replaces them. The scrub test now also rejects real chess.com game URLs, player API paths, PGN player tags and player names or ids in these responses (SR-12a).
+- Alternatives: a delay between chess.com requests instead of a lock (it doesn't stop two threads overlapping); retrying 429 inside `http.py` for every caller (Lichess's batch sync must never resend).
+- Consequences: a sync and a URL import can't hammer chess.com together. They queue behind the lock instead.
+
 ### 2026-11-03, v0.8: The game library and custom-puzzle schema (`user/0007_games.sql`)
 - Context: §4.3 sketched `games`, `account_sync`, `game_analysis` and `custom_puzzles`. v0.8 fills them in and adds Retry mode results.
 - Decision:
