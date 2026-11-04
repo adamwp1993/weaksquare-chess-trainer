@@ -85,6 +85,7 @@ from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
+from weaksquare.services.puzzle_import import PuzzleImportService
 from weaksquare.services.reasons import ReasonsService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
@@ -206,6 +207,7 @@ class Services:
     games: GameLibraryService
     analysis: AnalysisService
     review: ReviewService
+    puzzle_import: PuzzleImportService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -357,8 +359,10 @@ def build_services(
     )  # fmt: skip
     analysis_repo = GameAnalysisRepo(db)
     analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner)
+    custom_puzzles = CustomPuzzlesRepo(db)
+    puzzle_import = PuzzleImportService(custom_puzzles, runner, clock)
     review = ReviewService(
-        games_repo, analysis_repo, analysis, analysis.is_current, engine, CustomPuzzlesRepo(db), RetryRepo(db),
+        games_repo, analysis_repo, analysis, analysis.is_current, engine, custom_puzzles, RetryRepo(db),
         MistakeReasonsRepo(db), ui_settings, clock,
     )  # fmt: skip
     return Services(
@@ -383,6 +387,7 @@ def build_services(
         games=games,
         analysis=analysis,
         review=review,
+        puzzle_import=puzzle_import,
     )
 
 
