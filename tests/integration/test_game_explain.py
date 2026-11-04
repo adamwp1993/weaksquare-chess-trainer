@@ -199,3 +199,15 @@ def test_no_model_means_no_request(services, game: int) -> None:  # type: ignore
     assert services.game_explain.narrative_result(game) is None
     with pytest.raises(AppError):
         services.game_explain.start_narrative(game)
+
+
+def test_the_library_filters_and_shows_ai_reviewed_games(services, game: int) -> None:  # type: ignore[no-untyped-def]
+    from weaksquare.core.games import LibraryFilter
+
+    configure(services)
+    fake(services).queue(json.dumps(NARRATIVE_ANSWER))
+    wait(services, services.game_explain.start_narrative(game))
+    assert services.games.list_games(LibraryFilter(statuses=("ai_reviewed",)))[1] == 1
+    assert services.games.list_games(LibraryFilter(statuses=("analyzed",)))[1] == 0
+    rows, _ = services.games.list_games(LibraryFilter(statuses=("analyzed", "ai_reviewed")))
+    assert [r.analysis_status for r in rows] == ["ai_reviewed"]

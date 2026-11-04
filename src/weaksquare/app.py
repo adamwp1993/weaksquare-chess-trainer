@@ -483,6 +483,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         analysis=services.analysis,
         review=services.review,
         puzzle_import=services.puzzle_import,
+        game_explain=services.game_explain,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

@@ -25,7 +25,15 @@ from weaksquare.core.filters import FilterSpec
 from weaksquare.core.games import LibraryFilter
 from weaksquare.core.ladder import LEVEL_NAMES, LEVELS, LadderStatus
 from weaksquare.core.llm.cost import estimate
-from weaksquare.core.llm.defaults import PROVIDER_LABELS, PROVIDERS, TYPICAL_PROMPT_CHARS, PriceRow
+from weaksquare.core.llm.defaults import (
+    DROPDOWN_KIND,
+    FEATURE_LABELS,
+    FEATURES,
+    PROVIDER_LABELS,
+    PROVIDERS,
+    TYPICAL_PROMPT_CHARS,
+    PriceRow,
+)
 from weaksquare.core.reasons import REASONS
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
@@ -34,7 +42,8 @@ from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
 from weaksquare.services.engine import EngineService
-from weaksquare.services.explain import ExplainService
+from weaksquare.services.explain import ExplainService, ExplainView
+from weaksquare.services.game_explain import GameExplainService, GameQuote, NarrativeView
 from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
@@ -95,8 +104,10 @@ class Api:
         analysis: AnalysisService,
         review: ReviewService,
         puzzle_import: PuzzleImportService,
+        game_explain: GameExplainService,
     ) -> None:
         self._explain = explain
+        self._game_explain = game_explain
         self._games = games
         self._analysis = analysis
         self._review = review
@@ -656,17 +667,51 @@ class Api:
     @bridge_call
     def get_explanation(self, session_id: int) -> dto.Explanation | None:
         v = self._explain.result(session_id)
-        if v is None:
-            return None
-        x = v.explanation
-        steps = [
-            dto.ExplainStep(s.ply, s.side, s.san, s.uci, s.text,
-                            [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in s.annotations],  # type: ignore[arg-type]
-                            list(s.variation))
-            for s in x.steps
-        ]  # fmt: skip
-        return dto.Explanation(x.summary, steps, list(x.key_ideas), x.discarded, v.provider, v.model,
-                               round(v.cost_usd, 6), v.cached, v.start_fen, list(v.solution))  # fmt: skip
+        return None if v is None else _explanation_dto(v)
+
+    # ---- v0.9: a model per AI feature (FR-1.15) and Game Review AI (§11.4) --------------------------
+    @bridge_call
+    def set_llm_feature(
+        self,
+        feature: Literal["game_review"],
+        provider: Literal["same", "anthropic", "openai"],
+        model: str,
+        reasoning: Literal["low", "medium", "high"],
+    ) -> dto.LlmSettings:
+        """A feature's own provider and model, or 'same' to follow Explain's; and its reasoning level."""
+        self._llm_settings.update_feature(feature, provider, model, reasoning)
+        return self._llm_dto()
+
+    @bridge_call
+    def get_game_move_quote(self, game_id: int, ply: int) -> dto.GameAiQuote:
+        """Can Explain this move run for one of your analyzed moves, and about what would it cost?"""
+        return _game_quote_dto(self._game_explain.quote_move(game_id, ply))
+
+    @bridge_call
+    def start_game_move_explain(self, game_id: int, ply: int) -> str:
+        """Explain this move (FR-11.17), as a job. Then call get_game_move_explanation."""
+        return self._game_explain.start_move(game_id, ply)
+
+    @bridge_call
+    def get_game_move_explanation(self, game_id: int, ply: int) -> dto.Explanation | None:
+        """The explanation of this move under the current Game Review model (fresh or saved), if any."""
+        v = self._game_explain.move_result(game_id, ply)
+        return None if v is None else _explanation_dto(v)
+
+    @bridge_call
+    def get_game_narrative_quote(self, game_id: int, n: int | None = None) -> dto.GameAiQuote:
+        """The estimate the Confirm dialog shows before Explain my game (FR-8.11, 11.21)."""
+        return _game_quote_dto(self._game_explain.quote_narrative(game_id, n))
+
+    @bridge_call
+    def start_game_narrative(self, game_id: int, n: int | None = None) -> str:
+        """Explain my game (FR-11.18), as a job, after you confirm. Then call get_game_narrative."""
+        return self._game_explain.start_narrative(game_id, n)
+
+    @bridge_call
+    def get_game_narrative(self, game_id: int, n: int | None = None) -> dto.GameNarrative | None:
+        v = self._game_explain.narrative_result(game_id, n)
+        return None if v is None else _narrative_dto(v)
 
     def _spend_dto(self, cfg: LlmConfig) -> dto.LlmSpend:
         s = self._llm_usage.spend(cfg)
@@ -682,8 +727,27 @@ class Api:
                 for r in sorted((r for r in prices if r.provider == p), key=lambda r: (r.input_per_m, r.model))
             ]  # fmt: skip
             providers.append(dto.LlmProviderInfo(p, PROVIDER_LABELS[p], cfg.keys[p], cfg.models[p], options))
+        spend = self._llm_usage.spend(cfg)
+        features = [self._feature_dto(f, prices, spend.by_feature.get(f, 0.0)) for f in FEATURES]
         return dto.LlmSettings(cfg.provider, cfg.reasoning, cfg.run_cap_usd, cfg.monthly_budget_usd,  # type: ignore[arg-type]
-                               providers, self._spend_dto(cfg), *self._llm_settings.launch_check())  # fmt: skip
+                               providers, self._spend_dto(cfg), *self._llm_settings.launch_check(), features)  # fmt: skip
+
+    def _feature_dto(self, feature: str, prices: list[PriceRow], spent: float) -> dto.LlmFeature:
+        cfg = self._llm_settings.config(feature)
+        kind = DROPDOWN_KIND[feature]  # type: ignore[index]
+        options = [
+            dto.LlmModelChoice(r.provider, r.model,  # type: ignore[arg-type]
+                               round(estimate(kind, cfg.reasoning, TYPICAL_PROMPT_CHARS[kind], r).typical_usd, 6))
+            for r in sorted(prices, key=lambda r: (PROVIDERS.index(r.provider) if r.provider in PROVIDERS else 9,
+                                                   r.input_per_m, r.model))
+        ]  # fmt: skip
+        if feature == "explain":
+            choice, own_model = cfg.provider, cfg.model
+        else:
+            choice, own_model, _ = self._llm_settings.feature_choice(feature)
+        ready = cfg.configured and bool(cfg.model) and self._llm_settings.price(cfg.provider, cfg.model) is not None
+        return dto.LlmFeature(feature, FEATURE_LABELS[feature], choice, own_model, cfg.reasoning,  # type: ignore[arg-type, index]
+                              cfg.provider, cfg.model, ready, round(spent, 6), options)  # type: ignore[arg-type]  # fmt: skip
 
     # ---- v0.8: linked accounts and the game library (§11.5) --------------------------------------
     def _games_settings_dto(self) -> dto.GamesSettings:
@@ -844,6 +908,43 @@ class Api:
         return [dto.PuzzleSet(label, n) for label, n in self._puzzle_import.sets()]
 
 
+def _explanation_dto(v: ExplainView) -> dto.Explanation:
+    x = v.explanation
+    steps = [
+        dto.ExplainStep(s.ply, s.side, s.san, s.uci, s.text,
+                        [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in s.annotations],  # type: ignore[arg-type]
+                        list(s.variation))
+        for s in x.steps
+    ]  # fmt: skip
+    return dto.Explanation(x.summary, steps, list(x.key_ideas), x.discarded, v.provider, v.model,
+                           round(v.cost_usd, 6), v.cached, v.start_fen, list(v.solution))  # fmt: skip
+
+
+def _game_quote_dto(q: GameQuote) -> dto.GameAiQuote:
+    e = q.estimate
+    return dto.GameAiQuote(
+        q.state, q.message, q.provider, q.model,
+        e.input_tokens if e else None, e.typical_output_tokens if e else None, e.max_output_tokens if e else None,
+        round(e.typical_usd, 6) if e else None, round(e.worst_usd, 6) if e else None,
+        q.run_cap_usd, round(q.spend.spent_usd, 6), q.spend.budget_usd,
+    )  # fmt: skip
+
+
+def _narrative_dto(v: NarrativeView) -> dto.GameNarrative:
+    n = v.narrative
+    moments = [
+        dto.GameMoment(m.ply, m.played_san, m.text,
+                       [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in m.annotations],  # type: ignore[arg-type]
+                       list(m.better_line), list(m.better_uci))
+        for m in n.moments
+    ]  # fmt: skip
+    p = n.preset
+    preset = dto.SuggestedPreset(list(p.themes), list(p.names), p.rating_min, p.rating_max) if p else None
+    return dto.GameNarrative(v.game_id, v.n, list(v.moments), n.opening_summary, n.turning_point, list(n.themes),
+                             list(n.takeaways), moments, preset, n.discarded, v.provider, v.model,
+                             round(v.cost_usd, 6), v.cached)  # fmt: skip
+
+
 def _price_dto(p: PriceRow) -> dto.LlmPrice:
     return dto.LlmPrice(p.provider, p.model, p.input_per_m, p.output_per_m, p.long_ctx_threshold,  # type: ignore[arg-type]
                         p.long_input_per_m, p.long_output_per_m, p.as_of)  # fmt: skip
@@ -912,7 +1013,7 @@ def game_summary(g: Any) -> dto.GameSummary:
         g.result, g.user_result, g.eco, g.opening,
         (g.accuracy_white if white else g.accuracy_black) if mine else None,
         (g.accuracy_black if white else g.accuracy_white) if mine else None,
-        g.lichess_analyzed, "analyzed" if g.analysis_status != "none" else "none",
+        g.lichess_analyzed, g.analysis_status if g.analysis_status in ("analyzed", "ai_reviewed") else "none",
     )  # fmt: skip
 
 

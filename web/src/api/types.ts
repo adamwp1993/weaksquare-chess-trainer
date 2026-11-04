@@ -450,6 +450,25 @@ export interface LlmSpend {
   configured: boolean;
 }
 
+export interface LlmModelChoice {
+  provider: "anthropic" | "openai";
+  model: string;
+  usd: number;
+}
+
+export interface LlmFeature {
+  feature: "explain" | "game_review";
+  label: string;
+  choice: "same" | "anthropic" | "openai" | "none";
+  model: string;
+  reasoning: "low" | "medium" | "high";
+  provider: "none" | "anthropic" | "openai";
+  effective_model: string;
+  ready: boolean;
+  spent_usd: number;
+  options: LlmModelChoice[];
+}
+
 export interface LlmSettings {
   provider: "none" | "anthropic" | "openai";
   reasoning: "low" | "medium" | "high";
@@ -459,6 +478,7 @@ export interface LlmSettings {
   spend: LlmSpend;
   key_check: "none" | "checking" | "ok" | "failed";
   key_check_message: string | null;
+  features: LlmFeature[];
 }
 
 export interface LlmPrice {
@@ -511,6 +531,54 @@ export interface Explanation {
   solution: string[];
 }
 
+export interface GameAiQuote {
+  state: string;
+  message: string | null;
+  provider: string;
+  model: string;
+  input_tokens: number | null;
+  typical_output_tokens: number | null;
+  max_output_tokens: number | null;
+  typical_usd: number | null;
+  worst_usd: number | null;
+  run_cap_usd: number;
+  spent_usd: number;
+  budget_usd: number;
+}
+
+export interface GameMoment {
+  ply: number;
+  played_san: string;
+  text: string;
+  annotations: ExplainAnnotation[];
+  better_line: string[];
+  better_uci: string[];
+}
+
+export interface SuggestedPreset {
+  themes: string[];
+  names: string[];
+  rating_min: number | null;
+  rating_max: number | null;
+}
+
+export interface GameNarrative {
+  game_id: number;
+  n: number;
+  key_moments: number[];
+  opening_summary: string;
+  turning_point: number | null;
+  themes: string[];
+  takeaways: string[];
+  moments: GameMoment[];
+  preset: SuggestedPreset | null;
+  discarded: number;
+  provider: string;
+  model: string;
+  cost_usd: number;
+  cached: boolean;
+}
+
 export interface ReviewThresholds {
   inaccuracy: number;
   mistake: number;
@@ -560,7 +628,7 @@ export interface GameSummary {
   accuracy_user: number | null;
   accuracy_opponent: number | null;
   lichess_analyzed: boolean;
-  analysis_status: "none" | "analyzed";
+  analysis_status: "none" | "analyzed" | "ai_reviewed";
 }
 
 export interface GamePage {

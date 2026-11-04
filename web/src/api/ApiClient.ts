@@ -4,6 +4,8 @@ import type {
   AccountStatus,
   Analysis,
   ExplainQuote,
+  GameAiQuote,
+  GameNarrative,
   Explanation,
   LlmPrice,
   LlmSettings,
@@ -263,6 +265,20 @@ export interface ApiClient {
   startExplain(sessionId: number): Promise<string>;
   /** The explanation for the puzzle on the board, or null. Its text is plain: render it escaped (FR-8.7). */
   getExplanation(sessionId: number): Promise<Explanation | null>;
+  // ---- v0.9: a model per AI feature (FR-1.15) and Game Review AI (§11.4) -----------------------
+  /** Game Review's own provider and model, or "same" to follow Explain's; and its reasoning level. */
+  setLlmFeature(feature: "game_review", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
+  /** Can Explain this move run for one of your analyzed moves, and about what would it cost? */
+  getGameMoveQuote(gameId: number, ply: number): Promise<GameAiQuote>;
+  /** Explain this move (FR-11.17), as a job. Then call getGameMoveExplanation. */
+  startGameMoveExplain(gameId: number, ply: number): Promise<string>;
+  /** This move's explanation under the current Game Review model (fresh or saved), or null. Plain text. */
+  getGameMoveExplanation(gameId: number, ply: number): Promise<Explanation | null>;
+  /** The estimate shown before Explain my game (FR-8.11). `n` null: the Key moments setting. */
+  getGameNarrativeQuote(gameId: number, n: number | null): Promise<GameAiQuote>;
+  /** Explain my game (FR-11.18), as a job; only after you confirm the estimate. */
+  startGameNarrative(gameId: number, n: number | null): Promise<string>;
+  getGameNarrative(gameId: number, n: number | null): Promise<GameNarrative | null>;
   // ---- Game library, Game Review and your own puzzles (v0.8) ----------------------------------
   getGamesSettings(): Promise<GamesSettings>;
   setGamesSettings(change: GamesSettingsChange): Promise<GamesSettings>;

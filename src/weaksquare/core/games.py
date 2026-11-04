@@ -487,7 +487,7 @@ class LibraryFilter:
     opening: str = ""
     date_from: str | None = None
     date_to: str | None = None
-    statuses: tuple[str, ...] = ()  # none / analyzed
+    statuses: tuple[str, ...] = ()  # none / analyzed / ai_reviewed (v0.9)
     limit: int = 50
     offset: int = 0
 
