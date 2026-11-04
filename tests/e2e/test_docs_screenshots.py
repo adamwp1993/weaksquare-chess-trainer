@@ -456,7 +456,7 @@ def test_my_games(page) -> None:  # type: ignore[no-untyped-def]
 
 
 def test_game_review(page) -> None:  # type: ignore[no-untyped-def]
-    page.goto(page.base_url + "/")
+    page.goto(page.base_url + "/?showbest=1")  # v0.10: the arrow and engine lines need Show best moves on
     page.get_by_test_id("nav-games").click()
     page.get_by_test_id("review-1").click()
     page.get_by_test_id("eval-graph").wait_for()
@@ -467,7 +467,7 @@ def test_game_review(page) -> None:  # type: ignore[no-untyped-def]
 
 def test_game_review_ai(page) -> None:  # type: ignore[no-untyped-def]
     """v0.9 (FR-11.17, 11.18): Explain my game's narrative, a key moment's note and Explain this move."""
-    page.goto(page.base_url + "/?ai=on")
+    page.goto(page.base_url + "/?ai=on&showbest=1")
     page.get_by_test_id("nav-games").click()
     page.get_by_test_id("review-1").click()
     page.get_by_test_id("narrative-button").filter(has_text="≈ $").click()
@@ -509,3 +509,47 @@ def test_my_puzzles_source(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("match-count").filter(has_text="1 puzzle").wait_for()
     panel_top(page)
     shot(page, "my-puzzles-source")
+
+
+# ---- v0.10 -----------------------------------------------------------------------------------------------
+
+
+def test_review_show_best_off(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-11.35: the review with Show best moves off (the default) at a mistake."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("eval-graph").wait_for()
+    page.get_by_test_id("move-6").click()
+    page.mouse.move(1270, 890)
+    shot(page, "review-show-best-off", full_page=True)
+
+
+def test_analyze_from_here(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-11.34: the free board from a game position, with Stockfish's lines."""
+    page.goto(page.base_url + "/?showbest=1")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("move-5").click()
+    page.get_by_test_id("review-analyze-here").click()
+    play(page, "f3d4", "white")
+    page.get_by_test_id("engine-lines").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "analyze-from-here", full_page=True)
+
+
+def test_coach_report(page) -> None:  # type: ignore[no-untyped-def]
+    """§10.5: a Coach report with its weaknesses, examples and preset."""
+    page.goto(page.base_url + "/?coach=report")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-report").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "coach-report", full_page=True)
+
+
+def test_suggested_mix_banner(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-10.31: the banner when a new suggestion waits behind filters you changed."""
+    page.goto(page.base_url + "/?coach=banner")
+    page.get_by_test_id("suggestion-banner").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "suggested-mix-banner", clip={"x": 0, "y": 0, "width": 1280, "height": 420})

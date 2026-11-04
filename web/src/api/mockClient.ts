@@ -19,6 +19,8 @@
 // v0.7: the AI settings and Explain live in mockLlm.ts (`?ai=on|warn|over|failed|nomodel`).
 // v0.8: the game library, Review and puzzle files live in mockGames.ts (`?games=empty`, `?chesscom=…`,
 // `?file=none`, `?mine=1` starts with one imported puzzle of your own).
+// v0.10: the Coach lives in mockCoach.ts (`?coach=report` starts with one report, `?coach=banner` also with a
+// suggestion waiting behind the banner); `?showbest=1` starts with Show best moves on.
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
