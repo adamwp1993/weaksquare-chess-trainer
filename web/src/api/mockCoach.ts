@@ -1,6 +1,7 @@
 // v0.10: the Coach in the mock client (§10). Fixed, deterministic data for UI work, Playwright and the
 // user-guide screenshots: one report per run, built from the mock library's analyzed game (id 1).
 import { ApiCallError, type CoachParams } from "./ApiClient";
+import { defaultFilters } from "../state/filters";
 import type { GameKind } from "./mockLlm";
 import type {
   CoachAi,
@@ -148,7 +149,7 @@ export class MockCoach {
     return {
       name: "The report's mix",
       spec: {
-        ...(this.h.filters() ?? {}),
+        ...(this.h.filters() ?? defaultFilters()),
         themes: [], match: "any", source: "lichess", my_origins: [], my_share: null, order: "random",
         ratios: [{ themes: ["fork"], weight: 46 }, { themes: ["pin"], weight: 26 }, { themes: ["hangingPiece", "fork"], weight: 14 }, { themes: ["long", "veryLong"], weight: 14 }],
         rating_min: 1450, rating_max: 1750,
