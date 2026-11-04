@@ -290,8 +290,10 @@ export function App() {
             coordinates={coordinates}
             autoExplain={page.explain ?? false}
             onTrain={(p) => {
-              // FR-11.18 Train these: only on your click, after the confirm; saved presets don't change.
-              changeSpec({ ...spec, source: "lichess", themes: p.themes, match: "any", ratios: [], rating_min: p.rating_min, rating_max: p.rating_max });
+              // FR-11.18 Train these: only on your click, after the confirm; saved presets don't change. It sets
+              // the themes and rating; themes need Lichess puzzles and no ratios, so those switch only if they
+              // must. Match ANY/ALL stays yours (v0.9-B3).
+              changeSpec({ ...spec, source: spec.source === "my" ? "lichess" : spec.source, themes: p.themes, ratios: [], rating_min: p.rating_min, rating_max: p.rating_max });
               setPage({ kind: "trainer" });
             }}
           />

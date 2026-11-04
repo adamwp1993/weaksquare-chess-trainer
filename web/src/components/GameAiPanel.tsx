@@ -254,7 +254,9 @@ export function GameNarrativePanel({
               {narrative.preset.rating_min !== null || narrative.preset.rating_max !== null
                 ? ` and the rating range to ${narrative.preset.rating_min ?? "any"}–${narrative.preset.rating_max ?? "any"}`
                 : ""}
-              , replacing the themes and rating you have now. Your saved presets don't change.
+              , replacing the themes and rating you have now. Themes apply only to Lichess puzzles without a mix by
+              ratio, so if you were training My puzzles only, or mixing by ratio, it switches those off too. Your other
+              filters and your saved presets don't change.
             </Text>
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setTrain(false)}>

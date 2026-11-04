@@ -200,14 +200,13 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
               </Text>
             </Stack>
       )}
-      {info && (
-        <Stack gap={4} mt="xs">
-          <Text size="sm" fw={600}>
-            Game Review
-          </Text>
-          <FeatureModelPicker reasoning={full} onError={setError} />
-        </Stack>
-      )}
+      {/* Game Review can be set up on its own provider, even with puzzle Explain off (v0.9-B5). */}
+      <Stack gap={4} mt="xs">
+        <Text size="sm" fw={600}>
+          Game Review
+        </Text>
+        <FeatureModelPicker reasoning={full} onError={setError} />
+      </Stack>
       {full && (
         <>
           <Group grow align="flex-start" key={inputsKey}>

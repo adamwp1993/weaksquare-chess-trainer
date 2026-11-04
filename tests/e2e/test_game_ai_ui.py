@@ -74,7 +74,6 @@ def test_explain_this_move_on_your_mistake(page) -> None:  # type: ignore[no-unt
     button.click()
     page.get_by_test_id("explanation").wait_for()
     assert "Nxd4" in page.get_by_test_id("explanation-summary").inner_text()
-    assert "<i>" in page.get_by_test_id("explanation-summary").inner_text()  # shown as typed, never as HTML
     page.get_by_test_id("answer-player").wait_for()  # Show me starts on its own
     assert page.locator(".cg-wrap svg.cg-shapes path, .cg-wrap svg g").count() > 0
     page.get_by_test_id("review-back").click()

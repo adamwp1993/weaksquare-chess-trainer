@@ -230,12 +230,23 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.9: QA fixes (v0.9-B1 to B6)
+- Context: QA round 1 (`qa/QA-v0.9.md`), PASS WITH ISSUES: six minor bugs.
+- Decision:
+  - **B1:** `FeatureModelPicker` keeps the choice being saved in state, and every change builds on it, so a reasoning change made before a model change's save returns no longer resends the old model.
+  - **B2:** the cache key includes the grading thresholds, since the grades are in the prompt (the User Guide already said new thresholds give a new explanation).
+  - **B3:** Train these keeps Match ANY/ALL. It switches **Puzzles from** to Lichess only when it was My puzzles, and clears ratios, because themes need both; the dialog and the User Guide say so.
+  - **B4:** the Game Review picker is searchable and offers **Use “<typed ID>” with Anthropic / OpenAI** for a valid ID that isn't listed (FR-1.3's typed IDs).
+  - **B5:** Settings and the startup page always show the Game Review block, so it can be set up on its own provider with puzzle Explain off.
+  - **B6:** the mock's move explanation no longer contains literal markup (the user-guide screenshot showed it). Escaping stays covered by the puzzle Explain mock and tests.
+- Consequences: each fix has a regression test (QA's xfail tests now pass).
+
 ### 2026-11-04, v0.9: Game Review AI from the stored analysis, cached with the analysis settings
 - Context: Explain this move and Explain my game (FR-11.17–11.21) need grounded, anonymized context and the v0.7 guardrails, without a second analyzer (CLAUDE.md: one pipeline).
 - Decision:
   - **Built from `game_analysis` only** (`core/game_explain.py`): no engine call. Explain this move turns a `MoveRow` into Explain's own `ExplainInput` (the position before the move, `NO_PREMOVE`, Stockfish's best line cut by `saved_line` as the "solution", the played move as the refutation, and a new optional `GameMoveFact`), so `core/explain.validate()`, `Explanation`, the DTO and `ExplainPanel`'s view are reused unchanged. Explain my game has its own strict schema and `validate_narrative`: a moment must be one of the key moments sent and name the move played there; its better line must start with Stockfish's best move and be legal; annotations need valid squares.
   - **Anonymized by construction** (FR-8.16, 11.19): the narrative's move list is rebuilt as SAN from the UCI moves, never cut from the PGN text, so headers, names, ratings, dates, URLs, clocks and comments can't leak. `tests/unit/test_game_explain.py` checks a PGN full of them, and the live test checks the request that really went out.
-  - **Cache keys** in the existing `llm_cache` (no migration): `game:<id>:<think_s>|<engine>:move:<ply>` and `…:narrative:<N>:<the key-moment plies>`, with provider and model, hashed. Including the analysis settings and the plies goes beyond FR-11.20's (game, ply / N, provider, model): a re-analysis or new thresholds never bring back an answer grounded on other evals (REQUIREMENTS FR-11.20 updated).
+  - **Cache keys** in the existing `llm_cache` (no migration): `game:<id>:<think_s>|<engine>|<thresholds>:move:<ply>` (thresholds added for v0.9-B2) and `…:narrative:<N>:<the key-moment plies>`, with provider and model, hashed. Including the analysis settings and the plies goes beyond FR-11.20's (game, ply / N, provider, model): a re-analysis or new thresholds never bring back an answer grounded on other evals (REQUIREMENTS FR-11.20 updated).
   - **`ai_reviewed`** is a value of the existing `games.analysis_status` (foreseen in `0007_games.sql`). `GamesRepo.mark_ai_reviewed` sets it only from `analyzed`; re-analysis writes `analyzed` again.
   - **The recommended preset** (FR-11.18, minimal per Adam): `core/preset_suggestion.validate_preset` keeps up to 3 known motif or mate theme keys and a rating range that passes `FilterSpec.validate`; anything else is dropped and counted. The prompt lists the allowed keys. Train these is a front-end action on your click, after a confirm.
 - Alternatives: a `game_ai` table (rejected: `llm_cache` already holds validated results by key, and the status is one column); passing the PGN with headers stripped (rejected: a stripping bug would leak; rebuilding from moves can't).

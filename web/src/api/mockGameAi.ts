@@ -12,7 +12,7 @@ export function moveExplanation(move: ReviewMove, provider: string, model: strin
   return {
     summary: played
       ? `${move.san} was the best move here: it keeps the pressure on.`
-      : `${move.san} let your opponent in. ${san} was better: it keeps your pieces covered. <i>Shown as typed.</i>`,
+      : `${move.san} let your opponent in. ${san} was better: it keeps your pieces covered.`,
     steps: [
       {
         ply: 0,

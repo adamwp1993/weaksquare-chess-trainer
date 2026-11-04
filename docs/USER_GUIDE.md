@@ -583,7 +583,7 @@ Once a puzzle is over (you finished the line, or used **Show answer**), the **Ex
 
 Puzzle Explain and [Game Review's AI](#ai-explanations-in-game-review) each have their own model. You can use a cheap, fast model for the many small puzzle explanations and a stronger one for the few, much bigger game explanations.
 - **Puzzle Explain** uses the provider and model described above.
-- **Game Review model:** **Same as Explain** (the default) uses whatever Explain uses. Or pick any model in the price table, from either provider. The list shows about what one **Explain my game** costs on each. The same setting is on the startup page (**Show all options**), in Settings, and on the Review page next to **Explain my game**.
+- **Game Review model:** **Same as Explain** (the default) uses whatever Explain uses. Or pick any model in the price table, from either provider. The list shows about what one **Explain my game** costs on each. To use a model that isn't listed, type its ID and choose **Use “…” with Anthropic** or **with OpenAI**. Like Explain's model, it needs a row in the price table before it can be used. Game Review can be set up even when puzzle Explain has no provider. The same setting is on the startup page (**Show all options**), in Settings, and on the Review page next to **Explain my game**.
 - **Keys are per provider, not per feature.** If Game Review uses a provider that has no key yet, a key field appears under its model.
 - **Reasoning** is set per feature: **Puzzle Explain reasoning** and **Game Review reasoning**.
 - **Shared by every feature:** your keys, the price table, the per-run cap and the monthly budget. Under the budget, Settings shows this month's spend for each feature.
@@ -664,7 +664,7 @@ After about half a minute you get:
 - the **turning point** (click it to jump there),
 - the **recurring themes** of your mistakes and 2–3 **takeaways**,
 - a note on **each key moment** in the Key moments list, with **Show on the board** for its arrows and the better line,
-- often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces only the themes and rating you had. Your saved presets don't change.
+- often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
 
 The game then shows **AI-reviewed** in My games.
 

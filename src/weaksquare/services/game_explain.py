@@ -11,8 +11,9 @@ pattern:
 3. **Result:** the explanation under today's settings: a fresh one with its cost, or the cached one for free.
 
 **Cache keys** (FR-11.20): (game, ply, provider, model) for a move and (game, N, provider, model) for the
-narrative, plus the analysis settings (think time and engine) and, for the narrative, the key-moment
-plies, so re-analysis or new thresholds never bring back an answer grounded on other evals (v0.9 planning).
+narrative, plus the analysis settings (think time and engine), the grading thresholds (v0.9-B2) and, for
+the narrative, the key-moment plies, so re-analysis or new thresholds never bring back an answer grounded on
+other evals or grades (v0.9 planning).
 
 Explain this move is for **your** moves (every move when you review both sides). A finished Explain my game
 marks the game **AI-reviewed** (FR-11.25); re-analysis sets it back to Analyzed.
@@ -161,7 +162,10 @@ class GameExplainService:
         return game, rows
 
     def _key(self, game: GameRow, what: tuple[Any, ...], provider: str, model: str) -> str:
-        analysis = f"{game.analysis_think_s}|{game.analysis_engine}"
+        th = self._prefs.settings().thresholds  # the grades in the prompt depend on them (v0.9-B2)
+        analysis = (
+            f"{game.analysis_think_s}|{game.analysis_engine}|{th.inaccuracy},{th.mistake},{th.blunder},{th.decided}"
+        )
         ref = ":".join(["game", str(game.id), analysis, *(str(w) for w in what)])
         return cache_key(CacheKeyParts(ref, (), provider, model))
 
