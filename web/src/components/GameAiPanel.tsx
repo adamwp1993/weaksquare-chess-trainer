@@ -26,7 +26,7 @@ function jobError(job: ReturnType<typeof useJob>): string | null {
 
 // ---- Explain this move (FR-11.17) -------------------------------------------------------------------
 
-export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: number; onShowMe: (x: Explanation) => void }) {
+export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: number; onShowMe?: (x: Explanation) => void }) {
   const { settings, configured } = useGameReviewReady();
   const [quote, setQuote] = useState<GameAiQuote | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: nu
     if (!doneJob) return;
     api.getGameMoveExplanation(gameId, ply).then((r) => {
       setX(r);
-      if (r) showMeRef.current(r);
+      if (r) showMeRef.current?.(r);
     }, () => undefined);
   }, [doneJob, gameId, ply]);
 
@@ -93,7 +93,7 @@ export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: nu
           {error ?? jobError(job)}
         </Alert>
       )}
-      {x && <ExplanationView x={x} onShowMe={() => onShowMe(x)} />}
+      {x && <ExplanationView x={x} onShowMe={onShowMe ? () => onShowMe(x) : undefined} />}
     </Stack>
   );
 }
@@ -335,11 +335,11 @@ function NarrativeView({ x, onJump, onTrain }: { x: GameNarrative; onJump: (ply:
 }
 
 /** A key moment's note from Explain my game, under its entry in the key-moments list. */
-export function MomentNote({ m, onShow }: { m: GameMoment; onShow: () => void }) {
+export function MomentNote({ m, onShow }: { m: GameMoment; onShow?: () => void }) {
   return (
     <Stack gap={2} mt={4} data-testid={`moment-note-${m.ply}`}>
       <Text size="xs">{m.text}</Text>
-      {(m.annotations.length > 0 || m.better_uci.length > 0) && (
+      {onShow && (m.annotations.length > 0 || m.better_uci.length > 0) && (
         <Button size="compact-xs" variant="subtle" w="fit-content" onClick={onShow} data-testid={`moment-show-${m.ply}`}>
           Show on the board{m.better_line.length ? ` (${m.better_line.join(" ")})` : ""}
         </Button>

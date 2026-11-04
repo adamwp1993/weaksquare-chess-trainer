@@ -7,7 +7,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Analysis, EngineStatus } from "../api/types";
 import { pvToSan } from "../state/engine";
@@ -21,6 +21,8 @@ const DEBOUNCE_MS = 250;
 // React text (engine output is untrusted and never rendered as HTML).
 export function EnginePanel({
   sessionId,
+  analyze,
+  startLabel = "Puzzle start:",
   startFen,
   fen,
   purpose,
@@ -30,7 +32,11 @@ export function EnginePanel({
   onShowLine,
   children,
 }: {
-  sessionId: number;
+  sessionId?: number;
+  /** v0.10: where the evals come from (Analyze from here in Game Review); default the puzzle session's. */
+  analyze?: (fen: string, purpose: "start" | "panel" | "board") => Promise<Analysis>;
+  /** The pinned line's label: "Puzzle start:" or "Game position:". */
+  startLabel?: string;
   startFen: string;
   fen: string;
   purpose: "panel" | "board";
@@ -48,18 +54,27 @@ export function EnginePanel({
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(fen);
+  const ask = useRef(analyze);
+  useEffect(() => {
+    ask.current = analyze;
+  }, [analyze]);
+  const run = useCallback(
+    (f: string, p: "start" | "panel" | "board") =>
+      ask.current ? ask.current(f, p) : api.analyzePosition(sessionId ?? 0, f, p),
+    [sessionId],
+  );
 
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    api.analyzePosition(sessionId, startFen, "start").then(
+    run(startFen, "start").then(
       (a) => alive && !a.superseded && setStart(a),
       (e: Error) => alive && setError(e.message),
     );
     return () => {
       alive = false;
     };
-  }, [sessionId, startFen, ready]);
+  }, [run, startFen, ready]);
 
   useEffect(() => {
     latest.current = fen;
@@ -72,7 +87,7 @@ export function EnginePanel({
     setThinking(true);
     const timer = window.setTimeout(() => {
       setError(null);
-      api.analyzePosition(sessionId, fen, purpose).then(
+      run(fen, purpose).then(
         (a) => {
           if (a.superseded || latest.current !== fen) return; // a newer position was asked for
           setCurrent(a);
@@ -86,7 +101,7 @@ export function EnginePanel({
       );
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [sessionId, fen, startFen, purpose, ready]);
+  }, [run, fen, startFen, purpose, ready]);
 
   const shown = fen === startFen ? start : current;
   const best =
@@ -112,7 +127,7 @@ export function EnginePanel({
         </Group>
         <Group gap={6} data-testid="engine-start-eval">
           <Text size="sm" c="dimmed">
-            Puzzle start:
+            {startLabel}
           </Text>
           {start ? (
             <Badge variant="light" style={{ textTransform: "none" }}>

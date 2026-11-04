@@ -138,7 +138,7 @@ export function ExplainPanel({
   );
 }
 
-export function ExplanationView({ x, onShowMe }: { x: Explanation; onShowMe: () => void }) {
+export function ExplanationView({ x, onShowMe }: { x: Explanation; onShowMe?: () => void }) {
   return (
     <Paper withBorder p="sm" radius="md" data-testid="explanation">
       <Stack gap={6}>
@@ -146,9 +146,11 @@ export function ExplanationView({ x, onShowMe }: { x: Explanation; onShowMe: () 
           <Text fw={600} size="sm">
             Explanation
           </Text>
-          <Button size="compact-xs" variant="subtle" onClick={onShowMe} data-testid="explain-show-me">
-            Show me
-          </Button>
+          {onShowMe && (
+            <Button size="compact-xs" variant="subtle" onClick={onShowMe} data-testid="explain-show-me">
+              Show me
+            </Button>
+          )}
         </Group>
         <Text size="sm" data-testid="explanation-summary">
           {x.summary}

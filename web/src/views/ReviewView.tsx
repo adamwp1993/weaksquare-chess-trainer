@@ -3,12 +3,17 @@
 // refutation at any move (all from the stored analysis), and Retry mode on your mistakes.
 // v0.9 (§11.4): Explain this move on your moves, Explain my game with its Confirm dialog and the Game Review
 // model dropdown, the AI's notes on the key moments, and Train these.
-import { Alert, Badge, Button, Grid, Group, Paper, Progress, Radio, Stack, Table, Text, Title } from "@mantine/core";
+// v0.10: Show best moves (FR-11.35), off by default and remembered, hides everything that gives the better
+// move away; Analyze from here (FR-11.34) opens a free board on the interactive engine.
+import { Alert, Badge, Button, Grid, Group, Paper, Progress, Radio, Stack, Switch, Table, Text, Title } from "@mantine/core";
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
-import type { Explanation, GameMoment, GameNarrative, GameReview, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
+import type { EngineStatus, Explanation, GameMoment, GameNarrative, GameReview, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
+import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
+import { EnginePanel } from "../components/EnginePanel";
+import { legalArrow } from "../state/engine";
 import { answerPositions, AnswerPlayer } from "../components/AnswerPlayer";
 import { Board, type BoardShape } from "../components/Board";
 import { EvalGraph } from "../components/EvalGraph";
@@ -65,6 +70,25 @@ export function ReviewView({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  const [showBest, setShowBest] = useState(false); // FR-11.35: off until you turn it on
+  const [free, setFree] = useState<AnalysisState | null>(null); // Analyze from here (FR-11.34)
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const [freeBest, setFreeBest] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getSettings().then((s) => setShowBest(s.show_best), () => undefined);
+  }, []);
+  const toggleBest = (on: boolean) => {
+    setShowBest(on);
+    api.setSetting("review.show_best", on).catch((e: Error) => setError(e.message));
+  };
+  const loadEngine = useCallback(() => {
+    api.getEngineStatus().then(setEngine, () => undefined);
+  }, []);
+  const analyzeHere = useCallback(
+    (f: string, purpose: "start" | "panel" | "board") => api.analyzeGamePosition(gameId, f, purpose === "board" ? "board" : "panel"),
+    [gameId],
+  );
 
   const load = useCallback(() => {
     api.getReview(gameId).then(setReview, (e: Error) => setError(e.message));
@@ -95,9 +119,18 @@ export function ReviewView({
   const retrying = retry !== null && review !== null;
   useShortcuts(
     {
-      ArrowLeft: () => (showing ? setShowing({ ...showing, step: Math.max(0, showing.step - 1) }) : go(cursor - 1)),
+      ArrowLeft: () =>
+        free
+          ? setFree({ ...free, step: Math.max(0, free.step - 1) })
+          : showing
+            ? setShowing({ ...showing, step: Math.max(0, showing.step - 1) })
+            : go(cursor - 1),
       ArrowRight: () =>
-        showing ? setShowing({ ...showing, step: Math.min(showing.line.length, showing.step + 1) }) : go(cursor + 1),
+        free
+          ? setFree({ ...free, step: Math.min(free.positions.length - 1, free.step + 1) })
+          : showing
+            ? setShowing({ ...showing, step: Math.min(showing.line.length, showing.step + 1) })
+            : go(cursor + 1),
     },
     !retrying,
   );
@@ -199,18 +232,23 @@ export function ReviewView({
   }
 
   // ---- the review ------------------------------------------------------------------------------
-  const fen = showing ? answerPositions(showing.fen, showing.line)[showing.step].fen : cursor < n ? moves[cursor].fen_before : end;
+  const gameFen = cursor < n ? moves[cursor].fen_before : end;
+  const fen = free ? free.positions[free.step].fen : showing ? answerPositions(showing.fen, showing.line)[showing.step].fen : gameFen;
   const here = cursor < n ? moves[cursor] : null; // the next move: its position's engine lines
   const last = cursor > 0 ? moves[cursor - 1] : null; // the move just played
   const yours = (m: ReviewMove) => g.user_color === "both" || g.user_color === m.mover;
   const isError = (m: ReviewMove | null) => !!m && !!m.classification && m.classification in CLASS_COLOR;
-  const shapes: BoardShape[] = showing?.shapes?.[showing.step] ?? [];
-  if (!showing && here?.best_move) shapes.push({ orig: here.best_move.slice(0, 2), dest: here.best_move.slice(2, 4), color: "green" });
-  const lastMove = showing
-    ? answerPositions(showing.fen, showing.line)[showing.step].lastMove
-    : last
-      ? sq(last.uci)
-      : null;
+  const shapes: BoardShape[] = free ? [] : (showing?.shapes?.[showing.step] ?? []);
+  if (!free && !showing && showBest && here?.best_move) shapes.push({ orig: here.best_move.slice(0, 2), dest: here.best_move.slice(2, 4), color: "green" });
+  const freeArrow = free && showBest ? legalArrow(fen, freeBest ?? undefined) : null;
+  if (freeArrow) shapes.push({ orig: freeArrow[0], dest: freeArrow[1], color: "green" });
+  const lastMove = free
+    ? free.positions[free.step].lastMove
+    : showing
+      ? answerPositions(showing.fen, showing.line)[showing.step].lastMove
+      : last
+        ? sq(last.uci)
+        : null;
 
   return (
     <Stack gap="md" data-testid="review-view">
@@ -227,6 +265,14 @@ export function ReviewView({
           </Text>
         </Group>
         <Group gap="xs">
+          {review.analyzed && (
+            <Switch
+              label="Show best moves"
+              checked={showBest}
+              onChange={(e) => toggleBest(e.currentTarget.checked)}
+              data-testid="review-show-best"
+            />
+          )}
           {review.analyzed && review.retry_plies.length > 0 && (
             <Button
               onClick={() => {
@@ -303,8 +349,46 @@ export function ReviewView({
       <Grid gap="lg">
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Stack gap="xs">
-            <Board fen={fen} orientation={orientation} movable={null} lastMove={lastMove} coordinates={coordinates} shapes={shapes} maxWidth={560} />
-            {showing ? (
+            <Board
+              fen={fen}
+              orientation={orientation}
+              movable={free ? "both" : null}
+              onMove={(uci) => {
+                const next = free ? analysisMove(free, uci) : null;
+                if (next) setFree(next);
+              }}
+              lastMove={lastMove}
+              coordinates={coordinates}
+              shapes={shapes}
+              maxWidth={560}
+            />
+            {free ? (
+              <Stack gap="xs" data-testid="review-free">
+                <AnalysisControls
+                  state={free}
+                  onStep={(s) => setFree({ ...free, step: s })}
+                  onReset={() => setFree(openAnalysis(free.positions[0].fen))}
+                  onClose={() => setFree(null)}
+                  closeLabel="Back to the game"
+                />
+                {showBest ? (
+                  <EnginePanel
+                    analyze={analyzeHere}
+                    startLabel="Game position:"
+                    startFen={free.positions[0].fen}
+                    fen={fen}
+                    purpose="board"
+                    status={engine}
+                    onStatusChanged={loadEngine}
+                    onBestMove={setFreeBest}
+                  />
+                ) : (
+                  <Text size="xs" c="dimmed" data-testid="review-free-hidden">
+                    Stockfish's eval and lines stay hidden while Show best moves is off.
+                  </Text>
+                )}
+              </Stack>
+            ) : showing ? (
               <Stack gap={4}>
                 <AnswerPlayer positions={answerPositions(showing.fen, showing.line)} step={showing.step} onStep={(s) => setShowing({ ...showing, step: s })} />
                 {showing.notes?.[showing.step] && (
@@ -325,6 +409,18 @@ export function ReviewView({
                 </Text>
                 <Button size="xs" variant="default" onClick={() => go(cursor + 1)} aria-label="Forward" data-testid="review-next">›</Button>
                 <Button size="xs" variant="default" onClick={() => go(n)} aria-label="End">›|</Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  onClick={() => {
+                    loadEngine();
+                    setShowing(null);
+                    setFree(openAnalysis(gameFen));
+                  }}
+                  data-testid="review-analyze-here"
+                >
+                  Analyze from here
+                </Button>
               </Group>
             )}
             {review.analyzed && last && (
@@ -341,8 +437,8 @@ export function ReviewView({
                   )}
                   {last.eval_text && <Text size="sm" c="dimmed">{last.eval_text}</Text>}
                 </Group>
-                {isError(last) && last.best_san && (
-                  <Text size="sm">
+                {showBest && isError(last) && last.best_san && (
+                  <Text size="sm" data-testid="review-better">
                     Better was {last.best_san}
                     {last.cp_loss ? ` (it cost about ${(last.cp_loss / 100).toFixed(1)})` : ""}.
                   </Text>
@@ -352,10 +448,10 @@ export function ReviewView({
                     Why {last.san} fails: show me
                   </Button>
                 )}
-                {yours(last) && <MoveExplain key={last.ply} gameId={gameId} ply={last.ply} onShowMe={showExplanation} />}
+                {yours(last) && <MoveExplain key={last.ply} gameId={gameId} ply={last.ply} onShowMe={showBest ? showExplanation : undefined} />}
               </Paper>
             )}
-            {review.analyzed && !showing && here && here.lines.length > 0 && (
+            {review.analyzed && showBest && !showing && !free && here && here.lines.length > 0 && (
               <Paper withBorder p="sm" data-testid="review-lines">
                 <Text size="xs" c="dimmed" mb={4}>
                   Engine lines here ({here.mover} to move)
@@ -435,7 +531,8 @@ export function ReviewView({
                       <Group justify="space-between" wrap="nowrap">
                         <Button variant="subtle" size="compact-sm" onClick={() => go(p + 1)}>
                           {moveLabel(p)} Played {m.san}
-                          {m.symbol}, better was {m.best_san ?? "?"}
+                          {m.symbol}
+                          {showBest ? `, better was ${m.best_san ?? "?"}` : ""}
                         </Button>
                         <Group gap={4} wrap="nowrap">
                           {m.reason && <Badge size="xs" variant="outline">{m.reason}</Badge>}
@@ -461,7 +558,7 @@ export function ReviewView({
                       {notes.has(p) && (
                         <MomentNote
                           m={notes.get(p)!}
-                          onShow={() => {
+                          onShow={!showBest ? undefined : () => {
                             const note = notes.get(p)!;
                             const arrows = note.annotations.map((a) => ({ orig: a.orig, dest: a.dest, color: a.color }));
                             setShowing({ fen: m.fen_before, line: note.better_uci, step: 0, shapes: [arrows], notes: [note.text] });
