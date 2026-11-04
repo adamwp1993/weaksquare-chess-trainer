@@ -334,3 +334,36 @@ No `-m live`, no credentials. The fix commit touched no migration and added no d
 - ruff check and ruff format are clean with the new files.
 
 **For Adam's manual test:** the round-1 list still applies. B4 and B6 are fixed, so in step 5 try Danger spotting after choosing My puzzles: it should start on Lichess DB. In step 3, if you type your chess.com name in the Import dialog, type it carefully (B11).
+
+---
+
+# Round 3: re-verification of commit `bc09026` (2026-11-04)
+
+## Final verdict: **PASS**
+
+B10, B11 and B12 are fixed. No bug from any round is still open, and the re-test found no new ones. The fix commit changed only `core/puzzle_files.py`, `services/analysis.py`, `services/games.py` and ARCHITECTURE §7. It added no migration, dependency or DTO change.
+
+| Bug | Result | Evidence |
+|---|---|---|
+| B10 thresholds changed mid-analysis | **Fixed** | `test_qa_r2_thresholds_changed_while_a_game_is_analyzed_reach_that_game` passes without its xfail marker. `_analyze` now regrades the finished game when the thresholds changed during the run |
+| B11 mistyped chess.com name linked | **Fixed** | `test_qa_r2_a_username_whose_game_isnt_found_is_not_linked` passes: a failed search links nothing. New `test_qa_r3_a_found_game_links_the_typed_name_only_when_none_is_linked`: a found game still detects your color from the typed name, and an already-linked name is never replaced. B5's own test still passes |
+| B12 CSV blank rows and the cap | **Fixed** | `test_qa_r2_a_csv_at_the_cap_with_a_trailing_blank_line_is_not_over_the_cap` passes. New `test_qa_r3_blank_rows_keep_their_row_numbers_and_dont_count`: blank rows don't count toward the cap, and reported entry numbers are still the file's row numbers |
+
+**Residual, not filed:** B10 leaves a window of a few milliseconds. If the thresholds change after the job reads them back but before it stores the game, that game keeps the previous grades until the next threshold change. It's not practically reachable from the UI.
+
+## Commands run (round 3)
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1512 passed, 1 skipped**, 399 deselected (250 s), rc 0 |
+| `uv run pytest tests/integration/test_qa_v08_round2.py tests/integration/test_qa_v08_round3.py` | **7 passed** (the B10–B12 regression tests plus the round 3 tests) |
+| `uv run pytest -m e2e` | **238 passed** (608 s), rc 0 |
+| `uv run ruff check .` / `ruff format --check .` | clean |
+
+No `-m live`, no credentials, and no product code changed.
+
+## Tests added (round 3)
+- `tests/integration/test_qa_v08_round3.py`:
+  - `test_qa_r3_a_found_game_links_the_typed_name_only_when_none_is_linked`
+  - `test_qa_r3_blank_rows_keep_their_row_numbers_and_dont_count`
+
+**For Adam's manual test:** the round-1 list still applies, with no known open bugs.
