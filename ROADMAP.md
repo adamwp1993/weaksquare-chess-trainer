@@ -211,6 +211,26 @@ Scope:
 
 ---
 
+## v0.12: Training plan + journal
+**Goal:** a routine to follow and a record of what you did (REQUIREMENTS §10.12; Adam, 2026-11-04, from the v0.10 manual test).
+- **Training plan** (FR-10.61–10.65): 1–4 weeks of daily sessions from your latest Coach report, sized by days per week and minutes per day; tasks of a closed set of types (puzzle sessions, puzzles from your games, Retry, game review, lesson pointers, reflections) that open where they happen and tick themselves off; a Plan page and a **Today's plan** card. A new migration stores plans, days and tasks.
+- **AI coaching includes the plan** (FR-10.66): the LLM proposes a plan in a strict schema, validated task by task with the deterministic plan filling gaps; the next run gets the plan's progress as aggregates.
+- **Training journal** (FR-10.67–10.71): your notes, the automatic daily log, game reflections from Game Review, a Journal page with filters and search, and an opt-in **Include my journal** for AI coaching with a preview.
+- **Docs:** User Guide chapters on the plan and the journal; the privacy section says what Include my journal sends.
+
+**Done when:**
+- The deterministic plan fits the minutes and days set, weights time by weakness score, and every task type opens its screen (tests per type).
+- A puzzle task never changes your Mixer filters or saved presets (test).
+- Each task type ticks itself off from the real events, and manual tick / skip / swap work; carry-over follows the setting.
+- AI plan validation: an unknown task type, theme, mode or game reference is dropped; an empty or broken plan falls back to the deterministic one; the plan-progress part of the prompt has aggregates only (test).
+- The daily log is computed from stored data and matches Stats for the same day (test).
+- A game reflection appears in the game and in the journal, and links back to the position.
+- Prompt tests: journal text appears only with Include my journal; the preview shows exactly what is sent; no platform ids or URLs.
+
+**Adam's manual test:** run the Coach → build a 2-week plan at 5 days × 20 min → follow two days from the Today card (puzzle task, Retry task, a review with a reflection) → check they tick off and the Plan page adds up → write two journal notes → run AI coaching with Include my journal (check the preview) → use the AI's plan and compare it with the deterministic one.
+
+---
+
 ## v1.0: Fix tracking + release
 - **Checkpoints** every 10 eligible games plus Run now; weakness metrics and statuses with the sample-size guard, including v0.11's whole-game weakness kinds; Progress page with line charts per weakness and for overall game health (blunders, mistakes and inaccuracies per 10 games, one point per checkpoint over the rolling window; FR-10.38); optional auto AI summary (§10.8).
 - Release from source (NFR-8): a first-run wizard (puzzle DB download, Stockfish install, both through the existing install services), the setup script's Start-menu shortcut, and a GitHub Release from the `v1.0` tag with notes from CHANGELOG. No packaged `.exe`.

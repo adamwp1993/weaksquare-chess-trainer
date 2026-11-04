@@ -334,7 +334,9 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - from v0.11, the Coach's **game digests** (FR-10.52), which carry SAN only for the opening and the key moments
   - from v0.11, with **Advanced analysis** switched on and confirmed (FR-10.56), the SAN move lists of the games in that run, up to its game cap
 
-  Otherwise the Coach sends aggregates and example positions (§10). (Rule changed by Adam, 2026-11-03, for whole-game coaching.)
+  - from v0.12, with **Include my journal** switched on and previewed (FR-10.71), your journal notes and reflections for the report's period, as written
+
+  Otherwise the Coach sends aggregates and example positions (§10), and from v0.12 the current training plan's progress as aggregates (FR-10.66). (Rule changed by Adam, 2026-11-03, for whole-game coaching; journal added 2026-11-04.)
 
 ---
 
@@ -524,6 +526,33 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
   - **Links open in your default browser.** The app never fetches those sites, and the search terms go to the site you click (the User Guide's privacy section says so).
 - **FR-10.60** **Include my notes** (a per-run option, **off by default**): adds your mistake-reason notes (§7.3) for the games and puzzles in the run to the prompt. Before Confirm, you see exactly which notes will be sent.
 
+### 10.12 Training plan and training journal (v0.12; Adam, 2026-11-04)
+**Goal:** turn the Coach's diagnosis into a routine you can follow, and keep a record of what you did and what you learned, so the Coach (and you) can see what's working. Requested by Adam during the v0.10 manual test.
+
+**Training plan**
+- **FR-10.61** **Built from your weaknesses:** a plan of **1–4 weeks** (default 2) from your latest Coach report (with v0.11's whole-game weaknesses when present). You set **days per week** (default 5) and **minutes per day** (default 20). The top weaknesses get the most time; a weakness reported as fixed later (v1.0) keeps a small maintenance share.
+- **FR-10.62** **Daily sessions:** each training day has 2–4 **tasks** that fit the minutes you set. Task types (a closed list, so every task is something the app can open):
+  - a **puzzle session**: filters (themes, rating, source, own-game share), a mode and a count, e.g. *20 Danger-spotting puzzles: forks*
+  - **puzzles from your games** at a severity level (§10.9)
+  - **Retry your mistakes** in a named game (FR-11.15)
+  - **review a game** in Game Review, with Show best moves off (FR-11.35)
+  - a **lesson pointer** (FR-10.59, v0.11)
+  - a **journal reflection** (FR-10.66)
+- **FR-10.63** **Tasks open where they happen:** **Start** opens the task's screen ready to go. A puzzle task starts a session with the task's filters for that session only; it never changes your saved presets or your Mixer filters.
+- **FR-10.64** **Progress ticks itself off:** a puzzle task is done when its session reaches the count; Retry when every mistake was tried; a review when the game was stepped through; a reflection when the entry is saved. You can also tick, skip or swap a task by hand. A missed day's tasks are either carried over or dropped (setting, default carried over, at most one day's worth).
+- **FR-10.65** **Plan page and Today card:** a **Plan** page shows each week, its days, done / skipped / left and minutes spent; the main page shows **Today's plan** with Start on each task. A new plan replaces the current one only when you confirm; old plans stay in the history with their completion.
+- **FR-10.66** **AI coaching includes the plan** (Adam, 2026-11-04):
+  - With AI coaching (§10.6, §10.11), the LLM's answer includes a **proposed plan** in a strict schema: weeks → days → tasks of the FR-10.62 types only, with theme keys, modes, counts, game references and lesson topics validated like presets (FR-10.23). Invalid tasks are dropped and the **deterministic plan** fills the gaps, so there is always a complete plan. **Use this plan** (with a confirm) makes it current.
+  - The next AI coaching run is told how the current plan went, as **aggregates only**: tasks done and skipped per type and weakness, minutes, and puzzle accuracy per task theme. No journal text unless FR-10.71's option is on.
+  - Without an AI key the plan is still built deterministically; all §9.3 guardrails apply.
+
+**Training journal**
+- **FR-10.67** **Your notes:** dated entries you write (up to 5,000 characters), with optional tags: a weakness, a game (and ply), a plan day. You can edit and delete them.
+- **FR-10.68** **Automatic log:** for each day, the app adds a read-only summary from what's already stored (no extra tracking): puzzles by mode and source with first-try accuracy and the themes you missed most, games synced, analyzed and reviewed, Retry results, plan tasks done, Coach runs and their top weakness.
+- **FR-10.69** **Game reflections:** in Game Review, **Add a note** on a game or on one of its moves saves a journal entry linked to that game and ply. The game shows its notes (with a marker on the move), and the journal links back to the position.
+- **FR-10.70** **Journal page:** one timeline of your notes, reflections and the daily log, newest first, with filters (weakness, game, type, date range) and text search. Entries never leave the PC (privacy section updated).
+- **FR-10.71** **Feeds the AI coach (opt-in):** a per-run **Include my journal** option (off by default) adds your notes and reflections from the report's period to the AI coaching prompt, with a preview of exactly what is sent before Confirm. It extends v0.11's **Include my notes** (FR-10.60). Game references go as the report's own game labels, never as platform ids or URLs; names you typed yourself are sent only if you include them, and the preview warns that notes are sent as written.
+
 ## 11. Game Review: import a game, analyze it, explain better moves
 
 **Principle:** Stockfish grades every move locally, for free. The AI explains key moments using the same grounded-context and validation rules as Explain (§9.2). Without an LLM key, Game Review still works as a full engine review.
@@ -644,7 +673,7 @@ The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.0, each a stop-a
 | M5 Modes + stats + reasons | v0.5, v0.6 |
 | M4 LLM Explain + guardrails | v0.7 (moved after the modes; guardrails still ship before the first LLM call) |
 | M6 Game Review | v0.8 (engine), v0.9 (AI) |
-| M7 Coach + fix tracking | v0.10 (Coach), v0.11 (whole-game coaching), v1.0 (checkpoints, release) |
+| M7 Coach + fix tracking | v0.10 (Coach), v0.11 (whole-game coaching), v0.12 (training plan and journal), v1.0 (checkpoints, release) |
 
 ---
 
