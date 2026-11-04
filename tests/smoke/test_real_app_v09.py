@@ -49,7 +49,7 @@ def test_game_review_model_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_d
                     break
                 page.wait_for_timeout(100)
             assert settings["ok"], settings
-            explain, game_review = settings["data"]["features"]
+            explain, game_review = settings["data"]["features"][:2]  # v0.10 adds "coach" (v0.10-B8)
             assert (explain["feature"], explain["effective_model"]) == ("explain", "")
             assert (game_review["choice"], game_review["model"], game_review["reasoning"]) == (
                 "anthropic", "claude-sonnet-5-5", "medium")  # fmt: skip

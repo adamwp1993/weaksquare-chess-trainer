@@ -48,6 +48,8 @@ RETRY_CLASSES = ("mistake", "blunder")
 class Games(Protocol):
     def get(self, game_id: int) -> GameRow | None: ...
 
+    def subjects(self, game_id: int) -> dict[str, str | None]: ...
+
 
 class Analysis(Protocol):
     def rows(self, game_id: int) -> list[MoveRow]: ...
@@ -227,7 +229,12 @@ class ReviewService:
         return self._clock.now().astimezone(UTC).isoformat(timespec="seconds")
 
     def _yours(self, game: GameRow, mover: str) -> bool:
-        return game.user_color == "both" or game.user_color == mover
+        """Your move in your game. Another player's game (FR-10.3) is reviewed from their side, but nothing
+        in it is recorded as yours: no reasons, no Retry (v0.10-B1)."""
+        return self._mine(game) and (game.user_color == "both" or game.user_color == mover)
+
+    def _mine(self, game: GameRow) -> bool:
+        return "me" in self._games.subjects(game.id)
 
     def _suggestion(self, row: MoveRow) -> str | None:
         reply = row.refutation[0] if row.refutation else None
@@ -284,10 +291,12 @@ class ReviewService:
         colors = ("white", "black") if game.user_color == "both" else (game.user_color,) if game.user_color else ()
         moments: list[int] = []
         retry: list[int] = []
+        mine = self._mine(game)
         if analyzed:
             for c in colors:
                 moments += [r.ply for r in key_moments(rows, c, st.key_moments)]
-                retry += [r.ply for r in rows if r.mover == c and r.classification in RETRY_CLASSES]
+                if mine:
+                    retry += [r.ply for r in rows if r.mover == c and r.classification in RETRY_CLASSES]
         summaries = (
             (side_summary(rows, "white", game.accuracy_white), side_summary(rows, "black", game.accuracy_black))
             if analyzed
@@ -302,7 +311,7 @@ class ReviewService:
             summaries=summaries,
             key_moments=tuple(sorted(moments)),
             retry_plies=tuple(sorted(retry)),
-            ask_reasons=self._ask.reasons_ask() in ("always", "game_review"),
+            ask_reasons=mine and self._ask.reasons_ask() in ("always", "game_review"),
         )
 
     def _row(self, game: GameRow, ply: int) -> MoveRow:

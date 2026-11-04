@@ -233,6 +233,19 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.10: QA fixes (v0.10-B1 to B8)
+- Context: QA round 1 (`qa/QA-v0.10.md`), PASS WITH ISSUES: two major and six minor bugs.
+- Decision:
+  - **B1:** "yours" means the `me` row in `game_subjects`, not `games.user_color` (which holds another player's color for their games). `stats.game_reason_rows` joins it, and Review offers Retry and reason chips only on your games (`ReviewService._mine`).
+  - **B2:** `missed_or_allowed`: a move that walks into a forced mate is **Allowed** even from a winning position. A missed win that only loses ground stays Missed (checked with the real engine both ways). REQUIREMENTS FR-10.11 notes it.
+  - **B3:** `App.tsx` reloads the filters and the suggestion when any `coach_run` job ends, whatever page is open.
+  - **B4:** with Show best moves off, Explain this move hides its step-by-step line (the better line), as FR-11.35 hides the AI's better lines.
+  - **B5:** the Coach page chooses all your games, Lichess only or chess.com only (`platforms`, FR-10.3).
+  - **B6:** "1 game" in Saved reports; the User Guide states Lichess's mate-in-one rule.
+  - **B7:** `get_theme_catalog` returns no themes before a puzzle database exists, instead of crashing.
+  - **B8:** the v0.9 smoke test reads the first two of the three AI features.
+- Consequences: each fix has a regression test (QA's xfail tests now pass).
+
 ### 2026-11-04, v0.10: AI coaching on a report: allow-listed prompt, the Coach feature, stored on the report
 - Context: FR-10.21–10.25 and FR-1.15 (the Coach gets its own model).
 - Decision:

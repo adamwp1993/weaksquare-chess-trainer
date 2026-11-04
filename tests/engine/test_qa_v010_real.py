@@ -62,10 +62,6 @@ def test_qa_a_missed_mate_in_a_real_game_becomes_your_puzzle(real_services) -> N
     assert view.player_color == "white" and not view.solve_as_opponent
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="v0.10-B2: from a +1.5 position, a blunder that allows mate is classed Missed (EDGE rule), so no Allowed puzzle",
-)
 def test_qa_an_allowed_mate_in_a_real_game_is_solved_as_your_opponent(real_services) -> None:  # type: ignore[no-untyped-def]  # noqa: F811
     s, runner = real_services
     gid = _analyze(s, runner, "black")

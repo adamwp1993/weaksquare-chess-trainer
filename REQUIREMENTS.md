@@ -369,6 +369,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - **Missed:** you had a winning tactic. Its line comes from Stockfish's principal variation from your position.
   - **Allowed:** your move let the opponent win material or mate. Its line comes from Stockfish's principal variation after your move.
   - **Other:** a positional or untaggable mistake.
+  - *(v0.10-B2:)* a move that walks into a forced mate counts as **Allowed** even when you had a winning tactic before it.
 - **FR-10.12** Tag the Missed and Allowed lines with the **lichess-puzzler tagger**, so the themes match the puzzle DB exactly (`fork`, `capturingDefender`, `deflection`, and so on).
 - **FR-10.13** Also record the phase (opening / middlegame / endgame), low clock (under 10% of time remaining, when clock data exists), and color.
 - **FR-10.14** Show progress and estimated time remaining, and allow cancel. Analysis runs in the background without blocking solving.

@@ -77,7 +77,7 @@ export class MockCoach {
     this.last = { ...p, game_ids: [] };
     const id = this.h.jobId();
     this.running = id;
-    this.h.calls.push(`coach:${p.source}:${p.player ?? "me"}:${p.game_ids.length || p.count}`);
+    this.h.calls.push(`coach:${p.source}:${p.player ?? "me"}:${p.game_ids.length || p.count}`, `coachPlatforms:${p.platforms.join(",")}`);
     const steps = ["Syncing your games…", "Analyzing 3 games on your PC: about 2 min left", "Writing the report…"];
     steps.forEach((message, i) =>
       setTimeout(() => this.h.emit({ id, kind: "coach_run", state: "running", progress: i / 3, message, error_code: null }), i * 200),

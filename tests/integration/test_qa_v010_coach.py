@@ -192,7 +192,6 @@ def test_qa_a_coach_allowed_puzzle_takes_a_move_within_tolerance_and_the_engine_
 # ---- another player stays out of your data (FR-10.3; Adam, v0.10 planning) ---------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="v0.10-B1: game_reason_rows reads games.user_color, not game_subjects")
 def test_qa_another_players_game_mistakes_stay_out_of_your_mistake_reason_stats(services) -> None:  # type: ignore[no-untyped-def]
     before = services.stats.reasons(source="games").untagged
     _other_game(services)
@@ -317,3 +316,14 @@ def test_qa_level_and_think_time_bounds_are_checked(services) -> None:  # type: 
             services.game_puzzles.set_settings(**bad)
     assert services.game_puzzles.set_settings(think_s=0.2).think_s == 0.2
     assert services.game_puzzles.set_settings(think_s=5.0).think_s == 5.0
+
+
+def test_b1_another_players_game_records_nothing_as_yours(services) -> None:  # type: ignore[no-untyped-def]
+    """v0.10-B1 regression: reviewing another player's game offers no Retry and no reason chips."""
+    from weaksquare.core.errors import ValidationError
+
+    gid = _other_game(services)
+    view = services.review.review(gid)
+    assert view.retry_plies == () and not view.ask_reasons
+    with pytest.raises(ValidationError):
+        services.review.set_game_reason(gid, view.key_moments[0] if view.key_moments else 5, "didntLook")

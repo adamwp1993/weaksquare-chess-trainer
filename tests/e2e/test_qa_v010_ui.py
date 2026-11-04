@@ -45,7 +45,6 @@ def test_qa_show_best_off_explain_this_move_hides_the_board_arrows(page) -> None
     shot(page, "review-explain-best-off", full=True)
 
 
-@pytest.mark.xfail(strict=True, reason="v0.10-B4: the AI explanation's steps name the better move with Show best off")
 def test_qa_show_best_off_hides_the_better_move_in_the_explanation_steps(page) -> None:  # type: ignore[no-untyped-def]
     review(page, "?ai=on")
     page.get_by_test_id("move-6").click()
@@ -85,7 +84,6 @@ def test_qa_analyze_from_here_screens(page) -> None:  # type: ignore[no-untyped-
 # ---- the Suggested mix --------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="v0.10-B3: the Mixer reloads the applied mix only if the Coach page is open")
 def test_qa_leaving_the_coach_page_during_a_run_still_applies_the_mix_on_screen(page) -> None:  # type: ignore[no-untyped-def]
     coach(page)
     page.get_by_test_id("coach-run").click()

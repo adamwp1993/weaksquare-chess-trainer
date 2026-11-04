@@ -280,6 +280,9 @@ class Api:
     # ---- the mixer (FR-3.1–3.5) -----------------------------------------------------------------
     @bridge_call
     def get_theme_catalog(self) -> list[dto.ThemeGroup]:
+        st = self._puzzle_db.status()
+        if not st.installed or st.needs_upgrade:
+            return []  # v0.10-B7: no puzzle database yet (a fresh install): no themes, not a crash
         return [
             dto.ThemeGroup(g.name, [dto.ThemeOption(t.key, t.name, t.count) for t in g.themes])
             for g in self._mixer.theme_catalog()

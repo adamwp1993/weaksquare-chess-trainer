@@ -162,3 +162,23 @@ def test_my_puzzles_have_origin_and_severity_filters(page) -> None:  # type: ign
     page.get_by_test_id("my-severities").wait_for()
     page.get_by_test_id("my-origins").click()
     page.get_by_role("option", name="From my games (made automatically)").wait_for()
+
+
+def test_b5_you_can_coach_one_of_your_accounts(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.10-B5 regression: Lichess / chess.com / all of your games (FR-10.3)."""
+    coach(page)
+    page.get_by_test_id("coach-platforms").get_by_text("chess.com").click()
+    page.get_by_test_id("coach-run").click()
+    page.get_by_test_id("coach-report").wait_for(timeout=5000)
+    assert "coachPlatforms:chesscom" in page.evaluate("window.__mockApi.calls")
+
+
+def test_b6_one_game_is_singular_in_saved_reports(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.10-B6 regression."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("game-row-1").get_by_role("checkbox").check()
+    page.get_by_test_id("send-to-coach").click()
+    page.get_by_test_id("coach-run").click()
+    page.get_by_test_id("coach-history").filter(has_text="1 game").wait_for(timeout=5000)
+    assert "1 games" not in page.get_by_test_id("coach-history").inner_text()

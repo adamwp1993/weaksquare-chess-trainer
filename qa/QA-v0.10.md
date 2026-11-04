@@ -190,3 +190,7 @@ Screenshots (gitignored), `tests/e2e/artifacts/qa-v010-*.png`: coach-empty, coac
 - **Cancel mid-run:** press **Cancel** during the analysis step and check that the analysis queue stops and no report is saved.
 - **Your dev data folder is still at user.db v7.** The first `uv run python -m weaksquare --dev` on this branch migrates it to 0008 and starts the one-time backfill (tags, then puzzles from every analyzed game, on Stockfish). A v0.9 checkout then refuses it (the newer-schema check); the migration keeps a backup first, so switching back means restoring that. I didn't touch the dev folder.
 - **The quality of the weaknesses and puzzles** on 50–100 of your real games (the plan's checklist): only a person can judge whether the top 3 match your games. Note B2 and the mate-in-one observation when you look for Allowed puzzles.
+
+
+## Builder's fixes after round 1 (2026-11-04)
+B1–B8 fixed, each with a regression test; QA's xfail tests are now plain tests. See ARCHITECTURE.md §7, "v0.10: QA fixes (v0.10-B1 to B8)". B2 was narrowed: only walking into a forced mate overrides Missed (QA's Missed engine test still passes).

@@ -129,13 +129,17 @@ def grade(before: Score, after: Score, played_best: bool, th: Thresholds) -> tup
 
 
 def missed_or_allowed(before: Score, after: Score, classification: str) -> str | None:
-    """FR-10.11 for mistakes and blunders (plan v0.8's simple rule): **Missed** when your best move kept a
-    winning edge; otherwise **Allowed** when the opponent's best reply is winning for them; else Other."""
+    """FR-10.11 for mistakes and blunders: **Missed** when your best move kept a winning edge; otherwise
+    **Allowed** when the opponent's best reply is winning for them; else Other. One exception (v0.10-B2):
+    a move that walks into a forced mate is **Allowed** even from a winning position, since that mate is
+    what decided the game."""
     if classification not in ("mistake", "blunder"):
         return None
+    if after.mate is not None and after.mate < 0:
+        return "allowed"
     if before.value() >= EDGE:
         return "missed"
-    if after.value() <= -EDGE or (after.mate is not None and after.mate < 0):
+    if after.value() <= -EDGE:
         return "allowed"
     return "other"
 

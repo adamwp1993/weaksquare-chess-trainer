@@ -756,7 +756,7 @@ The side to move in each position is you. If a file gives only the first move, t
 
 Every time one of your games is analyzed (from the Coach, **Analyze selected** or **Review**), the app turns your clear mistakes into puzzles, on your PC and for free.
 - **Which mistakes:** the level in Settings → Games → **Puzzles from your games** (mistakes and blunders by default), from move 7 on.
-- **Only clear ones:** Stockfish checks each one with Lichess's rules for a puzzle: the best move must be clearly better than any other, the game mustn't already be decided, and the line goes on only while each of your moves is the only good one. A one-move win of material isn't kept; a mate in one is.
+- **Only clear ones:** Stockfish checks each one with Lichess's rules for a puzzle: the best move must be clearly better than any other, the game mustn't already be decided, and the line goes on only while each of your moves is the only good one. A one-move win of material isn't kept. A mate in one is kept unless another move also wins easily (Lichess's rule: the best move that doesn't mate must not leave you clearly winning).
 - **Missed** (you had a tactic and didn't play it) is solved as you, from your position.
 - **Allowed** (your move let your opponent in) is solved **as your opponent**, from the position after your mistake. The board turns to their side, and the puzzle says *Find what your opponent could have played*.
 - **Solving:** any move within the Retry tolerance of Stockfish's best counts, as for puzzles you save yourself.

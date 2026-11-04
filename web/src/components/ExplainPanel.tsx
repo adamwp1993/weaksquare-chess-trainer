@@ -1,4 +1,13 @@
-import { Alert, Badge, Button, Group, Paper, Stack, Text, Tooltip } from "@mantine/core";
+import {
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Tooltip,
+} from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { ApiCallError } from "../api/ApiClient";
@@ -18,8 +27,17 @@ export interface ExplainShowMe {
 export function showMeFor(x: Explanation): ExplainShowMe {
   const positions = answerPositions(x.start_fen, x.solution);
   const byPly = new Map(x.steps.map((s) => [s.ply, s]));
-  const shapes = positions.map((_, i) => (byPly.get(i)?.annotations ?? []).map((a) => ({ orig: a.orig, dest: a.dest, color: a.color })));
-  const notes = positions.map((_, i) => byPly.get(i)?.text ?? (i === positions.length - 1 ? x.summary : ""));
+  const shapes = positions.map((_, i) =>
+    (byPly.get(i)?.annotations ?? []).map((a) => ({
+      orig: a.orig,
+      dest: a.dest,
+      color: a.color,
+    })),
+  );
+  const notes = positions.map(
+    (_, i) =>
+      byPly.get(i)?.text ?? (i === positions.length - 1 ? x.summary : ""),
+  );
   return { positions, shapes, notes };
 }
 
@@ -55,7 +73,12 @@ export function ExplainPanel({
         setQuote(q);
         setQuoteError(null);
       },
-      (e: Error) => setQuoteError(e instanceof ApiCallError && e.code === "engine_not_installed" ? "Explain needs Stockfish." : e.message),
+      (e: Error) =>
+        setQuoteError(
+          e instanceof ApiCallError && e.code === "engine_not_installed"
+            ? "Explain needs Stockfish."
+            : e.message,
+        ),
     );
   }, [sessionId, over, engineReady]);
 
@@ -73,11 +96,14 @@ export function ExplainPanel({
   useEffect(() => {
     if (!doneJob) return;
     let alive = true;
-    api.getExplanation(sessionId).then((x) => {
-      if (!alive) return;
-      setExplanation(x);
-      if (x) showMeRef.current(showMeFor(x));
-    }, () => undefined);
+    api.getExplanation(sessionId).then(
+      (x) => {
+        if (!alive) return;
+        setExplanation(x);
+        if (x) showMeRef.current(showMeFor(x));
+      },
+      () => undefined,
+    );
     return () => {
       alive = false;
     };
@@ -86,17 +112,26 @@ export function ExplainPanel({
   if (!configured) return null;
 
   const running = jobId !== null && (job === null || job.state === "running");
-  const jobError = job?.state === "failed" || job?.state === "cancelled" ? job.message : null;
-  const can = over && engineReady && !running && (quote?.state === "ok" || quote?.state === "cached");
+  const jobError =
+    job?.state === "failed" || job?.state === "cancelled" ? job.message : null;
+  const can =
+    over &&
+    engineReady &&
+    !running &&
+    (quote?.state === "ok" || quote?.state === "cached");
   let label = "Explain";
   if (running) label = "Explaining…";
   else if (quote?.state === "cached") label = "Explain (saved)";
-  else if (quote?.state === "ok" && quote.typical_usd !== null) label = `Explain (≈ ${dollars(quote.typical_usd)})`;
+  else if (quote?.state === "ok" && quote.typical_usd !== null)
+    label = `Explain (≈ ${dollars(quote.typical_usd)})`;
   const why = !over
     ? "Explain unlocks once the puzzle is over."
     : !engineReady
       ? "Explain needs Stockfish. Install it from the engine panel or Settings → Engine."
-      : (quoteError ?? (quote && quote.state !== "ok" && quote.state !== "cached" ? quote.message : null));
+      : (quoteError ??
+        (quote && quote.state !== "ok" && quote.state !== "cached"
+          ? quote.message
+          : null));
 
   const start = async () => {
     setError(null);
@@ -113,7 +148,14 @@ export function ExplainPanel({
     <Stack gap={6} data-testid="explain">
       <Tooltip label={why ?? ""} disabled={!why} multiline w={260}>
         <div>
-          <Button fullWidth variant="light" color="indigo" disabled={!can} onClick={start} data-testid="explain-button">
+          <Button
+            fullWidth
+            variant="light"
+            color="indigo"
+            disabled={!can}
+            onClick={start}
+            data-testid="explain-button"
+          >
             {label}
           </Button>
         </div>
@@ -129,16 +171,35 @@ export function ExplainPanel({
         </Text>
       )}
       {(error ?? jobError) && (
-        <Alert color="red" withCloseButton onClose={() => { setError(null); setJobId(null); }} data-testid="explain-error">
+        <Alert
+          color="red"
+          withCloseButton
+          onClose={() => {
+            setError(null);
+            setJobId(null);
+          }}
+          data-testid="explain-error"
+        >
           {error ?? jobError}
         </Alert>
       )}
-      {explanation && <ExplanationView x={explanation} onShowMe={() => onShowMe(showMeFor(explanation))} />}
+      {explanation && (
+        <ExplanationView
+          x={explanation}
+          onShowMe={() => onShowMe(showMeFor(explanation))}
+        />
+      )}
     </Stack>
   );
 }
 
-export function ExplanationView({ x, onShowMe }: { x: Explanation; onShowMe?: () => void }) {
+export function ExplanationView({
+  x,
+  onShowMe,
+}: {
+  x: Explanation;
+  onShowMe?: () => void;
+}) {
   return (
     <Paper withBorder p="sm" radius="md" data-testid="explanation">
       <Stack gap={6}>
@@ -147,7 +208,12 @@ export function ExplanationView({ x, onShowMe }: { x: Explanation; onShowMe?: ()
             Explanation
           </Text>
           {onShowMe && (
-            <Button size="compact-xs" variant="subtle" onClick={onShowMe} data-testid="explain-show-me">
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              onClick={onShowMe}
+              data-testid="explain-show-me"
+            >
               Show me
             </Button>
           )}
@@ -158,26 +224,42 @@ export function ExplanationView({ x, onShowMe }: { x: Explanation; onShowMe?: ()
         {x.key_ideas.length > 0 && (
           <Group gap={4}>
             {x.key_ideas.map((k) => (
-              <Badge key={k} variant="light" color="indigo" style={{ textTransform: "none" }}>
+              <Badge
+                key={k}
+                variant="light"
+                color="indigo"
+                style={{ textTransform: "none" }}
+              >
                 {k}
               </Badge>
             ))}
           </Group>
         )}
-        <Stack gap={4} data-testid="explanation-steps">
-          {x.steps.map((s) => (
-            <Text size="xs" key={s.ply}>
-              <b>
-                {s.side === "you" ? "You" : "Opponent"}: {s.san}
-              </b>{" "}
-              {s.text}
-              {s.variation.length > 0 && <i> (for example {s.variation.join(" ")})</i>}
-            </Text>
-          ))}
-        </Stack>
+        {!onShowMe ? (
+          // v0.10-B4: without Show me (Show best moves off, FR-11.35) the step-by-step line would give the
+          // better move away; the summary and key ideas stay.
+          <Text size="xs" c="dimmed" data-testid="explanation-steps">
+            The line is hidden while Show best moves is off.
+          </Text>
+        ) : (
+          <Stack gap={4} data-testid="explanation-steps">
+            {x.steps.map((s) => (
+              <Text size="xs" key={s.ply}>
+                <b>
+                  {s.side === "you" ? "You" : "Opponent"}: {s.san}
+                </b>{" "}
+                {s.text}
+                {s.variation.length > 0 && (
+                  <i> (for example {s.variation.join(" ")})</i>
+                )}
+              </Text>
+            ))}
+          </Stack>
+        )}
         {x.discarded > 0 && (
           <Text size="xs" c="orange" data-testid="explanation-discarded">
-            Some annotations were discarded because they didn't fit the position.
+            Some annotations were discarded because they didn't fit the
+            position.
           </Text>
         )}
         <Text size="xs" c="dimmed" data-testid="explanation-cost">

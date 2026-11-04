@@ -494,6 +494,20 @@ export function CoachView({
                       ]}
                       data-testid="coach-whose"
                     />
+                    {whose === "me" && (
+                      <SegmentedControl
+                        fullWidth
+                        size="xs"
+                        value={params.platforms.length === 1 ? params.platforms[0] : "all"}
+                        onChange={(v) => set({ platforms: v === "all" ? [] : [v as "lichess" | "chesscom"] })}
+                        data={[
+                          { value: "all", label: "All my games" },
+                          { value: "lichess", label: "Lichess" },
+                          { value: "chesscom", label: "chess.com" },
+                        ]}
+                        data-testid="coach-platforms"
+                      />
+                    )}
                     {whose === "other" && (
                       <Group grow align="flex-end">
                         <TextInput
@@ -589,7 +603,8 @@ export function CoachView({
                     onClick={() => api.getCoachReport(s.id).then(setReport, (e: Error) => setError(e.message))}
                     data-testid={`coach-history-${s.id}`}
                   >
-                    {s.created_at.slice(0, 10)} · {s.subject_label} · {s.source === "puzzles" ? "puzzles" : `${s.games} games`}
+                    {s.created_at.slice(0, 10)} · {s.subject_label} ·{" "}
+                    {s.source === "puzzles" ? "puzzles" : `${s.games} game${s.games === 1 ? "" : "s"}`}
                   </Button>
                 ))}
               </Stack>

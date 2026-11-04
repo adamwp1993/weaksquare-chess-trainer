@@ -145,6 +145,15 @@ export function App() {
     }, () => undefined); // prettier-ignore
     loadSuggestion();
   }, [loadSuggestion]);
+  // v0.10-B3: a Coach run can end while you're on another page (you can keep solving meanwhile). Its
+  // suggestion may have replaced your filters in the backend, so the Mixer reloads them whatever page is open.
+  useEffect(
+    () =>
+      api.onEvent((e) => {
+        if (e.name === "job" && e.payload.kind === "coach_run" && e.payload.state === "done") reloadFilters();
+      }),
+    [reloadFilters],
+  );
   const applySuggestion = useCallback(() => {
     api.applySuggestion().then(reloadFilters, (e: Error) => setStartError(e.message));
   }, [reloadFilters]);
