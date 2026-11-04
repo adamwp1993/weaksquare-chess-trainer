@@ -37,7 +37,7 @@ def test_filters_then_solve_three(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_label("Maximum rating").fill("1700")
     page.get_by_label("Maximum rating").press("Enter")
     page.get_by_label("2 moves").check()
-    page.get_by_label("Puzzles").fill("3")
+    page.get_by_label("Puzzles", exact=True).fill("3")
     count.filter(has_text="307,865 puzzles match").wait_for()  # 5 mock puzzles
     assert count.inner_text() != everything
 

@@ -58,6 +58,20 @@ class Desktop:
         )
         return str(chosen[0]) if chosen else None
 
+    def choose_pgn_file(self) -> str | None:
+        """Native Open dialog for a game file (FR-11.2). None if cancelled."""
+        if self._window is None:
+            return None
+        chosen = self._window.create_file_dialog(10, file_types=("Chess games (*.pgn)", "All files (*.*)"))
+        return str(chosen[0]) if chosen else None
+
+    def choose_puzzle_import_file(self) -> str | None:
+        """Native Open dialog for your own puzzle file (FR-10.46). None if cancelled."""
+        if self._window is None:
+            return None
+        chosen = self._window.create_file_dialog(10, file_types=("Puzzle files (*.pgn;*.epd;*.csv)", "All files (*.*)"))
+        return str(chosen[0]) if chosen else None
+
     def choose_engine_file(self) -> str | None:
         """Native Open dialog for a UCI engine's .exe (FR-7.5 advanced setting). None if cancelled."""
         if self._window is None:

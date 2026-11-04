@@ -95,6 +95,11 @@ def _default_threads(cpu_count: int) -> int:
     return max(1, cpu_count - 1)
 
 
+def background_threads(threads: int) -> int:
+    """The background engine's threads: one fewer than the interactive engine's, at least 1."""
+    return max(1, threads - 1)
+
+
 class EngineService:
     def __init__(
         self,
@@ -116,6 +121,11 @@ class EngineService:
         self._engine: EngineClient | None = None
         self._engine_path: str | None = None
         self._engine_lock = threading.Lock()  # one search at a time; also guards _engine
+        # v0.8: the background engine, a second process for game analysis (ARCHITECTURE §3 decision 12).
+        # Its own lock, so interactive requests never wait behind it.
+        self._bg: EngineClient | None = None
+        self._bg_path: str | None = None
+        self._bg_lock = threading.Lock()
         self._gen_lock = threading.Lock()
         self._gens = itertools.count(1)
         self._latest: dict[Any, int] = {}
@@ -160,6 +170,9 @@ class EngineService:
             with self._engine_lock:
                 if self._engine is not None:
                     self._engine.configure(st.threads, st.hash_mb)
+            with self._bg_lock:
+                if self._bg is not None:
+                    self._bg.configure(background_threads(st.threads), st.hash_mb)
         return st
 
     # ---- status, install, custom engine -------------------------------------------------------------
@@ -251,6 +264,34 @@ class EngineService:
             self._engine_path = path
         return self._engine
 
+    def _bg_client(self) -> EngineClient:
+        """The background engine (call with _bg_lock held): one thread fewer than the interactive one, so
+        the trainer keeps a core while a game is analyzed (plan v0.8)."""
+        path = self._exe()
+        if self._bg is not None and self._bg_path != path:
+            self._bg.close()
+            self._bg = None
+        if self._bg is None:
+            st = self.settings()
+            self._bg = self._make_engine(path, background_threads(st.threads), st.hash_mb)
+            self._bg_path = path
+        return self._bg
+
+    def analyse_background(self, board: chess.Board, think_s: float, multipv: int = MULTIPV) -> list[EngineLine]:
+        """Raw White-relative lines for one position of a game, on the background engine (v0.8). The
+        caller validated the game with python-chess; a finished position returns no lines."""
+        if board.is_game_over(claim_draw=False) or not any(board.legal_moves):
+            return []
+        if not board.is_valid():  # defence in depth (FR-7.6)
+            raise ValidationError("That position isn't legal.")
+        with self._bg_lock:
+            return self._bg_client().analyse(board.copy(), think_s, multipv)
+
+    def engine_id(self) -> str:
+        """Which engine the stored analysis came from (FR-11.31): its name, else the binary's file name."""
+        st = self.status()
+        return st.name or Path(st.path or "engine").name
+
     def ticket(self, key: Any) -> int:
         """A new generation for `key`: any older request for the same key becomes superseded."""
         with self._gen_lock:
@@ -302,6 +343,9 @@ class EngineService:
         engine, self._engine, self._engine_path = self._engine, None, None
         if engine is not None:
             engine.close()
+        bg, self._bg, self._bg_path = self._bg, None, None
+        if bg is not None:
+            bg.close()
 
 
 def with_pv(analysis: Analysis, pv: tuple[str, ...]) -> Analysis:

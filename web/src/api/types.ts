@@ -61,6 +61,11 @@ export interface FilterSpec {
   ratios: RatioBucket[];
   exclude_played_on_lichess: boolean;
   source: "lichess" | "my" | "both";
+  my_origins: string[];
+  my_sets: string[];
+  my_kinds: string[];
+  my_phases: string[];
+  my_time_classes: string[];
 }
 
 export interface ThemeOption {
@@ -116,7 +121,7 @@ export interface UiSettings {
   srs_intervals: number[];
   filters_collapsed: boolean;
   time_offset_days: number | null;
-  reasons_ask: "always" | "off";
+  reasons_ask: "always" | "game_review" | "off";
   rushed_s: number;
 }
 
@@ -141,6 +146,8 @@ export interface PuzzleView {
   solution_plies: number | null;
   max_plies: number | null;
   candidate: string | null;
+  source: "lichess" | "my";
+  strict_without_engine: boolean;
 }
 
 export interface ThemeLabel {
@@ -502,4 +509,194 @@ export interface Explanation {
   cached: boolean;
   start_fen: string;
   solution: string[];
+}
+
+export interface ReviewThresholds {
+  inaccuracy: number;
+  mistake: number;
+  blunder: number;
+  decided: number;
+}
+
+export interface GamesSettings {
+  lichess_username: string | null;
+  chesscom_username: string | null;
+  sync_on_open: boolean;
+  first_sync_days: number;
+  first_sync_max: number;
+  think_s: number;
+  thresholds: ReviewThresholds;
+  tolerance_cp: number;
+  key_moments: number;
+}
+
+export interface ChesscomProfile {
+  username: string;
+  name: string | null;
+  url: string | null;
+  joined: number | null;
+}
+
+export interface GameSummary {
+  id: number;
+  source: "lichess" | "chesscom" | "paste" | "file";
+  url: string | null;
+  played_at: string | null;
+  time_class: string | null;
+  time_control: string | null;
+  rated: boolean | null;
+  white: string | null;
+  black: string | null;
+  white_rating: number | null;
+  black_rating: number | null;
+  user_color: "white" | "black" | "both" | null;
+  opponent: string | null;
+  opponent_rating: number | null;
+  user_rating: number | null;
+  result: string;
+  user_result: "win" | "loss" | "draw" | null;
+  eco: string | null;
+  opening: string | null;
+  accuracy_user: number | null;
+  accuracy_opponent: number | null;
+  lichess_analyzed: boolean;
+  analysis_status: "none" | "analyzed";
+}
+
+export interface GamePage {
+  games: GameSummary[];
+  total: number;
+}
+
+export interface GameChoice {
+  index: number;
+  label: string;
+  error: string | null;
+}
+
+export interface GameImport {
+  game_id: number | null;
+  created: boolean;
+  needs_color: boolean;
+  analyzed: boolean;
+  choices: GameChoice[];
+  token: string | null;
+}
+
+export interface AnalysisQueue {
+  job_id: string | null;
+  current: number | null;
+  waiting: number[];
+}
+
+export interface ReviewLine {
+  score: string;
+  pv: string[];
+  sans: string[];
+}
+
+export interface ReviewMove {
+  ply: number;
+  san: string;
+  uci: string;
+  mover: "white" | "black";
+  fen_before: string;
+  classification: "best" | "good" | "inaccuracy" | "mistake" | "blunder" | null;
+  symbol: string | null;
+  cp_loss: number | null;
+  eval_white: number | null;
+  eval_text: string | null;
+  best_move: string | null;
+  best_san: string | null;
+  lines: ReviewLine[];
+  refutation: string[];
+  kind: "missed" | "allowed" | "other" | null;
+  phase: "opening" | "middlegame" | "endgame" | null;
+  low_clock: boolean | null;
+  reason: string | null;
+  suggested_reason: string | null;
+  saved: boolean;
+}
+
+export interface PhaseSummary {
+  phase: "opening" | "middlegame" | "endgame";
+  moves: number;
+  inaccuracies: number;
+  mistakes: number;
+  blunders: number;
+  avg_cp_loss: number | null;
+}
+
+export interface SideSummary {
+  color: "white" | "black";
+  moves: number;
+  inaccuracies: number;
+  mistakes: number;
+  blunders: number;
+  avg_cp_loss: number | null;
+  platform_accuracy: number | null;
+  phases: PhaseSummary[];
+  low_clock_errors: number | null;
+}
+
+export interface GameReview {
+  game: GameSummary;
+  start_fen: string;
+  moves: ReviewMove[];
+  analyzed: boolean;
+  current: boolean;
+  summaries: SideSummary[];
+  key_moments: number[];
+  retry_plies: number[];
+  ask_reasons: boolean;
+}
+
+export interface RetryResult {
+  retry_id: number;
+  found: boolean;
+  played_san: string;
+  played_score: string;
+  best_san: string | null;
+  best_line: string[];
+  reply_line: string[];
+  suggested_reason: string | null;
+  engine_checked: boolean;
+}
+
+export interface SavedPuzzle {
+  puzzle_id: number;
+  created: boolean;
+}
+
+export interface PuzzleImportError {
+  n: number;
+  reason: string;
+}
+
+export interface PuzzleImportReport {
+  label: string;
+  file_name: string;
+  format: "pgn" | "epd" | "csv";
+  entries: number;
+  added: number;
+  duplicates: number;
+  skipped: number;
+  errors: PuzzleImportError[];
+}
+
+export interface PuzzleSet {
+  label: string;
+  count: number;
+}
+
+export interface SourceAccuracy {
+  source: "lichess" | "my";
+  attempts: number;
+  wins: number;
+}
+
+export interface GameStats {
+  retry_found: number;
+  retry_tried: number;
+  sources: SourceAccuracy[];
 }

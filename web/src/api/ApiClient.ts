@@ -38,8 +38,48 @@ import type {
   SyncStatus,
   UpdateOffer,
   ThemeGroup,
+  AnalysisQueue,
+  ChesscomProfile,
+  GameImport,
+  GamePage,
+  GameReview,
+  GameStats,
+  GamesSettings,
+  PuzzleImportReport,
+  PuzzleSet,
+  RetryResult,
+  SavedPuzzle,
   UiSettings,
 } from "./types";
+
+/** v0.8: the My games filters (FR-11.26); empty or missing fields don't filter. Dates are YYYY-MM-DD. */
+export interface LibraryFilters {
+  platforms?: ("lichess" | "chesscom" | "paste" | "file")[];
+  time_classes?: string[];
+  rated?: boolean | null;
+  results?: ("win" | "loss" | "draw")[];
+  colors?: ("white" | "black")[];
+  opponent?: string;
+  opening?: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  statuses?: ("none" | "analyzed")[];
+  limit?: number;
+  offset?: number;
+}
+
+/** v0.8: the Games settings saved together (any field may be left out). */
+export interface GamesSettingsChange {
+  sync_on_open?: boolean;
+  first_sync_days?: number;
+  first_sync_max?: number;
+  think_s?: number;
+  thresholds?: { inaccuracy: number; mistake: number; blunder: number; decided?: number };
+  tolerance_cp?: number;
+  key_moments?: number;
+}
+
+export type ReasonSource = "puzzles" | "games" | "all";
 
 export class ApiCallError extends Error {
   readonly code: string;
@@ -96,7 +136,7 @@ export interface SettingValues {
   "srs.intervals": number[];
   "ui.filters_collapsed": boolean;
   // v0.6
-  "reasons.ask": "always" | "off";
+  "reasons.ask": "always" | "game_review" | "off";
   "reasons.rushed_s": number;
 }
 
@@ -166,7 +206,7 @@ export interface ApiClient {
   /** FR-5.6: save why you missed it; choosing again replaces it. */
   setMistakeReason(attemptId: number, reason: ReasonKey, note: string | null): Promise<void>;
   /** FR-9.7: the mistake-reason breakdown, optionally for one theme and/or mode. */
-  getReasonStats(theme: string | null, mode: TrainingMode | null): Promise<ReasonStats>;
+  getReasonStats(theme: string | null, mode: TrainingMode | null, source?: ReasonSource): Promise<ReasonStats>;
   /** Hint, then Show answer (§7.2). Before the puzzle is decided, either one makes it a loss. */
   requestHelp(sessionId: number, kind: "hint" | "answer"): Promise<HelpResponse>;
   /** FR-5.12 Try again (not scored): replay the finished puzzle from its start; nothing is recorded. */
@@ -223,6 +263,39 @@ export interface ApiClient {
   startExplain(sessionId: number): Promise<string>;
   /** The explanation for the puzzle on the board, or null. Its text is plain: render it escaped (FR-8.7). */
   getExplanation(sessionId: number): Promise<Explanation | null>;
+  // ---- Game library, Game Review and your own puzzles (v0.8) ----------------------------------
+  getGamesSettings(): Promise<GamesSettings>;
+  setGamesSettings(change: GamesSettingsChange): Promise<GamesSettings>;
+  /** FR-11.24 Verify: the public profile (not_found: no such player). */
+  verifyChesscom(username: string): Promise<ChesscomProfile>;
+  /** Link (or unlink with null) a chess.com username. */
+  setChesscomUsername(username: string | null): Promise<GamesSettings>;
+  /** FR-11.27: sync both linked accounts as a job; null when no account is linked. */
+  startGamesSync(): Promise<string | null>;
+  listGames(filters: LibraryFilters): Promise<GamePage>;
+  importGamePgn(text: string): Promise<GameImport>;
+  /** Native Open dialog for a .pgn; null if cancelled. Several games come back as choices. */
+  chooseGameFile(): Promise<GameImport | null>;
+  pickImportedGame(token: string, index: number): Promise<GameImport>;
+  /** A Lichess or chess.com game URL, as a job; then getGameUrlImport. */
+  startGameUrlImport(url: string, chesscomUsername: string | null): Promise<string>;
+  getGameUrlImport(jobId: string): Promise<GameImport | null>;
+  setGameColor(gameId: number, color: "white" | "black" | "both"): Promise<void>;
+  openGameOnline(gameId: number): Promise<void>;
+  /** Queue games for the background engine (FR-11.31); null when there's nothing to do. */
+  analyzeGames(gameIds: number[], force: boolean): Promise<string | null>;
+  getAnalysisQueue(): Promise<AnalysisQueue>;
+  getReview(gameId: number): Promise<GameReview>;
+  /** Retry mode (FR-11.15): the answer comes back only with the result. */
+  retryMove(gameId: number, ply: number, uci: string, thinkMs: number | null): Promise<RetryResult>;
+  saveGamePuzzle(gameId: number, ply: number): Promise<SavedPuzzle>;
+  setGameReason(gameId: number, ply: number, reason: ReasonKey, note: string | null): Promise<void>;
+  setRetryReason(retryId: number, reason: ReasonKey, note: string | null): Promise<void>;
+  getGameStats(): Promise<GameStats>;
+  /** FR-10.46: Open dialog, then the import job; null if cancelled. */
+  chooseAndImportPuzzles(label: string): Promise<string | null>;
+  getPuzzleImportReport(jobId: string): Promise<PuzzleImportReport | null>;
+  listPuzzleSets(): Promise<PuzzleSet[]>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

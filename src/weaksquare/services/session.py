@@ -26,7 +26,7 @@ from typing import Any, Literal, Protocol
 
 import chess
 
-from weaksquare.core.chess_rules import PuzzleDataError, start_position
+from weaksquare.core.chess_rules import PuzzleDataError, is_acceptable, parse_move, start_position
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import (
     REFUTATION_MIN_PLIES,
@@ -39,6 +39,7 @@ from weaksquare.core.engine import (
 from weaksquare.core.errors import AppError, ConflictError, NotFoundError, StaleKeyError, ValidationError
 from weaksquare.core.explain import CacheKeyParts, DangerFact, EngineLineFact, ExplainInput, RefutationFact
 from weaksquare.core.filters import FilterSpec
+from weaksquare.core.game_review import Score
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, LEVELS, LadderStatus, ladder_key
 from weaksquare.core.ladder import status as ladder_status
 from weaksquare.core.modes.base import OPPONENT_DELAY_MS, AttemptResult, Feedback, HelpKind, HelpResult
@@ -64,6 +65,7 @@ from weaksquare.core.scoring import MIX, angle_for
 from weaksquare.core.srs import DEFAULT_INTERVALS, Card, Review, due_order, next_due, schedule
 from weaksquare.core.srs import MODE as SRS_MODE
 from weaksquare.core.themes import display_name
+from weaksquare.core.tolerance import DEFAULT_TOLERANCE_CP, within_tolerance
 from weaksquare.services.engine import Analysis, EngineService
 
 log = logging.getLogger(__name__)
@@ -145,7 +147,7 @@ class TrainingPrefs(Protocol):
 
     def ladder_window(self) -> int: ...
 
-    def reasons_ask(self) -> str: ...  # v0.6 (FR-5.8): 'always' or 'off'
+    def reasons_ask(self) -> str: ...  # FR-5.8: 'always', 'game_review' (v0.8) or 'off'
 
     def rushed_s(self) -> int: ...  # v0.6 (FR-5.9)
 
@@ -283,6 +285,8 @@ class PuzzleView:
     solution_plies: int | None = None  # Commit the line with Show move count only: how many moves to enter
     max_plies: int | None = None  # Commit the line: the longest line Submit accepts
     candidate: str | None = None  # Danger spotting: the highlighted move (never says if it's the blunder)
+    source: str = "lichess"  # v0.8: "my" for your own puzzles (no rating or opponent move first; never synced)
+    strict_without_engine: bool = False  # v0.8-B8: a puzzle from your games, checked on its stored line
 
 
 @dataclass(frozen=True)
@@ -395,6 +399,7 @@ class SessionService:
         engine: EngineService | None = None,
         prefs: TrainingPrefs | None = None,
         mode_fields: Any = None,
+        tolerance_cp: Any = None,
     ) -> None:
         """`sync` queues every decided attempt for Lichess (v0.3); without it attempts stay local.
         `queue_fields` builds the repo's SyncFields (passed in so services don't import adapters)."""
@@ -410,6 +415,8 @@ class SessionService:
         self._prefs: TrainingPrefs = prefs or _DefaultPrefs()
         # Builds the repo's ModeFields (passed in, like queue_fields, so services don't import adapters).
         self._mode_fields = mode_fields or (lambda **kw: None)
+        # v0.8: the engine tolerance for puzzles saved from your games (FR-10.43), shared with Retry mode.
+        self._tolerance_cp = tolerance_cp or (lambda: DEFAULT_TOLERANCE_CP)
         self._standard = StandardMode()
         self._commit = CommitLineMode()
         self._name = NameIdeaMode()
@@ -435,6 +442,10 @@ class SessionService:
             raise ValidationError("Unknown training mode.")
         if mode == SRS_MODE:
             return self._start_srs(spec, rated)
+        if spec.source != "lichess" and mode in (NAME, DANGER):
+            raise ValidationError(
+                "My puzzles works in Standard, Commit the line and Spaced repetition. Choose Lichess DB for this mode."
+            )
         if spec.depth_ladder and mode not in LADDER_MODES:
             raise ValidationError("The depth ladder works in Standard and Commit the line. Choose another order.")
         if mode == DANGER:
@@ -613,8 +624,8 @@ class SessionService:
             danger_call=danger.call if danger else None,
         )
         aid = self._attempts.append(p.ref, s.id, s.mode, s.current.started_at,
-                                    self._clock.now().isoformat(timespec="seconds"), result, p.rating,
-                                    sync_fields, extra)  # fmt: skip
+                                    self._clock.now().isoformat(timespec="seconds"), result,
+                                    p.rating if p.ref.source == "lichess" else None, sync_fields, extra)  # fmt: skip
         info = None
         if sync_fields is not None and self._sync is not None:
             found = self._sync.attempt_ratings([aid])
@@ -699,7 +710,7 @@ class SessionService:
                     log.warning("skipping puzzle %s: its moves aren't legal", puzzle.ref)
                     continue
                 s.served += 1
-                s.served_ids.append(puzzle.ref.id)
+                s.served_ids.append(puzzle.ref.id if puzzle.ref.source == "lichess" else str(puzzle.ref))
                 s.current = _Current(state, self._clock.now().isoformat(timespec="seconds"))
                 if isinstance(state, DangerState):
                     # The raw position, from the side about to move; the blunder itself never reaches
@@ -707,13 +718,17 @@ class SessionService:
                     return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, "",
                                       "white" if state.board.turn else "black", puzzle.rating, None, False, s.mode,
                                       candidate=state.candidate)  # fmt: skip
-                played = self._sync.played_before(puzzle.ref.id) if self._sync is not None else False
+                lichess = puzzle.ref.source == "lichess"
+                played = self._sync.played_before(puzzle.ref.id) if self._sync is not None and lichess else False
                 commit = isinstance(state, CommitState)
+                sound = sounds_for_line(puzzle.fen, puzzle.moves[:1])[0] if puzzle.has_premove else None
                 return PuzzleView(s.served, puzzle.ref.id, puzzle.fen, puzzle.moves[0],
-                                  "white" if state.board.turn else "black", puzzle.rating,
-                                  sounds_for_line(puzzle.fen, puzzle.moves[:1])[0], played, s.mode,
-                                  len(puzzle.moves) - 1 if commit and s.show_length else None,
-                                  max_plies(puzzle, s.show_length) if commit else None)  # fmt: skip
+                                  "white" if state.board.turn else "black", puzzle.rating, sound, played,
+                                  s.mode, len(puzzle.moves) - 1 if commit and s.show_length else None,
+                                  max_plies(puzzle, s.show_length) if commit else None,
+                                  source=puzzle.ref.source,
+                                  strict_without_engine=puzzle.tolerance and (self._engine is None or
+                                                        self._engine.status().state != "ready"))  # fmt: skip
             raise ValidationError("Too many unreadable puzzles in a row. Try re-importing the puzzle database.")
 
     def _start_state(self, s: _Session, puzzle: Puzzle, practice: bool = False, prev: State | None = None) -> State:
@@ -791,7 +806,8 @@ class SessionService:
         if s.mode == SRS_MODE:
             return  # its queue is puzzle IDs, looked up as they're served
         s.queue.clear()
-        s.served_keys = self._puzzles.keys_for_ids(s.served_ids)
+        # Your own puzzles' keys (negative) never change, so they're kept as they are.
+        s.served_keys = self._puzzles.keys_for_ids(s.served_ids) | {k for k in s.served_keys if k < 0}
         s.key_bucket.clear()
         if s.buckets:
             s.match_count, s.bucket_counts = self._puzzles.count_with_buckets(s.spec)
@@ -842,7 +858,7 @@ class SessionService:
     def _order(self, s: _Session, keys: list[int]) -> list[int]:
         """FR-3.11. Random keeps the sampled order. Easy → hard and grouped-by-theme sort what was
         drawn: the whole queue when its size is fixed, each refill of 50 when it's endless."""
-        if s.spec.order == "random" or len(keys) < 2:
+        if s.spec.order == "random" or len(keys) < 2 or s.spec.source != "lichess":
             return keys
         info = self._puzzles.describe(keys)
         if s.spec.order == "easy_to_hard":
@@ -858,10 +874,57 @@ class SessionService:
         with s.lock:
             if s.current is None:
                 raise ValidationError("There's no puzzle in progress.")
+            state = s.current.state
+            if isinstance(state, StandardState) and state.puzzle.tolerance and not state.finished:
+                self._tolerate(state, uci)
             feedback = self._mode_for(s).on_move(s.current.state, uci, self._clock.monotonic_ms())
             practice = s.current.state.practice  # Try again: never recorded (FR-5.12)
             outcome = self._record(s, feedback.attempt) if feedback.attempt and not practice else None
             return MoveResult(feedback, outcome)
+
+    def _tolerate(self, state: StandardState, uci: str) -> None:
+        """FR-10.43 (built in v0.8 for puzzles saved from your games): a move off the stored line counts
+        when the interactive engine rates it within the tolerance of the best move. The line then
+        continues from your move with the engine's best play, so the mode sees the expected move.
+        Without Stockfish (or when it fails), the stored line is checked as it is."""
+        board = state.board
+        move = parse_move(board, uci)
+        if move is None or state.next_index >= len(state.puzzle.moves):
+            return
+        expected = chess.Move.from_uci(state.puzzle.moves[state.next_index])
+        if is_acceptable(board, move, expected) or self._engine is None or self._engine.status().state != "ready":
+            return
+        player: Color = "white" if board.turn == chess.WHITE else "black"
+        after = board.copy()
+        after.push(move)
+        continuation: tuple[str, ...] = ()
+        try:
+            before = self._engine.analyse(board, player)
+            if not before.lines:
+                return
+            best = Score(before.lines[0].cp, before.lines[0].mate)
+            if after.is_checkmate():
+                played = Score(None, 0)
+            else:
+                same = [ln for ln in before.lines if ln.pv and ln.pv[0] == move.uci()]
+                if same:
+                    played, continuation = Score(same[0].cp, same[0].mate), tuple(same[0].pv[1:])
+                else:
+                    a = self._engine.analyse(after, player)
+                    if not a.lines:  # stalemate or a draw by rule
+                        played = Score(0, None)
+                    else:
+                        played, continuation = Score(a.lines[0].cp, a.lines[0].mate), tuple(a.lines[0].pv)
+        except AppError as e:
+            log.warning("tolerance check failed (%s): checking the stored line", e.message)
+            return
+        if not within_tolerance(best, played, self._tolerance_cp()):
+            return
+        remaining = len(state.puzzle.moves) - state.next_index
+        tail = [move.uci()] if after.is_checkmate() else [move.uci(), *continuation[: remaining - 1]]
+        if len(tail) % 2 == 0:
+            tail = tail[:-1]  # end on your move
+        state.puzzle = dataclasses.replace(state.puzzle, moves=(*state.puzzle.moves[: state.next_index], *tail))
 
     def submit_line(self, session_id: int, moves: Any) -> CommitOutcome:
         """Commit the line (FR-4.2): grade the whole submitted line. Recorded once, if it decided the attempt."""
@@ -907,7 +970,7 @@ class SessionService:
     def reason_prompt(self, session_id: int) -> ReasonPrompt | None:
         """Ask why you missed the puzzle: once it's over, after a recorded loss, unless the setting is Off
         (FR-5.7, 5.8). The suggestion (FR-5.9) uses Stockfish's refutation when the engine is installed."""
-        if self._prefs.reasons_ask() == "off":
+        if self._prefs.reasons_ask() != "always":  # "game_review" asks only in Game Review (v0.8)
             return None
         s = self._session(session_id)
         with s.lock:

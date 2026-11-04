@@ -30,9 +30,9 @@ SRS_INTERVALS_KEY = "srs.intervals"  # FR-4.6, days per box
 FILTERS_COLLAPSED_KEY = "ui.filters_collapsed"  # FR-1.14
 TIME_OFFSET_KEY = "debug.time_offset_days"  # FR-4.6 fast-forward, --dev runs only (written by the bridge)
 # v0.6
-REASONS_ASK_KEY = "reasons.ask"  # FR-5.8: when to ask why you missed ('always' / 'off'; 'game_review' in v0.8)
+REASONS_ASK_KEY = "reasons.ask"  # FR-5.8: when to ask why you missed: always / game_review (v0.8) / off
 RUSHED_S_KEY = "reasons.rushed_s"  # FR-5.9: a deciding move faster than this suggests Rushed
-REASONS_ASK = ("always", "off")
+REASONS_ASK = ("always", "game_review", "off")
 TRAINING_MODES = ("standard", "commit_line", "name_idea", "danger_spotting", "spaced_repetition")
 
 ColorScheme = Literal["light", "dark", "auto"]  # "auto" is Match system
@@ -106,7 +106,7 @@ def _mode(value: Any) -> Any:
 
 def _reasons_ask(value: Any) -> Any:
     if value not in REASONS_ASK:
-        raise ValidationError("reasons.ask must be 'always' or 'off'")
+        raise ValidationError("reasons.ask must be 'always', 'game_review' or 'off'")
     return value
 
 

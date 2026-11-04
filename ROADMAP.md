@@ -140,8 +140,13 @@ Scope:
 - Linked chess.com username with Verify; library page with filters and incremental sync for both platforms (§11.5).
 - Import: paste, file, Lichess URL, chess.com URL (§11.1).
 - Analysis pipeline, `game_analysis` and the analysis queue on the **background engine** (§11.2; ARCHITECTURE §3 decision 12). Review screen: eval graph, move symbols, key moments, refutations (§11.3).
-- Retry mode; Save as puzzle plus the **My games** puzzle source (FR-3.15, 11.15, 11.16); mistake reasons on game moves.
+- Retry mode; Save as puzzle plus the **My puzzles** puzzle source (FR-3.15, 11.15, 11.16); mistake reasons on game moves.
 - **Import puzzles from your own files** (PGN / EPD / CSV) into `custom_puzzles` with a set label, strict solving, an import report (FR-10.46–10.50; added 2026-11-02). No puzzle collections are shipped or downloaded.
+- Planning decisions (Adam, 2026-11-03):
+  - Every game is analyzed locally, even when Lichess already analyzed it (FR-11.3).
+  - No theme tags until the v0.10 tagger: mistakes are classified Missed / Allowed / Other only (FR-11.10).
+  - Puzzles saved from games are solved with the 30 cp tolerance plus the engine (FR-10.43, built now); imported puzzle files are strict.
+  - The source is named **My puzzles** (FR-3.15).
 
 **Done when:** PGN edge-case tests (multi-game file, bad PGN, variants rejected); chess.com optional-field tests; the serial-request rule is enforced in the chess.com client; analysis is reused on re-import; a puzzle refutation returns promptly while a game analysis is running; recorded game fixtures are anonymized (SR-12a); puzzle-file import tests (each format, bad entries reported and skipped, re-import adds nothing, mate-in-1 alternatives accepted).
 **Adam's manual test:** link both accounts → sync → review one Lichess and one chess.com game → retry mistakes → save 2 puzzles → drill them → import a small PGN or EPD puzzle file of your own → check the import report → drill the set.
@@ -162,7 +167,7 @@ Scope:
 - Multi-game aggregation reusing the v0.8 pipeline; puzzle-history source; free report; gap table (§10.1–10.5).
 - **Suggested default mix** with "Why this mix", the Apply/Compare/Dismiss banner, and reasons picking drill modes (§10.7).
 - Optional LLM coaching with validated presets (§10.6), with its own provider and model in the per-feature setting from v0.9 (FR-1.15).
-- **Puzzles from your games** (§10.9, FR-10.39–10.45): the analysis turns qualifying mistakes into `custom_puzzles` (new migration), with a severity-level setting (Blunders only / Mistakes and blunders / plus inaccuracies). Includes a quality check, Missed solved as you and Allowed solved as your opponent, the 30 cp tolerance with engine continuation, My games filters, a share of these puzzles in the Suggested mix, and archive.
+- **Puzzles from your games** (§10.9, FR-10.39–10.45): the analysis turns qualifying mistakes into `custom_puzzles` (new migration), with a severity-level setting (Blunders only / Mistakes and blunders / plus inaccuracies). Includes a quality check, Missed solved as you and Allowed solved as your opponent, the 30 cp tolerance with engine continuation, My puzzles filters, a share of these puzzles in the Suggested mix, and archive.
 
 **Done when:** each habit tag has positive and negative unit tests; tagger output matches the theme names in the puzzle DB; the suggestion never overwrites manual filters (test); quality-check tests accept and reject known positions (unique best move, several equal moves, already-decided position); each severity level produces the right set from fixture analysis, and narrowing archives (never deletes) with attempts kept; re-runs create no duplicates; Missed and Allowed puzzles have the right side to move and orientation; an alternative move within tolerance is accepted, and the engine continues from it; changing the level runs no new game analysis (test).
 **Adam's manual test:** run the Coach on 50 rapid games → sanity-check the top 3 weaknesses against your own sense of your games → apply the Suggested mix. Analyze your last 100 games with *Mistakes and blunders* → drill 10 of the generated puzzles (each should be a real mistake from your games, with a sensible answer and correct orientation) → switch to *Blunders only* (the count drops, no re-analysis) and back → try an Allowed puzzle as your opponent → open one in Game Review from its link.

@@ -9,6 +9,8 @@ means updating that allowlist in the same commit (ARCHITECTURE §3 decision 13).
 from __future__ import annotations
 
 import logging
+import re
+from pathlib import Path
 from typing import Any, Literal
 
 from weaksquare.adapters.desktop import Desktop
@@ -20,6 +22,7 @@ from weaksquare.config import APP_VERSION, LICENSE_NAME, REPO_URL, Paths
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
+from weaksquare.core.games import LibraryFilter
 from weaksquare.core.ladder import LEVEL_NAMES, LEVELS, LadderStatus
 from weaksquare.core.llm.cost import estimate
 from weaksquare.core.llm.defaults import PROVIDER_LABELS, PROVIDERS, TYPICAL_PROMPT_CHARS, PriceRow
@@ -27,17 +30,21 @@ from weaksquare.core.reasons import REASONS
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
+from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
 from weaksquare.services.engine import EngineService
 from weaksquare.services.explain import ExplainService
+from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
+from weaksquare.services.puzzle_import import PuzzleImportService
 from weaksquare.services.reasons import ReasonsService
+from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.sync import RatingInfo, SyncService
@@ -84,8 +91,16 @@ class Api:
         llm_settings: LlmSettingsService,
         llm_usage: LlmUsageService,
         explain: ExplainService,
+        games: GameLibraryService,
+        analysis: AnalysisService,
+        review: ReviewService,
+        puzzle_import: PuzzleImportService,
     ) -> None:
         self._explain = explain
+        self._games = games
+        self._analysis = analysis
+        self._review = review
+        self._puzzle_import = puzzle_import
         self._llm_settings = llm_settings
         self._llm_usage = llm_usage
         self._engine = engine
@@ -213,7 +228,7 @@ class Api:
             srs_intervals=list(s.srs_intervals),
             filters_collapsed=s.filters_collapsed,
             time_offset_days=self._time_offset(),
-            reasons_ask="off" if s.reasons_ask == "off" else "always",
+            reasons_ask=s.reasons_ask if s.reasons_ask in ("game_review", "off") else "always",  # type: ignore[arg-type]
             rushed_s=s.rushed_s,
         )
 
@@ -359,6 +374,8 @@ class Api:
             v.solution_plies,
             v.max_plies,
             v.candidate,
+            "my" if v.source == "my" else "lichess",
+            v.strict_without_engine,
         )
 
     @staticmethod
@@ -439,9 +456,12 @@ class Api:
         )  # fmt: skip
 
     @bridge_call
-    def get_reason_stats(self, theme: str | None = None, mode: str | None = None) -> dto.ReasonStats:
-        """FR-9.7: the mistake-reason breakdown, optionally for one theme and/or one mode."""
-        r = self._stats.reasons(theme, mode)
+    def get_reason_stats(
+        self, theme: str | None = None, mode: str | None = None, source: Literal["puzzles", "games", "all"] = "puzzles"
+    ) -> dto.ReasonStats:
+        """FR-9.7: the mistake-reason breakdown, optionally for one theme and/or one mode, for puzzles,
+        your games (v0.8: game mistakes and Retry misses), or all."""
+        r = self._stats.reasons(theme, mode, source)
         return dto.ReasonStats(
             [dto.ReasonStatRow(c.key, c.label, c.gap, c.count, c.share) for c in r.reasons],  # type: ignore[arg-type]
             r.tagged, r.untagged, r.misclicks, r.misclick_warning,
@@ -665,6 +685,164 @@ class Api:
         return dto.LlmSettings(cfg.provider, cfg.reasoning, cfg.run_cap_usd, cfg.monthly_budget_usd,  # type: ignore[arg-type]
                                providers, self._spend_dto(cfg), *self._llm_settings.launch_check())  # fmt: skip
 
+    # ---- v0.8: linked accounts and the game library (§11.5) --------------------------------------
+    def _games_settings_dto(self) -> dto.GamesSettings:
+        g = self._games.settings()
+        r = self._analysis.settings()
+        t = r.thresholds
+        return dto.GamesSettings(
+            self._account.status().username, g.chesscom_username, g.sync_on_open, g.first_sync_days,
+            g.first_sync_max, r.think_s, dto.ReviewThresholds(t.inaccuracy, t.mistake, t.blunder, t.decided),
+            r.tolerance_cp, r.key_moments,
+        )  # fmt: skip
+
+    @bridge_call
+    def get_games_settings(self) -> dto.GamesSettings:
+        return self._games_settings_dto()
+
+    @bridge_call
+    def set_games_settings(
+        self,
+        sync_on_open: bool | None = None,
+        first_sync_days: int | None = None,
+        first_sync_max: int | None = None,
+        think_s: float | None = None,
+        thresholds: dict | None = None,
+        tolerance_cp: int | None = None,
+        key_moments: int | None = None,
+    ) -> dto.GamesSettings:
+        self._games.set_settings(
+            sync_on_open=sync_on_open, first_sync_days=first_sync_days, first_sync_max=first_sync_max
+        )
+        self._analysis.set_settings(
+            think_s=think_s, thresholds=thresholds, tolerance_cp=tolerance_cp, key_moments=key_moments
+        )
+        return self._games_settings_dto()
+
+    @bridge_call
+    def verify_chesscom(self, username: str) -> dto.ChesscomProfile:
+        """FR-11.24: the public profile; `not_found` when there's no such player."""
+        p = self._games.verify_chesscom(username)
+        return dto.ChesscomProfile(p["username"], p["name"], p["url"], p["joined"])
+
+    @bridge_call
+    def set_chesscom_username(self, username: str | None) -> dto.GamesSettings:
+        self._games.set_chesscom_username(username)
+        return self._games_settings_dto()
+
+    @bridge_call
+    def start_games_sync(self) -> str | None:
+        """FR-11.27: sync both linked accounts in the background (metadata and PGNs only)."""
+        return self._games.start_sync()
+
+    @bridge_call
+    def list_games(self, filters: dict) -> dto.GamePage:
+        rows, total = self._games.list_games(_library_filter(filters))
+        return dto.GamePage([game_summary(r) for r in rows], total)
+
+    # ---- v0.8: one-off imports (§11.1) --------------------------------------------------------------
+    @bridge_call
+    def import_game_pgn(self, text: str) -> dto.GameImport:
+        return game_import(self._games.import_pgn(text))
+
+    @bridge_call
+    def choose_game_file(self) -> dto.GameImport | None:
+        """A .pgn file from the Open dialog; None if you cancel."""
+        chosen = self._desktop.choose_pgn_file()
+        if chosen is None:
+            return None
+        return game_import(self._games.import_file(Path(chosen)))
+
+    @bridge_call
+    def pick_imported_game(self, token: str, index: int) -> dto.GameImport:
+        return game_import(self._games.pick(token, index))
+
+    @bridge_call
+    def start_game_url_import(self, url: str, chesscom_username: str | None = None) -> str:
+        """A Lichess or chess.com game URL, as a job; then call get_game_url_import with its id."""
+        return self._games.start_url_import(url, chesscom_username)
+
+    @bridge_call
+    def get_game_url_import(self, job_id: str) -> dto.GameImport | None:
+        out = self._games.url_result(job_id)
+        return game_import(out) if out is not None else None
+
+    @bridge_call
+    def set_game_color(self, game_id: int, color: Literal["white", "black", "both"]) -> None:
+        self._games.set_user_color(game_id, color)
+
+    @bridge_call
+    def open_game_online(self, game_id: int) -> None:
+        """FR-11.29: the game's Lichess or chess.com page in your default browser."""
+        self._desktop.open_in_browser(self._games.online_url(game_id))
+
+    # ---- v0.8: analysis and Game Review (§11.2, §11.3) ---------------------------------------------
+    @bridge_call
+    def analyze_games(self, game_ids: list, force: bool = False) -> str | None:
+        """FR-11.30/11.31: queue games for the background engine; the job id, or None if nothing to do."""
+        return self._analysis.queue(game_ids, force=force)
+
+    @bridge_call
+    def get_analysis_queue(self) -> dto.AnalysisQueue:
+        q = self._analysis.status()
+        return dto.AnalysisQueue(q.job_id, q.current, list(q.waiting))
+
+    @bridge_call
+    def get_review(self, game_id: int) -> dto.GameReview:
+        v = self._review.review(game_id)
+        return dto.GameReview(
+            game_summary(v.game), v.start_fen, [review_move(m) for m in v.moves], v.analyzed, v.current,
+            [side_summary(s) for s in v.summaries], list(v.key_moments), list(v.retry_plies), v.ask_reasons,
+        )  # fmt: skip
+
+    @bridge_call
+    def retry_move(self, game_id: int, ply: int, uci: str, think_ms: int | None = None) -> dto.RetryResult:
+        """FR-11.15: your try at a mistake; the answer comes back only with the result."""
+        r = self._review.retry_move(game_id, ply, uci, think_ms, self._ui_settings.rushed_s() * 1000)
+        return dto.RetryResult(r.retry_id, r.found, r.played_san, r.played_score, r.best_san, list(r.best_line),
+                               list(r.reply_line), r.suggested_reason, r.engine_checked)  # fmt: skip
+
+    @bridge_call
+    def save_game_puzzle(self, game_id: int, ply: int) -> dto.SavedPuzzle:
+        """FR-11.16: the position before this move, as one of your puzzles (My puzzles)."""
+        pid, created = self._review.save_as_puzzle(game_id, ply)
+        return dto.SavedPuzzle(pid, created)
+
+    @bridge_call
+    def set_game_reason(self, game_id: int, ply: int, reason: str, note: str | None = None) -> None:
+        self._review.set_game_reason(game_id, ply, reason, note)
+
+    @bridge_call
+    def set_retry_reason(self, retry_id: int, reason: str, note: str | None = None) -> None:
+        self._review.set_retry_reason(retry_id, reason, note)
+
+    @bridge_call
+    def get_game_stats(self) -> dto.GameStats:
+        s = self._stats.game_stats()
+        return dto.GameStats(s.retry_found, s.retry_tried,
+                             [dto.SourceAccuracy(src, n, w) for src, n, w in s.sources if src in ("lichess", "my")])  # type: ignore[arg-type]  # fmt: skip
+
+    # ---- v0.8: puzzles from your own files (§10.10) ------------------------------------------------
+    @bridge_call
+    def choose_and_import_puzzles(self, label: str) -> str | None:
+        """FR-10.46: pick a PGN / EPD / CSV file and import it as a set; the job id, or None if you cancel."""
+        chosen = self._desktop.choose_puzzle_import_file()
+        if chosen is None:
+            return None
+        return self._puzzle_import.start_import(Path(chosen), label)
+
+    @bridge_call
+    def get_puzzle_import_report(self, job_id: str) -> dto.PuzzleImportReport | None:
+        r = self._puzzle_import.report(job_id)
+        if r is None:
+            return None
+        return dto.PuzzleImportReport(r.label, r.file_name, r.format, r.entries, r.added, r.duplicates,  # type: ignore[arg-type]
+                                      r.skipped, [dto.PuzzleImportError(e.n, e.reason) for e in r.errors])  # fmt: skip
+
+    @bridge_call
+    def list_puzzle_sets(self) -> list[dto.PuzzleSet]:
+        return [dto.PuzzleSet(label, n) for label, n in self._puzzle_import.sets()]
+
 
 def _price_dto(p: PriceRow) -> dto.LlmPrice:
     return dto.LlmPrice(p.provider, p.model, p.input_per_m, p.output_per_m, p.long_ctx_threshold,  # type: ignore[arg-type]
@@ -687,3 +865,72 @@ def analysis_dto(a: AnalysisResult) -> dto.Analysis:
     return dto.Analysis(
         a.fen, [dto.EngineLine(x.score, x.cp, x.mate, list(x.pv)) for x in a.lines], a.game_over, a.superseded
     )
+
+
+def _library_filter(f: dict) -> LibraryFilter:
+    """FR-11.26 from the UI: unknown keys are refused, values are type-checked."""
+    lists = {"platforms", "time_classes", "results", "colors", "statuses"}
+    texts = {"opponent", "opening"}
+    known = lists | texts | {"rated", "date_from", "date_to", "limit", "offset"}
+    unknown = set(f) - known
+    if unknown:
+        raise ValidationError(f"unknown library filter: {sorted(unknown)[0]}")
+    kw: dict[str, Any] = {}
+    for k, v in f.items():
+        if k in lists:
+            if not isinstance(v, list) or not all(isinstance(x, str) and len(x) <= 20 for x in v) or len(v) > 10:
+                raise ValidationError(f"{k} must be a short list of strings")
+            kw[k] = tuple(v)
+        elif k in texts:
+            if not isinstance(v, str) or len(v) > 100:
+                raise ValidationError(f"{k} must be text")
+            kw[k] = v
+        elif k == "rated":
+            if v is not None and not isinstance(v, bool):
+                raise ValidationError("rated must be true, false or null")
+            kw[k] = v
+        elif k in ("date_from", "date_to"):
+            if v is not None and (not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)):
+                raise ValidationError(f"{k} must be a YYYY-MM-DD date")
+            kw[k] = v
+        else:
+            if not isinstance(v, int) or isinstance(v, bool) or v < 0 or v > 100_000:
+                raise ValidationError(f"{k} must be a whole number")
+            kw[k] = v
+    return LibraryFilter(**kw)
+
+
+def game_summary(g: Any) -> dto.GameSummary:
+    mine = g.user_color in ("white", "black")
+    white = g.user_color == "white"
+    return dto.GameSummary(
+        g.id, g.source, g.url, g.played_at, g.time_class, g.time_control, g.rated, g.white, g.black,
+        g.white_rating, g.black_rating, g.user_color,
+        (g.black if white else g.white) if mine else None,
+        (g.black_rating if white else g.white_rating) if mine else None,
+        (g.white_rating if white else g.black_rating) if mine else None,
+        g.result, g.user_result, g.eco, g.opening,
+        (g.accuracy_white if white else g.accuracy_black) if mine else None,
+        (g.accuracy_black if white else g.accuracy_white) if mine else None,
+        g.lichess_analyzed, "analyzed" if g.analysis_status != "none" else "none",
+    )  # fmt: skip
+
+
+def game_import(o: Any) -> dto.GameImport:
+    return dto.GameImport(o.game_id, o.created, o.needs_color, o.analyzed,
+                          [dto.GameChoice(c.index, c.label, c.error) for c in o.choices], o.token)  # fmt: skip
+
+
+def review_move(m: Any) -> dto.ReviewMove:
+    return dto.ReviewMove(
+        m.ply, m.san, m.uci, m.mover, m.fen_before, m.classification, m.symbol, m.cp_loss, m.eval_white,
+        m.eval_text, m.best_move, m.best_san, [dto.ReviewLine(x.score, list(x.pv), list(x.sans)) for x in m.lines],
+        list(m.refutation), m.kind, m.phase, m.low_clock, m.reason, m.suggested_reason, m.saved,
+    )  # fmt: skip
+
+
+def side_summary(s: Any) -> dto.SideSummary:
+    phases = [dto.PhaseSummary(p, x.moves, x.inaccuracies, x.mistakes, x.blunders, x.avg_cp_loss)  # type: ignore[arg-type]
+              for p, x in s.by_phase.items()]  # fmt: skip
+    return dto.SideSummary(s.color, s.moves, s.inaccuracies, s.mistakes, s.blunders, s.avg_cp_loss,
+                           s.platform_accuracy, phases, s.low_clock_errors)  # fmt: skip

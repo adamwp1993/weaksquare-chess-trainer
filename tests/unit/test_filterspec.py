@@ -49,17 +49,38 @@ def test_invalid_input_rejected(data: object) -> None:
         FilterSpec.from_json(data)
 
 
+def test_v08_puzzle_source_and_my_puzzles_filters() -> None:
+    spec = FilterSpec.from_json(
+        {"source": "both", "my_origins": ["manual"], "my_sets": ["Book"], "my_kinds": ["missed"],
+         "my_phases": ["endgame"], "my_time_classes": ["rapid", "blitz"]}
+    )  # fmt: skip
+    assert spec.source == "both" and spec.my_time_classes == ("rapid", "blitz")
+    assert FilterSpec.from_json(spec.to_json()) == spec
+    old = {k: v for k, v in FilterSpec().to_json().items() if not k.startswith("my_") and k != "source"}
+    assert FilterSpec.from_json(old).source == "lichess"  # a preset saved before v0.8 loads as Lichess DB
+
+
 @pytest.mark.parametrize(
-    "data",
+    "data, words",
     [
-        {"source": "my"},  # v0.8
-        {"source": "both"},  # v0.8
+        ({"source": "mine"}, "source must be"),
+        ({"my_origins": ["coach"]}, "my_origins"),  # v0.10
+        ({"my_kinds": ["missed", "missed"]}, "my_kinds"),
+        ({"my_sets": ["x" * 61]}, "set label"),
+        ({"source": "my", "order": "easy_to_hard"}, "order is random"),
+        (
+            {"source": "both", "ratios": [{"themes": ["fork"], "weight": 50}, {"themes": ["pin"], "weight": 50}]},
+            "Ratios",
+        ),
     ],
 )
-def test_later_version_fields_rejected_not_ignored(data: dict) -> None:
-    with pytest.raises(UnsupportedInThisVersion) as e:
+def test_my_puzzles_rules(data: dict, words: str) -> None:
+    with pytest.raises(ValidationError, match=words):
         FilterSpec.from_json(data)
-    assert e.value.code == "unsupported_in_this_version"
+
+
+def test_the_later_version_error_type_still_exists() -> None:
+    assert UnsupportedInThisVersion("x").code == "unsupported_in_this_version"
 
 
 # ---- v0.2 -------------------------------------------------------------------------------------

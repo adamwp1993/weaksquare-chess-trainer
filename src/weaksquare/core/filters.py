@@ -23,6 +23,12 @@ Side = Literal["either", "white", "black"]
 Order = Literal["random", "easy_to_hard", "by_theme", "depth_ladder"]  # depth_ladder: v0.5 (FR-4.5)
 ORDERS = ("random", "easy_to_hard", "by_theme", "depth_ladder")
 Source = Literal["lichess", "my", "both"]
+SOURCES = ("lichess", "my", "both")
+MY_ORIGINS = ("manual", "import")  # coach arrives in v0.10
+MY_KINDS = ("missed", "allowed")
+MY_PHASES = ("opening", "middlegame", "endgame")
+MY_TIME_CLASSES = ("bullet", "blitz", "rapid", "classical", "daily")
+MAX_SETS = 200
 
 RATING_FLOOR = 0
 RATING_CEILING = 4000
@@ -73,8 +79,13 @@ class FilterSpec:
     ratios: tuple[RatioBucket, ...] = ()  # FR-3.10: replaces `themes` when set
     # --- v0.3 ---------------------------------------------------------------------------
     exclude_played_on_lichess: bool = True  # FR-3.9: hide puzzles in your Lichess history (on by default)
-    # --- later versions (schema only; must stay at the defaults) -------------------------
-    source: Source = "lichess"  # FR-3.15 (v0.8)
+    # --- v0.8: the puzzle source (FR-3.15) ------------------------------------------------
+    source: Source = "lichess"  # lichess / my (My puzzles: custom_puzzles) / both
+    my_origins: tuple[str, ...] = ()  # manual (saved from your games) / import; empty = all
+    my_sets: tuple[str, ...] = ()  # imported set labels; empty = all
+    my_kinds: tuple[str, ...] = ()  # missed / allowed; empty = all
+    my_phases: tuple[str, ...] = ()  # opening / middlegame / endgame; empty = all
+    my_time_classes: tuple[str, ...] = ()  # bullet / blitz / rapid / classical / daily; empty = all
 
     @property
     def all_themes(self) -> bool:
@@ -166,12 +177,27 @@ class FilterSpec:
         if self.min_plays is not None and not 0 <= self.min_plays <= MAX_MIN_PLAYS:
             raise ValidationError(f"The minimum number of plays must be between 0 and {MAX_MIN_PLAYS:,}.")
         self._validate_ratios()
-        later = {
-            "source": self.source != "lichess",
-        }
-        used = [k for k, v in later.items() if v]
-        if used:
-            raise UnsupportedInThisVersion(f"This version doesn't support the filter(s): {', '.join(used)}.")
+        self._validate_source()
+
+    def _validate_source(self) -> None:
+        """FR-3.15 (v0.8): the My-puzzles filters; ratios and the orders need Lichess's ratings and themes."""
+        if self.source not in SOURCES:
+            raise ValidationError("source must be 'lichess', 'my' or 'both'")
+        for name, values, allowed in (
+            ("my_origins", self.my_origins, MY_ORIGINS),
+            ("my_kinds", self.my_kinds, MY_KINDS),
+            ("my_phases", self.my_phases, MY_PHASES),
+            ("my_time_classes", self.my_time_classes, MY_TIME_CLASSES),
+        ):
+            if not set(values) <= set(allowed) or len(set(values)) != len(values):
+                raise ValidationError(f"{name} must be distinct values from {', '.join(allowed)}")
+        if len(self.my_sets) > MAX_SETS or not all(isinstance(x, str) and 0 < len(x) <= 60 for x in self.my_sets):
+            raise ValidationError("my_sets contains an invalid set label")
+        if self.source != "lichess":
+            if self.ratios:
+                raise ValidationError("Ratios work with Lichess puzzles only. Choose Lichess DB as the source.")
+            if self.order != "random":
+                raise ValidationError("With My puzzles, the order is random. Choose Lichess DB for the other orders.")
 
     def _validate_ratios(self) -> None:
         if not self.ratios:
@@ -192,7 +218,16 @@ class FilterSpec:
 
 def _coerce(key: str, value: Any) -> Any:
     """Convert JSON values to the field's type, rejecting anything else."""
-    str_lists = {"themes", "exclude_themes", "openings"}
+    str_lists = {
+        "themes",
+        "exclude_themes",
+        "openings",
+        "my_origins",
+        "my_sets",
+        "my_kinds",
+        "my_phases",
+        "my_time_classes",
+    }
     optional_ints = {"rating_min", "rating_max", "queue_size", "min_popularity", "min_plays"}
     bools = {"exclude_solved_here", "exclude_played_on_lichess", "only_my_misses"}
     strings = {"match", "side", "order", "source"}

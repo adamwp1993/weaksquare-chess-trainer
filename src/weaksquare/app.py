@@ -17,13 +17,18 @@ from typing import Any
 
 from weaksquare import config
 from weaksquare.adapters import instance_lock
+from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzleSource, CustomPuzzlesRepo, RetryRepo
+from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
+from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
+from weaksquare.adapters.db.repos.puzzle_sources import CombinedSource
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
 from weaksquare.adapters.db.repos.user_data import (
@@ -50,6 +55,7 @@ from weaksquare.adapters.lichess import (
     is_unauthorized,
     retry_after,
 )
+from weaksquare.adapters.lichess_games import LichessGames
 from weaksquare.adapters.llm.anthropic import AnthropicProvider
 from weaksquare.adapters.llm.openai import OpenAIProvider
 from weaksquare.adapters.logging_setup import setup_logging
@@ -63,21 +69,26 @@ from weaksquare.bridge.api import Api, attempt_rating
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineClient, EngineProbe, parse_manifest, platform_key
+from weaksquare.core.games import ChesscomClient, LichessGamesClient
 from weaksquare.core.lichess import LichessClient
 from weaksquare.core.llm.provider import LLMProvider
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
+from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
 from weaksquare.services.explain import ExplainService
+from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
+from weaksquare.services.puzzle_import import PuzzleImportService
 from weaksquare.services.reasons import ReasonsService
+from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
@@ -194,6 +205,10 @@ class Services:
     llm_settings: LlmSettingsService
     llm_usage: LlmUsageService
     explain: ExplainService
+    games: GameLibraryService
+    analysis: AnalysisService
+    review: ReviewService
+    puzzle_import: PuzzleImportService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -221,6 +236,8 @@ def build_services(
     engine_probe: EngineProbe | None = None,
     cpu_count: int | None = None,
     llm_providers: dict[str, LLMProvider] | None = None,
+    lichess_games: LichessGamesClient | None = None,
+    chesscom: ChesscomClient | None = None,
 ) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
 
@@ -253,7 +270,7 @@ def build_services(
         runner,
         clock,
     )
-    puzzles = LichessDbSource(db)
+    puzzles = CombinedSource(LichessDbSource(db), CustomPuzzleSource(db))  # FR-3.15 (v0.8)
     attempts = AttemptsRepo(db)
     mixer = MixerService(puzzles)
     ui_settings = UiSettingsService(SettingsRepo(db))
@@ -317,8 +334,12 @@ def build_services(
         probe,
         cpu_count or os.cpu_count() or 1,
     )
+    games_repo = GamesRepo(db)
+    analysis_repo = GameAnalysisRepo(db)
+    analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner)
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields,
-                              engine=engine, prefs=ui_settings, mode_fields=ModeFields)  # fmt: skip
+                              engine=engine, prefs=ui_settings, mode_fields=ModeFields,
+                              tolerance_cp=lambda: analysis.settings().tolerance_cp)  # fmt: skip
     reasons = ReasonsService(attempts, MistakeReasonsRepo(db), clock, sessions.suggestion_for)
     presets = PresetService(PresetsRepo(db), clock)
     stats = StatsService(StatsRepo(db), attempts, sync_repo, clock)
@@ -336,6 +357,16 @@ def build_services(
     )
     llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
     explain = ExplainService(sessions, llm_settings, llm_usage, LlmCacheRepo(db), runner, clock)
+    games = GameLibraryService(
+        games_repo, AccountSyncRepo(db), SettingsRepo(db), runner, clock, account,
+        lichess_games or LichessGames(http), chesscom or ChesscomGames(http), classify_game_error,
+    )  # fmt: skip
+    custom_puzzles = CustomPuzzlesRepo(db)
+    puzzle_import = PuzzleImportService(custom_puzzles, runner, clock)
+    review = ReviewService(
+        games_repo, analysis_repo, analysis, analysis.is_current, engine, custom_puzzles, RetryRepo(db),
+        MistakeReasonsRepo(db), ui_settings, clock,
+    )  # fmt: skip
     return Services(
         db=db,
         http=http,
@@ -355,6 +386,10 @@ def build_services(
         llm_settings=llm_settings,
         llm_usage=llm_usage,
         explain=explain,
+        games=games,
+        analysis=analysis,
+        review=review,
+        puzzle_import=puzzle_import,
     )
 
 
@@ -438,6 +473,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         llm_settings=services.llm_settings,
         llm_usage=services.llm_usage,
         explain=services.explain,
+        games=services.games,
+        analysis=services.analysis,
+        review=services.review,
+        puzzle_import=services.puzzle_import,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())
@@ -446,6 +485,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     log.info("%s", engine_log_line(services.engine.status()))
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
     services.llm_settings.start_launch_check()  # FR-1.6: and a stored AI key, with the free model lookup
+    services.games.sync_on_open()  # FR-11.27: new games from your linked accounts, in the background (v0.8)
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's

@@ -13,7 +13,7 @@ import re
 
 import chess
 
-from weaksquare.core.puzzle import Color
+from weaksquare.core.puzzle import NO_PREMOVE, Color
 
 UCI_MOVE = re.compile(r"^[a-h][1-8][a-h][1-8][qrbn]?$")
 LENGTH_BUCKETS = (1, 2, 3, 4)  # 4 means "4 or more"
@@ -79,7 +79,16 @@ def validate_line(fen: str, moves: list[str] | tuple[str, ...]) -> None:
 
 
 def start_position(fen: str, moves: list[str] | tuple[str, ...]) -> tuple[chess.Board, chess.Move]:
-    """The board the player solves from (after the opponent's first move), and that move."""
+    """The board the player solves from (after the opponent's first move), and that move. A custom puzzle
+    (v0.8) has no opponent move first (`NO_PREMOVE`): the board is the FEN itself, and the move is null."""
+    if moves and moves[0] == NO_PREMOVE:
+        if len(moves) < 2:
+            raise PuzzleDataError("a puzzle needs at least one player move")
+        board = _board(fen)
+        check = board.copy()
+        for uci in moves[1:]:
+            check.push(_move(check, uci))
+        return board, chess.Move.null()
     validate_line(fen, moves)
     board = _board(fen)
     opponent = _move(board, moves[0])

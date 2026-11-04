@@ -1,0 +1,10 @@
+{
+  "@id": "https://api.chess.com/pub/player/player_a",
+  "url": "https://www.chess.com/member/player_a",
+  "username": "player_a",
+  "player_id": 1,
+  "status": "basic",
+  "name": "player_a",
+  "joined": 1600000000,
+  "last_online": 1790000000
+}

@@ -148,7 +148,8 @@ class Wired:
                        puzzle_db=s.puzzle_db, mixer=s.mixer, sessions=s.sessions, presets=s.presets, stats=s.stats,
                        ui_settings=s.ui_settings, db_update=s.db_update, account=s.account, sync=s.sync,
                        history=s.history, engine=s.engine, reasons=s.reasons,
-                       llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain)  # fmt: skip
+                       llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain, games=s.games,
+                       analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import)  # fmt: skip
 
     def settle(self) -> None:
         for _ in range(10):
@@ -186,7 +187,7 @@ def _check_in(w: Wired) -> None:
 
 def _solve_one(api: Api, sid: int) -> dict:
     view = data(api.next_puzzle(sid))
-    with api._sessions._puzzles._db.session() as c:
+    with api._sessions._puzzles._lichess._db.session() as c:
         moves = c.execute("SELECT moves FROM pz.puzzles WHERE id = ?", (view["puzzle_id"],)).fetchone()[0].split()
     fb = None
     for uci in moves[1::2]:

@@ -16,6 +16,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   Mistake reasons ............................................. v0.6
   AI explanations and what they cost .......................... v0.7
   Your game library and Game Review ........................... v0.8, v0.9
+  Importing your own puzzles .................................. v0.8
   The Coach ................................................... v0.10
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
@@ -45,6 +46,13 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Explain** sends one puzzle: its position (FEN), the solution moves, its themes, the moves you played, Stockfish's lines and its answer to your wrong move, and facts about which pieces attack and defend which squares. In Danger spotting it also sends the highlighted move and your call. It never sends the puzzle's ID or rating, your Lichess name, your settings or anything about other puzzles. OpenAI requests ask it not to keep the response for later retrieval (`store: false`); each provider's own data policy applies.
     - **Test key**, and the silent check of a saved key at start-up, only ask the provider whether the model exists. That's free and sends no puzzle.
     - What each request cost is kept in `user.db`, on this PC only.
+  - **Your games** (v0.8), only for accounts you link. Each sync fetches game metadata and PGNs, never analysis, and sends nothing about you beyond the request itself:
+    - **Lichess:** with your sign-in, your own games since the last sync, from lichess.org (`/api/games/user/<you>`).
+    - **chess.com:** your linked username's public monthly game archives from api.chess.com, one request at a time. chess.com's public API needs no login. **Verify** looks up that username's public profile.
+    - **Importing by URL** fetches that one game: from lichess.org, or by searching your chess.com archives of the last six months.
+    - **The analysis runs on your PC.** Stockfish grades your games locally, and the games and their analysis stay in `user.db`.
+    - **Open on Lichess / chess.com** opens the game's page in your browser, like any link.
+  - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
 
@@ -168,8 +176,11 @@ The banner's puzzle count comes from the database.lichess.org page, which can la
 ## Choosing your puzzles
 *Added in v0.1. Changed in v0.2: ratios, openings, quality, your history, order and presets. Changed in v0.3: Exclude played on Lichess, and Rated. Changed in v0.5: the Mode control, the Depth ladder order, and Hide filters.*
 
+*Changed in v0.8: Puzzles from (Lichess DB / My puzzles / Both).*
+
 The left-hand panel, **Choose your puzzles**, decides which puzzles you get. The count under the filters updates as you change them, so you always know how many puzzles match. The panel scrolls on its own, so the board stays in view. At its top, **Mode** picks how you train (see [Training modes](#training-modes)).
 
+1. Under **Puzzles from**, choose **Lichess DB**, **My puzzles**, or **Both** (see [My puzzles](#my-puzzles)).
 1. Pick **Themes**, or leave it at **All themes**. To mix themes in fixed shares instead, switch on **Mix by ratio** (below).
 2. Choose **ANY** (a puzzle needs at least one of your themes) or **ALL** (it needs every one).
 3. Narrow it down with **Exclude themes**, **Rating**, **Number of moves** and **You play**.
@@ -231,7 +242,7 @@ The **⋯** button next to it renames or deletes the preset you loaded.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Stats
-*Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode. Changed in v0.6: mode details, Why you missed, misclicks.*
+*Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode. Changed in v0.6: mode details, Why you missed, misclicks. Changed in v0.8: Why you missed in your games, Retry and My puzzles.*
 
 Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
 
@@ -244,7 +255,8 @@ Choose **☰ → Stats** to see how you're doing across every puzzle you've play
   - **Commit the line:** calculation accuracy, the replies you predicted out of all the solutions' replies.
   - **Name the idea first:** **ideas found** (the puzzle's motifs you named, out of all its motifs) and **tags right** (your tags that were motifs, out of all your tags).
   - **Danger spotting:** how often you called a **safe** move Safe, and how often you spotted **and punished** a real blunder. Look at both: a habit of always saying "Unsafe" shows up as a low first number.
-- **Why you missed** (*added in v0.6*): how often you gave each reason for a miss (see [Mistake reasons](#mistake-reasons)), with its gap type (process, calculation, knowledge, time). Pick a **Theme** or a **Mode** to see one part of your training, for example why you miss forks. **By week** shows the same counts over time, as a chart and a table.
+- **Why you missed** (*added in v0.6*): how often you gave each reason for a miss (see [Mistake reasons](#mistake-reasons)), with its gap type (process, calculation, knowledge, time). Pick a **Theme** or a **Mode** to see one part of your training, for example why you miss forks. *Changed in v0.8:* **From** switches between **Puzzles**, **My games (and Retry)** (the reasons you gave on your game mistakes and Retry misses) and **Both**, so you can compare why you miss things in games with why you miss them in puzzles. **By week** shows the same counts over time, as a chart and a table.
+- **My games and my puzzles** (*added in v0.8*): how many of your mistakes you found in [Retry](#why-you-missed-it-save-as-puzzle-and-retry), and your accuracy on Lichess puzzles and on [My puzzles](#my-puzzles).
 - **Lichess puzzle rating** (*added in v0.3*): your rating over time, one point each time Lichess reported a new rating for your synced solves, and a table of the change in each session (newest first). Hover over the line to see a point's rating. It's empty until you sign in with Lichess and sync rated puzzles. The numbers are exactly what Lichess returned.
 
 **Gotchas**
@@ -489,7 +501,7 @@ The depth ladder is an **Order** choice (**Choose your puzzles → Order → Dep
 |---|---|
 | **Move up at (%)** / **Over the last (puzzles)** | The depth ladder's threshold (80% by default, 10–100) and how many recent puzzles at your level it looks at (20 by default, 3–100). Saved when you leave the box. |
 | **Review boxes (days)** | Spaced repetition's boxes, as days separated by commas (1, 3, 7, 14, 30 by default). 2 to 10 boxes, each longer than the one before, up to 365 days. Press **Save**. |
-| **Ask after a failed puzzle** | *v0.6.* **Always** (the default) shows the [mistake-reason](#mistake-reasons) chips after each miss; **Off** never asks. |
+| **Ask why you missed** | *Changed in v0.8.* **Always** (the default) shows the [mistake-reason](#mistake-reasons) chips after each failed puzzle and on your mistakes in Game Review; **Game Review only** asks only there; **Off** never asks. |
 | **Suggest Rushed under (seconds)** | *v0.6.* A deciding move made faster than this (3 s by default, 1–30) gets **Rushed** suggested. Saved when you leave the box. |
 
 Changing either setting applies to everything you've already played: the app works your boxes and ladder levels out from your attempt history, rather than storing them separately.
@@ -528,7 +540,7 @@ A miss you tag **Misclick** is left out of your accuracy here: the session bar (
 
 **Gotchas**
 - You're asked after every miss in every mode, including Danger spotting, but not during **Try again** practice. The chips stay while you practise.
-- To stop being asked, set **Ask after a failed puzzle** to **Off** in Settings → Training.
+- To stop being asked, set **Ask why you missed** to **Off** in Settings → Training. **Game Review only** keeps the question for your game mistakes and stops it after puzzles.
 - Your reasons and notes stay on this PC.
 
 ## AI explanations and what they cost
@@ -576,6 +588,97 @@ Every cost comes from the **price table** and the token counts the provider repo
 
 When Explain can't run, the reason shows under the button: no provider or key, no model picked, the model isn't in the price table, the per-run cap, or the monthly budget.
 
+## Your games and Game Review
+*Added in v0.8.*
+
+Stockfish goes through your own games on your PC, for free. It grades every move, finds the moments that cost you, and shows what you should have played. You can replay those moments as practice and save them as puzzles.
+
+### Linking your accounts
+- **Lichess** is linked automatically when you're [signed in](#signing-in-with-lichess-syncing-solves-offline-mode).
+- **chess.com** is linked by username. Open **☰ → Settings… → Games**, type your username (or paste your profile link), press **Verify** to check it exists, then **Link**. chess.com's public API needs no login, so linking only tells the app whose public games to fetch.
+
+### My games
+![My games](img/my-games.png)
+
+Press **My games** at the top of the window. The list combines both accounts, newest first. It shows the date, platform, your color and rating, your opponent and their rating, the result, the time control, the opening, the platform's accuracy (when it has one), and whether the game is analyzed. **Lichess analysis** means Lichess already analyzed the game. The app still analyzes every game itself, so all your games are graded the same way.
+
+- **Refresh** fetches your new games in the background. With **Sync new games when the app opens** on (the default), this also happens at each start. The first sync fetches the last 90 days or 200 games per account, whichever is smaller. You can change both in Settings → Games.
+- **Filters** above the list: platform, time control, result, your color, status, rated or casual, opponent, opening or ECO code, and a date range.
+- **Analyze selected** queues the ticked games for Stockfish. Games are analyzed one at a time, with a progress bar and **Cancel**. A game already analyzed at the same settings isn't analyzed again.
+- **Review** opens a game. **Open on Lichess / Open on chess.com** opens it in your browser.
+
+### Importing one game
+Press **Import game** (at the top, or on My games):
+- **Paste PGN:** paste a game's PGN and press **Import**.
+- **PGN file:** choose a `.pgn` file. If it holds several games, pick one from the list. Games that can't be read are shown with the reason.
+- **Game URL:** a `lichess.org/…` or `chess.com/game/live/…` link. chess.com has no single-game lookup, so the app searches the last six months of your chess.com games. If you haven't linked a username, it asks for it. If the game isn't found, paste its PGN instead (on chess.com: **Share → PGN**).
+
+If the app can't tell which side you played, it asks: **White**, **Black** or **Review both sides**. Only standard chess can be imported, not Chess960 or other variants. Importing a game you already have (the same game, or the same moves) opens the existing one, with its analysis.
+
+### Reading the review
+![Game Review](img/game-review.png)
+
+- **The board and the move list.** Step with the arrows below the board (or the **←** and **→** keys), or click a move. Your moves are in bold. The symbols mark inaccuracies (**?!**), mistakes (**?**) and blunders (**??**). A move isn't penalized when the game was already lost before it (−5 or worse), or is still won after it (+5 or better). Dropping from +8 to +1 still counts.
+- **The eval graph** shows who was better through the game, from White's side and capped at ±10. Click it to jump to a move.
+- **The summary** gives each side's inaccuracies, mistakes, blunders, average loss and the platform's accuracy.
+- **At any move,** a green arrow shows Stockfish's best move, and **Engine lines here** lists its top three lines. Click a line to step through it. After a bad move, **Why … fails: show me** steps through the punishment.
+- **Key moments** are your biggest mistakes (five by default). Each one reads *Played X, better was Y*. Click it to go there.
+
+### Why you missed it, Save as puzzle and Retry
+- **Mistake reasons:** open a key moment and pick why it happened with the [reason chips](#mistake-reasons) (keys **1–6**). Settings → Training → **Ask why you missed** controls this. **Game Review only** asks here but not after puzzles.
+- **Save as puzzle** turns the position before your mistake into one of [My puzzles](#my-puzzles), with Stockfish's best line as the answer (at most three of your moves).
+![Retry mode](img/retry-mode.png)
+
+- **Retry your mistakes** goes through your mistakes and blunders one by one, without showing the answer. Play the move you should have played. Any move within 30 centipawns of the best counts as found (Settings → Games → **Retry tolerance**). Then you see the best line and, if you missed, what your move ran into. Retries count in Stats only. They never go to Lichess, and nothing in Game Review affects a rating.
+
+### Games settings
+In **Settings → Games**:
+
+| Setting | What it does |
+|---|---|
+| **chess.com username** | Verify, Link or Unlink. |
+| **Sync new games when the app opens** | On by default. |
+| **First sync: days back / at most (games)** | How far the first sync of each account reaches (90 days, 200 games). |
+| **Analysis: seconds per position** | Stockfish's time per position (0.3 s by default). A higher value is slower but more accurate. New analyses use it, and a game analyzed at another setting shows **Analyze again**. |
+| **Key moments** | How many of your mistakes are listed (5). |
+| **Retry tolerance (cp)** | How close to the best move counts as found, in Retry and in puzzles saved from your games (30). |
+| **Inaccuracy / Mistake / Blunder from (cp)** | The grading thresholds (50, 100, 200). Games you've already analyzed are regraded at once, with no new analysis. Losing a forced mate, or walking into one, is always a blunder. |
+
+### Gotchas
+- **Analysis needs Stockfish.** Without it, **Analyze** says so. See [Installing Stockfish](#installing-stockfish).
+- **Mistakes aren't tagged with themes yet.** Theme tags for game mistakes come in a later version.
+
+## Importing your own puzzles
+*Added in v0.8.*
+
+If you have puzzles in a file (for example from a book or a course you own), you can train on them in the app. The app doesn't ship, link to or download any puzzle collection.
+
+1. Open **☰ → Import puzzles from a file…**.
+2. Give the set a **label**, such as the book's title.
+3. Press **Choose a file…** and pick a **PGN**, **EPD** or **CSV** file:
+   - **PGN:** each game is a puzzle. Its `FEN` tag is the position, and its moves are the solution.
+   - **EPD:** one position per line, with `pv` (the line) or `bm` (the best move) as the solution, and `id` as the name.
+   - **CSV:** columns `fen`, `solution` (or `moves`, in UCI like `e2e4` or SAN like `Nf3`) and an optional `name`.
+![The import report](img/import-puzzles.png)
+
+4. When it's done, the **report** shows how many puzzles were added, how many were already there, and which entries were skipped, with their entry number and why.
+
+The side to move in each position is you. If a file gives only the first move, the puzzle is that move. Imported puzzles are checked **strictly**, like Lichess puzzles: only the file's moves count, except that any checkmate counts where the solution mates. Importing the same file again adds nothing twice, but the same file under another label is another set. **The file is read on your PC and never sent anywhere.**
+
+## My puzzles
+*Added in v0.8.*
+
+![Puzzles from: My puzzles](img/my-puzzles-source.png)
+
+**My puzzles** holds the puzzles you saved from your games and the ones you imported. In **Choose your puzzles**, set **Puzzles from** to **My puzzles**, or to **Both** to mix them with Lichess puzzles in proportion to the two pools.
+
+- **Filters:** origin (saved from my games / imported), set, Missed or Allowed, phase and time control. **Number of moves**, **You play** and your history (Exclude solved here, Only my misses) apply too.
+- **Not for My puzzles:** they have no rating or themes yet, so themes, rating, openings, quality and ratios apply only to Lichess puzzles, and the order is always random. With My puzzles only, those controls are greyed out.
+- **Modes:** Standard, Commit the line and Spaced repetition. Name the idea and Danger spotting stay Lichess-only.
+- **There's no opponent move first:** the puzzle starts in the position you solve, and you move first.
+- **Checking moves:** a puzzle saved from your games accepts any move within the Retry tolerance of Stockfish's best, which Stockfish checks before the line continues from your move. Without Stockfish, only the saved line counts. In Commit the line, your line is graded against the saved one.
+- They **never sync to Lichess** and have no rating. Misses come back in Spaced repetition like any puzzle, and Stats show their accuracy next to Lichess puzzles'.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 
@@ -585,7 +688,7 @@ When Explain can't run, the reason shows under the button: no provider or key, n
 | **H** | Hint |
 | **A** | Show answer (once it's unlocked; after the puzzle, back to the start of the answer) |
 | **R** | Try again (not scored), once the puzzle is over (v0.4) |
-| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4) |
+| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4). In Game Review: through the game, or a line you're stepping through (v0.8) |
 | **C** | Show or hide the letters and numbers around the board |
 | **F** | Hide or show the filters panel (v0.5) |
 | **S** / **U** | Danger spotting: call the highlighted move Safe or Unsafe (v0.6) |

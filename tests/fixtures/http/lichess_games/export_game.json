@@ -1,0 +1,66 @@
+{
+  "id": "GAMEID11",
+  "rated": true,
+  "variant": "standard",
+  "speed": "rapid",
+  "perf": "rapid",
+  "createdAt": 1790000000000,
+  "lastMoveAt": 1790000600000,
+  "status": "mate",
+  "winner": "black",
+  "players": {
+    "white": {
+      "user": {
+        "name": "player_a",
+        "id": "player_a"
+      },
+      "rating": 1500,
+      "ratingDiff": -6,
+      "analysis": {
+        "inaccuracy": 1,
+        "mistake": 0,
+        "blunder": 2,
+        "acpl": 140,
+        "accuracy": 55
+      }
+    },
+    "black": {
+      "user": {
+        "name": "opponent_b",
+        "id": "opponent_b"
+      },
+      "rating": 1510,
+      "ratingDiff": 6,
+      "analysis": {
+        "inaccuracy": 0,
+        "mistake": 0,
+        "blunder": 0,
+        "acpl": 12,
+        "accuracy": 96
+      }
+    }
+  },
+  "opening": {
+    "eco": "C50",
+    "name": "Italian Game: Blackburne-Kostic Gambit",
+    "ply": 6
+  },
+  "moves": "e4 e5 Nf3 Nc6 Bc4 Nd4 Nxe5 Qg5 Nxf7 Qxg2 Rf1 Qxe4+ Be2 Nf3#",
+  "clock": {
+    "initial": 600,
+    "increment": 0,
+    "totalTime": 600
+  },
+  "division": {
+    "middle": 8
+  },
+  "analysis": [
+    {
+      "eval": 20
+    },
+    {
+      "eval": 25
+    }
+  ],
+  "pgn": "[Event \"Rated rapid game\"]\n[Site \"https://lichess.org/GAMEID11\"]\n[Date \"2026.09.21\"]\n[Round \"?\"]\n[White \"player_a\"]\n[Black \"opponent_b\"]\n[Result \"0-1\"]\n[WhiteElo \"1500\"]\n[BlackElo \"1510\"]\n[TimeControl \"600+0\"]\n[ECO \"C50\"]\n[UTCDate \"2026.09.21\"]\n[UTCTime \"13:46:40\"]\n\n1. e4 { [%clk 0:09:58] } 1... e5 { [%clk 0:09:57] } 2. Nf3 { [%clk 0:09:50] }\n2... Nc6 { [%clk 0:09:55] } 3. Bc4 { [%clk 0:09:40] } 3... Nd4\n{ [%clk 0:09:50] } 4. Nxe5 { [%clk 0:09:30] } 4... Qg5 { [%clk 0:09:45] } 5.\nNxf7 { [%clk 0:09:20] } 5... Qxg2 { [%clk 0:09:40] } 6. Rf1 { [%clk 0:09:10] }\n6... Qxe4+ { [%clk 0:09:35] } 7. Be2 { [%clk 0:09:00] } 7... Nf3#\n{ [%clk 0:09:30] } 0-1"
+}

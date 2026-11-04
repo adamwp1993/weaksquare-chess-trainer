@@ -81,6 +81,30 @@ ALLOWLIST = {
     "get_reason_prompt",  # v0.6: mistake reasons (§7.3)
     "set_mistake_reason",  # v0.6: mistake reasons (FR-5.6)
     "get_reason_stats",  # v0.6: the reason breakdown (FR-9.7)
+    "get_games_settings",  # v0.8: games and Review settings (§11.5)
+    "set_games_settings",  # v0.8
+    "verify_chesscom",  # v0.8: FR-11.24
+    "set_chesscom_username",  # v0.8: FR-11.24
+    "start_games_sync",  # v0.8: FR-11.27
+    "list_games",  # v0.8: My games (FR-11.25, 11.26)
+    "import_game_pgn",  # v0.8: FR-11.2
+    "choose_game_file",  # v0.8: FR-11.2
+    "pick_imported_game",  # v0.8: FR-11.2
+    "start_game_url_import",  # v0.8: FR-11.3, 11.4
+    "get_game_url_import",  # v0.8
+    "set_game_color",  # v0.8: FR-11.5
+    "open_game_online",  # v0.8: FR-11.29
+    "analyze_games",  # v0.8: FR-11.30, 11.31
+    "get_analysis_queue",  # v0.8: FR-11.31
+    "get_review",  # v0.8: FR-11.12-11.14
+    "retry_move",  # v0.8: Retry mode (FR-11.15)
+    "save_game_puzzle",  # v0.8: FR-11.16
+    "set_game_reason",  # v0.8: FR-5.7
+    "set_retry_reason",  # v0.8: FR-5.7
+    "get_game_stats",  # v0.8: Retry and per-source accuracy
+    "choose_and_import_puzzles",  # v0.8: FR-10.46
+    "get_puzzle_import_report",  # v0.8: FR-10.48
+    "list_puzzle_sets",  # v0.8: FR-10.47
 }
 
 

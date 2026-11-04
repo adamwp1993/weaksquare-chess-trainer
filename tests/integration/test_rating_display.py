@@ -52,7 +52,7 @@ def data(r: dict):  # type: ignore[no-untyped-def]
 
 
 def moves_of(api: Api, puzzle_id: str) -> list[str]:
-    with api._sessions._puzzles._db.session() as c:
+    with api._sessions._puzzles._lichess._db.session() as c:
         return c.execute("SELECT moves FROM pz.puzzles WHERE id = ?", (puzzle_id,)).fetchone()[0].split()
 
 

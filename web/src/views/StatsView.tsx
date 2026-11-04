@@ -2,6 +2,7 @@ import { Alert, Group, Loader, Modal, Paper, SimpleGrid, Stack, Table, Tabs, Tex
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { RatingHistory, StatRow, StatsReport } from "../api/types";
+import { GameStatsCard } from "../components/GameStatsCard";
 import { RatingTrend } from "../components/RatingTrend";
 import { ModeDetailsTable, ReasonStatsPanel } from "../components/ReasonStatsPanel";
 
@@ -133,6 +134,7 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
             </Tabs.Panel>
           </Tabs>
           <RatingTrend history={ratings} />
+          <GameStatsCard />
           {report.misclicks > 0 && (
             <Text size="xs" c="dimmed" data-testid="stats-misclicks">
               {report.misclicks} {report.misclicks === 1 ? "miss" : "misses"} tagged Misclick {report.misclicks === 1 ? "is" : "are"} left

@@ -90,6 +90,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="with -m live: write scrubbed, anonymized copies of the real responses to tests/fixtures/http/lichess",
     )
     parser.addoption(
+        "--record-games",
+        action="store_true",
+        default=False,
+        help="with -m live: write scrubbed, anonymized recorded_* game fixtures (v0.8)",
+    )
+    parser.addoption(
+        "--chesscom-user",
+        default=None,
+        help="with -m live: your chess.com username, to check the chess.com API (v0.8)",
+    )
+    parser.addoption(
         "--record-llm",
         action="store_true",
         default=False,

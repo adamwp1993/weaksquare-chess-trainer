@@ -25,6 +25,11 @@ export function defaultFilters(): FilterSpec {
     only_my_misses: false,
     ratios: [],
     source: "lichess",
+    my_origins: [],
+    my_sets: [],
+    my_kinds: [],
+    my_phases: [],
+    my_time_classes: [],
   };
 }
 

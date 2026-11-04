@@ -245,11 +245,11 @@ export function TrainerView({
       }
       if (next.mode === "name_idea") setNeedTags(true);
       later(() => {
-        const opp = next.opponent_move;
-        c.move(uciMove(opp));
+        const opp = next.opponent_move; // empty for your own puzzles (v0.8): nothing to play first
+        if (opp) c.move(uciMove(opp));
         chess.current = c;
         setFen(c.fen());
-        setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
+        setLastMove(opp ? [opp.slice(0, 2), opp.slice(2, 4)] : null);
         setMovable(next.mode === "commit_line" ? "both" : next.mode === "name_idea" ? null : next.player_color);
         sounds.play(next.opponent_sound); // before you've clicked anything (FR-1.13)
         setMessage({ color: "gray", text: turnMessage(next, false) });
@@ -297,7 +297,7 @@ export function TrainerView({
     setEntry(rest);
     setFen(entryBoard(chess.current.fen(), rest).fen());
     const last = rest[rest.length - 1];
-    setLastMove(last ? [last.slice(0, 2), last.slice(2, 4)] : view ? [view.opponent_move.slice(0, 2), view.opponent_move.slice(2, 4)] : null);
+    setLastMove(last ? [last.slice(0, 2), last.slice(2, 4)] : view?.opponent_move ? [view.opponent_move.slice(0, 2), view.opponent_move.slice(2, 4)] : null);
   };
 
   const submitLine = async () => {
@@ -625,10 +625,10 @@ export function TrainerView({
     }
     later(() => {
       const opp = view.opponent_move;
-      c.move(uciMove(opp));
+      if (opp) c.move(uciMove(opp));
       chess.current = c;
       setFen(c.fen());
-      setLastMove([opp.slice(0, 2), opp.slice(2, 4)]);
+      setLastMove(opp ? [opp.slice(0, 2), opp.slice(2, 4)] : null);
       setMovable(view.mode === "commit_line" ? "both" : view.player_color);
       sounds.play(view.opponent_sound);
       setMessage({ color: "gray", text: turnMessage(view, true) });
@@ -769,10 +769,15 @@ export function TrainerView({
           )}
         </div>
         <Stack gap="sm" style={{ flex: "0 0 260px" }}>
+          {view?.strict_without_engine && (
+            <Text size="xs" c="dimmed" data-testid="strict-note">
+              Stockfish isn't installed, so only this puzzle's saved line counts.
+            </Text>
+          )}
           {view && (
             <Text size="sm" c="dimmed" data-testid="puzzle-header">
               Puzzle {view.number}
-              {stats?.queue_size ? ` of ${stats.queue_size}` : ""} · rated {view.rating} ·{" "}
+              {stats?.queue_size ? ` of ${stats.queue_size}` : ""} · {view.source === "my" ? "my puzzle" : `rated ${view.rating}`} ·{" "}
               {danger && dangerPhase === "refute"
                 ? `you play ${other(view.player_color)}`
                 : danger
@@ -807,7 +812,7 @@ export function TrainerView({
                 <Text fw={700} c={outcome.win ? "green" : "red"}>
                   {outcome.win ? "Solved" : "Failed"}
                 </Text>
-                <Text size="sm">Themes:</Text>
+                {outcome.themes.length > 0 && <Text size="sm">Themes:</Text>}
                 <Group gap={4} data-testid="outcome-themes">
                   {outcome.themes.map((t) => (
                     <Badge key={t.key} variant="light" style={{ textTransform: "none" }}>
@@ -823,10 +828,12 @@ export function TrainerView({
                     {outcome.level_up.top ? "+" : ""} moves)
                   </Badge>
                 )}
-                {!danger && <RatingChange info={rating} />}
+                {!danger && view?.source !== "my" && <RatingChange info={rating} />}
+                {view?.source !== "my" && (
                 <Anchor size="sm" href={outcome.puzzle_url} target="_blank" rel="noreferrer">
                   Open this puzzle on Lichess
                 </Anchor>
+                )}
               </Stack>
             </Paper>
           )}

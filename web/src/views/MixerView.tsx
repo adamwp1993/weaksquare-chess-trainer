@@ -30,6 +30,7 @@ import {
 import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { PresetMenu } from "../components/PresetMenu";
 import { RatioEditor } from "../components/RatioEditor";
+import { MyPuzzlesFilters, SourceSelect } from "../components/SourceControls";
 import { ThemePicker } from "../components/ThemePicker";
 import { useEngineStatus } from "../state/engine";
 import { LADDER_MODES, MODES, modeLabel, shortDate } from "../state/modes";
@@ -63,6 +64,12 @@ export function filtersSummary(
   const names = new Map(catalog.flatMap((g) => g.themes.map((t) => [t.key, t.name] as const)));
   const name = (k: string) => names.get(k) ?? k;
   const parts: string[] = [modeLabel(mode)];
+  if (spec.source === "my") {
+    parts.push("My puzzles");
+    if (count !== null) parts.push(`${count.toLocaleString("en-US")} ${count === 1 ? "puzzle" : "puzzles"}`);
+    return parts.join(" · ");
+  }
+  if (spec.source === "both") parts.push("Lichess + My puzzles");
   if (spec.ratios.length) parts.push(spec.ratios.map((r) => `${r.weight}% ${r.themes.map(name).join("/") || "…"}`).join(", "));
   else if (spec.themes.length === 0) parts.push("All themes");
   else parts.push(spec.themes.length <= 3 ? spec.themes.map(name).join(", ") : `${spec.themes.length} themes`);
@@ -178,6 +185,10 @@ export function MixerView({
   }, [spec, dbStatus.imported_at, historyVersion, playedCount]);
 
   const set = (patch: Partial<FilterSpec>) => onChange({ ...spec, ...patch });
+  // v0.8 (FR-3.15): with My puzzles only, the Lichess-only filters are greyed out; with Both they apply to
+  // the Lichess part. Ratios and the non-random orders are Lichess-only either way.
+  const onlyMine = spec.source === "my";
+  const lichessOnly = onlyMine ? { opacity: 0.45, pointerEvents: "none" as const } : undefined;
   const bounds: [number, number] = [dbStatus.rating_min ?? 400, dbStatus.rating_max ?? 3400];
   const usingRatios = spec.ratios.length > 0;
   const srsMode = mode === "spaced_repetition";
@@ -272,11 +283,20 @@ export function MixerView({
         >
         <Stack gap="md">
         <PresetMenu spec={spec} onLoad={onChange} />
+        <SourceSelect spec={spec} mode={mode} onChange={set} />
+        {spec.source !== "lichess" && <MyPuzzlesFilters spec={spec} onChange={set} version={historyVersion} />}
+        {onlyMine && (
+          <Text size="xs" c="dimmed" data-testid="lichess-only-note">
+            The filters below in grey are for Lichess puzzles only.
+          </Text>
+        )}
+        <div style={lichessOnly} aria-disabled={onlyMine}>
+        <Stack gap="md">
         <Switch
           label="Mix by ratio"
           description={ladderOrder ? "Can't be combined with the depth ladder." : "e.g. 50% forks, 30% pins, 20% one-movers"}
           checked={usingRatios}
-          disabled={ladderOrder}
+          disabled={ladderOrder || spec.source !== "lichess"}
           onChange={(e) => toggleRatios(e.currentTarget.checked)}
           data-testid="ratio-switch"
         />
@@ -324,6 +344,8 @@ export function MixerView({
           max={spec.rating_max}
           onChange={(rating_min, rating_max) => set({ rating_min, rating_max })}
         />
+        </Stack>
+        </div>
         <MoveCountSelect value={spec.lengths} onChange={(lengths) => set({ lengths })} setByLadder={ladderOrder} />
         <SideSelect value={spec.side} onChange={(side) => set({ side })} />
         <Accordion variant="contained" chevronPosition="right">
@@ -356,6 +378,7 @@ export function MixerView({
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
+        <div style={spec.source !== "lichess" ? { opacity: 0.45, pointerEvents: "none" } : undefined}>
         <OrderSelect
           value={spec.order}
           endless={spec.queue_size === null}
@@ -364,6 +387,7 @@ export function MixerView({
           ladder={ladderOrder && ladderAllowed ? ladder : null}
           ladderAllowed={ladderAllowed}
         />
+        </div>
         </Stack>
         </fieldset>
         <Divider />
@@ -396,7 +420,11 @@ export function MixerView({
           description={
             dangerMode
               ? "Danger spotting stays on this PC: nothing is sent to Lichess."
-              : rated
+              : spec.source === "my"
+                ? "Your own puzzles stay on this PC: they never count toward a rating."
+                : spec.source === "both" && rated
+                  ? "Lichess puzzles count toward your Lichess puzzle rating; your own never do."
+                  : rated
                 ? "Solves count toward your Lichess puzzle rating."
                 : "Solves sync to Lichess as unrated."
           }

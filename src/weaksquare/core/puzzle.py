@@ -8,8 +8,10 @@ from typing import Literal
 from weaksquare.core.errors import ValidationError
 
 Color = Literal["white", "black"]
-PuzzleSourceName = Literal["lichess"]  # "my" (custom puzzles from your games) arrives in v0.8
-SOURCES: tuple[str, ...] = ("lichess",)
+PuzzleSourceName = Literal["lichess", "my"]  # my: your own puzzles (custom_puzzles), v0.8
+SOURCES: tuple[str, ...] = ("lichess", "my")
+# v0.8: a custom puzzle has no opponent move first: its moves[0] is this, and the FEN is the position you solve.
+NO_PREMOVE = ""
 
 
 @dataclass(frozen=True, order=True)
@@ -39,7 +41,37 @@ class Puzzle:
     themes: tuple[str, ...]
     game_url: str
     opening_tags: tuple[str, ...]
+    tolerance: bool = False  # v0.8: solved with the engine tolerance (FR-10.43), not only the stored line
+
+    @property
+    def has_premove(self) -> bool:
+        return bool(self.moves) and self.moves[0] != NO_PREMOVE
 
     @property
     def length(self) -> int:
         return len(self.moves) // 2
+
+
+@dataclass(frozen=True)
+class NewCustomPuzzle:
+    """A puzzle of your own for `custom_puzzles` (v0.8): saved from Game Review or imported from a file."""
+
+    fen: str  # the position you solve (you are to move)
+    solution: tuple[str, ...]  # UCI, ending on your move
+    player_color: str
+    origin: str  # manual / import
+    strict: bool
+    game_id: int | None = None
+    ply: int | None = None
+    set_label: str | None = None
+    name: str | None = None
+    kind: str | None = None
+    severity: str | None = None
+    cp_loss: int | None = None
+    phase: str | None = None
+    time_class: str | None = None
+    game_date: str | None = None
+
+    @property
+    def length(self) -> int:
+        return (len(self.solution) + 1) // 2  # your moves

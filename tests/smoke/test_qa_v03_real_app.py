@@ -42,7 +42,7 @@ def test_signed_out_solve_is_queued_with_its_angle(pw, tmp_path: Path, fixture_p
             box.wait_for()
             assert box.is_disabled()  # signed out, no history imported
             page.get_by_test_id("more-filters").click()
-            page.get_by_label("Puzzles").fill("1")
+            page.get_by_label("Puzzles", exact=True).fill("1")
             page.get_by_role("button", name="Start").click()
             page.get_by_test_id("hint-button").click(timeout=30_000)  # help = a loss, decided at once
             page.get_by_test_id("outcome").filter(has_text="Failed").wait_for()

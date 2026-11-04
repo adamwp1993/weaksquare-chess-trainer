@@ -2,7 +2,7 @@ import { BarChart } from "@mantine/charts";
 import { Alert, Group, Select, Stack, Table, Text, Title, useComputedColorScheme } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { TrainingMode } from "../api/ApiClient";
+import type { ReasonSource, TrainingMode } from "../api/ApiClient";
 import type { ModeDetails, ReasonStats, StatRow } from "../api/types";
 import { MODES } from "../state/modes";
 
@@ -69,18 +69,19 @@ export function ReasonStatsPanel({ themes }: { themes: StatRow[] }) {
   const scheme = useComputedColorScheme("light");
   const [theme, setTheme] = useState<string | null>(null);
   const [mode, setMode] = useState<TrainingMode | null>(null);
+  const [source, setSource] = useState<ReasonSource>("puzzles"); // v0.8 (FR-9.7): puzzles vs games
   const [stats, setStats] = useState<ReasonStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getReasonStats(theme, mode).then(
+    api.getReasonStats(source === "games" ? null : theme, source === "games" ? null : mode, source).then(
       (r) => {
         setStats(r);
         setError(null);
       },
       (e: Error) => setError(e.message),
     );
-  }, [theme, mode]);
+  }, [theme, mode, source]);
 
   const colors = SERIES[scheme === "dark" ? "dark" : "light"];
   const keys = stats?.reasons.map((r) => r.key) ?? [];
@@ -92,6 +93,21 @@ export function ReasonStatsPanel({ themes }: { themes: StatRow[] }) {
     <Stack gap="sm" data-testid="stats-reasons">
       <Group gap="sm" align="end">
         <Select
+          label="From"
+          data={[
+            { value: "puzzles", label: "Puzzles" },
+            { value: "games", label: "My games (and Retry)" },
+            { value: "all", label: "Both" },
+          ]}
+          value={source}
+          onChange={(v) => setSource((v as ReasonSource | null) ?? "puzzles")}
+          allowDeselect={false}
+          size="xs"
+          w={190}
+          data-testid="reasons-source"
+        />
+        <Select
+          disabled={source === "games"}
           label="Theme"
           placeholder="All themes"
           data={themes.map((t) => ({ value: t.key, label: t.label }))}

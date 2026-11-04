@@ -21,15 +21,27 @@ class FakeDesktop(Desktop):
     def __init__(self) -> None:
         super().__init__()
         self.opened: list[Path] = []
+        self.urls: list[str] = []
+        self.next_file: str | None = None  # v0.8: what the Open dialogs return
 
     def open_folder(self, path: Path) -> None:
         self.opened.append(path)
+
+    def open_in_browser(self, url: str) -> None:
+        self.urls.append(url)
+
+    def choose_pgn_file(self) -> str | None:
+        return self.next_file
+
+    def choose_puzzle_import_file(self) -> str | None:
+        return self.next_file
 
 
 def fake_service_kwargs(lichess: object | None = None) -> dict:
     """Fakes for everything that would reach Lichess, Credential Manager, a timer thread or an engine."""
     from tests.fakes.desktop import FakeBrowser, FakeScheduler
     from tests.fakes.engine import FakeEngine, fake_probe
+    from tests.fakes.games import FakeChesscom, FakeLichessGames
     from tests.fakes.lichess import FakeLichess
     from tests.fakes.llm import fake_providers
     from weaksquare.adapters.secret_store import MemorySecretStore
@@ -43,6 +55,8 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
         "engine_probe": fake_probe,
         "cpu_count": 8,
         "llm_providers": fake_providers(),  # never the real Anthropic or OpenAI
+        "lichess_games": FakeLichessGames(),  # never the real Lichess or chess.com (v0.8)
+        "chesscom": FakeChesscom(),
     }
 
 
@@ -77,6 +91,10 @@ def build_api(
         llm_settings=services.llm_settings,
         llm_usage=services.llm_usage,
         explain=services.explain,
+        games=services.games,
+        analysis=services.analysis,
+        review=services.review,
+        puzzle_import=services.puzzle_import,
     )
 
 

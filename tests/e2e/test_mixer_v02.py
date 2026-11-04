@@ -69,7 +69,7 @@ def solve_first_mate_in_one(page) -> None:  # type: ignore[no-untyped-def]
     """Mate in 1, a queue of 1: the mock serves 001KR first (white mates with f1f8)."""
     ready(page)
     pick_theme(page, "themes-picker", "mate in 1", "Mate in 1")
-    page.get_by_label("Puzzles").fill("1")
+    page.get_by_label("Puzzles", exact=True).fill("1")
     page.get_by_role("button", name="Start").click()
     your_turn(page)
     assert "you play white" in page.get_by_test_id("puzzle-header").inner_text()
@@ -97,7 +97,7 @@ def test_solved_puzzle_is_left_out_by_default_and_back_when_unticked(page) -> No
 def test_only_my_misses(page) -> None:  # type: ignore[no-untyped-def]
     ready(page)
     pick_theme(page, "themes-picker", "mate in 1", "Mate in 1")
-    page.get_by_label("Puzzles").fill("1")
+    page.get_by_label("Puzzles", exact=True).fill("1")
     page.get_by_role("button", name="Start").click()
     your_turn(page)
     page.get_by_test_id("next-button").click()  # skip: a miss

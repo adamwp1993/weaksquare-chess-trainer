@@ -70,6 +70,12 @@ weaksquare-chess-trainer/
 │  │  ├─ reasons.py            # mistake-reason suggestion rules      (v0.6)
 │  │  ├─ llm/                  # LLMProvider protocol, defaults (the only model names), cost, guardrails (v0.7)
 │  │  ├─ srs.py                # Leitner scheduling                   (v0.5)
+│  │  ├─ games.py              # PGN parsing, colors, URLs, time classes, Lichess game JSON, library types,
+│  │  │                        #   the LichessGamesClient / ChesscomClient protocols  (v0.8)
+│  │  ├─ chesscom.py           # chess.com archive games and months   (v0.8)
+│  │  ├─ game_review.py        # grading, Missed/Allowed, phases, key moments, side summary (v0.8)
+│  │  ├─ tolerance.py          # the 30 cp engine tolerance (Retry, game puzzles) (v0.8)
+│  │  ├─ puzzle_files.py       # your own PGN / EPD / CSV puzzle files (v0.8)
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
@@ -82,6 +88,9 @@ weaksquare-chess-trainer/
 │  │                           #   v0.6: reasons.py (saving mistake reasons)
 │  │                           #   v0.7: llm_settings.py (provider, key, prices, Test key), llm_usage.py
 │  │                           #         (the guardrail gate every LLM request goes through)
+│  │                           #   v0.8: games.py (library, sync, imports), analysis.py (the queue on the
+│  │                           #         background engine, Review settings), review.py (review, Retry,
+│  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -89,7 +98,9 @@ weaksquare-chess-trainer/
 │  │  │  ├─ puzzles_indexes.sql  # built after each puzzle import's bulk load
 │  │  │  ├─ migrations/puzzles/0001_init.sql …
 │  │  │  ├─ migrations/user/0001_init.sql …
-│  │  │  └─ repos/             # one repository per aggregate
+│  │  │  └─ repos/             # one repository per aggregate; v0.8: games.py, game_analysis.py,
+│  │  │                        #   custom_puzzles.py (+ CustomPuzzleSource, RetryRepo), puzzle_sources.py
+│  │  │                        #   (CombinedSource: Lichess DB + My puzzles)
 │  │  ├─ http.py               # shared httpx client: UA, timeouts, retry/backoff, redaction
 │  │  ├─ secret_store.py       # the ONLY module that imports keyring
 │  │  ├─ system_clock.py       # SystemClock + the seeded Random, built only in app.py
@@ -97,7 +108,7 @@ weaksquare-chess-trainer/
 │  │  ├─ instance_lock.py      # single-instance lock + bring the window forward
 │  │  ├─ desktop.py            # open a folder, pick a file, fatal-error box
 │  │  ├─ stockfish.py          # StockfishEngine (python-chess UCI) + probe_engine  (v0.4)
-│  │  ├─ lichess.py            # LichessHttp (v0.3)   chesscom.py (v0.8)
+│  │  ├─ lichess.py            # LichessHttp (v0.3); lichess_games.py, chesscom.py (v0.8: serial lock, ETags)
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)
@@ -169,7 +180,7 @@ weaksquare-chess-trainer/
 | `LichessClient` | httpx implementation, fake | v0.3 |
 | `EngineClient` | `StockfishEngine`, fake | v0.4 |
 | `LLMProvider` | `AnthropicProvider`, `OpenAIProvider`, fake | v0.7 |
-| `GameSource` | `LichessGames`, `ChesscomGames`, `PgnImport` | v0.8 |
+| `LichessGamesClient`, `ChesscomClient` (`core/games.py`; the two APIs differ too much for one `GameSource`, v0.8 planning). Pastes and files are parsed by `core.games.parse_pgn` | `LichessGames`, `ChesscomGames`, fakes | v0.8 |
 | `Tagger` | `LichessPuzzlerTagger` + `HabitTagger` | v0.10 |
 
 ---
@@ -215,6 +226,67 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.8: QA fixes (v0.8-B1 to B12)
+- Context: `qa/QA-v0.8.md` round 1: FAIL, with one major bug (B4) and eight minor ones.
+- Decision:
+  - **B1:** changing the grading thresholds regrades every stored move from its stored evals (`core.game_review.regrade`, `GameAnalysisRepo.regrade`), with no engine pass.
+  - **B2:** a puzzle file over 20,000 entries, or a game file over 500 games, says so in the report or the list, instead of dropping the rest silently.
+  - **B3:** without Stockfish, a Retry move that isn't in the stored lines can't be graded. It's neither recorded nor counted, and it gets no reason chips.
+  - **B4:** Name the idea and Danger spotting always start on Lichess DB. The front end switches the source along with the mode, so the locked control and the session agree.
+  - **B5:** the chess.com username typed for a URL import is linked when none is, so it detects your color and isn't asked again.
+  - **B6:** My puzzles show no Lichess link, no rating change and no empty Themes line, and the Rated text says they never count.
+  - **B7:** Review shows at most 8 moves of an engine line, and the lines wrap.
+  - **B8:** a puzzle from your games says so when Stockfish is missing and only its saved line counts (`PuzzleView.strict_without_engine`).
+  - **B9:** the User Guide states the decided-position rule exactly.
+  - **Round 2 (B10–B12):** a game analyzed while the thresholds changed is graded with the new ones at the end (B10). The chess.com name typed for a URL import is linked only once the game is found, and it's used for the color either way (B11). Blank CSV rows don't count toward the 20,000-entry cap (B12).
+- Alternatives: B1, marking games *not current* to force a re-analysis (slow, and the evals don't change); B4, unlocking the control in those modes (they can't serve your puzzles).
+- Consequences: each bug has a regression test. QA's strict-xfail tests for B1–B6 now pass unmarked, and B2 (game files), B7 and B8 have their own.
+
+### 2026-11-03, v0.8: My puzzles in the session: negative keys, no pre-move, the engine tolerance
+- Context: decision 3 promised `my:` puzzle refs. The session's queue holds integer keys into `puzzles.db`, every mode applies `moves[0]` (the opponent's move) first, and puzzles saved from games need the 30 cp tolerance (Adam, v0.8 planning).
+- Decision:
+  - **One source for the session and the mixer:** `adapters/db/repos/puzzle_sources.py` (`CombinedSource`) wraps `LichessDbSource` and `CustomPuzzleSource`. Your puzzles use the **negated** `custom_puzzles.id` as their key, so one queue and one served set hold both. Their keys never change, so they survive a puzzle-DB re-import. **Both** gives each slot to your pool with probability (your pool) / (both pools).
+  - **No pre-move:** a custom puzzle is an ordinary `Puzzle` whose `moves[0]` is `NO_PREMOVE` (empty). `start_position` then starts from the FEN itself. Lengths (`len(moves) // 2`), Commit the line, Show answer and the outcome's solution (`moves[1:]`) work unchanged. The front end already handles an empty opponent move (Danger spotting).
+  - **The tolerance lives in the session, not the mode:** before Standard mode sees a move on a tolerance puzzle, `SessionService._tolerate` asks the interactive engine (best line, then the position after your move). If your move is within the tolerance, the rest of the line is rewritten from your move with the engine's continuation, cut to end on your move. The mode then sees it as the expected move. Without Stockfish, or if the engine fails, the stored line is checked as it is. Commit the line always grades the stored line.
+  - **What reads attempts:** Spaced repetition replays `my:` attempts too (`srs_rows` names them `my:<id>`). The history filters use `MY_SOLVED` and `MY_MISSED` on the `my` source. Stats take a `my:` puzzle's length from `custom_puzzles`. A `my:` attempt is always `local` and stores no puzzle rating.
+  - **Lichess-only:** ratios, the non-random orders, Name the idea and Danger spotting (validated in `FilterSpec` and `SessionService.start`). No `SAVED_FILTERS_VERSION` bump is needed, because the new fields' defaults are what older presets mean.
+- Alternatives: a separate queue per source (every queue path would branch); synthesizing an opponent pre-move for custom puzzles (an imported book position has none); tolerance inside `StandardMode` (core does no I/O).
+- Consequences: a tolerance move costs one or two interactive searches (about the engine think time each). A wrong move on a tolerance puzzle is only wrong after the engine has looked.
+
+### 2026-11-03, v0.8: The background engine and the analysis queue
+- Context: decision 12 reserved a second Stockfish process for game analysis, so the trainer never waits behind it. FR-11.31 asks for one job at a time and no repeat analysis at the same settings.
+- Decision:
+  - **`EngineService` owns the background engine** as a second `EngineClient` instance with its own lock, started lazily on the first game search and closed with the interactive one. It gets one thread fewer than the interactive engine (at least 1). `analyse_background` returns raw White-relative lines. No new `EngineClient` methods.
+  - **`services/analysis.py` (`AnalysisService`)** keeps an in-memory FIFO queue drained by one `game_analysis` job. A `_draining` flag, set under the queue lock, decides whether a newly queued game joins the running job or starts a new one, so a game queued as the job exits can't be stranded. Cancel clears the queue. Each game's rows are stored in one transaction, so a cancelled game keeps its previous analysis or none.
+  - **"The same settings"** means the same think time and the same `engine_id()` (the engine's name). Changing either makes a game *not current*, but nothing re-analyzes until you ask.
+  - **Grading is pure** (`core/game_review.grade_game`): it takes the engine lines of every position, and the final position's lines give the last move's refutation. The refutation of every move is stored (`refutation_uci`), so the Review screen needs no live engine call.
+- Alternatives: one engine with a priority queue (a 0.3 s background search would still delay a refutation); a fresh engine process per game (slow to start, and no shared hash).
+- Consequences: a second Stockfish process (about the hash size in memory) while games are analyzed. A test proves a puzzle refutation returns at once while the background engine is blocked mid-search.
+
+### 2026-11-03, v0.8: Game clients: chess.com serialized by a lock, ETags in `http.py`, hand-written fixtures
+- Context: chess.com's Published-Data API answers parallel requests with 429 and asks for ETag caching (FR-10.7). Lichess exports your own games fastest with your token. Neither API had a client yet.
+- Decision:
+  - `adapters/chesscom.py` (`ChesscomGames`) holds **one lock around every request**, so calls from any thread go out one at a time. It accepts only `api.chess.com/pub/…` URLs (FR-11.32), waits on 429 (`Retry-After`, else a doubling backoff, 4 tries), and maps 404 to `ChesscomNotFound` and 410 to `ChesscomGone`.
+  - `HttpClient.get_json_cached(url, etag)` sends `If-None-Match` and returns a 304 as data, not an error.
+  - `adapters/lichess_games.py` (`LichessGames`) streams `/api/games/user/{u}` as ndjson and fetches single games from `/game/export/{id}` as JSON, both with the documented flags.
+  - There's no single `GameSource` protocol: `core/games.py` has `LichessGamesClient` and `ChesscomClient`, because the two APIs share nothing but the PGN.
+  - The fixtures under `tests/fixtures/http/chesscom/` and `lichess_games/` are generated from the API docs with legal PGNs, until Adam's live recorder replaces them. The scrub test now also rejects real chess.com game URLs, player API paths, PGN player tags and player names or ids in these responses (SR-12a).
+- Alternatives: a delay between chess.com requests instead of a lock (it doesn't stop two threads overlapping); retrying 429 inside `http.py` for every caller (Lichess's batch sync must never resend).
+- Consequences: a sync and a URL import can't hammer chess.com together. They queue behind the lock instead.
+
+### 2026-11-03, v0.8: The game library and custom-puzzle schema (`user/0007_games.sql`)
+- Context: §4.3 sketched `games`, `account_sync`, `game_analysis` and `custom_puzzles`. v0.8 fills them in and adds Retry mode results.
+- Decision:
+  - **`games`** is keyed by `(source, source_game_id)` when the platform gives an id. Pastes and files are deduplicated by `moves_hash` (SHA-256 of the start FEN and the UCI moves), so identical moves reuse the stored analysis (FR-11.7). Two platform games with different ids are never merged, even with identical moves (a short trap gets played many times); a platform copy adopts an earlier paste of the same moves.
+  - Player names and ratings are stored per color (`white`, `black`, …) rather than as *user/opponent*, because your color can be unknown at import, and *Review both sides* exists.
+  - `analysis_think_s` and `analysis_engine` record what the stored analysis used, so a game is never analyzed twice at the same settings (FR-11.31).
+  - **`game_analysis`** keeps one row per ply with evals as `{"cp"}`/`{"mate"}` JSON from the mover's view. `themes` stays NULL until the v0.10 tagger.
+  - **`custom_puzzles`** holds puzzles saved from games (`origin` manual) and imported files (`origin` import). `fen` is the position you solve, with no opponent pre-move, unlike §4.2. `strict` picks exact checking (imports) or the engine tolerance (games). It has two partial unique indexes: one per game and ply, and one per imported set, position and line.
+  - **`retry_attempts`** is a separate log: retries aren't puzzle attempts and never sync.
+  - The `game_errors` view waits for its first reader, the v0.10 Coach.
+- Alternatives: storing Retry results in `attempts` (they have no `PuzzleRef`, and every attempts reader would need to exclude them); a full UNIQUE on `(game_id, ply)` (SQLite treats NULLs as distinct anyway, but the partial index states the intent).
+- Consequences: the Coach (v0.10) and fix tracking read `game_analysis` directly. Coach-made puzzles reuse `custom_puzzles` with `origin = coach`.
 
 ### 2026-11-03, v0.7: QA fixes (v0.7-B1 to B7)
 - Context: `qa/QA-v0.7.md` round 1: PASS WITH ISSUES, seven minor bugs.

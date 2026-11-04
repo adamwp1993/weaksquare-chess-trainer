@@ -162,7 +162,7 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.12 | Queue size | Fixed N or endless | |
 | FR-3.13 | **Presets** | Save / load / rename / delete named filter sets | Stored as JSON |
 | FR-3.14 | Hidden labels | Themes are **not shown** while solving | Revealed after the puzzle ends |
-| FR-3.15 | Puzzle source | Lichess DB / **My games** / Both | "My games" = `custom_puzzles`, saved from Game Review (§11) or created by the Coach (§10.9). These never sync to Lichess. Extra filters for My games: severity level (FR-10.40), Missed / Allowed, phase, time control, game date, origin. They have no rating, so the rating filter doesn't apply to them. |
+| FR-3.15 | Puzzle source | Lichess DB / **My puzzles** / Both | "My puzzles" = `custom_puzzles`: saved from Game Review (§11), imported from your own files (§10.10) or created by the Coach (§10.9). These never sync to Lichess. Extra filters for My puzzles: origin, set label, Missed / Allowed, phase, time control; severity level (FR-10.40) from v0.10. Themes, rating, openings, quality, played on Lichess, ratios and the orders other than Random (easy → hard, by theme, depth ladder) apply only to Lichess puzzles: with My puzzles or Both, the order is random. Number of moves, side to move and the history filters apply to both. **Both** mixes the two pools in proportion to their sizes. In v0.8 My puzzles works in Standard, Commit the line and Spaced repetition; Name the idea and Danger spotting stay Lichess-only. A custom puzzle starts from the position you solve (no opponent move first). *(Adam, v0.8 planning: renamed from "My games".)* |
 
 ---
 
@@ -217,7 +217,7 @@ Habit tags (FR-10.27) and themes describe **what** went wrong. Mistake reasons r
   - on each of **your mistakes** in Game Review (key moments and the move list)
   - after a **Retry-mode miss** (FR-11.15)
   - after a **Danger-spotting miss**
-- **FR-5.8** **One click, never blocking:** a row of 6 reason chips below the board, with keyboard shortcuts **1–6** and a Skip option. The next puzzle loads as normal, and the chips stay available on the result panel until you move on. A setting controls how often you're asked: *Always* / *Game Review only* / *Off*. Until Game Review ships (v0.8) it offers *Always* / *Off* (v0.6 planning). Practice runs (FR-5.12) never ask. You can change the reason until you move on; the latest choice counts.
+- **FR-5.8** **One click, never blocking:** a row of 6 reason chips below the board, with keyboard shortcuts **1–6** and a Skip option. The next puzzle loads as normal, and the chips stay available on the result panel until you move on. A setting controls how often you're asked: *Always* / *Game Review only* / *Off*. Until Game Review ships (v0.8) it offers *Always* / *Off* (v0.6 planning); v0.8 adds *Game Review only*. Practice runs (FR-5.12) never ask. You can change the reason until you move on; the latest choice counts.
 - **FR-5.9** **Suggested reason:** the app pre-highlights a likely reason, but it's only saved when you click it.
   - `rushed`: move made in under 3 s (configurable), or a game move made with a low clock
   - `miscalculated`: first move correct, later move wrong (puzzles), or the right idea's first move was played but the continuation failed (games)
@@ -445,7 +445,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.40** **Severity level (user setting):** which mistakes become puzzles. **Blunders only** / **Mistakes and blunders** (default) / **Inaccuracies, mistakes and blunders**. The levels use the shared thresholds (FR-11.9).
   - Changing the level rebuilds the set from the stored `game_analysis`, with no new engine pass over the games. Only new candidates get the quality check (FR-10.41).
   - Narrowing the level **archives** the puzzles outside it, never deletes them, so their attempt history is kept. Widening restores them.
-  - The same three choices are also a filter when training the My games source (FR-3.15).
+  - The same three choices are also a filter when training the My puzzles source (FR-3.15).
 - **FR-10.41** **Quality check:** a mistake becomes a puzzle only if it has a clear answer.
   - The best move must be clearly better than the second best (default gap 150 cp, configurable), or be the only move that keeps the advantage.
   - The position must not already be decided (beyond ±500 cp before the move).
@@ -456,16 +456,16 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - **Missed** (you had a tactic and didn't play it): you solve from your own position, as the side you played.
   - **Allowed** (your move let your opponent in): you solve **as your opponent**, from the position after your mistake, finding the punishment. The board is oriented for the side to move, and the puzzle is labelled *"Find what your opponent could have played."*
   - Allowed positions can also feed Danger spotting (FR-4.4) once that mode exists.
-- **FR-10.43** **Solving rules:** these come from engine analysis, not a verified single solution, so any move within 30 cp of the best (configurable, shared with Retry mode FR-11.15) counts. The interactive engine then continues the line from the move you played. Themes come from the lichess-puzzler tagger and stay hidden until the puzzle ends (FR-3.14). Any help before completion is a loss, as everywhere (§7.1).
+- **FR-10.43** **Solving rules:** these come from engine analysis, not a verified single solution, so any move within 30 cp of the best (configurable, shared with Retry mode FR-11.15) counts. *(Built in v0.8 for puzzles saved from Game Review, FR-11.16; without Stockfish they fall back to the stored line.)* The interactive engine then continues the line from the move you played. Themes come from the lichess-puzzler tagger and stay hidden until the puzzle ends (FR-3.14). Any help before completion is a loss, as everywhere (§7.1).
 - **FR-10.44** **Training them:**
-  - **My games** works as a source on its own or mixed with Lichess puzzles, in every mode that supports it, including **Spaced repetition** (FR-4.6).
+  - **My puzzles** works as a source on its own or mixed with Lichess puzzles, in every mode that supports it, including **Spaced repetition** (FR-4.6).
   - The Suggested mix (§10.7) may include a share of your own-game puzzles (default 20%) linked to your top weaknesses, and "Why this mix" says so.
   - Each puzzle links back to its game in Game Review. You can archive any puzzle you don't want.
 - **FR-10.45** **Progress:** accuracy on your own-game puzzles appears on each weakness card (FR-10.38) next to Lichess-puzzle accuracy. It's a secondary signal only. A weakness's status is still decided by its game rate (§10.8), never by puzzle accuracy.
 
 ### 10.10 Importing puzzles from your own files (v0.8; Adam, 2026-11-02)
 - **FR-10.46** **Import puzzles** from a file you already have: PGN (a `FEN` header and the solution as the moves; several games per file), EPD (`bm` or `pv` as the solution) or a simple CSV (FEN, solution in UCI or SAN, optional name). You give the set a label (e.g. the book's title). The app ships, links to and downloads **no** puzzle collections: copyrighted sets (for example published problem books) are yours to import only if you have them.
-- **FR-10.47** **Stored with your other puzzles:** imported puzzles go into `custom_puzzles` with `origin = import` and the set label, and train through the **My games** source (FR-3.15; it's renamed to **My puzzles** if that reads better at v0.8 planning), on their own or mixed with Lichess puzzles, in every mode that supports custom puzzles, Stats and Spaced repetition included. Filter by set label. They never sync to Lichess.
+- **FR-10.47** **Stored with your other puzzles:** imported puzzles go into `custom_puzzles` with `origin = import` and the set label, and train through the **My puzzles** source (FR-3.15; renamed from "My games" at v0.8 planning), on their own or mixed with Lichess puzzles, in every mode that supports custom puzzles, Stats and Spaced repetition included. Filter by set label. They never sync to Lichess.
 - **FR-10.48** **Validated on import:** python-chess checks every position and every solution move; bad entries are skipped and listed in an import report (entry number and reason). Re-importing the same file adds nothing twice (one puzzle per set and position + solution). The import runs as a job with progress and cancel.
 - **FR-10.49** **Solving rules:** a book problem has one verified solution, so it's checked strictly like Lichess puzzles (§4.2), including "any mate counts" for mate-in-1, not with FR-10.43's 30 cp tolerance. If the file gives only the first move, the puzzle is that one move. The engine refutation and the post-puzzle panel (FR-7.2, 7.7) work as for any puzzle. Imported files usually carry no themes: they stay untagged until the lichess-puzzler tagger arrives (v0.10), which then tags them locally.
 - **FR-10.50** **Privacy:** the file is read on your PC and never sent anywhere; the User Guide says so.
@@ -534,7 +534,7 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
   - a **Lichess** game URL
   - a **chess.com** game URL
   - pick from your **Game library**, which pulls games automatically from your linked accounts (§11.5). This is the main way in. The options above are for one-off games.
-- **FR-11.3** **Lichess URL** (`lichess.org/<gameId>`, optionally followed by `/white`, `/black` or `#<ply>`): take the 8-character game ID and call `GET /game/export/{gameId}` with `evals=true`, `clocks=true`, `accuracy=true`, `opening=true`, `division=true`. Reuse Lichess's evals when the game was already analyzed there.
+- **FR-11.3** **Lichess URL** (`lichess.org/<gameId>`, optionally followed by `/white`, `/black` or `#<ply>`): take the 8-character game ID and call `GET /game/export/{gameId}` with `evals=true`, `clocks=true`, `accuracy=true`, `opening=true`, `division=true`. Every game is analyzed locally (§11.2), even when Lichess already analyzed it, so every review is graded the same way. Lichess's per-move evals don't include the top lines or refutations the review needs. Lichess's accuracy % is shown, and the game gets an *Analyzed on Lichess* badge. *(Adam, v0.8 planning; this replaces "reuse Lichess's evals".)*
 - **FR-11.4** **chess.com URL** (`chess.com/game/live/<id>` or `/game/daily/<id>`): the public API has no single-game endpoint. Search the user's recent monthly archives for the matching game URL, using the username from settings (or ask once), with serial requests only (FR-10.7). If it isn't found, ask the user to paste the PGN (chess.com: Share → PGN).
 - **FR-11.5** **Your color:** detected by matching the PGN player tags against your configured usernames. Otherwise the app asks which side you played. You can also choose to review both sides.
 - **FR-11.6** Validate with python-chess and reject malformed or illegal games with a clear error. Version 1 supports standard chess only (no Chess960 or other variants).
@@ -543,7 +543,7 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
 ### 11.2 Engine analysis (local, free)
 - **FR-11.8** Evaluate **every position** in the game (default **0.3 s per position**, configurable), in the background, with a progress bar and the option to cancel. The user's moves are highlighted, and the opponent's moves are graded too, so you can see blunders you failed to punish.
 - **FR-11.9** **Recorded for each move:** eval before and after (cp or mate, from the mover's view), best move, top 3 engine lines, centipawn loss, and a classification of Best / Good / Inaccuracy / Mistake / Blunder. Thresholds are configurable and shared with the Coach: inaccuracy ≥ 50 cp, mistake ≥ 100 cp, blunder ≥ 200 cp or a mate swing. Positions already decided (beyond ±500 cp) aren't penalized.
-- **FR-11.10** **Tagging:** every user mistake or blunder is classified as Missed or Allowed and tagged with the lichess-puzzler tagger (same as FR-10.11 and FR-10.12).
+- **FR-11.10** **Tagging:** every user mistake or blunder is classified as Missed or Allowed and tagged with the lichess-puzzler tagger (same as FR-10.11 and FR-10.12). *(Adam, v0.8 planning: v0.8 classifies Missed / Allowed / Other with a simple rule but adds no theme tags. The tagger arrives in v0.10, which then tags stored mistakes and puzzles.)*
 - **FR-11.11** **Summary per side:** counts of inaccuracies, mistakes and blunders; average centipawn loss; Lichess's accuracy % when the export provides it; a breakdown by phase (from Lichess's `division` data, or estimated by move number); and mistakes made with a low clock (when clock data exists).
 
 ### 11.3 Review screen
@@ -551,7 +551,7 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
 - **FR-11.13** **Key moments:** the biggest eval swings on the user's side (default top 5). Each shows "Played X, better was Y" and the eval swing, plus the mistake-reason chips (§7.3).
 - **FR-11.14** **At any move:** best-move arrow and the engine's top lines. At a mistake, also the **refutation** of the move you played, which you can step through.
 - **FR-11.15** **Retry mode** ("learn from your mistakes"): from the position before each of your mistakes, you try to find a better move before the answer is shown. Any move within 30 cp of the best move (configurable) counts as found. Results feed local stats.
-- **FR-11.16** **Save as puzzle:** any key moment can be saved to `custom_puzzles` (position, best line, tags) and drilled through the "My games" source (FR-3.15), including Spaced repetition. These puzzles never sync to Lichess.
+- **FR-11.16** **Save as puzzle:** any key moment can be saved to `custom_puzzles` (position, best line, tags) and drilled through the "My puzzles" source (FR-3.15), including Spaced repetition. It stores the position, the best line and (from v0.10) tags; it is solved with the 30 cp tolerance (FR-10.43). These puzzles never sync to Lichess.
 
 ### 11.4 AI explanations (optional)
 - **FR-11.17** **Explain this move:** on demand, for a key moment or any move. Its grounded context: position, played move, best move and its line, refutation of the played move, eval swing, top engine lines, attack/defense facts, tags. Output, validation and board annotations work exactly like FR-8.3 to FR-8.5.

@@ -78,7 +78,7 @@ def test_v05_modes_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_db: Path)
             # Commit the line: enter the whole solution, both sides, then Submit
             choose_mode(page, "Commit the line")
             page.get_by_test_id("show-length-switch").wait_for()
-            page.get_by_label("Puzzles").fill("5")
+            page.get_by_label("Puzzles", exact=True).fill("5")
             page.get_by_role("button", name="Start").click()
             fen, color = wait_turn(page)
             moves = solution_for(data_dir / "puzzles.db", fen)

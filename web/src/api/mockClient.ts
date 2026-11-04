@@ -17,21 +17,27 @@
 // v0.6: Danger spotting alternates safe and blunder candidates (the first is safe); `?reasons=off`
 // starts with the mistake-reason question turned off.
 // v0.7: the AI settings and Explain live in mockLlm.ts (`?ai=on|warn|over|failed|nomodel`).
+// v0.8: the game library, Review and puzzle files live in mockGames.ts (`?games=empty`, `?chesscom=…`,
+// `?file=none`, `?mine=1` starts with one imported puzzle of your own).
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
   ApiClient,
   BackendEvent,
   EngineSettingsChange,
+  GamesSettingsChange,
+  LibraryFilters,
   LlmPriceChange,
   LlmProvider,
   LlmSettingsChange,
   ReasonKey,
+  ReasonSource,
   SettingValues,
   TrainingMode,
 } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
+import { MockGames } from "./mockGames";
 import { type ExplainTarget, MockLlm } from "./mockLlm";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
@@ -322,10 +328,13 @@ export class MockClient implements ApiClient {
   private revokeOffline = false;
   readonly calls: string[] = [];
   private readonly llm: MockLlm;
+  private readonly games: MockGames;
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
     this.llm = new MockLlm(params, (job) => this.emit(job), () => `job-${this.nextJob++}`);
+    this.games = new MockGames(params, (job) => this.emit(job), () => `job-${this.nextJob++}`,
+      () => (this.account.state === "signed_in" ? this.account.username : null)); // prettier-ignore
     const scenario = params.get("scenario");
     // ?scheme=dark|auto starts the mock in that saved scheme; ?sounds=off with sounds off.
     const scheme = params.get("scheme");
@@ -774,7 +783,7 @@ export class MockClient implements ApiClient {
     if (!c) throw new ApiCallError({ code: "invalid_argument", message: "There's no puzzle in progress.", retryable: false });
     const p = c.puzzle;
     const start = new Chess(p.fen);
-    start.move(uciToMove(p.moves[0]));
+    if (p.moves[0]) start.move(uciToMove(p.moves[0]));
     const s = this.session(sessionId);
     const path = [s.mode, c.danger ? `call:${c.danger.call ?? "none"}` : "", c.firstWrong ? `wrong:${c.firstWrong[1]}` : ""].join("|");
     return {
@@ -797,6 +806,103 @@ export class MockClient implements ApiClient {
 
   async getExplanation(sessionId: number) {
     return this.llm.result(sessionId, this.session(sessionId).current?.puzzle.id ?? null);
+  }
+
+  // ---- v0.8: the game library, Game Review and your own puzzles (mockGames.ts) ----------------
+  async getGamesSettings() {
+    return this.games.getSettings();
+  }
+
+  async setGamesSettings(change: GamesSettingsChange) {
+    return this.games.setSettings(change);
+  }
+
+  async verifyChesscom(username: string) {
+    return this.games.verifyChesscom(username);
+  }
+
+  async setChesscomUsername(username: string | null) {
+    return this.games.setChesscom(username);
+  }
+
+  async startGamesSync() {
+    return this.games.startSync();
+  }
+
+  async listGames(filters: LibraryFilters) {
+    return this.games.list(filters);
+  }
+
+  async importGamePgn(text: string) {
+    return this.games.importPgn(text);
+  }
+
+  async chooseGameFile() {
+    return this.games.chooseFile();
+  }
+
+  async pickImportedGame(token: string, index: number) {
+    return this.games.pick(token, index);
+  }
+
+  async startGameUrlImport(url: string, chesscomUsername: string | null) {
+    return this.games.startUrl(url, chesscomUsername);
+  }
+
+  async getGameUrlImport(jobId: string) {
+    return this.games.urlResult(jobId);
+  }
+
+  async setGameColor(gameId: number, color: "white" | "black" | "both") {
+    this.games.setColor(gameId, color);
+  }
+
+  async openGameOnline(gameId: number) {
+    this.calls.push(`open:${this.games.onlineUrl(gameId)}`);
+  }
+
+  async analyzeGames(gameIds: number[], force: boolean) {
+    return this.games.analyze(gameIds, force);
+  }
+
+  async getAnalysisQueue() {
+    return this.games.queue();
+  }
+
+  async getReview(gameId: number) {
+    return this.games.review(gameId);
+  }
+
+  async retryMove(gameId: number, ply: number, uci: string) {
+    return this.games.retry(gameId, ply, uci);
+  }
+
+  async saveGamePuzzle(gameId: number, ply: number) {
+    return this.games.savePuzzle(gameId, ply);
+  }
+
+  async setGameReason(gameId: number, ply: number, reason: ReasonKey) {
+    this.games.setGameReason(gameId, ply, reason);
+  }
+
+  async setRetryReason(retryId: number, reason: ReasonKey) {
+    this.games.setRetryReason(retryId, reason);
+  }
+
+  async getGameStats() {
+    return this.games.stats({ attempts: this.allTime.solved + this.allTime.failed, wins: this.allTime.solved });
+  }
+
+  async chooseAndImportPuzzles(label: string) {
+    return this.games.importPuzzles(label);
+  }
+
+  async getPuzzleImportReport(jobId: string) {
+    return this.games.importReport(jobId);
+  }
+
+  async listPuzzleSets() {
+    return this.games.puzzleSets();
   }
 
   async getAppInfo(): Promise<AppInfo> {
@@ -892,6 +998,7 @@ export class MockClient implements ApiClient {
   }
 
   async cancelJob(jobId: string) {
+    if (this.games.cancel(jobId)) return true;
     const job = this.jobs.get(jobId);
     if (!job || job.state !== "running") return false;
     this.status.import_job_id = null;
@@ -940,6 +1047,8 @@ export class MockClient implements ApiClient {
 
   async countMatches(spec: FilterSpec) {
     validate(spec);
+    if (spec.source === "my") return this.games.myPool(spec).length;
+    if (spec.source === "both") return this.pool(spec).length * SCALE + this.games.myPool(spec).length;
     if (spec.order === "depth_ladder") return (await this.getLadderStatus(spec)).match_count;
     if (spec.ratios.length > 0) {
       const ids = new Set(spec.ratios.flatMap((_, i) => this.pool(bucketSpec(spec, i)).map((p) => p.id)));
@@ -1021,7 +1130,12 @@ export class MockClient implements ApiClient {
     }
     const ladder = spec.order === "depth_ladder" ? { base: spec, key: ladderKey(spec) } : null;
     if (ladder) spec = atLevel(spec, this.ladderState(ladder.key).level);
-    const pools = spec.ratios.length > 0 ? spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i))) : [this.pool(spec)];
+    if (spec.source !== "lichess" && (mode === "name_idea" || mode === "danger_spotting")) {
+      throw new ApiCallError({ code: "invalid_argument", message: "My puzzles works in Standard, Commit the line and Spaced repetition. Choose Lichess DB for this mode.", retryable: false });
+    }
+    const mine = spec.source === "lichess" ? [] : this.games.myPool(spec);
+    const pools = spec.source === "my" ? [mine] : spec.source === "both" ? [[...mine, ...this.pool(spec)]]
+      : spec.ratios.length > 0 ? spec.ratios.map((_, i) => this.pool(bucketSpec(spec, i))) : [this.pool(spec)]; // prettier-ignore
     const queue = interleave(pools, spec);
     if (queue.length === 0) {
       throw new ApiCallError({
@@ -1056,7 +1170,7 @@ export class MockClient implements ApiClient {
     const puzzle = s.queue[s.served++];
     if (s.mode === "danger_spotting") return this.nextDanger(s, puzzle);
     const chess = new Chess(puzzle.fen);
-    chess.move(uciToMove(puzzle.moves[0]));
+    if (puzzle.moves[0]) chess.move(uciToMove(puzzle.moves[0]));
     s.current = {
       puzzle, chess, start: chess.fen(), next: 1, decided: false, failed: false, hinted: false, finished: false,
       firstWrong: null, tags: s.mode === "name_idea" ? null : undefined,
@@ -1068,12 +1182,14 @@ export class MockClient implements ApiClient {
       opponent_move: puzzle.moves[0],
       player_color: chess.turn() === "w" ? "white" : "black",
       rating: puzzle.rating,
-      opponent_sound: soundOf(puzzle.fen, puzzle.moves[0]),
-      already_played: this.lichessHistory.has(puzzle.id),
+      opponent_sound: puzzle.moves[0] ? soundOf(puzzle.fen, puzzle.moves[0]) : null,
+      already_played: puzzle.source !== "my" && this.lichessHistory.has(puzzle.id),
       mode: s.mode,
       solution_plies: s.mode === "commit_line" && s.showLength ? puzzle.moves.length - 1 : null,
       max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : 60) : null,
       candidate: null,
+      source: puzzle.source === "my" ? "my" : "lichess",
+      strict_without_engine: puzzle.source === "my" && puzzle.origin === "manual" && this.engine.state !== "ready",
     };
   }
 
@@ -1091,7 +1207,7 @@ export class MockClient implements ApiClient {
     return {
       number: s.served, puzzle_id: puzzle.id, fen: puzzle.fen, opponent_move: "",
       player_color: chess.turn() === "w" ? "white" : "black", rating: puzzle.rating, opponent_sound: null,
-      already_played: false, mode: s.mode, solution_plies: null, max_plies: null, candidate,
+      already_played: false, mode: s.mode, solution_plies: null, max_plies: null, candidate, source: "lichess", strict_without_engine: false,
     };
   }
 
@@ -1181,7 +1297,8 @@ export class MockClient implements ApiClient {
     this.reasons.set(attemptId, reason);
   }
 
-  async getReasonStats(theme: string | null, mode: TrainingMode | null): Promise<ReasonStats> {
+  async getReasonStats(theme: string | null, mode: TrainingMode | null, source: ReasonSource = "puzzles"): Promise<ReasonStats> {
+    if (source === "games") return this.games.reasonStats();
     this.calls.push(`reasonStats:${theme ?? "all"}:${mode ?? "all"}`);
     // Fixed history plus whatever you tagged in this mock session, filtered like the backend.
     const base: [ReasonKey, number][] = [["didntLook", 7], ["missedResource", 5], ["miscalculated", 4], ["unknownPattern", 3], ["rushed", 2]];
@@ -1409,7 +1526,7 @@ export class MockClient implements ApiClient {
       throw new ApiCallError({ code: "conflict", message: "Finish the puzzle first: Try again is for after it's over.", retryable: true });
     }
     const chess = new Chess(c.puzzle.fen);
-    if (!c.danger) chess.move(uciToMove(c.puzzle.moves[0]));
+    if (!c.danger && c.puzzle.moves[0]) chess.move(uciToMove(c.puzzle.moves[0]));
     this.calls.push("retry");
     s.current = {
       puzzle: c.puzzle, chess, start: chess.fen(), next: 1, decided: true, failed: false, hinted: false,

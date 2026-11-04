@@ -64,7 +64,7 @@ def test_main_flow_alternative_mate_wrong_move_persistence(pw, data_dir: Path) -
             page.get_by_label("Maximum rating").press("Enter")
             count.filter(has_text=re.compile(r"^1 puzzle matches$")).wait_for()  # v0.1-B5: singular
             assert count.inner_text() != everything
-            page.get_by_label("Puzzles").fill("2")
+            page.get_by_label("Puzzles", exact=True).fill("2")
             page.wait_for_timeout(800)  # let the filters save (500 ms debounce)
             page.get_by_role("button", name="Start").click()
             your_turn(page)

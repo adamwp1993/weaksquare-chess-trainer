@@ -254,7 +254,8 @@ def test_no_prompt_after_a_win_while_playing_on_or_when_off(api, clock: FixedClo
     ok(api.request_help(sid, "answer")) if not st.finished else None
     assert ok(api.get_reason_prompt(sid)) is None
     assert ok(api.get_settings())["reasons_ask"] == "off"
-    assert err(api.set_setting("reasons.ask", "game_review")) == "invalid_argument"
+    assert api.set_setting("reasons.ask", "game_review")["ok"]  # v0.8: Game Review only (FR-5.8)
+    assert err(api.set_setting("reasons.ask", "sometimes")) == "invalid_argument"
 
 
 def rows_id(api: Any) -> int:

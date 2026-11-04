@@ -9,6 +9,9 @@ export interface MockPuzzle {
   popularity?: number; // default 90
   plays?: number; // default 1,000
   openings?: string[]; // OpeningTags (family, then variation)
+  source?: "my"; // v0.8: one of your own puzzles: moves[0] is "" (no opponent move first)
+  origin?: string;
+  set_label?: string | null;
 }
 
 export const MOCK_PUZZLES: MockPuzzle[] = [

@@ -1,8 +1,27 @@
-import { ActionIcon, Alert, AppShell, Button, Center, Grid, Group, Loader, Menu, Modal, Paper, Text, Title } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  AppShell,
+  Button,
+  Center,
+  Grid,
+  Group,
+  Loader,
+  Menu,
+  Modal,
+  Paper,
+  Text,
+  Title,
+} from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { TrainingMode } from "./api/ApiClient";
-import type { FilterSpec, PuzzleDbStatus, SoundSettings, UpdateOffer } from "./api/types";
+import type {
+  FilterSpec,
+  PuzzleDbStatus,
+  SoundSettings,
+  UpdateOffer,
+} from "./api/types";
 import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
 import { SpendIndicator } from "./components/SpendIndicator";
@@ -13,6 +32,10 @@ import { useLichess } from "./state/lichess";
 import { useJob } from "./state/useJob";
 import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
+import { GamesView } from "./views/GamesView";
+import { ImportGameDialog } from "./views/ImportGameDialog";
+import { ImportPuzzlesDialog } from "./views/ImportPuzzlesDialog";
+import { ReviewView } from "./views/ReviewView";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
 import { sounds as soundPlayer } from "./sound/player";
@@ -35,8 +58,18 @@ export function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [coordinates, setCoordinates] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // v0.8: My games and Game Review are pages; the trainer stays mounted (hidden) so a session survives.
+  const [page, setPage] = useState<
+    { kind: "trainer" } | { kind: "games" } | { kind: "review"; gameId: number }
+  >({ kind: "trainer" });
+  const [importOpen, setImportOpen] = useState(false);
+  const [puzzlesOpen, setPuzzlesOpen] = useState(false);
   const [settingsAi, setSettingsAi] = useState(false); // opened from the spend indicator
-  const [sounds, setSounds] = useState<SoundSettings>({ on: false, volume: 70, set: "sfx" });
+  const [sounds, setSounds] = useState<SoundSettings>({
+    on: false,
+    volume: 70,
+    set: "sfx",
+  });
   const [autoCheck, setAutoCheck] = useState(true);
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
   const [checkJob, setCheckJob] = useState<string | null>(null);
@@ -99,7 +132,11 @@ export function App() {
     });
   }, []);
 
-  useShortcuts({ c: toggleCoordinates, f: () => started && toggleCollapsed(), "?": () => setShortcutsOpen(true) });
+  useShortcuts({
+    c: toggleCoordinates,
+    f: () => started && toggleCollapsed(),
+    "?": () => setShortcutsOpen(true),
+  });
 
   // FR-1.13: the player follows the saved settings; off means silent and nothing loaded.
   useEffect(() => soundPlayer.configure(sounds), [sounds]);
@@ -108,6 +145,10 @@ export function App() {
     api.setSetting("ui.sounds", next).catch(() => undefined);
   }, []);
 
+  /** v0.8-B4: Name the idea and Danger spotting are Lichess-only, so they always use Lichess DB. */
+  const forMode = (s: FilterSpec, m: TrainingMode): FilterSpec =>
+    (m === "name_idea" || m === "danger_spotting") && s.source !== "lichess" ? { ...s, source: "lichess" } : s;
+
   /** Starts a session; false if it couldn't (the error is shown). */
   const start = async (asMode: TrainingMode = mode): Promise<boolean> => {
     if (!spec) return false;
@@ -115,11 +156,15 @@ export function App() {
     setStartError(null);
     setStartNotice(null);
     try {
-      const info = await api.startSession(spec, rated, asMode, showLength);
+      const info = await api.startSession(forMode(spec, asMode), rated, asMode, showLength);
       setSessionId(info.session_id);
       if (info.empty_buckets.length > 0) {
-        const groups = info.empty_buckets.map((i) => `group ${i + 1}`).join(" and ");
-        setStartNotice(`No puzzles match ${groups}, so it's left out; the other groups share its share.`);
+        const groups = info.empty_buckets
+          .map((i) => `group ${i + 1}`)
+          .join(" and ");
+        setStartNotice(
+          `No puzzles match ${groups}, so it's left out; the other groups share its share.`,
+        );
       }
       return true;
     } catch (e) {
@@ -135,6 +180,7 @@ export function App() {
   // session carries on, with the reason shown (v0.5-B1).
   const changeMode = async (next: TrainingMode) => {
     if (sessionId !== null && !(await start(next))) return;
+    if (spec && forMode(spec, next) !== spec) changeSpec(forMode(spec, next)); // the locked control shows Lichess DB
     setMode(next);
     api.setSetting("trainer.mode", next).catch(() => undefined);
   };
@@ -144,7 +190,9 @@ export function App() {
   };
 
   const refresh = useCallback(() => {
-    api.getPuzzleDbStatus().then(setDbStatus, (e: Error) => setError(e.message));
+    api
+      .getPuzzleDbStatus()
+      .then(setDbStatus, (e: Error) => setError(e.message));
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -154,7 +202,8 @@ export function App() {
     api.getUpdateOffer().then(setOffer, () => setOffer(null));
   }, []);
   useEffect(() => {
-    if (checkStarted.current || !dbStatus?.installed || dbStatus.needs_upgrade) return;
+    if (checkStarted.current || !dbStatus?.installed || dbStatus.needs_upgrade)
+      return;
     checkStarted.current = true;
     api.checkForDbUpdate(false).then(setCheckJob, () => undefined);
   }, [dbStatus]);
@@ -186,10 +235,19 @@ export function App() {
 
   // "Exclude played on Lichess" needs a history: none while signed out with nothing imported.
   const playedCount =
-    sync && (account?.state !== "signed_out" || sync.history_count > 0) ? sync.history_count : null;
+    sync && (account?.state !== "signed_out" || sync.history_count > 0)
+      ? sync.history_count
+      : null;
 
   let main;
-  if (!started) main = <StartupView account={account} onContinue={() => setStarted(true)} onChanged={refreshLichess} />;
+  if (!started)
+    main = (
+      <StartupView
+        account={account}
+        onContinue={() => setStarted(true)}
+        onChanged={refreshLichess}
+      />
+    );
   else if (error) main = <Text c="red">{error}</Text>;
   else if (!dbStatus)
     main = (
@@ -198,8 +256,17 @@ export function App() {
       </Center>
     );
   else if (!dbStatus.installed)
-    main = <ImportView firstRun runningJobId={dbStatus.import_job_id} onDone={imported} />;
-  else if (dbStatus.needs_upgrade) main = <UpgradeView runningJobId={dbStatus.import_job_id} onDone={imported} />;
+    main = (
+      <ImportView
+        firstRun
+        runningJobId={dbStatus.import_job_id}
+        onDone={imported}
+      />
+    );
+  else if (dbStatus.needs_upgrade)
+    main = (
+      <UpgradeView runningJobId={dbStatus.import_job_id} onDone={imported} />
+    );
   else if (!spec)
     main = (
       <Center h={300}>
@@ -208,141 +275,262 @@ export function App() {
     );
   else
     main = (
-      <Grid gap="lg">
-        {account?.state === "expired" && (
-          <Grid.Col span={12}>
-            <Alert color="yellow" data-testid="expired-banner">
-              <Group justify="space-between">
-                <Text size="sm">
-                  Your Lichess sign-in has expired or was revoked. Your solves are kept here and sync after you sign in.
-                </Text>
-                <Button size="xs" onClick={() => setSettingsOpen(true)} data-testid="sign-in-again">
-                  Sign in again
-                </Button>
-              </Group>
-            </Alert>
-          </Grid.Col>
-        )}
-        {timeOffset !== null && timeOffset > 0 && (
-          <Grid.Col span={12}>
-            <Alert color="orange" data-testid="time-offset-banner">
-              Time fast-forwarded +{timeOffset} {timeOffset === 1 ? "day" : "days"} (dev). Settings → Debug sets it back.
-            </Alert>
-          </Grid.Col>
-        )}
-        {offer && (
-          <Grid.Col span={12}>
-            <UpdateBanner offer={offer} onUpdate={updateNow} onNotNow={() => dismiss("not_now")} onSkip={() => dismiss("skip")} />
-          </Grid.Col>
-        )}
-        {collapsed && (
-          <Grid.Col span={12}>
-            <FiltersStrip summary={summary} rated={rated} onExpand={toggleCollapsed} />
-          </Grid.Col>
-        )}
-        {/* Hidden, not unmounted, while collapsed, so the panel comes back exactly as it was (FR-1.14). */}
-        <Grid.Col span={{ base: 12, md: 4 }} style={collapsed ? { display: "none" } : undefined} data-testid="mixer-column">
-          <MixerView
-            mode={mode}
-            onMode={changeMode}
-            showLength={showLength}
-            onShowLength={changeShowLength}
-            onCollapse={toggleCollapsed}
-            onSummary={setSummary}
-            spec={spec}
-            onChange={changeSpec}
-            dbStatus={dbStatus}
-            onStart={() => start()}
-            starting={starting}
-            historyVersion={historyVersion}
-            rated={rated}
-            onRated={setRated}
-            playedCount={playedCount}
+      <>
+        {page.kind === "games" && (
+          <GamesView
+            onReview={(id) => setPage({ kind: "review", gameId: id })}
+            onImport={() => setImportOpen(true)}
           />
-          {startError && (
-            <Alert color="red" mt="sm" data-testid="start-error">
-              {startError}
-            </Alert>
+        )}
+        {page.kind === "review" && (
+          <ReviewView
+            key={page.gameId}
+            gameId={page.gameId}
+            onBack={() => setPage({ kind: "games" })}
+            coordinates={coordinates}
+          />
+        )}
+        <Grid
+          gap="lg"
+          style={page.kind === "trainer" ? undefined : { display: "none" }}
+          data-testid="trainer-page"
+        >
+          {account?.state === "expired" && (
+            <Grid.Col span={12}>
+              <Alert color="yellow" data-testid="expired-banner">
+                <Group justify="space-between">
+                  <Text size="sm">
+                    Your Lichess sign-in has expired or was revoked. Your solves
+                    are kept here and sync after you sign in.
+                  </Text>
+                  <Button
+                    size="xs"
+                    onClick={() => setSettingsOpen(true)}
+                    data-testid="sign-in-again"
+                  >
+                    Sign in again
+                  </Button>
+                </Group>
+              </Alert>
+            </Grid.Col>
           )}
-          {startNotice && (
-            <Alert color="yellow" mt="sm" withCloseButton onClose={() => setStartNotice(null)} data-testid="start-notice">
-              {startNotice}
-            </Alert>
+          {timeOffset !== null && timeOffset > 0 && (
+            <Grid.Col span={12}>
+              <Alert color="orange" data-testid="time-offset-banner">
+                Time fast-forwarded +{timeOffset}{" "}
+                {timeOffset === 1 ? "day" : "days"} (dev). Settings → Debug sets
+                it back.
+              </Alert>
+            </Grid.Col>
           )}
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, md: collapsed ? 12 : 8 }}>
-          {startError && collapsed && (
-            <Alert color="red" mb="sm" data-testid="start-error-collapsed">
-              {startError}
-            </Alert>
+          {offer && (
+            <Grid.Col span={12}>
+              <UpdateBanner
+                offer={offer}
+                onUpdate={updateNow}
+                onNotNow={() => dismiss("not_now")}
+                onSkip={() => dismiss("skip")}
+              />
+            </Grid.Col>
           )}
-          {sessionId === null ? (
-            <Paper withBorder p="xl" radius="md">
-              <Text c="dimmed">
-                {collapsed ? "Show filters to choose your puzzles, then press Start." : "Choose your puzzles on the left, then press Start."}
-              </Text>
-            </Paper>
-          ) : (
-            <TrainerView
-              key={sessionId}
-              sessionId={sessionId}
-              onNewSession={() => setSessionId(null)}
-              onHistoryChange={historyChanged}
-              coordinates={coordinates}
-              wide={collapsed}
+          {collapsed && (
+            <Grid.Col span={12}>
+              <FiltersStrip
+                summary={summary}
+                rated={rated}
+                onExpand={toggleCollapsed}
+              />
+            </Grid.Col>
+          )}
+          {/* Hidden, not unmounted, while collapsed, so the panel comes back exactly as it was (FR-1.14). */}
+          <Grid.Col
+            span={{ base: 12, md: 4 }}
+            style={collapsed ? { display: "none" } : undefined}
+            data-testid="mixer-column"
+          >
+            <MixerView
+              mode={mode}
+              onMode={changeMode}
+              showLength={showLength}
+              onShowLength={changeShowLength}
+              onCollapse={toggleCollapsed}
+              onSummary={setSummary}
+              spec={spec}
+              onChange={changeSpec}
+              dbStatus={dbStatus}
+              onStart={() => start()}
+              starting={starting}
+              historyVersion={historyVersion}
+              rated={rated}
+              onRated={setRated}
+              playedCount={playedCount}
             />
-          )}
-        </Grid.Col>
-      </Grid>
+            {startError && (
+              <Alert color="red" mt="sm" data-testid="start-error">
+                {startError}
+              </Alert>
+            )}
+            {startNotice && (
+              <Alert
+                color="yellow"
+                mt="sm"
+                withCloseButton
+                onClose={() => setStartNotice(null)}
+                data-testid="start-notice"
+              >
+                {startNotice}
+              </Alert>
+            )}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: collapsed ? 12 : 8 }}>
+            {startError && collapsed && (
+              <Alert color="red" mb="sm" data-testid="start-error-collapsed">
+                {startError}
+              </Alert>
+            )}
+            {sessionId === null ? (
+              <Paper withBorder p="xl" radius="md">
+                <Text c="dimmed">
+                  {collapsed
+                    ? "Show filters to choose your puzzles, then press Start."
+                    : "Choose your puzzles on the left, then press Start."}
+                </Text>
+              </Paper>
+            ) : (
+              <TrainerView
+                key={sessionId}
+                sessionId={sessionId}
+                onNewSession={() => setSessionId(null)}
+                onHistoryChange={historyChanged}
+                coordinates={coordinates}
+                wide={collapsed}
+              />
+            )}
+          </Grid.Col>
+        </Grid>
+      </>
     );
 
+  const ready = started && !!dbStatus?.installed && !dbStatus.needs_upgrade;
   return (
     <AppShell header={{ height: 56 }} padding="md">
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Title order={3}>WeakSquare Chess Trainer</Title>
           <Group gap="sm">
-          {started && <LichessStatus account={account} sync={sync} />}
-          {started && (
-            <SpendIndicator
-              onOpen={() => {
-                setSettingsAi(true);
-                setSettingsOpen(true);
-              }}
-            />
-          )}
-          <ActionIcon variant="subtle" size="lg" aria-label="Settings" onClick={() => setSettingsOpen(true)} data-testid="gear">
-            {"\u2699\uFE0E"}
-          </ActionIcon>
-          <Menu position="bottom-end" width={240}>
-            <Menu.Target>
-              <ActionIcon variant="subtle" size="lg" aria-label="Menu">
-                ☰
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              {started && dbStatus?.installed && (
-                <Menu.Item onClick={() => setUpdateOpen(true)}>Update puzzle database…</Menu.Item>
-              )}
-              <Menu.Item onClick={() => setStatsOpen(true)} disabled={!started || !dbStatus?.installed}>
-                Stats
-              </Menu.Item>
-              <Menu.Item onClick={() => setSettingsOpen(true)}>Settings…</Menu.Item>
-              <Menu.Item onClick={toggleCoordinates} data-testid="menu-coordinates">
-                {coordinates ? "Hide board coordinates" : "Show board coordinates"}
-              </Menu.Item>
-              <Menu.Item onClick={() => setShortcutsOpen(true)}>Keyboard shortcuts</Menu.Item>
-              <Menu.Divider />
-              <Menu.Item onClick={() => setAboutOpen(true)}>About</Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+            {ready && (
+              <Group gap={4}>
+                <Button
+                  size="xs"
+                  variant={page.kind === "trainer" ? "light" : "subtle"}
+                  onClick={() => setPage({ kind: "trainer" })}
+                  data-testid="nav-puzzles"
+                >
+                  Puzzles
+                </Button>
+                <Button
+                  size="xs"
+                  variant={page.kind !== "trainer" ? "light" : "subtle"}
+                  onClick={() => setPage({ kind: "games" })}
+                  data-testid="nav-games"
+                >
+                  My games
+                </Button>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  onClick={() => setImportOpen(true)}
+                  data-testid="nav-import-game"
+                >
+                  Import game
+                </Button>
+              </Group>
+            )}
+            {started && <LichessStatus account={account} sync={sync} />}
+            {started && (
+              <SpendIndicator
+                onOpen={() => {
+                  setSettingsAi(true);
+                  setSettingsOpen(true);
+                }}
+              />
+            )}
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              aria-label="Settings"
+              onClick={() => setSettingsOpen(true)}
+              data-testid="gear"
+            >
+              {"\u2699\uFE0E"}
+            </ActionIcon>
+            <Menu position="bottom-end" width={240}>
+              <Menu.Target>
+                <ActionIcon variant="subtle" size="lg" aria-label="Menu">
+                  ☰
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {started && dbStatus?.installed && (
+                  <Menu.Item onClick={() => setUpdateOpen(true)}>
+                    Update puzzle database…
+                  </Menu.Item>
+                )}
+                {ready && (
+                  <Menu.Item
+                    onClick={() => setPuzzlesOpen(true)}
+                    data-testid="menu-import-puzzles"
+                  >
+                    Import puzzles from a file…
+                  </Menu.Item>
+                )}
+                <Menu.Item
+                  onClick={() => setStatsOpen(true)}
+                  disabled={!started || !dbStatus?.installed}
+                >
+                  Stats
+                </Menu.Item>
+                <Menu.Item onClick={() => setSettingsOpen(true)}>
+                  Settings…
+                </Menu.Item>
+                <Menu.Item
+                  onClick={toggleCoordinates}
+                  data-testid="menu-coordinates"
+                >
+                  {coordinates
+                    ? "Hide board coordinates"
+                    : "Show board coordinates"}
+                </Menu.Item>
+                <Menu.Item onClick={() => setShortcutsOpen(true)}>
+                  Keyboard shortcuts
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item onClick={() => setAboutOpen(true)}>About</Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Main>{main}</AppShell.Main>
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ImportGameDialog
+        opened={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={(id) => {
+          setImportOpen(false);
+          setPage({ kind: "review", gameId: id });
+        }}
+      />
+      <ImportPuzzlesDialog
+        opened={puzzlesOpen}
+        onClose={() => setPuzzlesOpen(false)}
+        onDone={historyChanged}
+      />
       <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
-      <ShortcutsHelp opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ShortcutsHelp
+        opened={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+      />
       <SettingsModal
         opened={settingsOpen}
         onClose={() => {
@@ -364,7 +552,12 @@ export function App() {
         timeOffset={timeOffset}
         onTimeOffset={setTimeOffset}
       />
-      <Modal opened={updateOpen} onClose={() => setUpdateOpen(false)} title="Update the puzzle database" size="lg">
+      <Modal
+        opened={updateOpen}
+        onClose={() => setUpdateOpen(false)}
+        title="Update the puzzle database"
+        size="lg"
+      >
         <ImportView
           firstRun={false}
           runningJobId={dbStatus?.import_job_id ?? null}
