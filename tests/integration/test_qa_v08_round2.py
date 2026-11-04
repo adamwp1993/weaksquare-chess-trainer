@@ -32,7 +32,7 @@ def test_qa_r2_regrading_after_an_analysis_matches_the_new_thresholds(services, 
     assert [r.classification for r in rows] == [regrade(r, LOW).classification for r in rows]
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B10: thresholds changed during an analysis don't reach that game")
+# Regression test for v0.8-B10 (fixed in the QA fix loop).
 def test_qa_r2_thresholds_changed_while_a_game_is_analyzed_reach_that_game(services, paths) -> None:  # type: ignore[no-untyped-def]
     import threading
 
@@ -64,7 +64,7 @@ def test_qa_r2_thresholds_changed_while_a_game_is_analyzed_reach_that_game(servi
     assert [r.classification for r in rows] == [regrade(r, LOW).classification for r in rows]
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B11: a mistyped chess.com name from a URL import stays linked")
+# Regression test for v0.8-B11 (fixed in the QA fix loop).
 def test_qa_r2_a_username_whose_game_isnt_found_is_not_linked(rig: Rig) -> None:  # noqa: F811
     job = rig.svc.start_url_import("https://www.chess.com/game/live/100000077", chesscom_username="player_typo")
     st = rig.runner.wait(job, 5)
@@ -73,7 +73,7 @@ def test_qa_r2_a_username_whose_game_isnt_found_is_not_linked(rig: Rig) -> None:
     assert rig.svc.settings().chesscom_username is None
 
 
-@pytest.mark.xfail(strict=True, reason="v0.8-B12: a CSV of exactly the cap plus a blank line says 'more than'")
+# Regression test for v0.8-B12 (fixed in the QA fix loop).
 def test_qa_r2_a_csv_at_the_cap_with_a_trailing_blank_line_is_not_over_the_cap() -> None:
     row = "6k1/5ppp/8/8/8/8/8/RR4K1 w - - 0 1,a1a8"
     out = parse_csv("fen,solution\n" + row + "\n" + row + "\n\n", max_entries=2)

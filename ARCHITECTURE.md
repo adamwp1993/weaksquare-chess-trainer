@@ -227,7 +227,7 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
-### 2026-11-04, v0.8: QA fixes (v0.8-B1 to B9)
+### 2026-11-04, v0.8: QA fixes (v0.8-B1 to B12)
 - Context: `qa/QA-v0.8.md` round 1: FAIL, with one major bug (B4) and eight minor ones.
 - Decision:
   - **B1:** changing the grading thresholds regrades every stored move from its stored evals (`core.game_review.regrade`, `GameAnalysisRepo.regrade`), with no engine pass.
@@ -239,6 +239,7 @@ Entry format:
   - **B7:** Review shows at most 8 moves of an engine line, and the lines wrap.
   - **B8:** a puzzle from your games says so when Stockfish is missing and only its saved line counts (`PuzzleView.strict_without_engine`).
   - **B9:** the User Guide states the decided-position rule exactly.
+  - **Round 2 (B10–B12):** a game analyzed while the thresholds changed is graded with the new ones at the end (B10). The chess.com name typed for a URL import is linked only once the game is found, and it's used for the color either way (B11). Blank CSV rows don't count toward the 20,000-entry cap (B12).
 - Alternatives: B1, marking games *not current* to force a re-analysis (slow, and the evals don't change); B4, unlocking the control in those modes (they can't serve your puzzles).
 - Consequences: each bug has a regression test. QA's strict-xfail tests for B1–B6 now pass unmarked, and B2 (game files), B7 and B8 have their own.
 

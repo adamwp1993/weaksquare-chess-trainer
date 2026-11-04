@@ -278,4 +278,7 @@ class AnalysisService:
             division=division,
             th=st.thresholds,
         )
+        now = self.settings().thresholds
+        if now != st.thresholds:  # v0.8-B10: the thresholds changed while this game was analyzed
+            rows = [regrade(r, now) for r in rows]
         self._store.replace(game.id, rows, "analyzed", st.think_s, engine)

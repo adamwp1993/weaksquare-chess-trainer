@@ -261,12 +261,14 @@ def parse_csv(text: str, max_entries: int = MAX_ENTRIES) -> list[Entry]:
     if fen_i is None or sol_i is None:
         raise FileError("The CSV needs a header row with 'fen' and 'solution' (or 'moves') columns.")
     out: list[Entry] = []
-    for n, row in enumerate(reader, 1):
-        if n > max_entries:
+    entries = 0
+    for n, row in enumerate(reader, 1):  # n: the row number, as reported
+        if not any(c.strip() for c in row):
+            continue  # blank rows aren't entries (v0.8-B12)
+        entries += 1
+        if entries > max_entries:
             out.append(_too_many(n, max_entries))
             break
-        if not any(c.strip() for c in row):
-            continue
         if len(row) <= max(fen_i, sol_i):
             out.append(EntryError(n, "the row is missing its FEN or solution"))
             continue

@@ -423,8 +423,8 @@ class GameLibraryService:
 
     # ------------------------------------------------------------ one-off imports
 
-    def _save(self, rec: GameRecord, parsed: ParsedGame) -> ImportOutcome:
-        color = detect_color(rec.white, rec.black, self.usernames())
+    def _save(self, rec: GameRecord, parsed: ParsedGame, extra_name: str | None = None) -> ImportOutcome:
+        color = detect_color(rec.white, rec.black, self.usernames() + ([extra_name] if extra_name else []))
         gid, created = self._repo.add(rec, moves_hash(parsed.start_fen, parsed.moves), color, self._now())
         row = self.get(gid)
         return ImportOutcome(
@@ -503,8 +503,6 @@ class GameLibraryService:
                 raise ValidationError(
                     "To find a chess.com game, the app needs your chess.com username.", code="chesscom_username_needed"
                 )
-            if not self.settings().chesscom_username:
-                self.set_chesscom_username(username)  # v0.8-B5: asked once (FR-11.4), then linked
 
         with self._lock:
             self._next_token += 1
@@ -515,7 +513,11 @@ class GameLibraryService:
                 outcome = self._import_lichess(lichess_id, progress)
             else:
                 assert chesscom is not None and username is not None
+                # v0.8-B5/B11: the name you typed is used to detect your color, and linked (when none
+                # is) only once the game is found, so a typo is never saved as your account.
                 outcome = self._import_chesscom(chesscom[1], username, progress, cancel)
+                if not self.settings().chesscom_username:
+                    self.set_chesscom_username(username)
             with self._lock:
                 self._url_results[ticket] = outcome
             return "Game imported"
@@ -587,7 +589,7 @@ class GameLibraryService:
                         ) from None
                     except GameError as e:
                         raise JobFailed("bad_pgn", e.reason, retryable=False) from None
-                    return self._save(rec, parsed)
+                    return self._save(rec, parsed, username)
         except (JobFailed, JobCancelled):
             raise
         except Exception as e:
