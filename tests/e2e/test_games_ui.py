@@ -105,7 +105,9 @@ def test_an_unanalyzed_game_offers_analyze(page) -> None:  # type: ignore[no-unt
 def test_import_a_pasted_game_asks_your_color(page) -> None:  # type: ignore[no-untyped-def]
     page.goto(page.base_url + "/")
     page.get_by_test_id("nav-import-game").click()
-    page.get_by_test_id("import-pgn-text").fill('[White "a"]\n[Black "b"]\n\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0')
+    page.get_by_test_id("import-pgn-text").fill(
+        '[White "a"]\n[Black "b"]\n\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0'
+    )
     page.get_by_test_id("import-pgn").click()
     dialog = page.get_by_test_id("import-game-dialog")
     dialog.get_by_text("Which side did you play?").wait_for()

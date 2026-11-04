@@ -183,3 +183,24 @@ def test_lichess_single_game_export_is_json_and_works_without_a_token() -> None:
     assert parse_lichess_game(data).extra["division"] == {"middle": 8}
     with pytest.raises(ValueError):
         LichessGames(http).export_game(None, "../x")
+
+
+def test_recorded_game_fixtures_parse() -> None:
+    """Adam's live recorder (`-m live --record-games`) writes recorded_* files; they must parse like the app does."""
+    from weaksquare.core.chesscom import parse_archive_game
+
+    found = 0
+    for p in (FIX / "lichess_games").glob("recorded_*"):
+        for line in (
+            p.read_text(encoding="utf-8").splitlines() if p.suffix == ".ndjson" else [p.read_text(encoding="utf-8")]
+        ):
+            if line.strip():
+                parse_single_pgn(parse_lichess_game(json.loads(line)).pgn)
+                found += 1
+    archive = FIX / "chesscom" / "recorded_archive.json"
+    if archive.exists():
+        for g in json.loads(archive.read_text(encoding="utf-8"))["games"]:
+            parse_single_pgn(parse_archive_game(g).pgn)
+            found += 1
+    if not found:
+        pytest.skip("no recorded game fixtures yet")
