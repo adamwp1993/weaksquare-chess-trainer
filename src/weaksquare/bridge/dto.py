@@ -1148,3 +1148,18 @@ class SuggestionView:
     pending: bool  # the banner: Apply / Compare / Dismiss
     previous: dict[str, Any] | None  # your filters it would replace (Compare)
     active: bool  # your current filters are this suggestion
+
+
+EXPORTED += [
+    CoachExample,
+    CoachWeakness,
+    CoachGapRow,
+    CoachPresetView,
+    CoachReport,
+    CoachReportSummary,
+    PlayerSubject,
+    CoachDefaults,
+    CoachAiNote,
+    CoachAi,
+    SuggestionView,
+]

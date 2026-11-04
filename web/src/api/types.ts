@@ -777,3 +777,119 @@ export interface GameStats {
   retry_tried: number;
   sources: SourceAccuracy[];
 }
+
+export interface CoachExample {
+  game_id: number;
+  ply: number;
+  cp_loss: number;
+}
+
+export interface CoachWeakness {
+  key: string;
+  kind: "missed" | "allowed" | "habit" | "puzzle";
+  name: string;
+  label: string;
+  count: number;
+  per10: number;
+  severity: number;
+  score: number;
+  themes: string[];
+  mode: string | null;
+  reasons: Record<string, number>;
+  examples: CoachExample[];
+  puzzle_accuracy: number | null;
+  trend: number | null;
+}
+
+export interface CoachGapRow {
+  theme: string;
+  label: string;
+  puzzle_accuracy: number | null;
+  puzzle_attempts: number;
+  missed_per10: number;
+  allowed_per10: number;
+}
+
+export interface CoachPresetView {
+  name: string;
+  spec: Record<string, unknown>;
+  mode: string;
+  why: string[];
+}
+
+export interface CoachReport {
+  id: number;
+  created_at: string;
+  subject_label: string;
+  is_me: boolean;
+  source: "puzzles" | "games" | "both";
+  params: Record<string, unknown>;
+  games: number;
+  first_played: string | null;
+  last_played: string | null;
+  per10: Record<string, number>;
+  results: Record<string, number>;
+  missed: CoachWeakness[];
+  allowed: CoachWeakness[];
+  habits: CoachWeakness[];
+  puzzles: CoachWeakness[];
+  gap: CoachGapRow[];
+  reasons: Record<string, number>;
+  low_clock_errors: number;
+  preset: CoachPresetView | null;
+  notes: string[];
+}
+
+export interface CoachReportSummary {
+  id: number;
+  created_at: string;
+  subject_label: string;
+  is_me: boolean;
+  source: "puzzles" | "games" | "both";
+  games: number;
+  top: string[];
+}
+
+export interface PlayerSubject {
+  subject: string;
+  label: string;
+  games: number;
+}
+
+export interface CoachDefaults {
+  params: Record<string, unknown>;
+  usernames: string[];
+  players: PlayerSubject[];
+  running_job: string | null;
+}
+
+export interface CoachAiNote {
+  key: string;
+  label: string;
+  explanation: string;
+  drill: string;
+}
+
+export interface CoachAi {
+  summary: string;
+  weaknesses: CoachAiNote[];
+  presets: CoachPresetView[];
+  fallback_preset: boolean;
+  discarded: number;
+  provider: string;
+  model: string;
+  cost_usd: number;
+}
+
+export interface SuggestionView {
+  report_id: number;
+  number: number;
+  created_at: string;
+  label: string;
+  spec: Record<string, unknown>;
+  mode: string;
+  why: string[];
+  pending: boolean;
+  previous: Record<string, unknown> | null;
+  active: boolean;
+}

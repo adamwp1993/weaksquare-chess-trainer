@@ -52,7 +52,26 @@ import type {
   RetryResult,
   SavedPuzzle,
   UiSettings,
+  CoachAi,
+  CoachDefaults,
+  CoachReport,
+  CoachReportSummary,
+  SuggestionView,
 } from "./types";
+
+/** v0.10: one Coach run's settings (FR-10.2–10.5). `player` null means you. */
+export interface CoachParams {
+  source: "puzzles" | "games" | "both";
+  player: string | null;
+  platform: "lichess" | "chesscom";
+  platforms: ("lichess" | "chesscom")[];
+  count: 25 | 50 | 100 | 200;
+  rated_only: boolean;
+  time_classes: string[];
+  color: "both" | "white" | "black";
+  detail: "summary" | "detailed";
+  game_ids: number[];
+}
 
 /** v0.8: the My games filters (FR-11.26); empty or missing fields don't filter. Dates are YYYY-MM-DD. */
 export interface LibraryFilters {
@@ -66,6 +85,7 @@ export interface LibraryFilters {
   date_from?: string | null;
   date_to?: string | null;
   statuses?: ("none" | "analyzed")[];
+  player?: string; // v0.10: "me" (default) or another player's subject, "lichess:<name>"
   limit?: number;
   offset?: number;
 }
@@ -142,6 +162,8 @@ export interface SettingValues {
   // v0.6
   "reasons.ask": "always" | "game_review" | "off";
   "reasons.rushed_s": number;
+  // v0.10
+  "review.show_best": boolean;
 }
 
 /** Why you missed it (§7.3, FR-5.6). */
@@ -269,7 +291,7 @@ export interface ApiClient {
   getExplanation(sessionId: number): Promise<Explanation | null>;
   // ---- v0.9: a model per AI feature (FR-1.15) and Game Review AI (§11.4) -----------------------
   /** Game Review's own provider and model, or "same" to follow Explain's; and its reasoning level. */
-  setLlmFeature(feature: "game_review", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
+  setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
   /** Can Explain this move run for one of your analyzed moves, and about what would it cost? */
   getGameMoveQuote(gameId: number, ply: number): Promise<GameAiQuote>;
   /** Explain this move (FR-11.17), as a job. Then call getGameMoveExplanation. */
@@ -314,6 +336,24 @@ export interface ApiClient {
   chooseAndImportPuzzles(label: string): Promise<string | null>;
   getPuzzleImportReport(jobId: string): Promise<PuzzleImportReport | null>;
   listPuzzleSets(): Promise<PuzzleSet[]>;
+  // ---- v0.10: Game Review additions, your puzzles, the Coach -----------------------------------
+  /** Analyze from here (FR-11.34): the interactive engine on any position of the free board. */
+  analyzeGamePosition(gameId: number, fen: string, purpose: "panel" | "board"): Promise<Analysis>;
+  /** FR-10.44: archive one of your puzzles you don't want (kept, never served). */
+  archiveMyPuzzle(puzzleId: number): Promise<void>;
+  getCoachDefaults(): Promise<CoachDefaults>;
+  /** A Coach run (sync, analyze, tag, puzzles, report) as a job; then getCoachRunResult. */
+  startCoachRun(params: CoachParams): Promise<string>;
+  getCoachRunResult(jobId: string): Promise<number | null>;
+  listCoachReports(): Promise<CoachReportSummary[]>;
+  getCoachReport(reportId: number): Promise<CoachReport>;
+  getCoachAiQuote(reportId: number): Promise<GameAiQuote>;
+  /** Get AI coaching (FR-10.21–10.25), only after you confirm the estimate. */
+  startCoachAi(reportId: number): Promise<string>;
+  getCoachAi(reportId: number): Promise<CoachAi | null>;
+  getSuggestion(): Promise<SuggestionView | null>;
+  applySuggestion(): Promise<SuggestionView>;
+  dismissSuggestion(): Promise<SuggestionView | null>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

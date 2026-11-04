@@ -4,6 +4,7 @@ import {
   type AnalysisPurpose,
   type ApiClient,
   type BackendEvent,
+  type CoachParams,
   type EngineSettingsChange,
   type LlmPriceChange,
   type LlmProvider,
@@ -16,6 +17,11 @@ import {
   type TrainingMode,
 } from "./ApiClient";
 import type {
+  CoachAi,
+  CoachDefaults,
+  CoachReport,
+  CoachReportSummary,
+  SuggestionView,
   AccountStatus,
   Analysis,
   ExplainQuote,
@@ -203,7 +209,7 @@ export class PywebviewClient implements ApiClient {
     return this.call<Explanation | null>("get_explanation", sessionId);
   }
   // ---- v0.9: a model per AI feature and Game Review AI -------------------------------------------
-  setLlmFeature(feature: "game_review", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
+  setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
     return this.call<LlmSettings>("set_llm_feature", feature, choice, model, reasoning);
   }
 
@@ -511,6 +517,59 @@ export class PywebviewClient implements ApiClient {
 
   listPuzzleSets() {
     return this.call<PuzzleSet[]>("list_puzzle_sets");
+  }
+
+  // ---- v0.10 ---------------------------------------------------------------------------------------
+  analyzeGamePosition(gameId: number, fen: string, purpose: "panel" | "board") {
+    return this.call<Analysis>("analyze_game_position", gameId, fen, purpose);
+  }
+
+  archiveMyPuzzle(puzzleId: number) {
+    return this.call<void>("archive_my_puzzle", puzzleId);
+  }
+
+  getCoachDefaults() {
+    return this.call<CoachDefaults>("get_coach_defaults");
+  }
+
+  startCoachRun(params: CoachParams) {
+    return this.call<string>("start_coach_run", params);
+  }
+
+  getCoachRunResult(jobId: string) {
+    return this.call<number | null>("get_coach_run_result", jobId);
+  }
+
+  listCoachReports() {
+    return this.call<CoachReportSummary[]>("list_coach_reports");
+  }
+
+  getCoachReport(reportId: number) {
+    return this.call<CoachReport>("get_coach_report", reportId);
+  }
+
+  getCoachAiQuote(reportId: number) {
+    return this.call<GameAiQuote>("get_coach_ai_quote", reportId);
+  }
+
+  startCoachAi(reportId: number) {
+    return this.call<string>("start_coach_ai", reportId);
+  }
+
+  getCoachAi(reportId: number) {
+    return this.call<CoachAi | null>("get_coach_ai", reportId);
+  }
+
+  getSuggestion() {
+    return this.call<SuggestionView | null>("get_suggestion");
+  }
+
+  applySuggestion() {
+    return this.call<SuggestionView>("apply_suggestion");
+  }
+
+  dismissSuggestion() {
+    return this.call<SuggestionView | null>("dismiss_suggestion");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

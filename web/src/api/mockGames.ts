@@ -203,6 +203,7 @@ export class MockGames {
   }
 
   list(f: LibraryFilters): GamePage {
+    if (f.player && f.player !== "me") return { games: [], total: 0 }; // v0.10: the mock keeps no other players' games
     let rows = this.games.map((g) => g.summary);
     const has = <T>(list: T[] | undefined, v: T) => !list || list.length === 0 || list.includes(v);
     rows = rows.filter(
@@ -484,6 +485,11 @@ export class MockGames {
   // ---- your own puzzles -------------------------------------------------------------------------
   private addMine(id: string, fen: string, line: string[], origin: "manual" | "import", label: string | null) {
     this.mine.push({ id, fen, moves: ["", ...line], rating: 0, themes: [], source: "my", origin, set_label: label } as MockPuzzle);
+  }
+
+  archive(id: string) {
+    const i = this.mine.findIndex((p) => p.id === id);
+    if (i >= 0) this.mine.splice(i, 1);
   }
 
   myPool(spec: FilterSpec): MockPuzzle[] {
