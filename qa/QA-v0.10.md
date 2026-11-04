@@ -253,3 +253,43 @@ The fix commit touches `stats.py`, `review.py`, `game_review.py`, `bridge/api.py
 
 ## Builder's fixes after round 2 (2026-11-04)
 B9 and B10 fixed with regression tests (QA's B9 test is now plain). The round-2 observation about old Missed/Allowed labels is fixed too: the backfill regrades stored moves before re-tagging (`test_r2_the_backfill_applies_the_b2_rule_to_old_analysis`).
+
+---
+
+## Round 3 (manual-test fix M1): commits `1fa82ba`, `3395254`, `8825699`
+
+### Final verdict: **PASS WITH ISSUES** (M1, B9 and B10 fixed; 2 new minor issues: B11, B12)
+
+| Item | Re-test | Result | Evidence |
+|---|---|---|---|
+| **M1** the Coach's model is picked in the AI coaching box | e2e | **Fixed** | builder `test_manual_the_coach_model_is_picked_in_the_ai_coaching_box` (pick → Get AI coaching → switch to Sonnet → **Ask claude-sonnet-5-5 instead**, old answer kept until asked → new answer on Sonnet). QA `test_qa_r3_the_ai_coaching_box_with_its_model_picker`: options read "about $0.03 **per report**", and the choice made in the box shows in Settings → AI → Coach (one setting). The real DTO's `CoachAi.model` exists, and the backend's `_cached` also compares the model, so "Ask … instead" really sends a new request. Screenshot `qa-v010-r3-ai-coaching-box.png` |
+| **B9** Mixer's mode vs the running session | e2e | **Fixed for the reported case** (follow-ups: B11) | `test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_step` now passes |
+| **B10** docs and screenshot for B4/B5 | docs | **Fixed** | User Guide step 3 names **All my games / Lichess / chess.com**; "Off hides" lists Explain this move's line. The B5 control is in `coach-report.png` (but see B12) |
+| Backfill regrade (round-2 observation) | integration | **Fixed** | builder `test_r2_the_backfill_applies_the_b2_rule_to_old_analysis` |
+| `8825699` docs only (REQUIREMENTS §10.12, ROADMAP v0.12, CLAUDE.md line) | review | OK | nothing built for v0.12; `check_docs --strict` passes |
+
+### v0.10-B11 (minor): the mode that waits for the session to end is applied only by **New session**
+The B9 fix keeps the suggestion's mode in `pendingMode` and applies it when `sessionId` becomes null. That only happens with **New session** at the end of a session; **Start** in the Mixer and a mode click replace the session without passing through null.
+- **(a) Start keeps the old mode.** Run the Coach, go to Puzzles, **Start** (Standard), and let the run finish (the mix's mode is Danger spotting). Then press **Start** again. The new session is **Standard**, and the Mixer shows Standard, while the stored `trainer.mode` is `danger_spotting`. After a restart the mode switches to Danger spotting without a word. The guide says the mode "waits until that session ends", and starting a new one ends it.
+- **(b) Your own choice is overwritten later.** Same start, then pick **Commit the line** yourself mid-session (`changeMode` starts a Commit session and saves `trainer.mode = commit_line`). Finish the session and press **New session**: the stale pending mode switches the Mixer to **Danger spotting**, although you chose Commit the line after the run. The UI and the stored setting now disagree again (`commit_line` saved).
+- **Fix idea:** clear `pendingMode` whenever you change the mode yourself, and apply it at the next `start()` (or when the session ends) rather than only on `sessionId === null`.
+- **Evidence:** `tests/e2e/test_qa_v010_ui.py::test_qa_r3_starting_again_after_the_run_uses_the_suggested_mode` (xfail strict: `('Standard', 'standard', 'danger_spotting')` = session, Mixer, stored) and `::test_qa_r3_a_mode_you_pick_mid_session_is_not_replaced_later` (xfail strict: Mixer shows `danger_spotting`).
+
+### v0.10-B12 (minor, docs): `docs/img/coach-report.png` is stale again after M1
+`uv run pytest -m docs_screenshots` changes `coach-report.png`. The committed one (from `1fa82ba`) shows "no model · Settings → AI → Coach" and no picker. The regenerated one has the new model picker ("Same as Explain") in the AI coaching box and only "no model" on the right. CLAUDE.md asks for screenshots to be regenerated at every handoff, so this needs doing before `v0.10-rc2`. (`import-puzzles.png` and `stats-reasons.png` also re-render, but I compared them with the committed copies and they look identical.) I restored all three.
+
+### Round-3 runs
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1718 passed, 1 skipped**, rc 0 (294 s) |
+| `uv run pytest -m e2e` | **290 passed, 2 xfailed** (B11), rc 0 (710 s). `test_qa_v010_ui.py` alone afterwards, with the M1 test added: 12 passed, 2 xfailed |
+| `uv run pytest -m docs_screenshots` | 37 passed; `coach-report.png` drifts (B12) |
+| `uv run ruff check .`, `ruff format --check .`, `uv run mypy src` | clean; 375 files formatted; no issues in 119 files |
+| `npm.cmd --prefix web run typecheck` / `lint` (PowerShell AllSigned) | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [version v0.10] |
+| `-m smoke`, `-m engine`, `-m fulldb` | not re-run: the round-3 changes are front-end (mock-tested), docs and the backfill regrade (integration-tested). Round 2: engine 19 passed; smoke 34 passed with one unrelated flake |
+
+**Tests added in round 3** (`tests/e2e/test_qa_v010_ui.py`): `test_qa_r3_starting_again_after_the_run_uses_the_suggested_mode` (xfail B11), `test_qa_r3_a_mode_you_pick_mid_session_is_not_replaced_later` (xfail B11), `test_qa_r3_the_ai_coaching_box_with_its_model_picker`.
+
+**For Adam's manual test:** in the real app, change the model in the AI coaching box on a report that already has an answer, check the estimate is for the new model, and confirm **Ask … instead** sends exactly one request (Settings → AI spend for the Coach).

@@ -170,3 +170,62 @@ def test_qa_r2_a_run_ending_mid_session_keeps_the_mode_shown_and_the_session_in_
     # The Mixer and the running session must agree on the mode (§6: a mode change starts a new session).
     labels = {"standard": "Standard", "danger_spotting": "Danger spotting", "commit_line": "Commit the line"}
     assert labels.get(str(shown)) == running, (shown, running)
+
+
+# ---- round 3 (B9 fix) -----------------------------------------------------------------------------------
+
+
+def _run_then_session(page) -> None:  # type: ignore[no-untyped-def]
+    coach(page)
+    page.get_by_test_id("coach-run").click()
+    page.get_by_test_id("nav-puzzles").click()
+    page.get_by_role("button", name="Start").click()
+    page.get_by_test_id("board").wait_for()
+    page.get_by_test_id("suggestion-label").wait_for(timeout=5000)
+    assert page.get_by_test_id("session-mode").inner_text() == "Standard"
+
+
+def _shown(page) -> str | None:  # type: ignore[no-untyped-def]
+    return page.get_by_test_id("mode-control").locator("input:checked").get_attribute("value")  # type: ignore[no-any-return]
+
+
+@pytest.mark.xfail(strict=True, reason="v0.10-B11: the waiting mode is applied only on New session, not on Start")
+def test_qa_r3_starting_again_after_the_run_uses_the_suggested_mode(page) -> None:  # type: ignore[no-untyped-def]
+    """The guide: the new mix's mode waits until that session ends. Pressing Start ends it too."""
+    _run_then_session(page)
+    page.get_by_role("button", name="Start").click()  # a new session from the Mixer
+    page.wait_for_timeout(500)
+    running = page.get_by_test_id("session-mode").inner_text()
+    stored = page.evaluate("window.__mockApi.settings.mode") if page.evaluate("!!window.__mockApi.settings") else None
+    assert running == "Danger spotting", (running, _shown(page), stored)
+
+
+@pytest.mark.xfail(strict=True, reason="v0.10-B11: a mode you pick after the run is replaced by the waiting one")
+def test_qa_r3_a_mode_you_pick_mid_session_is_not_replaced_later(page) -> None:  # type: ignore[no-untyped-def]
+    _run_then_session(page)
+    page.get_by_test_id("mode-control").get_by_text("Commit the line", exact=True).click()  # your own choice
+    page.get_by_test_id("session-mode").filter(has_text="Commit the line").wait_for()
+    for _ in range(25):  # finish the session
+        if page.get_by_role("button", name="New session").count():
+            break
+        page.get_by_test_id("next-button").click()
+        page.wait_for_timeout(100)
+    page.get_by_role("button", name="New session").click()
+    page.wait_for_timeout(300)
+    assert _shown(page) == "commit_line", _shown(page)
+
+
+def test_qa_r3_the_ai_coaching_box_with_its_model_picker(page) -> None:  # type: ignore[no-untyped-def]
+    """M1: the picker sits in the box, its options are priced per report, and the same setting as Settings → AI."""
+    coach(page, "?ai=on&coach=report")
+    box = page.get_by_test_id("coach-ai")
+    box.get_by_test_id("ai-feature-model-coach").click()
+    page.get_by_role("option", name="claude-sonnet-5-5  ·  about").filter(has_text="per report").wait_for()
+    page.get_by_role("option", name="claude-sonnet-5-5  ·  about").click()
+    box.get_by_test_id("coach-ai-start").wait_for()
+    box.scroll_into_view_if_needed()
+    shot(page, "r3-ai-coaching-box")
+    page.get_by_test_id("gear").click()
+    picker = page.get_by_test_id("settings-ai").get_by_test_id("ai-feature-model-coach")
+    picker.scroll_into_view_if_needed()
+    assert picker.input_value().startswith("claude-sonnet-5-5"), picker.input_value()
