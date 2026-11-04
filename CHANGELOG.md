@@ -15,6 +15,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ### Added
 - **Theme tags on your mistakes:** your game mistakes, saved puzzles and imported puzzles get the same themes as Lichess puzzles (fork, pin, back-rank mate…), worked out on your PC by Lichess's own tagger. [FR-10.12] [FR-11.10] [FR-10.49]
+- **Habit tags on your game mistakes:** *hung a piece*, *missed a free capture*, *ignored a threat* and *moved a defender*, the most common club-level slips, checked on your PC. [FR-10.27]
 
 ## [v0.9] - 2026-11-04
 Candidates: v0.9-rc1 (2026-11-04)
