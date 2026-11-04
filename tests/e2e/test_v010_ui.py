@@ -44,7 +44,7 @@ def test_show_best_moves_off_hides_every_better_move(page) -> None:  # type: ign
     page.get_by_test_id("review-better").filter(has_text="Better was Nxd4").wait_for()
     assert "better was Nxd4" in page.get_by_test_id("key-moments").inner_text()
     calls = page.evaluate("window.__mockApi.calls")
-    assert 'setting:review.show_best=true' in calls
+    assert "setting:review.show_best=true" in calls
 
 
 def test_show_best_moves_is_read_from_the_saved_setting(page) -> None:  # type: ignore[no-untyped-def]
