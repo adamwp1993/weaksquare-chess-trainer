@@ -17,8 +17,11 @@ from typing import Any
 
 from weaksquare import config
 from weaksquare.adapters import instance_lock
+from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
+from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
@@ -50,6 +53,7 @@ from weaksquare.adapters.lichess import (
     is_unauthorized,
     retry_after,
 )
+from weaksquare.adapters.lichess_games import LichessGames
 from weaksquare.adapters.llm.anthropic import AnthropicProvider
 from weaksquare.adapters.llm.openai import OpenAIProvider
 from weaksquare.adapters.logging_setup import setup_logging
@@ -63,14 +67,17 @@ from weaksquare.bridge.api import Api, attempt_rating
 from weaksquare.bridge.events import EventSink
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineClient, EngineProbe, parse_manifest, platform_key
+from weaksquare.core.games import ChesscomClient, LichessGamesClient
 from weaksquare.core.lichess import LichessClient
 from weaksquare.core.llm.provider import LLMProvider
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
+from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
 from weaksquare.services.explain import ExplainService
+from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
@@ -194,6 +201,8 @@ class Services:
     llm_settings: LlmSettingsService
     llm_usage: LlmUsageService
     explain: ExplainService
+    games: GameLibraryService
+    analysis: AnalysisService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -221,6 +230,8 @@ def build_services(
     engine_probe: EngineProbe | None = None,
     cpu_count: int | None = None,
     llm_providers: dict[str, LLMProvider] | None = None,
+    lichess_games: LichessGamesClient | None = None,
+    chesscom: ChesscomClient | None = None,
 ) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
 
@@ -336,6 +347,12 @@ def build_services(
     )
     llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
     explain = ExplainService(sessions, llm_settings, llm_usage, LlmCacheRepo(db), runner, clock)
+    games_repo = GamesRepo(db)
+    games = GameLibraryService(
+        games_repo, AccountSyncRepo(db), SettingsRepo(db), runner, clock, account,
+        lichess_games or LichessGames(http), chesscom or ChesscomGames(http), classify_game_error,
+    )  # fmt: skip
+    analysis = AnalysisService(games_repo, GameAnalysisRepo(db), engine, SettingsRepo(db), runner)
     return Services(
         db=db,
         http=http,
@@ -355,6 +372,8 @@ def build_services(
         llm_settings=llm_settings,
         llm_usage=llm_usage,
         explain=explain,
+        games=games,
+        analysis=analysis,
     )
 
 

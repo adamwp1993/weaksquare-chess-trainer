@@ -216,6 +216,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.8: The background engine and the analysis queue
+- Context: decision 12 reserved a second Stockfish process for game analysis, so the trainer never waits behind it. FR-11.31 asks for one job at a time and no repeat analysis at the same settings.
+- Decision:
+  - **`EngineService` owns the background engine** as a second `EngineClient` instance with its own lock, started lazily on the first game search and closed with the interactive one. It gets one thread fewer than the interactive engine (at least 1). `analyse_background` returns raw White-relative lines. No new `EngineClient` methods.
+  - **`services/analysis.py` (`AnalysisService`)** keeps an in-memory FIFO queue drained by one `game_analysis` job. A `_draining` flag, set under the queue lock, decides whether a newly queued game joins the running job or starts a new one, so a game queued as the job exits can't be stranded. Cancel clears the queue. Each game's rows are stored in one transaction, so a cancelled game keeps its previous analysis or none.
+  - **"The same settings"** means the same think time and the same `engine_id()` (the engine's name). Changing either makes a game *not current*, but nothing re-analyzes until you ask.
+  - **Grading is pure** (`core/game_review.grade_game`): it takes the engine lines of every position, and the final position's lines give the last move's refutation. The refutation of every move is stored (`refutation_uci`), so the Review screen needs no live engine call.
+- Alternatives: one engine with a priority queue (a 0.3 s background search would still delay a refutation); a fresh engine process per game (slow to start, and no shared hash).
+- Consequences: a second Stockfish process (about the hash size in memory) while games are analyzed. A test proves a puzzle refutation returns at once while the background engine is blocked mid-search.
+
 ### 2026-11-03, v0.8: Game clients: chess.com serialized by a lock, ETags in `http.py`, hand-written fixtures
 - Context: chess.com's Published-Data API answers parallel requests with 429 and asks for ETag caching (FR-10.7). Lichess exports your own games fastest with your token. Neither API had a client yet.
 - Decision:

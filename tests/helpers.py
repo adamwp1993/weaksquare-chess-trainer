@@ -30,6 +30,7 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
     """Fakes for everything that would reach Lichess, Credential Manager, a timer thread or an engine."""
     from tests.fakes.desktop import FakeBrowser, FakeScheduler
     from tests.fakes.engine import FakeEngine, fake_probe
+    from tests.fakes.games import FakeChesscom, FakeLichessGames
     from tests.fakes.lichess import FakeLichess
     from tests.fakes.llm import fake_providers
     from weaksquare.adapters.secret_store import MemorySecretStore
@@ -43,6 +44,8 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
         "engine_probe": fake_probe,
         "cpu_count": 8,
         "llm_providers": fake_providers(),  # never the real Anthropic or OpenAI
+        "lichess_games": FakeLichessGames(),  # never the real Lichess or chess.com (v0.8)
+        "chesscom": FakeChesscom(),
     }
 
 
