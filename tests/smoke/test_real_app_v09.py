@@ -30,8 +30,12 @@ def test_game_review_model_in_the_real_app(pw, tmp_path: Path, fixture_puzzles_d
             section.scroll_into_view_if_needed()
             section.get_by_test_id("ai-provider").click()
             page.get_by_role("option", name="Anthropic").click()
+            # Choosing a provider adds Explain's model and key fields above the picker: wait for the layout to
+            # settle before opening it (v0.9-B7).
+            section.get_by_test_id("ai-model").wait_for()
+            page.wait_for_timeout(300)
             picker = section.get_by_test_id("ai-feature-model-game_review")
-            picker.wait_for()
+            picker.scroll_into_view_if_needed()
             assert picker.input_value() == "Same as Explain"  # no Explain model picked yet
             picker.click()
             page.get_by_role("option", name="claude-sonnet-5-5  ·  about").click()

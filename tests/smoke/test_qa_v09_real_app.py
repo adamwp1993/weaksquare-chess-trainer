@@ -111,6 +111,10 @@ def test_qa_v09_reasoning_right_after_a_model_pick_keeps_the_model(
             section.scroll_into_view_if_needed()
             section.get_by_test_id("ai-provider").click()
             page.get_by_role("option", name="Anthropic").click()
+            # Choosing a provider adds Explain's model and key fields above the Game Review picker; wait for
+            # that layout shift before clicking it (QA round 2: the click otherwise lands where it used to be).
+            section.get_by_test_id("ai-model").wait_for()
+            page.wait_for_timeout(300)
             picker = section.get_by_test_id("ai-feature-model-game_review")
             picker.wait_for()
             # A slow bridge round trip (a busy PC): every set_llm_feature reply takes 1.5 s.

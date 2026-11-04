@@ -174,3 +174,52 @@ Screenshots (gitignored), `tests/e2e/artifacts/qa-v09-*.png`: review-ai-before, 
 - **Quality of the narrative** (whether the turning point and takeaways make sense) can only be judged with a real model.
 - **B1** needs a slow round trip; try changing the model then the reasoning quickly in Settings → AI.
 - **Review + Explain my game** on a game that needs the real Stockfish analysis first (the mock's analysis is simulated; the QA smoke planted the analysis because the temp folder has no engine).
+
+---
+
+## Round 2 (2026-11-04): re-verification of B1–B6 (commit `9158334`)
+
+### Final verdict: **PASS WITH ISSUES** (B1–B6 fixed; one new minor, test-only issue, B7)
+
+The fix commit touches `FeatureModelPicker.tsx`, `AiSettingsPanel.tsx`, `App.tsx`, `GameAiPanel.tsx`, `mockGameAi.ts`, `services/game_explain.py` (cache key), REQUIREMENTS FR-11.20, the User Guide, ARCHITECTURE §7 and the screenshots. My round-1 tests are unchanged except that the xfail markers were removed (I checked the assertions). There's no new dependency or migration.
+
+| Bug | Re-test | Result | Evidence |
+|---|---|---|---|
+| B1 picker race | real app, `set_llm_feature` delayed 1.5 s, model pick then Medium | **Fixed** | `test_qa_v09_reasoning_right_after_a_model_pick_keeps_the_model` passes 6/6 (it saves `('anthropic', 'claude-sonnet-5-5', 'medium')`) |
+| B2 thresholds in the cache key | integration | **Fixed** | `test_qa_new_grading_thresholds_give_a_new_explanation_as_the_user_guide_says` passes; FR-11.20 and the ARCHITECTURE key format are updated |
+| B3 Train these | e2e | **Fixed** | `test_qa_train_these_changes_only_themes_and_rating` (Match ALL kept). New: `test_qa_r2_train_these_switches_the_source_only_from_my_puzzles` (×2): My puzzles → Lichess DB, Both stays Both. The dialog and User Guide text match |
+| B4 typed model ID | e2e | **Fixed** | `test_qa_game_review_picker_takes_a_typed_model_id`. New: `test_qa_r2_a_typed_unpriced_model_is_saved_but_blocked_with_a_reason` ("!! not a model" → *Not a model ID*; "claude-qa-custom-9" → *Use “…” with Anthropic*, saved, shown in the Review page's picker; Explain my game is disabled with the price-table reason) |
+| B5 Game Review without Explain | e2e | **Fixed** | `test_qa_game_review_can_be_set_up_without_puzzle_explain`. New: `test_qa_r2_game_review_alone_on_openai_with_explain_off` (provider stays *None*; picking gpt-5.4-mini shows the OpenAI key field) |
+| B6 screenshot markup | docs screenshots + visual check | **Fixed** | `docs/img/game-review-ai.png` has no tags. `uv run pytest -m docs_screenshots`: 33 passed, `docs/` unchanged. Escaping is still covered for the shared `ExplanationView` by `test_explain_ui.py` (`<b>This text is shown as typed</b>`) |
+
+### Regression checks requested
+- **Typing in the picker:** `test_qa_r2_typing_filters_the_list_and_picking_a_listed_model_still_works`. Typing "sonnet" filters the list and picks the model. A listed ID typed in full isn't offered again as "Use …". Typing "Same" goes back to *Same as Explain*.
+- **Compact picker on the Review page:** `test_qa_r2_the_compact_review_picker_takes_a_typed_id_and_a_listed_model`. A typed `gpt-qa-typed-1` with OpenAI shows the key field in place and a reason, and the button is disabled. Typing "opus" and picking Claude Opus brings back the estimate, and the Confirm shows `claude-opus-5-5`. Screenshot `qa-v09-r2-compact-typed.png`: the layout fits.
+- **Startup short form with no AI set up:** `test_qa_r2_the_startup_short_form_with_no_ai_set_up`. Provider *None* and Game Review *Same as Explain*, with no AI spend indicator. Screenshot `qa-v09-r2-startup-no-ai.png` looks clean.
+
+### v0.9-B7 (minor, test only): the builder's v0.9 smoke test is flaky after B5
+- **Steps:** `uv run pytest -m smoke tests/smoke/test_real_app_v09.py`, repeated.
+- **Actual:** `test_game_review_model_in_the_real_app` failed 2 times in 10 runs (once in the full smoke run). The error is `Locator.click: Timeout … element is not visible` on the *claude-sonnet-5-5* option. My B1 smoke test failed once the same way before I changed it.
+- **Cause:** I reproduced this with a debug loop and a screenshot. Since B5, the Game Review picker exists before you choose Explain's provider. Choosing **Anthropic** then adds Explain's *Model* and key fields above the picker. The test clicks the picker straight away, so the click lands where the picker used to be, the dropdown never opens, and the option stays hidden. For a person this is just a normal layout change; it isn't a product bug.
+- **Fix (test):** wait for the new fields first. In my test I added `section.get_by_test_id("ai-model").wait_for()` plus a 300 ms settle, and the v0.9 smoke tests then passed 6/6 together. I left the builder's test alone; it needs the same wait.
+
+### Observation (no bug filed): two saves can still overlap on the backend
+The picker now sends the full choice each time, so the B1 symptom (the model reverting) is gone. pywebview runs each JS call on its own thread, though. `LlmSettingsService.update_feature` writes provider, model and reasoning as three separate `settings.set` calls with no lock. Two overlapping saves could still interleave within milliseconds and keep the earlier reasoning. That can't happen through the UI in practice, and the dropdown would show it.
+
+### Round-2 runs
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1585 passed, 1 skipped**, rc 0 |
+| `uv run pytest -m e2e` | **264 passed**, rc 0 (650 s). It includes the 7 new round-2 tests and the round-1 regressions. The v0.2 possible flake passed again |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0; **32 passed, 1 skipped, 1 failed** (B7). Re-runs of the two v0.9 smoke files: 2 failures in 8 runs before my wait fix. After it: **6 of 6** runs with all 3 tests passing |
+| `uv run pytest -m docs_screenshots` | **33 passed**, `docs/` unchanged |
+| `uv run ruff check .`, `ruff format --check .`, `uv run mypy src` | clean; 343 files formatted; no issues in 105 files |
+| `npm.cmd --prefix web run typecheck` / `lint` (PowerShell AllSigned) | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | gitleaks Passed, keyring-only Passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings [version v0.9] |
+| `-m engine`, `-m fulldb` | not re-run: the fix doesn't touch the engine, the puzzle DB or the filters (round 1: 15 passed; 71 passed, 3 xfailed) |
+| `-m live` | not run (Adam's) |
+
+**Tests added in round 2** (`tests/e2e/test_qa_v09_ui.py`): `test_qa_r2_typing_filters_the_list_and_picking_a_listed_model_still_works`, `test_qa_r2_a_typed_unpriced_model_is_saved_but_blocked_with_a_reason`, `test_qa_r2_the_compact_review_picker_takes_a_typed_id_and_a_listed_model`, `test_qa_r2_the_startup_short_form_with_no_ai_set_up`, `test_qa_r2_game_review_alone_on_openai_with_explain_off`, `test_qa_r2_train_these_switches_the_source_only_from_my_puzzles` (×2). I also changed `tests/smoke/test_qa_v09_real_app.py` to wait for the layout shift (B7).
+
+**For Adam's manual test** (in addition to round 1): in Settings → AI, type a model ID in the Game Review field and choose **Use “…” with Anthropic**. Then check that the Review page shows the price-table reason until you add a price row.

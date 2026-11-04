@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.9-rc1 (2026-11-04)
 
 ### Added
 - **Explain this move:** on any of your analyzed moves in Game Review, the AI explains why Stockfish's move is best and what was wrong with yours, with **Show me** on the board. Every move and square it mentions is checked against the game. [FR-11.17] [FR-11.20]

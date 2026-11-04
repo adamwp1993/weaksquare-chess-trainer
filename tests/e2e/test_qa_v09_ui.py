@@ -183,3 +183,113 @@ def test_qa_game_review_can_be_set_up_without_puzzle_explain(page) -> None:  # t
     panel = page.get_by_test_id("settings-ai")
     panel.scroll_into_view_if_needed()
     assert panel.get_by_test_id("ai-feature-model-game_review").count() == 1
+
+
+# ---- QA round 2 (fixes for B1–B6): regressions around the changed picker, Train these and Settings ----------
+
+
+def _type(page, model, text: str) -> None:  # type: ignore[no-untyped-def]
+    model.click()
+    model.fill(text)
+
+
+def test_qa_r2_typing_filters_the_list_and_picking_a_listed_model_still_works(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?ai=on")
+    page.get_by_test_id("gear").click()
+    model = page.get_by_test_id("settings-ai").get_by_test_id("ai-feature-model-game_review")
+    model.scroll_into_view_if_needed()
+    _type(page, model, "sonnet")
+    page.get_by_role("option", name="claude-sonnet-5-5  ·  about").click()
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=ai-feature-model-game_review]').value.startsWith('claude-sonnet')"
+    )
+    # A listed ID typed in full isn't offered twice as "Use …".
+    _type(page, model, "claude-opus-5-5")
+    assert page.get_by_role("option", name="Use “claude-opus-5-5” with Anthropic").count() == 0
+    page.keyboard.press("Escape")
+    # Back to Same as Explain.
+    _type(page, model, "Same")
+    page.get_by_role("option", name="Same as Explain (claude-haiku-5-5)").click()
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=ai-feature-model-game_review]').value.startsWith('Same as Explain')"
+    )
+
+
+def test_qa_r2_a_typed_unpriced_model_is_saved_but_blocked_with_a_reason(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?ai=on")
+    page.get_by_test_id("gear").click()
+    model = page.get_by_test_id("settings-ai").get_by_test_id("ai-feature-model-game_review")
+    model.scroll_into_view_if_needed()
+    _type(page, model, "!! not a model")
+    page.get_by_text("Not a model ID").wait_for()
+    _type(page, model, "claude-qa-custom-9")
+    page.get_by_role("option", name="Use “claude-qa-custom-9” with Anthropic").click()
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=ai-feature-model-game_review]').value.includes('claude-qa-custom-9')"
+    )
+    shot(page, "r2-typed-model")
+    page.keyboard.press("Escape")
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    why = page.get_by_test_id("narrative-why")
+    why.filter(has_text="price table").wait_for()
+    assert page.get_by_test_id("narrative-button").is_disabled()
+    compact = page.get_by_test_id("narrative-panel").get_by_test_id("ai-feature-model-game_review")
+    assert "claude-qa-custom-9" in compact.input_value()
+    shot(page, "r2-review-typed-model")
+
+
+def test_qa_r2_the_compact_review_picker_takes_a_typed_id_and_a_listed_model(page) -> None:  # type: ignore[no-untyped-def]
+    review(page)
+    compact = page.get_by_test_id("narrative-panel").get_by_test_id("ai-feature-model-game_review")
+    _type(page, compact, "gpt-qa-typed-1")
+    page.get_by_role("option", name="Use “gpt-qa-typed-1” with OpenAI").click()
+    page.get_by_test_id("narrative-why").wait_for()  # no OpenAI key and no price row: blocked with a reason
+    assert page.get_by_test_id("ai-feature-key-game_review").count() == 1  # the key field appears in place
+    shot(page, "r2-compact-typed")
+    _type(page, compact, "opus")
+    page.get_by_role("option", name="claude-opus-5-5  ·  about").click()
+    page.get_by_test_id("narrative-button").filter(has_text="≈ $").wait_for()
+    page.get_by_test_id("narrative-button").click()
+    assert "claude-opus-5-5" in page.get_by_test_id("narrative-estimate").inner_text()
+
+
+def test_qa_r2_the_startup_short_form_with_no_ai_set_up(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?startup=show")
+    more = page.get_by_test_id("startup-more")
+    if more.count():
+        more.click()
+    page.get_by_test_id("ai-feature-model-game_review").wait_for()
+    shot(page, "r2-startup-no-ai")
+    assert page.get_by_test_id("ai-feature-model-game_review").input_value() == "Same as Explain"
+    # Nothing is set up behind your back: the top bar shows no AI spend.
+    assert page.get_by_text("AI $").count() == 0
+
+
+def test_qa_r2_game_review_alone_on_openai_with_explain_off(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("gear").click()
+    panel = page.get_by_test_id("settings-ai")
+    model = panel.get_by_test_id("ai-feature-model-game_review")
+    model.scroll_into_view_if_needed()
+    model.click()
+    page.get_by_role("option", name="gpt-5.4-mini  ·  about").click()
+    panel.get_by_test_id("ai-feature-key-game_review").wait_for()
+    assert panel.get_by_test_id("ai-provider").input_value() == "None"
+    shot(page, "r2-game-review-alone")
+
+
+@pytest.mark.parametrize(("source", "expected"), [("My puzzles", "my→lichess"), ("Both", "both")])
+def test_qa_r2_train_these_switches_the_source_only_from_my_puzzles(page, source: str, expected: str) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?ai=on")
+    page.get_by_test_id("source-select").get_by_text(source).click()
+    page.get_by_test_id("nav-games").click()
+    page.get_by_test_id("review-1").click()
+    page.get_by_test_id("review-view").wait_for()
+    explain_game(page)
+    page.get_by_test_id("narrative-train").click()
+    page.get_by_test_id("train-apply").click()
+    page.get_by_test_id("trainer-page").wait_for()
+    want = "lichess" if expected == "my→lichess" else "both"
+    assert page.get_by_test_id("source-select").locator("input:checked").get_attribute("value") == want
+    page.get_by_test_id("themes-picker").filter(has_text="2 selected").wait_for()
