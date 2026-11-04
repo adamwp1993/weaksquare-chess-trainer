@@ -216,6 +216,19 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.8: The game library and custom-puzzle schema (`user/0007_games.sql`)
+- Context: §4.3 sketched `games`, `account_sync`, `game_analysis` and `custom_puzzles`. v0.8 fills them in and adds Retry mode results.
+- Decision:
+  - **`games`** is keyed by `(source, source_game_id)` when the platform gives an id. Pastes and files are deduplicated by `moves_hash` (SHA-256 of the start FEN and the UCI moves) in the service, so identical moves reuse the stored analysis (FR-11.7).
+  - Player names and ratings are stored per color (`white`, `black`, …) rather than as *user/opponent*, because your color can be unknown at import, and *Review both sides* exists.
+  - `analysis_think_s` and `analysis_engine` record what the stored analysis used, so a game is never analyzed twice at the same settings (FR-11.31).
+  - **`game_analysis`** keeps one row per ply with evals as `{"cp"}`/`{"mate"}` JSON from the mover's view. `themes` stays NULL until the v0.10 tagger.
+  - **`custom_puzzles`** holds puzzles saved from games (`origin` manual) and imported files (`origin` import). `fen` is the position you solve, with no opponent pre-move, unlike §4.2. `strict` picks exact checking (imports) or the engine tolerance (games). It has two partial unique indexes: one per game and ply, and one per imported set, position and line.
+  - **`retry_attempts`** is a separate log: retries aren't puzzle attempts and never sync.
+  - The `game_errors` view waits for its first reader, the v0.10 Coach.
+- Alternatives: storing Retry results in `attempts` (they have no `PuzzleRef`, and every attempts reader would need to exclude them); a full UNIQUE on `(game_id, ply)` (SQLite treats NULLs as distinct anyway, but the partial index states the intent).
+- Consequences: the Coach (v0.10) and fix tracking read `game_analysis` directly. Coach-made puzzles reuse `custom_puzzles` with `origin = coach`.
+
 ### 2026-11-03, v0.7: QA fixes (v0.7-B1 to B7)
 - Context: `qa/QA-v0.7.md` round 1: PASS WITH ISSUES, seven minor bugs.
 - Decision:
