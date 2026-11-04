@@ -149,7 +149,8 @@ class Wired:
                        ui_settings=s.ui_settings, db_update=s.db_update, account=s.account, sync=s.sync,
                        history=s.history, engine=s.engine, reasons=s.reasons,
                        llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain, games=s.games,
-                       analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import)  # fmt: skip
+                       analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import,
+                       game_explain=s.game_explain)  # fmt: skip
 
     def settle(self) -> None:
         for _ in range(10):

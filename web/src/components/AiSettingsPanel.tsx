@@ -16,6 +16,7 @@ import type { LlmSettingsChange } from "../api/ApiClient";
 import type { LlmSettings } from "../api/types";
 import { dollars, publishLlm, useLlmSettings } from "../state/llm";
 import { useJob } from "../state/useJob";
+import { FeatureModelPicker } from "./FeatureModelPicker";
 import { PriceTable } from "./PriceTable";
 
 const REASONING: { value: LlmSettings["reasoning"]; label: string }[] = [
@@ -41,6 +42,8 @@ function change(s: LlmSettings, over: Partial<LlmSettingsChange>): LlmSettingsCh
 // dropdown lists the price table's models with about what one Explain costs, and you can type any other
 // ID), the API key (saved to Windows Credential Manager, never shown again) and Test key. The full
 // version (Settings → AI) adds reasoning, the per-run cap, the monthly budget and the price table.
+// v0.9 (FR-1.15): Game Review has its own model picker ("Same as Explain" by default) in both versions,
+// and its own reasoning level in the full one. Keys, the cap and the budget are shared.
 export function AiSettingsPanel({ full = false }: { full?: boolean }) {
   const settings = useLlmSettings();
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +109,9 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
 
   return (
     <Stack gap="xs" data-testid="ai-settings">
+      <Text size="sm" fw={600}>
+        Puzzle Explain
+      </Text>
       <Select
         label="AI provider (optional)"
         description="Explain sends the puzzle position and moves to this provider. You pay them directly."
@@ -178,22 +184,32 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
           )}
         </>
       )}
+      {full && info && (
+            <Stack gap={2}>
+              <Text size="sm" fw={500}>
+                Puzzle Explain reasoning
+              </Text>
+              <SegmentedControl
+                data={REASONING}
+                value={settings.reasoning}
+                onChange={(v) => save({ reasoning: v as LlmSettings["reasoning"] })}
+                data-testid="ai-reasoning"
+              />
+              <Text size="xs" c="dimmed">
+                Hidden reasoning is billed as output: Medium allows about 2× the cost of Low, High about 4×.
+              </Text>
+            </Stack>
+      )}
+      {info && (
+        <Stack gap={4} mt="xs">
+          <Text size="sm" fw={600}>
+            Game Review
+          </Text>
+          <FeatureModelPicker reasoning={full} onError={setError} />
+        </Stack>
+      )}
       {full && (
         <>
-          <Stack gap={2}>
-            <Text size="sm" fw={500}>
-              Reasoning
-            </Text>
-            <SegmentedControl
-              data={REASONING}
-              value={settings.reasoning}
-              onChange={(v) => save({ reasoning: v as LlmSettings["reasoning"] })}
-              data-testid="ai-reasoning"
-            />
-            <Text size="xs" c="dimmed">
-              Hidden reasoning is billed as output: Medium allows about 2× the cost of Low, High about 4×.
-            </Text>
-          </Stack>
           <Group grow align="flex-start" key={inputsKey}>
             <NumberInput
               label="Per-run cap ($)"
@@ -220,7 +236,10 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
           </Group>
           <Text size="sm" data-testid="ai-spend-line">
             This month: {dollars(spend.spent_usd)} of {dollars(spend.budget_usd)}
-            {spend.level === "over" ? " (budget used up: Explain is off until next month or until you raise it)" : spend.level === "warn" ? " (over 80%)" : ""}
+            {spend.level === "over" ? " (budget used up: the AI is off until next month or until you raise it)" : spend.level === "warn" ? " (over 80%)" : ""}
+          </Text>
+          <Text size="xs" c="dimmed" data-testid="ai-spend-by-feature">
+            {settings.features.map((f) => `${f.label} ${dollars(f.spent_usd)}`).join("  ·  ")}
           </Text>
           <PriceTable />
         </>

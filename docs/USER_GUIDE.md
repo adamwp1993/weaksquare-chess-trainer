@@ -45,12 +45,14 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - **AI explanations** (v0.7), only if you set up an AI provider and press **Explain** (or **Test key**). They go over HTTPS to the provider you chose, api.anthropic.com or api.openai.com, with your API key. See [AI explanations and what they cost](#ai-explanations-and-what-they-cost).
     - **Explain** sends one puzzle: its position (FEN), the solution moves, its themes, the moves you played, Stockfish's lines and its answer to your wrong move, and facts about which pieces attack and defend which squares. In Danger spotting it also sends the highlighted move and your call. It never sends the puzzle's ID or rating, your Lichess name, your settings or anything about other puzzles. OpenAI requests ask it not to keep the response for later retrieval (`store: false`); each provider's own data policy applies.
     - **Test key**, and the silent check of a saved key at start-up, only ask the provider whether the model exists. That's free and sends no puzzle.
+    - **Explain this move** (v0.9) sends one move of one of your games: the position before it (FEN), the move you played and its grade, Stockfish's evals before and after it, its best line and top lines from that position, its reply to your move, the game phase and move number, and the attack and defence facts. Nothing else about the game.
+    - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
     - What each request cost is kept in `user.db`, on this PC only.
   - **Your games** (v0.8), only for accounts you link. Each sync fetches game metadata and PGNs, never analysis, and sends nothing about you beyond the request itself:
     - **Lichess:** with your sign-in, your own games since the last sync, from lichess.org (`/api/games/user/<you>`).
     - **chess.com:** your linked username's public monthly game archives from api.chess.com, one request at a time. chess.com's public API needs no login. **Verify** looks up that username's public profile.
     - **Importing by URL** fetches that one game: from lichess.org, or by searching your chess.com archives of the last six months.
-    - **The analysis runs on your PC.** Stockfish grades your games locally, and the games and their analysis stay in `user.db`.
+    - **The analysis runs on your PC.** Stockfish grades your games locally, and the games and their analysis stay in `user.db`. Only the AI buttons (v0.9) send anything about a game, as described under AI explanations above.
     - **Open on Lichess / chess.com** opens the game's page in your browser, like any link.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
@@ -576,12 +578,24 @@ Once a puzzle is over (you finished the line, or used **Show answer**), the **Ex
 - **Saved explanations are free.** The same puzzle, with the same moves from you and the same model, shows **Explain (saved)** and costs nothing, even when this month's budget is used up. A different model gets its own explanation, so you can compare two.
 - If the answer comes back cut short, refused, or not in the expected form, nothing is shown and you can try again. A cut-short or refused answer is still billed by the provider, and it counts in your spend.
 
+### A model for each feature
+*Added in v0.9.*
+
+Puzzle Explain and [Game Review's AI](#ai-explanations-in-game-review) each have their own model. You can use a cheap, fast model for the many small puzzle explanations and a stronger one for the few, much bigger game explanations.
+- **Puzzle Explain** uses the provider and model described above.
+- **Game Review model:** **Same as Explain** (the default) uses whatever Explain uses. Or pick any model in the price table, from either provider. The list shows about what one **Explain my game** costs on each. The same setting is on the startup page (**Show all options**), in Settings, and on the Review page next to **Explain my game**.
+- **Keys are per provider, not per feature.** If Game Review uses a provider that has no key yet, a key field appears under its model.
+- **Reasoning** is set per feature: **Puzzle Explain reasoning** and **Game Review reasoning**.
+- **Shared by every feature:** your keys, the price table, the per-run cap and the monthly budget. Under the budget, Settings shows this month's spend for each feature.
+
 ### What it costs, and the limits
+*Changed in v0.9: the limits cover Game Review too.*
+
 Every cost comes from the **price table** and the token counts the provider reports.
 - **Spend indicator:** while an AI provider is set up, the top bar shows this month's spend against your budget, for example **AI $0.03 / $5.00**. It turns yellow at 80% of the budget and red at 100%. Click it to open the settings.
-- **Monthly budget** (default **$5.00**): when this month's spend reaches it, Explain is off until the next calendar month, or until you raise the budget. A request that starts just under the budget can take you a little over it.
+- **Monthly budget** (default **$5.00**): when this month's spend reaches it, Explain and Game Review's AI are off until the next calendar month, or until you raise the budget. A request that starts just under the budget can take you a little over it.
 - **Per-run cap** (default **$0.50**): a request that *could* cost more than this, if the model used every token it's allowed, is blocked. It's there to catch an expensive model or a typo in the price table.
-- **Reasoning** (**Low** by default, **Medium** or **High**): how hard the model thinks before answering. Its thinking is billed as output, so Medium allows about twice the cost of Low and High about four times. The estimate and the cap allow for it.
+- **Reasoning** (**Low** by default, **Medium** or **High**, set per feature): how hard the model thinks before answering. Its thinking is billed as output, so Medium allows about twice the cost of Low and High about four times. The estimate and the cap allow for it.
 - **The price table** (at the bottom of **Settings → AI explanations**): USD per million input and output tokens for each model, plus the long-prompt tier for models that charge more for very long prompts. It starts with prices checked in October 2026. Prices change, so check them against your provider's pricing page. **Edit** fills the form with a row, **Save price** adds or replaces it, **Delete** removes it. Rows you change stay as you left them.
 
 ![Explain blocked: the month's budget is used up](img/explain-over-budget.png)
@@ -600,12 +614,12 @@ Stockfish goes through your own games on your PC, for free. It grades every move
 ### My games
 ![My games](img/my-games.png)
 
-Press **My games** at the top of the window. The list combines both accounts, newest first. It shows the date, platform, your color and rating, your opponent and their rating, the result, the time control, the opening, the platform's accuracy (when it has one), and whether the game is analyzed. **Lichess analysis** means Lichess already analyzed the game. The app still analyzes every game itself, so all your games are graded the same way.
+Press **My games** at the top of the window. The list combines both accounts, newest first. It shows the date, platform, your color and rating, your opponent and their rating, the result, the time control, the opening, the platform's accuracy (when it has one), and its status: **Not analyzed**, **Analyzed**, or **AI-reviewed** (from v0.9: Explain my game has run on it). **Lichess analysis** means Lichess already analyzed the game. The app still analyzes every game itself, so all your games are graded the same way.
 
 - **Refresh** fetches your new games in the background. With **Sync new games when the app opens** on (the default), this also happens at each start. The first sync fetches the last 90 days or 200 games per account, whichever is smaller. You can change both in Settings → Games.
 - **Filters** above the list: platform, time control, result, your color, status, rated or casual, opponent, opening or ECO code, and a date range.
 - **Analyze selected** queues the ticked games for Stockfish. Games are analyzed one at a time, with a progress bar and **Cancel**. A game already analyzed at the same settings isn't analyzed again.
-- **Review** opens a game. **Open on Lichess / Open on chess.com** opens it in your browser.
+- **Review** opens a game. **Review + Explain my game** (v0.9, shown once an AI model is set up) opens it, analyzes it first if needed, then asks you to confirm [Explain my game](#ai-explanations-in-game-review). **Open on Lichess / Open on chess.com** opens it in your browser.
 
 ### Importing one game
 Press **Import game** (at the top, or on My games):
@@ -630,6 +644,35 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 ![Retry mode](img/retry-mode.png)
 
 - **Retry your mistakes** goes through your mistakes and blunders one by one, without showing the answer. Play the move you should have played. Any move within 30 centipawns of the best counts as found (Settings → Games → **Retry tolerance**). Then you see the best line and, if you missed, what your move ran into. Retries count in Stats only. They never go to Lichess, and nothing in Game Review affects a rating.
+
+### AI explanations in Game Review
+*Added in v0.9.*
+
+With an [AI provider set up](#setting-it-up), Game Review can explain your games in words. The AI works from Stockfish's analysis, so the game must be analyzed first. As with puzzle Explain, every move and square in its answer is checked against the game before it's shown, and anything that doesn't fit is left out (*Some annotations were discarded*).
+
+**Explain this move.** Step to one of your moves (every move, if you review both sides). Under the move, **Explain this move (≈ $0.0012)** explains why Stockfish's move is best and, if you played something else, what was wrong with yours. **Show me** steps through Stockfish's line with the explanation's arrows and notes.
+
+**Explain my game.** Above the eval graph:
+1. Optionally choose how many **key moments** to cover (1–10; the default is your Key moments setting, 5).
+2. Optionally pick the **model** for Game Review. It's the same setting as in Settings.
+3. Press **Explain my game (≈ $0.05)**. A dialog shows the estimate: the input and output tokens, about what it costs and the most it can cost, its share of what's left of this month's budget, and the per-run cap. Press **Confirm** to send it, or **Cancel**.
+
+![Explain my game](img/game-review-ai.png)
+
+After about half a minute you get:
+- a short summary of the **opening**,
+- the **turning point** (click it to jump there),
+- the **recurring themes** of your mistakes and 2–3 **takeaways**,
+- a note on **each key moment** in the Key moments list, with **Show on the board** for its arrows and the better line,
+- often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces only the themes and rating you had. Your saved presets don't change.
+
+The game then shows **AI-reviewed** in My games.
+
+**Gotchas**
+- **Saved explanations are free.** The same move, or the same game with the same number of key moments, on the same model, shows **(saved)** and costs nothing, even when the budget is used up. A new analysis at other settings, or other grading thresholds, gets a new explanation. Analyzing a game again sets it back to **Analyzed**.
+- **What it costs:** Explain my game is roughly 10,000 input and 3,000 output tokens: about $0.003 on Claude Haiku 5.5, $0.05 on Claude Sonnet 5.5 and $0.14 on GPT-5.5. Explain this move costs about the same as one puzzle Explain. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply.
+- **Your side first:** the AI needs to know which side you played. If the app asks, answer it first.
+- **What's sent:** see [Your data and privacy](#your-data-and-privacy). No names, ratings, dates, links or clocks.
 
 ### Games settings
 In **Settings → Games**:

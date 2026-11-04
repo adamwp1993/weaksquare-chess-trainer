@@ -60,7 +60,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // v0.8: My games and Game Review are pages; the trainer stays mounted (hidden) so a session survives.
   const [page, setPage] = useState<
-    { kind: "trainer" } | { kind: "games" } | { kind: "review"; gameId: number }
+    { kind: "trainer" } | { kind: "games" } | { kind: "review"; gameId: number; explain?: boolean }
   >({ kind: "trainer" });
   const [importOpen, setImportOpen] = useState(false);
   const [puzzlesOpen, setPuzzlesOpen] = useState(false);
@@ -278,7 +278,7 @@ export function App() {
       <>
         {page.kind === "games" && (
           <GamesView
-            onReview={(id) => setPage({ kind: "review", gameId: id })}
+            onReview={(id, explain) => setPage({ kind: "review", gameId: id, explain })}
             onImport={() => setImportOpen(true)}
           />
         )}
@@ -288,6 +288,12 @@ export function App() {
             gameId={page.gameId}
             onBack={() => setPage({ kind: "games" })}
             coordinates={coordinates}
+            autoExplain={page.explain ?? false}
+            onTrain={(p) => {
+              // FR-11.18 Train these: only on your click, after the confirm; saved presets don't change.
+              changeSpec({ ...spec, source: "lichess", themes: p.themes, match: "any", ratios: [], rating_min: p.rating_min, rating_max: p.rating_max });
+              setPage({ kind: "trainer" });
+            }}
           />
         )}
         <Grid

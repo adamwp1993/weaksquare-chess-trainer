@@ -13,6 +13,15 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **Explain this move:** on any of your analyzed moves in Game Review, the AI explains why Stockfish's move is best and what was wrong with yours, with **Show me** on the board. Every move and square it mentions is checked against the game. [FR-11.17] [FR-11.20]
+- **Explain my game:** one request covering your top key moments (5 by default, up to 10): an opening summary, the turning point, recurring themes, 2–3 takeaways, a note on each key moment you can show on the board, and often a puzzle recommendation with **Train these**. It shows the estimated tokens and cost first and runs only when you **Confirm**. It sends the game's moves only, as You and Opponent: no names, ratings, dates, links or clocks. [FR-11.18] [FR-11.19] [FR-11.21]
+- **AI-reviewed** status and filter in My games, and **Review + Explain my game**, which analyzes the game first if needed. [FR-11.25] [FR-11.29]
+- **A model for each AI feature:** Game Review has its own model (**Same as Explain** by default) and reasoning level, set in Settings → AI, on the startup page or right on the Review page. Keys, the price table, the per-run cap and the monthly budget are shared, and Settings shows this month's spend per feature. [FR-1.15]
+
+### Changed
+- **Spending limits:** the monthly budget and the per-run cap now cover Game Review's AI too, and saved game explanations are free like saved puzzle explanations. [FR-8.13] [FR-8.14]
+
 ## [v0.8] - 2026-11-04
 Candidates: v0.8-rc1 (2026-11-04)
 

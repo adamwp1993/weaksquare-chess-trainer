@@ -19,13 +19,28 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { LibraryFilters } from "../api/ApiClient";
-import type { AnalysisQueue, GamePage } from "../api/types";
+import type { AnalysisQueue, GamePage, GameSummary } from "../api/types";
 import { PLATFORM_LABEL, TIME_CLASSES, cap, gameDate, resultLabel } from "../state/games";
+import { useLlmSettings } from "../state/llm";
 import { useJob } from "../state/useJob";
 
 const PAGE = 50;
 
-export function GamesView({ onReview, onImport }: { onReview: (gameId: number) => void; onImport: () => void }) {
+const STATUS: Record<GameSummary["analysis_status"], { label: string; color: string }> = {
+  none: { label: "Not analyzed", color: "gray" },
+  analyzed: { label: "Analyzed", color: "green" },
+  ai_reviewed: { label: "AI-reviewed", color: "indigo" }, // v0.9: Explain my game ran (FR-11.25)
+};
+
+export function GamesView({
+  onReview,
+  onImport,
+}: {
+  /** `explain`: Review + Explain my game (FR-11.29, v0.9). */
+  onReview: (gameId: number, explain?: boolean) => void;
+  onImport: () => void;
+}) {
+  const aiReady = useLlmSettings()?.features.find((f) => f.feature === "game_review")?.ready ?? false;
   const [filters, setFilters] = useState<LibraryFilters>({});
   const [page, setPage] = useState<GamePage | null>(null);
   const [limit, setLimit] = useState(PAGE);
@@ -184,6 +199,7 @@ export function GamesView({ onReview, onImport }: { onReview: (gameId: number) =
             data={[
               { value: "none", label: "Not analyzed" },
               { value: "analyzed", label: "Analyzed" },
+              { value: "ai_reviewed", label: "AI-reviewed" },
             ]}
             value={filters.statuses ?? []}
             onChange={(v) => set({ statuses: v as LibraryFilters["statuses"] })}
@@ -269,8 +285,8 @@ export function GamesView({ onReview, onImport }: { onReview: (gameId: number) =
                 <Table.Td>{g.accuracy_user !== null ? `${Math.round(g.accuracy_user)}%` : "—"}</Table.Td>
                 <Table.Td>
                   <Group gap={4}>
-                    <Badge size="sm" variant="light" color={g.analysis_status === "analyzed" ? "green" : "gray"}>
-                      {g.analysis_status === "analyzed" ? "Analyzed" : "Not analyzed"}
+                    <Badge size="sm" variant="light" color={STATUS[g.analysis_status].color} data-testid={`status-${g.id}`}>
+                      {STATUS[g.analysis_status].label}
                     </Badge>
                     {g.lichess_analyzed && (
                       <Badge size="sm" variant="outline" color="blue" title="Lichess already has computer analysis for this game">
@@ -284,6 +300,11 @@ export function GamesView({ onReview, onImport }: { onReview: (gameId: number) =
                     <Button size="compact-xs" onClick={() => onReview(g.id)} data-testid={`review-${g.id}`}>
                       Review
                     </Button>
+                    {aiReady && g.user_color !== null && (
+                      <Button size="compact-xs" variant="light" color="indigo" onClick={() => onReview(g.id, true)} data-testid={`review-explain-${g.id}`}>
+                        Review + Explain my game
+                      </Button>
+                    )}
                     {g.url && (
                       <Button size="compact-xs" variant="subtle" onClick={() => api.openGameOnline(g.id)} data-testid={`open-${g.id}`}>
                         {g.source === "chesscom" ? "Open on chess.com" : "Open on Lichess"}

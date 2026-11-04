@@ -74,6 +74,8 @@ weaksquare-chess-trainer/
 │  │  │                        #   the LichessGamesClient / ChesscomClient protocols  (v0.8)
 │  │  ├─ chesscom.py           # chess.com archive games and months   (v0.8)
 │  │  ├─ game_review.py        # grading, Missed/Allowed, phases, key moments, side summary (v0.8)
+│  │  ├─ game_explain.py       # Game Review AI: the anonymized context, the narrative schema, validation (v0.9)
+│  │  ├─ preset_suggestion.py  # an LLM-recommended puzzle preset, validated (v0.9; the Coach reuses it)
 │  │  ├─ tolerance.py          # the 30 cp engine tolerance (Retry, game puzzles) (v0.8)
 │  │  ├─ puzzle_files.py       # your own PGN / EPD / CSV puzzle files (v0.8)
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
@@ -91,6 +93,7 @@ weaksquare-chess-trainer/
 │  │                           #   v0.8: games.py (library, sync, imports), analysis.py (the queue on the
 │  │                           #         background engine, Review settings), review.py (review, Retry,
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
+│  │                           #   v0.9: game_explain.py (Explain this move, Explain my game)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -226,6 +229,27 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.9: Game Review AI from the stored analysis, cached with the analysis settings
+- Context: Explain this move and Explain my game (FR-11.17–11.21) need grounded, anonymized context and the v0.7 guardrails, without a second analyzer (CLAUDE.md: one pipeline).
+- Decision:
+  - **Built from `game_analysis` only** (`core/game_explain.py`): no engine call. Explain this move turns a `MoveRow` into Explain's own `ExplainInput` (the position before the move, `NO_PREMOVE`, Stockfish's best line cut by `saved_line` as the "solution", the played move as the refutation, and a new optional `GameMoveFact`), so `core/explain.validate()`, `Explanation`, the DTO and `ExplainPanel`'s view are reused unchanged. Explain my game has its own strict schema and `validate_narrative`: a moment must be one of the key moments sent and name the move played there; its better line must start with Stockfish's best move and be legal; annotations need valid squares.
+  - **Anonymized by construction** (FR-8.16, 11.19): the narrative's move list is rebuilt as SAN from the UCI moves, never cut from the PGN text, so headers, names, ratings, dates, URLs, clocks and comments can't leak. `tests/unit/test_game_explain.py` checks a PGN full of them, and the live test checks the request that really went out.
+  - **Cache keys** in the existing `llm_cache` (no migration): `game:<id>:<think_s>|<engine>:move:<ply>` and `…:narrative:<N>:<the key-moment plies>`, with provider and model, hashed. Including the analysis settings and the plies goes beyond FR-11.20's (game, ply / N, provider, model): a re-analysis or new thresholds never bring back an answer grounded on other evals (REQUIREMENTS FR-11.20 updated).
+  - **`ai_reviewed`** is a value of the existing `games.analysis_status` (foreseen in `0007_games.sql`). `GamesRepo.mark_ai_reviewed` sets it only from `analyzed`; re-analysis writes `analyzed` again.
+  - **The recommended preset** (FR-11.18, minimal per Adam): `core/preset_suggestion.validate_preset` keeps up to 3 known motif or mate theme keys and a rating range that passes `FilterSpec.validate`; anything else is dropped and counted. The prompt lists the allowed keys. Train these is a front-end action on your click, after a confirm.
+- Alternatives: a `game_ai` table (rejected: `llm_cache` already holds validated results by key, and the status is one column); passing the PGN with headers stripped (rejected: a stripping bug would leak; rebuilding from moves can't).
+- Consequences: the Coach (v0.10) can reuse `preset_suggestion` and the narrative validators. A game's AI notes are lost from view, never from the cache, when its analysis changes.
+
+### 2026-11-04, v0.9: A model per AI feature: request kinds, `llm.feature.*` keys, one gate
+- Context: FR-1.15. Puzzle Explain and Game Review need different models; keys, prices, the cap and the budget stay shared.
+- Decision:
+  - `core/llm/defaults.py` gains `FEATURES` (`explain`, `game_review`), request **kinds** (`explain`, `game_move`, `game_narrative`) with their own `MAX_TOKENS` (1,500 / 1,500 / 4,000, FR-8.14), and `FEATURE_OF` (kind → feature). `LlmUsageService.quote/run` take the kind; the feature picks the config and is what `llm_usage.feature` records.
+  - `LlmSettingsService.config(feature)` resolves a feature's provider, model and reasoning. Explain keeps the v0.7 keys, so nothing migrates. Other features use `llm.feature.<feature>.provider` (`same` or unset: follow Explain's provider and model), `.model` and `.reasoning` (Low by default). The launch check (FR-1.6) tests each distinct provider and model in use.
+  - Bridge: `set_llm_feature`; `LlmSettings.features[]` lists each feature's choice, effective provider and model, readiness, this month's spend (`LlmUsageRepo.spent_by_feature`) and its model options with the cost of that feature's typical request (Explain my game for Game Review).
+  - Front end: `FeatureModelPicker` is the one Game Review picker, used in Settings → AI, on the startup page (both pickers, Adam) and on the Review page next to Explain my game (Adam). It shows a key field when the chosen provider has no key.
+- Alternatives: per-feature caps (rejected at planning: one cap and one budget are simpler to reason about); copying Explain's model into Game Review's setting (rejected: "Same as Explain" keeps following it).
+- Consequences: the Coach (v0.10) adds `coach` to `FEATURES` and its kinds to `MAX_TOKENS` / `FEATURE_OF`; the bridge and the picker pick it up from `features[]`.
 
 ### 2026-11-04, v0.8: QA fixes (v0.8-B1 to B12)
 - Context: `qa/QA-v0.8.md` round 1: FAIL, with one major bug (B4) and eight minor ones.
