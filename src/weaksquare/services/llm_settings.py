@@ -192,7 +192,9 @@ class LlmSettingsService:
         k = key.strip()
         if not (KEY_MIN <= len(k) <= KEY_MAX) or any(c.isspace() for c in k) or not k.isascii():
             raise ValidationError(f"That doesn't look like an API key ({KEY_MIN}–{KEY_MAX} characters, no spaces).")
-        if not k.startswith(KEY_PREFIX[p]):
+        if not k.startswith(KEY_PREFIX[p]) or any(
+            k.startswith(KEY_PREFIX[other]) and len(KEY_PREFIX[other]) > len(KEY_PREFIX[p]) for other in PROVIDERS
+        ):  # an sk-ant- key also starts with OpenAI's sk- (v0.7-B2)
             raise ValidationError(
                 f"That doesn't look like an {PROVIDER_LABELS[p]} key: they start with {KEY_PREFIX[p]}."
             )
@@ -320,7 +322,7 @@ class LlmSettingsService:
         if as_of is None:
             day = self._today()
             as_of = day.isoformat() if isinstance(day, date) else str(day)
-        if not isinstance(as_of, str) or not ISO_DATE.fullmatch(as_of):
+        if not isinstance(as_of, str) or not ISO_DATE.fullmatch(as_of) or not _real_date(as_of):
             raise ValidationError("'As of' must be a date (YYYY-MM-DD).")
         row = PriceRow(
             p,
@@ -339,6 +341,15 @@ class LlmSettingsService:
         self._ensure_seeded()
         if not self._prices.delete(check_provider(provider), check_model(model)):
             raise NotFoundError("There's no price row for that model.")
+
+
+def _real_date(text: str) -> bool:
+    """2026-13-45 has the right shape but isn't a day (v0.7-B3)."""
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
 
 
 def _rate(value: object, name: str) -> float:

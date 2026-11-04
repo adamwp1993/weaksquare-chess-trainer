@@ -349,6 +349,8 @@ def _variation(board: chess.Board, raw: Any) -> tuple[tuple[str, ...], bool]:
             move = b.parse_san(san.strip())
         except ValueError:
             return (), True
+        if not move or move not in b.legal_moves:  # parse_san accepts a null move without checking (v0.7-B1)
+            return (), True
         out.append(b.san(move))
         b.push(move)
     return tuple(out), False

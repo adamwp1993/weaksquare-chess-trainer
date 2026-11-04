@@ -216,6 +216,19 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-03, v0.7: QA fixes (v0.7-B1 to B7)
+- Context: `qa/QA-v0.7.md` round 1: PASS WITH ISSUES, seven minor bugs.
+- Decision:
+  - **B1:** python-chess's `parse_san` accepts a null move (`--`, `Z0`, `0000`, `@@@@`) without a legality check, so `_variation` now also requires the move to be in `legal_moves`.
+  - **B2:** a key for one provider is refused if it also matches a *longer* prefix that belongs to another provider: `sk-ant-` starts with OpenAI's `sk-`. The same rule is in `set_test_token.py`'s `KEY_SHAPE`.
+  - **B3:** a price row's "as of" must be a real date (`date.fromisoformat`), not just the right shape.
+  - **B4:** an emptied cap or budget field keeps the saved amount instead of saving $0.
+  - **B5:** the spend indicator opens Settings scrolled to AI explanations (`focusAi`).
+  - **B6:** the model field's dropdown lists every model while a picked model is in the box; typing anything else filters it.
+  - **B7:** the version is 0.7.0. `test_version_matches_the_branch_being_built` now derives the expected version from the newest `plans/v0.x.md`, so it can't go stale again.
+- Alternatives: B4, refusing an empty field with an error (keeping the old value is what the engine settings do); B7, keeping a hard-coded version in the test (it's what let 0.6.0 slip through).
+- Consequences: each bug has a regression test: QA's pinned tests (B1–B5) now pass, and B6, B7 and the script side of B2 have their own.
+
 ### 2026-11-03, v0.7: Front end for the AI settings, the spend indicator and Explain
 - Context: FR-1.2–1.4, 1.6, 1.8, 1.10 and FR-8.1–8.8 on screen.
 - Decision:

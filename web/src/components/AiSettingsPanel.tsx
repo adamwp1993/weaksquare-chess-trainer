@@ -64,6 +64,16 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
       setInputsKey((k) => k + 1);
     });
   };
+  // An emptied field keeps the saved amount (v0.7-B4): $0 is a real choice that blocks every Explain, so it
+  // has to be typed, never left behind by clearing the box.
+  const saveDollars = (field: "run_cap_usd" | "monthly_budget_usd", text: string) => {
+    const value = text.trim() === "" ? NaN : Number(text);
+    if (!Number.isFinite(value)) {
+      setInputsKey((k) => k + 1);
+      return;
+    }
+    if (value !== settings[field]) save({ [field]: value });
+  };
   const saveKey = async () => {
     if (!info) return;
     setError(null);
@@ -117,6 +127,13 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
             placeholder="Choose a model"
             data={options}
             value={modelValue}
+            filter={({ options: all, search }) => {
+              // A picked model shows the whole list, so you can switch without clearing it (v0.7-B6);
+              // anything else you type narrows it.
+              const q = search.trim().toLowerCase();
+              if (!q || info.models.some((m) => m.model === search.trim())) return all;
+              return all.filter((o) => "value" in o && o.value.toLowerCase().includes(q));
+            }}
             onChange={setModelText}
             onOptionSubmit={(v) => save({ model: v }).then(() => setModelText(null))}
             onBlur={commitModel}
@@ -186,7 +203,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
               max={1000}
               step={0.1}
               decimalScale={2}
-              onBlur={(e) => save({ run_cap_usd: Number(e.currentTarget.value) })}
+              onBlur={(e) => saveDollars("run_cap_usd", e.currentTarget.value)}
               data-testid="ai-cap"
             />
             <NumberInput
@@ -197,7 +214,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
               max={1000}
               step={1}
               decimalScale={2}
-              onBlur={(e) => save({ monthly_budget_usd: Number(e.currentTarget.value) })}
+              onBlur={(e) => saveDollars("monthly_budget_usd", e.currentTarget.value)}
               data-testid="ai-budget"
             />
           </Group>

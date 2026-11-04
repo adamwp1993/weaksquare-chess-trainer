@@ -57,7 +57,7 @@ def test_qa_show_me_steps_with_the_arrow_keys(page) -> None:  # type: ignore[no-
     assert board.get_attribute("data-shapes") == ""
 
 
-@pytest.mark.xfail(strict=True, reason="v0.7-B4: an emptied cap field saves $0")
+# Regression test for v0.7-B4 (fixed).
 def test_qa_clearing_the_cap_field_does_not_silently_set_zero(page) -> None:  # type: ignore[no-untyped-def]
     """Emptying 'Per-run cap ($)' and leaving the field shouldn't quietly save $0 (which blocks every
     Explain); it should keep the old value or say why."""
@@ -74,7 +74,7 @@ def test_qa_clearing_the_cap_field_does_not_silently_set_zero(page) -> None:  # 
     assert value not in ("0", "0.00", ""), f"the cap became {value!r}"
 
 
-@pytest.mark.xfail(strict=True, reason="v0.7-B5: the indicator opens Settings at the top, not at AI")
+# Regression test for v0.7-B5 (fixed).
 def test_qa_spend_indicator_opens_settings_at_the_ai_section(page) -> None:  # type: ignore[no-untyped-def]
     start(page, "?ai=warn")
     page.get_by_test_id("spend-indicator").click()

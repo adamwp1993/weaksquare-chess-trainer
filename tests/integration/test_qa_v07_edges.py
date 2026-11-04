@@ -1,6 +1,6 @@
 """QA v0.7 (independent, qa/QA-v0.7.md): edge cases for LLM Explain and the cost guardrails beyond the
 builder's tests. Fake engine and fake LLM provider only; never the network, never Credential Manager
-(MemorySecretStore). Tests marked xfail(strict=True) pin a reported bug and flip to a failure once it's fixed.
+(MemorySecretStore). The tests that pinned B1-B3 as expected failures are regression tests now that they're fixed.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def _one_ply_input() -> ExplainInput:
     return ExplainInput(FEN, ("f1c4", "g8f6"), ("Opening",))
 
 
-@pytest.mark.xfail(strict=True, reason="v0.7-B1: a null move passes variation validation")
+# Regression test for v0.7-B1 (fixed).
 @pytest.mark.parametrize("null", ["--", "Z0", "0000", "@@@@"])
 def test_qa_null_move_in_a_variation_is_dropped(null: str) -> None:
     """python-chess's parse_san accepts null moves ('--', 'Z0', '0000') without a legality check. A
@@ -137,7 +137,7 @@ def test_qa_model_ids_with_slash_are_url_encoded_in_test_key() -> None:
     assert seen[0].endswith("/v1/models/org%2Fmodel%3Av1%40x") and seen[1].endswith("/v1/models/ft%3Aorg%2Fx")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.7-B2: an sk-ant- key passes OpenAI's sk- shape check")
+# Regression test for v0.7-B2 (fixed).
 def test_qa_an_anthropic_key_is_refused_as_an_openai_key(api: Any) -> None:  # noqa: F811
     """The shape check exists 'so a key pasted into the wrong provider is caught before it's stored'
     (services/llm_settings.py). Anthropic keys start with sk-ant-, which also starts with OpenAI's sk-."""
@@ -173,7 +173,7 @@ def test_qa_price_rows_are_validated(api: Any, args: tuple[Any, ...]) -> None:  
     assert api.save_llm_price(*args)["error"]["code"] == "invalid_argument"
 
 
-@pytest.mark.xfail(strict=True, reason="v0.7-B3: 'as of' accepts impossible dates")
+# Regression test for v0.7-B3 (fixed).
 def test_qa_impossible_as_of_date_is_refused(api: Any) -> None:  # noqa: F811
     assert (
         api.save_llm_price("anthropic", "m", 1, 1, None, None, None, "2026-13-45")["error"]["code"]

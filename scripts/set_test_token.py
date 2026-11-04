@@ -36,7 +36,10 @@ from weaksquare.adapters.secret_store import (
 # Lichess personal access tokens start with "lip_"; the length check is loose on purpose (FR-6.7).
 TOKEN_SHAPE = re.compile(r"^lip_[A-Za-z0-9_\-]{8,}$")
 # AI keys: Anthropic's start with sk-ant-, OpenAI's with sk- (v0.7).
-KEY_SHAPE = {ANTHROPIC: re.compile(r"^sk-ant-[A-Za-z0-9_\-]{16,}$"), OPENAI: re.compile(r"^sk-[A-Za-z0-9_\-]{16,}$")}
+KEY_SHAPE = {
+    ANTHROPIC: re.compile(r"^sk-ant-[A-Za-z0-9_\-]{16,}$"),
+    OPENAI: re.compile(r"^sk-(?!ant-)[A-Za-z0-9_\-]{16,}$"),
+}
 
 
 def looks_like_a_token(value: str) -> bool:

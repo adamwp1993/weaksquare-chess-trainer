@@ -127,3 +127,12 @@ def test_set_test_token_stores_an_ai_key_without_printing(capsys) -> None:  # ty
     assert "nope nope" not in capsys.readouterr().out
     assert mod.main(["--llm", "anthropic", "--delete"], prompt=lambda _: "", store_factory=lambda s: store) == 0
     assert store.get("anthropic") is None
+
+
+def test_an_anthropic_key_is_not_an_openai_key() -> None:
+    """v0.7-B2 (the script's side): sk-ant- also starts with OpenAI's sk-."""
+    mod = _script()
+    store = MemorySecretStore()
+    key = "sk-ant-FAKE" + "abc123" * 3
+    assert mod.main(["--llm", "openai"], prompt=lambda _: key, store_factory=lambda s: store) == 1
+    assert store.get("openai") is None

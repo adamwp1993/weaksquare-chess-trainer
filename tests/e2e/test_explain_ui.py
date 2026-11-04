@@ -152,3 +152,18 @@ def test_price_table_add_and_delete(page) -> None:  # type: ignore[no-untyped-de
     row.get_by_role("button", name="Delete").click()
     row.wait_for(state="detached")
     assert table.get_by_test_id("price-row").count() == 8
+
+
+def test_switching_models_without_clearing_the_field(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.7-B6: with a model picked, the dropdown still lists every model (Adam's two-model comparison)."""
+    start(page, "?ai=on")
+    open_ai_settings(page)
+    model = page.get_by_test_id("settings-ai").get_by_test_id("ai-model")
+    assert model.input_value() == "claude-haiku-5-5"
+    model.click()
+    page.get_by_role("option").filter(has_text="claude-sonnet-5-5").click()
+    page.wait_for_function("() => document.querySelector('[data-testid=ai-model]').value === 'claude-sonnet-5-5'")
+    model.click()  # and typing still narrows it
+    model.fill("opus")
+    page.get_by_role("option").filter(has_text="claude-opus-5-5").wait_for()
+    assert page.get_by_role("option").count() == 1

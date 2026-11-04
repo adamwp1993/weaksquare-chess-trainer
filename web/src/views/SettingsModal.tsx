@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   Button,
   Group,
@@ -42,7 +43,10 @@ export function SettingsModal({
   onAccountChanged,
   timeOffset = null,
   onTimeOffset = () => undefined,
+  focusAi = false,
 }: {
+  /** Open scrolled to AI explanations (the spend indicator, v0.7-B5). */
+  focusAi?: boolean;
   /** FR-4.6 fast-forward: a number in --dev runs, null in the real app (no Debug section). */
   timeOffset?: number | null;
   onTimeOffset?: (days: number) => void;
@@ -58,6 +62,12 @@ export function SettingsModal({
   onAutoCheck: (on: boolean) => void;
 }) {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const aiRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!opened || !focusAi) return;
+    const t = window.setTimeout(() => aiRef.current?.scrollIntoView({ block: "start" }), 50);
+    return () => window.clearTimeout(t);
+  }, [opened, focusAi]);
 
   return (
     <Modal opened={opened} onClose={onClose} title="Settings" size="lg">
@@ -138,7 +148,7 @@ export function SettingsModal({
           {opened && <TrainingSettingsPanel />}
         </Stack>
 
-        <Stack gap="xs" data-testid="settings-ai">
+        <Stack gap="xs" data-testid="settings-ai" ref={aiRef}>
           <Title order={5}>AI explanations</Title>
           {opened && <AiSettingsPanel full />}
         </Stack>
