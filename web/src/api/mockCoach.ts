@@ -61,6 +61,7 @@ function measures(games: number): CoachMeasures {
     ],
     time: { games: 14, low_moves: 160, low_errors: 20, low_blunders: 11, low_error_rate: 12.5, other_moves: 980, other_errors: 25, other_blunders: 9, other_error_rate: 2.55, enough: true },
     king: { games: 28, late: 6, late_score: 25, on_time_score: 55.8, enough: true },
+    phases_enough: true,
   }; // prettier-ignore
 }
 

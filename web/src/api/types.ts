@@ -925,6 +925,7 @@ export interface CoachMeasures {
   endgames: CoachEndgameRow[];
   time: CoachTimeRow;
   king: CoachKingRow;
+  phases_enough: boolean;
 }
 
 export interface CoachAdvancedCompare {

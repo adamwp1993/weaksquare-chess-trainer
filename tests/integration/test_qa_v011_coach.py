@@ -1,6 +1,6 @@
 """QA v0.11 (independent): whole-game coaching end to end on several distinct, fully-headed games
 (REQUIREMENTS §10.11, FR-8.16). Every PGN here carries names, dates, a Site URL, ratings, clocks and
-comments, so the prompt checks are meaningful. Tests marked xfail document bugs from qa/QA-v0.11.md."""
+comments, so the prompt checks are meaningful. Tests marked QA v0.11-Bn were xfail for bugs in qa/QA-v0.11.md; they're regression tests now."""
 
 from __future__ import annotations
 
@@ -186,9 +186,7 @@ def test_qa_the_notes_preview_matches_what_is_sent_exactly(services, paths) -> N
     assert sent == [n.text for n in preview]
 
 
-@pytest.mark.xfail(
-    reason="QA v0.11 B2: 'bit.ly/y' in a note is not removed before the preview and sending", strict=True
-)
+# QA v0.11-B2 regression (fixed)
 def test_qa_short_links_in_notes_are_removed(services, paths) -> None:  # type: ignore[no-untyped-def]
     rid, ids = _report(services, paths, 3)
     services.review.set_game_reason(ids[1], 8, "miscalculated", "video: youtu.be/abc and bit.ly/y")
@@ -216,7 +214,7 @@ def test_qa_lesson_targets_are_strict(services, paths) -> None:  # type: ignore[
     )
 
 
-@pytest.mark.xfail(reason="QA v0.11 B3: a report seen again after another report is counted twice", strict=True)
+# QA v0.11-B3 regression (fixed)
 def test_qa_an_observation_counts_each_report_once_in_any_order(services) -> None:  # type: ignore[no-untyped-def]
     repo = ObservationsRepo(services.db)
     assert repo.note("me", "concept:trades", "", "", "Trades", 1) == 1
@@ -224,7 +222,7 @@ def test_qa_an_observation_counts_each_report_once_in_any_order(services) -> Non
     assert repo.note("me", "concept:trades", "", "", "Trades", 1) == 2  # report 1 again: still 2 reports
 
 
-@pytest.mark.xfail(reason="QA v0.11 B5: two quick start_ai calls send (and bill) two identical requests", strict=True)
+# QA v0.11-B5 regression (fixed)
 def test_qa_two_quick_starts_send_one_request(services, paths) -> None:  # type: ignore[no-untyped-def]
     rid, _ = _report(services, paths, 2)
     configure(services)

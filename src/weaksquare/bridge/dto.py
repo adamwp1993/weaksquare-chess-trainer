@@ -1186,6 +1186,7 @@ class CoachMeasures:
     endgames: list[CoachEndgameRow]
     time: CoachTimeRow
     king: CoachKingRow
+    phases_enough: bool = False  # mistakes per phase: at least 5 games (QA v0.11-B4)
 
 
 @dataclass(frozen=True)

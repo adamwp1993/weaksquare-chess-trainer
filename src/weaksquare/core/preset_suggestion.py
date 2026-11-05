@@ -13,6 +13,7 @@ from typing import Any
 from weaksquare.core.errors import ValidationError
 from weaksquare.core.filters import FilterSpec
 from weaksquare.core.themes import IDEA_GROUPS, display_name, info, keys_in_groups
+from weaksquare.core.urls import strip_urls
 
 MAX_PRESET_THEMES = 3  # Adam, v0.9 planning
 PRESET_GROUPS = (*IDEA_GROUPS, "Mates")
@@ -147,7 +148,7 @@ def validate_coach_preset(raw: Any) -> tuple[CoachPreset | None, int]:
         dropped += queue is not None
         queue = None
     name = raw.get("name")
-    name = " ".join(name.split())[:MAX_NAME] if isinstance(name, str) and name.strip() else "Coach preset"
+    name = " ".join(strip_urls(name).split())[:MAX_NAME] if isinstance(name, str) and name.strip() else "Coach preset"
     return (
         CoachPreset(name, tuple(themes), base.rating_min, base.rating_max, tuple(sorted(lengths)), str(mode), queue),
         dropped,

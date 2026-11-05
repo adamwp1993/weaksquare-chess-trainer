@@ -1,5 +1,5 @@
 """QA v0.11 (independent): edge cases of the pure whole-game coaching code (REQUIREMENTS §10.11, FR-8.16).
-Tests marked xfail document bugs from qa/QA-v0.11.md; they flip to XPASS once fixed."""
+Tests marked QA v0.11-Bn were xfail for bugs in qa/QA-v0.11.md; they're regression tests now."""
 
 from __future__ import annotations
 
@@ -97,9 +97,7 @@ URL_FORMS = [
 ]
 
 
-@pytest.mark.xfail(
-    reason="QA v0.11 B2: strip_urls only knows .com/.org/.net/.io bare domains and http(s)/www", strict=True
-)
+# QA v0.11-B2 regression (fixed)
 @pytest.mark.parametrize("url", URL_FORMS)
 def test_qa_strip_urls_removes_every_web_address(url: str) -> None:
     out = strip_urls(f"see {url} later")
@@ -111,7 +109,7 @@ def test_qa_strip_urls_keeps_chess_text() -> None:
         assert strip_urls(text) == text
 
 
-@pytest.mark.xfail(reason="QA v0.11 B1: an AI preset's name keeps a URL the LLM wrote", strict=True)
+# QA v0.11-B1 regression (fixed)
 def test_qa_a_url_in_an_ai_preset_name_is_never_kept() -> None:
     preset = {
         "name": "Forks: see https://evil.example/x", "themes": ["fork"], "rating_min": 1200, "rating_max": 1500,
@@ -122,7 +120,7 @@ def test_qa_a_url_in_an_ai_preset_name_is_never_kept() -> None:
     assert "evil.example" not in d.presets[0].name
 
 
-@pytest.mark.xfail(reason="QA v0.11 B1: the puzzle-history (keyed) coaching keeps URLs the LLM wrote", strict=True)
+# QA v0.11-B1 regression (fixed)
 def test_qa_a_url_in_puzzle_history_coaching_is_never_kept() -> None:
     raw = json.dumps(
         {
@@ -251,7 +249,7 @@ def test_qa_a_custom_search_site_must_be_https_with_a_host(bad: str) -> None:
         validate_custom_template(bad)
 
 
-@pytest.mark.xfail(reason="QA v0.11 B4: mistakes per phase have no sample-size guard (shown from 1 game)", strict=True)
+# QA v0.11-B4 regression (fixed)
 def test_qa_errors_per_phase_are_guarded_below_five_games() -> None:
     j = build_measures(games(dg(errors_by_phase={"opening": 1, "middlegame": 0, "endgame": 0}))).to_json()
     flags = [v.get("enough") for k, v in j.items() if "phase" in k and isinstance(v, dict) and "enough" in v]
@@ -259,13 +257,13 @@ def test_qa_errors_per_phase_are_guarded_below_five_games() -> None:
     assert flags and not any(flags)
 
 
-@pytest.mark.xfail(reason="QA v0.11 B2: no word boundary after the TLD, so 'Qd1.Coming' loses a word", strict=True)
+# QA v0.11-B2 regression (fixed)
 @pytest.mark.parametrize("text", ["I played Qd1.Coming back was better", "I lost on time.Commitment issue"])
 def test_qa_strip_urls_leaves_words_after_a_missing_space(text: str) -> None:
     assert strip_urls(text) == text
 
 
-@pytest.mark.xfail(reason="QA v0.11 B6: the whole-game prompt drops v0.10's puzzles-vs-games table", strict=True)
+# QA v0.11-B6 regression (fixed)
 def test_qa_the_diagnosis_still_sends_the_puzzles_vs_games_table() -> None:
     report = {
         "source": "both",

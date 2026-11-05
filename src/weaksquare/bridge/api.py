@@ -1196,7 +1196,7 @@ def _measures_dto(m: Any) -> dto.CoachMeasures | None:
             {str(k): float(v) for k, v in (m.get("errors_per10_by_phase") or {}).items()},
             dto.CoachRateRow(**m["conversion"]), dto.CoachRateRow(**m["saves"]),
             [dto.CoachEndgameRow(**e) for e in m.get("endgames") or []], dto.CoachTimeRow(**m["time"]),
-            dto.CoachKingRow(**m["king"]),
+            dto.CoachKingRow(**m["king"]), bool(m.get("phases_enough")),
         )  # fmt: skip
     except (KeyError, TypeError, ValueError):
         return None

@@ -74,7 +74,7 @@ def test_qa_unticking_advanced_drops_the_comparison(page) -> None:  # type: igno
     assert "Advanced also sends" not in page.get_by_test_id("narrative-estimate").inner_text()
 
 
-@pytest.mark.xfail(reason="QA v0.11 B5: a double-click on Confirm starts two paid AI runs", strict=True)
+# QA v0.11-B5 regression (fixed)
 def test_qa_a_double_click_on_confirm_sends_one_request(page) -> None:  # type: ignore[no-untyped-def]
     coach(page, "?ai=on&coach=report")
     page.get_by_test_id("coach-ai-start").click()

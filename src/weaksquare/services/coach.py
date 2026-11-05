@@ -20,7 +20,9 @@ waits behind the Apply / Compare / Dismiss banner. Another player's run never to
 
 from __future__ import annotations
 
+import json
 import logging
+import threading
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Protocol
@@ -420,6 +422,8 @@ class CoachService:
         self._digests = digests
         self._notes_repo: Any = reports if hasattr(reports, "game_notes") else None
         self._ai_jobs: dict[str, dict[str, int | None]] = {}
+        self._ai_going: dict[tuple[Any, str], str] = {}
+        self._ai_lock = threading.Lock()
         self._ai_runs = ai_runs
         self._observations = observations
         self._rows = rows
@@ -863,6 +867,18 @@ class CoachService:
     def start_ai(self, report_id: Any, options: Any = None) -> str:
         """Run the AI coaching. The UI calls this only after you Confirm the estimate (FR-8.11)."""
         opts = CoachAiOptions.from_json(options)
+        with self._ai_lock:  # QA v0.11-B5: a double-click on Confirm joins the run already going
+            key = (report_id, json.dumps(opts.to_json(), sort_keys=True))
+            going = self._ai_going.get(key)
+            if going is not None:
+                st = self._runner.status(going)
+                if st is not None and st.state not in ("done", "failed", "cancelled"):
+                    return going
+            job = self._start_ai(report_id, opts)
+            self._ai_going[key] = job
+            return job
+
+    def _start_ai(self, report_id: Any, opts: CoachAiOptions) -> str:
         quote = self.quote_ai(report_id, opts.to_json())
         if quote.quote.state not in ("ok", "cached"):
             raise AppError(quote.quote.message or "AI coaching can't run now.", code=quote.quote.state)

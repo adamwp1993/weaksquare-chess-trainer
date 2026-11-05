@@ -353,23 +353,27 @@ class ObservationsRepo:
         """Record one sighting; returns how many reports have seen it."""
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT id, last_report_id, times_seen FROM coach_observations"
+                "SELECT id, report_ids FROM coach_observations"
                 " WHERE subject = ? AND topic_key = ? AND category = ? AND title_key = ?",
                 (subject, topic_key, category, title_key),
             ).fetchone()
             if row is None:
                 conn.execute(
                     "INSERT INTO coach_observations (subject, topic_key, category, title_key, title,"
-                    " first_report_id, last_report_id, times_seen) VALUES (?,?,?,?,?,?,?,1)",
-                    (subject, topic_key, category, title_key, title, report_id, report_id),
+                    " first_report_id, last_report_id, times_seen, report_ids) VALUES (?,?,?,?,?,?,?,1,?)",
+                    (subject, topic_key, category, title_key, title, report_id, report_id, json.dumps([report_id])),
                 )
                 return 1
-            seen = int(row[2]) + (0 if row[1] == report_id else 1)
+            # QA v0.11-B3: count distinct reports, in any order (0010 added report_ids)
+            reports = [int(x) for x in json.loads(row[1] or "[]")]
+            if report_id not in reports:
+                reports.append(report_id)
             conn.execute(
-                "UPDATE coach_observations SET title = ?, last_report_id = ?, times_seen = ? WHERE id = ?",
-                (title, report_id, seen, int(row[0])),
+                "UPDATE coach_observations SET title = ?, last_report_id = ?, times_seen = ?, report_ids = ?"
+                " WHERE id = ?",
+                (title, report_id, len(reports), json.dumps(reports), int(row[0])),
             )
-            return seen
+            return len(reports)
 
     def all(self, subject: str) -> list[ObservationRow]:
         with self._db.session() as conn:

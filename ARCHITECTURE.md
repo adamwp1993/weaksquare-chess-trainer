@@ -85,6 +85,7 @@ weaksquare-chess-trainer/
 │  │  ├─ game_measures.py      # whole-game measures and weaknesses, the 5-game guard (v0.11)
 │  │  ├─ coach_diagnosis.py    # the whole-game AI prompt, schema and evidence rule (v0.11)
 │  │  ├─ lessons.py            # lesson topics, the curated Lichess map, search links (v0.11)
+│  │  ├─ urls.py               # strip web addresses from notes and AI text (v0.11)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
@@ -236,6 +237,16 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.11: QA fixes (v0.11-B1 to B8)
+- Context: QA round 1 (`qa/QA-v0.11.md`), FAIL: three major and five minor bugs.
+- Decision:
+  - **B1, B2:** one `core/urls.strip_urls`, used on your notes, on all AI text (the diagnosis, the v0.10 keyed coaching) and on AI preset names. It catches any `scheme://`, `www.` and bare domains on a list of common top-level domains (`youtu.be`, `bit.ly`, `.co.uk`, `.de`…), and needs a word boundary after the domain, so "Qd1.Coming back" is left alone.
+  - **B3:** `user/0010_observation_reports.sql` adds `coach_observations.report_ids` (backfilled from the first and last report), and `times_seen` counts distinct reports in any order.
+  - **B4:** `Measures.phases_enough` (5 games) guards mistakes per phase, shown with *not enough data yet*.
+  - **B5:** `CoachService.start_ai` is single-flight per report and options (a second call while that job runs returns the same job), and the Confirm button holds a guard until the job ends, so a double-click sends and bills one request.
+  - **B6:** the diagnosis prompt keeps v0.10's puzzles-vs-games table; the privacy section lists the key moments' themes and reason labels. **B7:** "1 game" in the measures. **B8:** the plan ticks lesson pointers.
+- Consequences: each fix has a regression test (QA's xfail tests now pass).
 
 ### 2026-11-04, v0.11: Lesson links are built and opened by the backend (`open_lesson`)
 - Context: FR-10.59: the LLM picks topics only and never writes URLs; Adam chose Lichess Practice and Learn only for the curated map.

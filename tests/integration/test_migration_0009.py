@@ -87,6 +87,27 @@ def test_digests_are_keyed_by_game_and_color(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_0010_backfills_the_reports_an_observation_was_seen_in(tmp_path: Path) -> None:
+    """QA v0.11-B3: an observation seen in reports 1 and 2 keeps both, and report 1 again stays at 2."""
+    old = tmp_path / "v9"
+    old.mkdir()
+    for f in sorted((MIGRATIONS_DIR / "user").glob("000[1-9]_*.sql")):
+        shutil.copy(f, old / f.name)
+    db_path = tmp_path / "user.db"
+    migrate(db_path, old, CLOCK)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO coach_observations (subject, topic_key, category, title_key, title, first_report_id,"
+        " last_report_id, times_seen) VALUES ('me', 'concept:trades', '', '', 'Trades', 1, 2, 2)"
+    )
+    conn.commit()
+    conn.close()
+    migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)
+    repo = ObservationsRepo(Database(db_path, tmp_path / "puzzles.db"))
+    assert repo.note("me", "concept:trades", "", "", "Trades", 1) == 2
+    assert repo.note("me", "concept:trades", "", "", "Trades", 3) == 3
+
+
 def test_an_observation_counts_once_per_report(tmp_path: Path) -> None:
     db_path = tmp_path / "user.db"
     migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)

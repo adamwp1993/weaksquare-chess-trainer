@@ -3,7 +3,7 @@
 // analysis and Include my notes (per run, off every time, never saved), every answer kept with a picker,
 // and lesson pointers whose links only the backend builds. All text is plain React text, never HTML.
 import { Alert, Anchor, Badge, Button, Checkbox, Group, Modal, NumberInput, Paper, Select, Stack, Text, Title } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { CoachAiOptions, TrainingMode } from "../api/ApiClient";
 import type { CoachAiQuote, CoachAiRun, CoachAiRunSummary, CoachFinding, CoachNote, CoachReport, FilterSpec } from "../api/types";
@@ -152,6 +152,8 @@ export function CoachAiPanel({
   const [notesOpen, setNotesOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false); // QA v0.11-B5: one click, one paid run
+  const startingRef = useRef(false); // the second click of a double-click comes before a re-render
   const job = useJob(jobId);
 
   const loadRuns = (select: number | null) =>
@@ -175,6 +177,10 @@ export function CoachAiPanel({
     api.getCoachAiRun(report.id, runId).then(setRun, (e: Error) => setError(e.message));
   }, [report.id, runId]);
   useEffect(() => {
+    if (job && job.state !== "running") {
+      startingRef.current = false;
+      setStarting(false); // eslint-disable-line react-hooks/set-state-in-effect
+    }
     if (job?.state !== "done") return;
     api.getCoachAiJobRun(job.id).then((id) => loadRuns(id), (e: Error) => setError(e.message));
     api.getCoachAiQuote(report.id, opts).then(setQuote, () => undefined);
@@ -189,12 +195,17 @@ export function CoachAiPanel({
     }
   };
   const start = async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    setStarting(true);
     setConfirm(false);
     setError(null);
     try {
-      setJobId(await api.startCoachAi(report.id, opts));
+      setJobId(await api.startCoachAi(report.id, opts)); // the guard stays until this job ends (below)
     } catch (e) {
       setError((e as Error).message);
+      startingRef.current = false;
+      setStarting(false);
     }
   };
   const q = quote?.quote ?? null;
@@ -257,7 +268,7 @@ export function CoachAiPanel({
           <Button
             size="xs"
             color="indigo"
-            disabled={blocked || running}
+            disabled={blocked || running || starting}
             loading={running}
             onClick={() => (q?.state === "cached" ? start() : setConfirm(true))}
             data-testid="coach-ai-start"
@@ -358,7 +369,7 @@ export function CoachAiPanel({
               <Button variant="default" onClick={() => setConfirm(false)}>
                 Cancel
               </Button>
-              <Button color="indigo" onClick={start} data-testid="coach-ai-confirm-button">
+              <Button color="indigo" onClick={start} disabled={starting} data-testid="coach-ai-confirm-button">
                 Confirm
               </Button>
             </Group>

@@ -127,6 +127,7 @@ class Measures:
     time: TimeRow
     king: KingRow
     min_games: int = MIN_GAMES
+    phases_enough: bool = False  # QA v0.11-B4: mistakes per phase need MIN_GAMES games too
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -217,6 +218,7 @@ def build_measures(digests: Sequence[tuple[int, Digest]]) -> Measures:
             other_error_rate=_per100(oe, om),
             enough=len(clocked) >= MIN_GAMES,
         ),
+        phases_enough=n >= MIN_GAMES,
         king=KingRow(
             games=len(reached),
             late=len(late),

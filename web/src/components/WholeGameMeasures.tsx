@@ -11,6 +11,7 @@ function Thin({ enough }: { enough: boolean }) {
   );
 }
 
+const games = (n: number) => `${n} game${n === 1 ? "" : "s"}`; // QA v0.11-B7
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x)}%`);
 const pawns = (cp: number | null) => (cp === null ? "—" : `${cp > 0 ? "+" : ""}${(cp / 100).toFixed(1)}`);
 
@@ -21,7 +22,7 @@ export function WholeGameMeasures({ m }: { m: CoachMeasures }) {
     <Stack gap="xs" data-testid="coach-measures">
       <Title order={5}>Whole-game measures</Title>
       <Text size="xs" c="dimmed">
-        From {m.games} games, worked out on your PC. A group needs at least {m.min_games} games before it counts.
+        From {games(m.games)}, worked out on your PC. A group needs at least {m.min_games} games before it counts.
       </Text>
       {m.openings.length > 0 && (
         <Table withTableBorder striped data-testid="measures-openings">
@@ -54,9 +55,12 @@ export function WholeGameMeasures({ m }: { m: CoachMeasures }) {
       )}
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
         <Paper withBorder p="xs" data-testid="measures-phases">
-          <Text size="sm" fw={600}>
-            Phases and conversion
-          </Text>
+          <Group gap={6}>
+            <Text size="sm" fw={600}>
+              Phases and conversion
+            </Text>
+            <Thin enough={m.phases_enough} />
+          </Group>
           <Text size="sm">
             Mistakes per 10 games: opening {m.errors_per10_by_phase.opening ?? 0}, middlegame {m.errors_per10_by_phase.middlegame ?? 0},
             endgame {m.errors_per10_by_phase.endgame ?? 0}
@@ -100,7 +104,7 @@ export function WholeGameMeasures({ m }: { m: CoachMeasures }) {
             <Thin enough={k.enough} />
           </Group>
           <Text size="sm">
-            Castled after move 12 or never: {k.late} of {k.games} games. Your score then {pct(k.late_score)}, otherwise{" "}
+            Castled after move 12 or never: {k.late} of {games(k.games)}. Your score then {pct(k.late_score)}, otherwise{" "}
             {pct(k.on_time_score)}.
           </Text>
         </Paper>
@@ -112,7 +116,7 @@ export function WholeGameMeasures({ m }: { m: CoachMeasures }) {
             {m.endgames.map((e) => (
               <Group key={e.type} gap={6}>
                 <Text size="sm">
-                  {e.label}: {e.games} games, +{e.wins} ={e.draws} −{e.losses}, {e.errors} mistakes
+                  {e.label}: {games(e.games)}, +{e.wins} ={e.draws} −{e.losses}, {e.errors} mistakes
                 </Text>
                 <Thin enough={e.enough} />
               </Group>

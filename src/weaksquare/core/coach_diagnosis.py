@@ -38,6 +38,7 @@ from weaksquare.core.coach_llm import SCHEMA as KEYED_SCHEMA
 from weaksquare.core.digest import Digest
 from weaksquare.core.lessons import Topic
 from weaksquare.core.preset_suggestion import COACH_MODES, CoachPreset, preset_themes, validate_coach_preset
+from weaksquare.core.urls import strip_urls
 
 SCHEMA_NAME = "coach_diagnosis"
 MIN_WEAKNESSES, MAX_WEAKNESSES = 3, 8
@@ -50,7 +51,6 @@ MAX_SUMMARY = 1500
 MAX_NOTE = 300
 CATEGORIES = ("tactical", "strategic", "opening", "endgame", "time", "other")
 GAME_GROUPS = ("missed", "allowed", "habits", "puzzles", "whole_game")
-_URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+|\b[\w.-]+\.(?:com|org|net|io)(?:/\S*)?")
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -111,11 +111,6 @@ Rules:
   move counts from 1 to 4 (4 means 4 or more); "mode" is one of {", ".join(COACH_MODES)};
   "queue_size" is 5–100; ratings are puzzle ratings or null.
 """
-
-
-def strip_urls(text: str) -> str:
-    """Web addresses out (FR-8.16: never a URL to the LLM; FR-10.59: never a URL from it)."""
-    return _URL.sub("[link removed]", text)
 
 
 @dataclass(frozen=True)
@@ -223,6 +218,12 @@ def build_prompt(
             for group in GAME_GROUPS
         },
         "measures": _measures_json(report.get("measures")),
+        # QA v0.11-B6: v0.10's puzzles-vs-games table still goes (FR-10.21)
+        "puzzles_vs_games": [
+            {k: g.get(k) for k in ("theme", "puzzle_accuracy", "puzzle_attempts", "missed_per10", "allowed_per10")}
+            for g in report.get("gap") or []
+            if isinstance(g, dict)
+        ][:10],
     }
     for group in data["weaknesses"].values():
         sent.keys.update(str(w["key"]) for w in group if "key" in w)
