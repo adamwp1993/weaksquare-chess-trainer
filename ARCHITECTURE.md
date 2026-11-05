@@ -233,6 +233,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.11: The whole-game diagnosis: G labels, the evidence rule, per-run options, stored runs
+- Context: FR-10.54–10.60: an open-ended diagnosis that must cite real games and plies, an opt-in Advanced run with move lists, opt-in notes, and every answer kept (Adam, v0.11 planning).
+- Decision:
+  - **`core/coach_diagnosis.py`** builds the prompt from the report's allow-listed aggregates, the measures, one digest per game labelled `G1…` (in the report's game order), the v0.10 examples (now with a game label and 1-based ply), and only with the options the SAN move lists (`core/game_explain.san_moves`, from the parsed moves, so no PGN text) or your notes (`strip_urls`). It returns the text and a `Sent` record (citable plies per label, measured keys, topic ids) that `validate` checks every citation, key and topic against. The label → game id map is stored with the run, never sent.
+  - **`services/coach.CoachAiOptions`** (advanced, game cap 10–50, include notes) is an argument of `quote_ai` / `start_ai` only. It's not part of `CoachParams`, so it's never in `coach.last_params`, and a call with no options is a standard run.
+  - **Advanced's comparison** builds the standard prompt too and quotes both; the minutes come from `TYPICAL_INPUT_TOKENS_PER_S` and `TYPICAL_OUTPUT_TOKENS_PER_S` in `core/llm/defaults.py`. Coach requests use `COACH_TIMEOUT_S` (180 s) through a new `timeout_s` argument of `LlmUsageService.run`.
+  - **Runs** go to `coach_ai_runs`. A cached answer means the same report, options (and cap), format, provider and model. `ai_runs` marks the findings no earlier run had, matched by key, else topic, else category and normalized title. Puzzle-history reports keep the v0.10 keyed prompt (`format = 'keyed'`).
+- Alternatives: one prompt for both report kinds (rejected: a puzzle-history report has no games to cite); storing options on the report (rejected: several runs per report).
+- Consequences: v1.0's checkpoint summary must call `quote_ai` / `start_ai` with no options, which can't be Advanced.
+
 ### 2026-11-04, v0.11: Whole-game schema (`user/0009_whole_game.sql`): digests, AI runs, observations
 - Context: FR-10.52 stores the digests; FR-10.57 asks for a migration for the new kinds and recurring observations; Adam wants every AI answer of a report kept, so a standard and an Advanced run can be compared (v0.11 planning).
 - Decision:

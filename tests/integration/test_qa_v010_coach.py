@@ -287,7 +287,7 @@ def test_qa_a_metadata_heavy_game_leaves_no_trace_in_the_coach_prompt(services, 
     text = req.system + "\n" + req.user + "\n" + json.dumps(req.schema if hasattr(req, "schema") else {})
     for m in MARKERS:
         assert m not in text, m
-    assert "game_id" not in text and '"ply"' not in text  # examples are labels, never game ids
+    assert "game_id" not in text  # examples are labels, never game ids (v0.11: plies are cited on purpose, FR-10.54)
     assert req.max_tokens == 5000  # FR-8.14: Coach Detailed
 
 

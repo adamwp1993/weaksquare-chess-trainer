@@ -27,6 +27,12 @@ from typing import Any, Protocol
 
 from weaksquare.core.clock import Clock
 from weaksquare.core.coach import ErrorRow, GameInfo, PuzzleTheme, Report, build_report, trend
+from weaksquare.core.coach_diagnosis import MAX_NOTE, Diagnosis, NoteItem, Sent, strip_urls, title_key
+from weaksquare.core.coach_diagnosis import SCHEMA as DIAGNOSIS_SCHEMA
+from weaksquare.core.coach_diagnosis import SCHEMA_NAME as DIAGNOSIS_SCHEMA_NAME
+from weaksquare.core.coach_diagnosis import SYSTEM_PROMPT as DIAGNOSIS_PROMPT
+from weaksquare.core.coach_diagnosis import build_prompt as build_diagnosis_prompt
+from weaksquare.core.coach_diagnosis import validate as validate_diagnosis
 from weaksquare.core.coach_llm import (
     DETAILED_EXAMPLES,
     SCHEMA,
@@ -42,22 +48,28 @@ from weaksquare.core.coach_llm import (
 from weaksquare.core.digest import DIGEST_VERSION, Digest, build_digest
 from weaksquare.core.errors import AppError, NotFoundError, ValidationError
 from weaksquare.core.filters import MY_TIME_CLASSES, FilterSpec
+from weaksquare.core.game_explain import san_moves
 from weaksquare.core.game_measures import build_measures, game_weaknesses
 from weaksquare.core.game_review import MoveRow, saved_line
 from weaksquare.core.games import (
+    GameError,
     GameRecord,
     GameRow,
     LibraryFilter,
     base_seconds,
     detect_color,
+    parse_single_pgn,
     username_from,
     valid_username,
 )
+from weaksquare.core.lessons import catalog
 from weaksquare.core.lichess import Dashboard
+from weaksquare.core.llm.defaults import COACH_TIMEOUT_S, TYPICAL_INPUT_TOKENS_PER_S, TYPICAL_OUTPUT_TOKENS_PER_S
 from weaksquare.core.stats import AttemptRow
 from weaksquare.core.stats import Report as StatsReport
 from weaksquare.core.suggested_mix import Suggestion, build_suggestion, report_preset
 from weaksquare.jobs.runner import CancelToken, JobCancelled, JobFailed, JobRunner, ProgressFn
+from weaksquare.services.llm_usage import prompt_chars
 
 log = logging.getLogger(__name__)
 
@@ -247,6 +259,100 @@ class GamePuzzleCount(Protocol):
     def coach_puzzles(self) -> list[tuple[int, int, int, str | None, str]]: ...
 
 
+GAME_CAP_DEFAULT, GAME_CAP_MIN, GAME_CAP_MAX = 30, 10, 50  # FR-10.56
+
+
+@dataclass(frozen=True)
+class CoachAiOptions:
+    """One AI run's options (FR-10.56, 10.60). Chosen for each run, off by default, and never saved
+    (v0.11 planning), so nothing automatic can turn them on."""
+
+    advanced: bool = False
+    game_cap: int = GAME_CAP_DEFAULT
+    include_notes: bool = False
+
+    @classmethod
+    def from_json(cls, data: Any) -> CoachAiOptions:
+        if data is None:
+            return cls()
+        if isinstance(data, CoachAiOptions):
+            return data
+        if not isinstance(data, dict) or set(data) - {"advanced", "game_cap", "include_notes"}:
+            raise ValidationError("Unknown AI coaching options.")
+        adv, notes = data.get("advanced", False), data.get("include_notes", False)
+        cap = data.get("game_cap", GAME_CAP_DEFAULT)
+        if not isinstance(adv, bool) or not isinstance(notes, bool):
+            raise ValidationError("advanced and include_notes must be true or false")
+        if not isinstance(cap, int) or isinstance(cap, bool) or not GAME_CAP_MIN <= cap <= GAME_CAP_MAX:
+            raise ValidationError(f"The game cap must be {GAME_CAP_MIN}–{GAME_CAP_MAX}.")
+        return cls(adv, cap, notes)
+
+    def to_json(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class AdvancedCompare:
+    """FR-10.56: how an Advanced run compares with a standard one, for the Confirm dialog."""
+
+    games_with_moves: int
+    token_ratio: float | None  # input tokens, Advanced ÷ standard
+    standard_usd: float | None
+    budget_share: float | None  # this run's typical cost ÷ the monthly budget
+    minutes: int
+
+
+@dataclass(frozen=True)
+class CoachQuote:
+    quote: Any  # services.game_explain.GameQuote
+    compare: AdvancedCompare | None
+    cached_run: int | None  # the stored run that would be shown again, when the state is 'cached'
+
+
+@dataclass
+class _AiRequest:
+    row: Any
+    kind: str
+    fmt: str  # keyed (v0.10 prompt) / diagnosis (v0.11)
+    system: str
+    user: str
+    schema_name: str
+    schema: dict[str, Any]
+    keys: list[str] = field(default_factory=list)
+    sent: Sent | None = None
+    labels: dict[str, int] = field(default_factory=dict)  # G label → game id (kept by the app only)
+    fallback: dict[str, Any] | None = None
+    notes: list[NoteItem] = field(default_factory=list)
+    moves: int = 0  # games whose move list was sent (Advanced)
+
+
+@dataclass(frozen=True)
+class AiRunView:
+    id: int
+    created_at: str
+    format: str
+    advanced: bool
+    include_notes: bool
+    game_cap: int | None
+    provider: str
+    model: str
+    cost_usd: float
+    result: dict[str, Any]
+    new: tuple[int, ...]  # indexes of findings no earlier run of this report had
+
+
+def finding_id(f: Any) -> str:
+    """What makes two findings "the same" across runs: the measured key, else the topic, else the
+    category and normalized title."""
+    if not isinstance(f, dict):
+        return ""
+    if f.get("key"):
+        return f"key:{f['key']}"
+    if f.get("topic"):
+        return f"topic:{f['topic']}"
+    return f"title:{f.get('category')}:{title_key(str(f.get('title') or ''))}"
+
+
 @dataclass(frozen=True)
 class SuggestionState:
     report_id: int
@@ -289,6 +395,8 @@ class CoachService:
         observations: Any = None,
     ) -> None:
         self._digests = digests
+        self._notes_repo: Any = reports if hasattr(reports, "game_notes") else None
+        self._ai_jobs: dict[str, dict[str, int | None]] = {}
         self._ai_runs = ai_runs
         self._observations = observations
         self._rows = rows
@@ -586,10 +694,11 @@ class CoachService:
         cur = build_report_from_json(row.report)
         return row, (trend(cur, prev.report) if prev is not None and cur is not None else {})
 
-    # ------------------------------------------------------------ AI coaching (FR-10.21–10.25)
+    # ------------------------------------------------------------ AI coaching (FR-10.21–10.25, 10.54–10.60)
 
-    def _examples(self, row: Any, detail: str) -> list[ExamplePosition]:
-        """The report's example moments as anonymized positions: labels, never game ids (FR-10.21)."""
+    def _example_refs(self, row: Any, detail: str) -> list[tuple[ExamplePosition, int, int]]:
+        """The report's example moments as anonymized positions (FR-10.21), with the game and 0-based ply
+        they come from, which only the app keeps."""
         if self._rows is None:
             return []
         limit = DETAILED_EXAMPLES if detail == "detailed" else SUMMARY_EXAMPLES
@@ -603,7 +712,7 @@ class CoachService:
                     gid, ply = int(ex[i]["game_id"]), int(ex[i]["ply"])
                     if all((g, p) != (gid, ply) for _, g, p in picked):
                         picked.append((str(w.get("key")), gid, ply))
-        out: list[ExamplePosition] = []
+        out: list[tuple[ExamplePosition, int, int]] = []
         cache: dict[int, list[MoveRow]] = {}
         for n, (wkey, gid, ply) in enumerate(picked, start=1):
             rows = cache.setdefault(gid, self._rows.rows(gid))
@@ -611,70 +720,158 @@ class CoachService:
                 continue
             r = rows[ply]
             before = tuple(x.move_uci for x in rows[max(0, ply - 2) : ply])
-            out.append(
-                ExamplePosition(
-                    f"E{n}", wkey, r.fen_before, r.move_uci,
-                    saved_line(r.lines[0].pv) if r.lines and r.lines[0].pv else (), r.themes, r.cp_loss,
-                    before, rows[ply - len(before)].fen_before if before else None,
-                )
+            pos = ExamplePosition(
+                f"E{n}", wkey, r.fen_before, r.move_uci,
+                saved_line(r.lines[0].pv) if r.lines and r.lines[0].pv else (), r.themes, r.cp_loss,
+                before, rows[ply - len(before)].fen_before if before else None,
             )  # fmt: skip
+            out.append((pos, gid, ply))
         return out
 
-    def _ai_request(self, report_id: Any) -> tuple[Any, str, str, list[str]]:
+    def _examples(self, row: Any, detail: str) -> list[ExamplePosition]:
+        return [e for e, _, _ in self._example_refs(row, detail)]
+
+    def _notes(self, row: Any, labels: dict[int, str]) -> list[NoteItem]:
+        """FR-10.60: your notes for the run's games and puzzles, web addresses removed, as they'll be sent."""
+        if self._notes_repo is None or row.subject != ME:
+            return []
+        out: list[NoteItem] = []
+        for n in self._notes_repo.game_notes(list(labels)):
+            if n.game_id in labels and n.ply is not None:
+                out.append(NoteItem(strip_urls(n.note)[:MAX_NOTE], n.reason, labels[n.game_id], n.ply + 1, n.source))
+        since = row.report.get("first_played")
+        for n in self._notes_repo.puzzle_notes(since, None):
+            out.append(NoteItem(strip_urls(n.note)[:MAX_NOTE], n.reason, None, None, n.source))
+        return out
+
+    def _ai_request(self, report_id: Any, options: CoachAiOptions) -> _AiRequest:
         if self._llm_settings is None or self._llm_usage is None:
             raise AppError("AI coaching isn't available.", code="no_llm")
         row, _ = self.report(report_id)
         detail = str(row.params.get("detail") or "summary")
         kind = "coach_detailed" if detail == "detailed" else "coach_summary"
-        user = build_prompt(row.report, self._examples(row, detail), detail)
-        keys = [
-            str(w.get("key"))
-            for g in ("missed", "allowed", "habits", "puzzles")
-            for w in row.report.get(g) or []
-            if isinstance(w, dict)
-        ]
-        return row, kind, user, keys
+        fallback = fallback_preset(row.report)
+        reasons = self._reports.game_reasons() if row.subject == ME else {}
+        digests = self.digests(row.game_ids, row.subject, reasons) if row.game_ids else []
+        if not digests:  # a puzzle-history report (or no analyzed games): the v0.10 keyed prompt
+            if options.advanced or options.include_notes:
+                raise ValidationError("Advanced analysis and Include my notes need a report with games.")
+            user = build_prompt(row.report, self._examples(row, detail), detail)
+            keys = [
+                str(w.get("key"))
+                for g in ("missed", "allowed", "habits", "puzzles")
+                for w in row.report.get(g) or []
+                if isinstance(w, dict)
+            ]
+            return _AiRequest(
+                row, kind, "keyed", SYSTEM_PROMPT, user, SCHEMA_NAME, SCHEMA, keys=keys, fallback=fallback
+            )
+        labels = {gid: f"G{n}" for n, (gid, _) in enumerate(digests, start=1)}
+        games = [(labels[gid], d) for gid, d in digests]
+        examples = [(e, labels.get(gid), ply + 1) for e, gid, ply in self._example_refs(row, detail) if gid in labels]
+        moves: dict[str, str] | None = None
+        if options.advanced:
+            moves = {}
+            for gid, _ in digests[: options.game_cap]:
+                g = self._games.get(gid)
+                try:
+                    parsed = parse_single_pgn(g.pgn) if g is not None else None
+                except GameError:
+                    parsed = None
+                if parsed is not None:
+                    moves[labels[gid]] = san_moves(parsed.start_fen, parsed.moves)
+        notes = self._notes(row, labels) if options.include_notes else None
+        topics = catalog([d.family for _, d in digests])
+        user, sent = build_diagnosis_prompt(row.report, games, examples, detail, topics, moves=moves, notes=notes)
+        return _AiRequest(
+            row, kind, "diagnosis", DIAGNOSIS_PROMPT, user, DIAGNOSIS_SCHEMA_NAME, DIAGNOSIS_SCHEMA,
+            sent=sent, labels={v: k for k, v in labels.items()}, fallback=fallback, notes=notes or [],
+            moves=len(moves or {}),
+        )  # fmt: skip
 
-    @staticmethod
-    def _cached(row: Any, cfg: Any) -> bool:
-        llm = row.llm
-        return bool(llm) and llm.get("provider") == cfg.provider and llm.get("model") == cfg.model
+    def _cached_run(self, report_id: int, options: CoachAiOptions, cfg: Any, fmt: str) -> Any:
+        if self._ai_runs is None:
+            return None
+        for r in reversed(self._ai_runs.for_report(report_id)):
+            same = r.advanced == options.advanced and r.include_notes == options.include_notes
+            if options.advanced:
+                same = same and r.game_cap == options.game_cap
+            if same and r.format == fmt and r.provider == cfg.provider and r.model == cfg.model:
+                return r
+        return None
 
-    def quote_ai(self, report_id: Any) -> Any:
-        """FR-10.25: the estimate for Get AI coaching, checked against the cap and the budget."""
+    def quote_ai(self, report_id: Any, options: Any = None) -> CoachQuote:
+        """FR-10.25, 10.56: the estimate for Get AI coaching, checked against the cap and the budget; with
+        Advanced, how it compares with a standard run."""
         from weaksquare.services.game_explain import GameQuote  # one quote shape for every AI feature
-        from weaksquare.services.llm_usage import prompt_chars
 
-        row, kind, user, _ = self._ai_request(report_id)
+        opts = CoachAiOptions.from_json(options)
+        req = self._ai_request(report_id, opts)
         cfg = self._llm_settings.config("coach")
         spend = self._llm_usage.spend(cfg)
-        if self._cached(row, cfg):
-            return GameQuote("cached", None, cfg.provider, cfg.model, None, cfg.run_cap_usd, spend)
-        chars = prompt_chars(SYSTEM_PROMPT, user, SCHEMA)
-        q = self._llm_usage.quote(kind, chars, cfg)
-        return GameQuote(str(q.state), q.message, q.provider, q.model, q.estimate, q.run_cap_usd, spend)
+        cached = self._cached_run(req.row.id, opts, cfg, req.fmt)
+        if cached is not None:
+            q = GameQuote("cached", None, cfg.provider, cfg.model, None, cfg.run_cap_usd, spend)
+            return CoachQuote(q, None, cached.id)
+        lq = self._llm_usage.quote(req.kind, prompt_chars(req.system, req.user, req.schema), cfg)
+        q = GameQuote(str(lq.state), lq.message, lq.provider, lq.model, lq.estimate, lq.run_cap_usd, spend)
+        compare = None
+        if opts.advanced and lq.estimate is not None:
+            std = self._ai_request(report_id, replace(opts, advanced=False))
+            std_q = self._llm_usage.quote(req.kind, prompt_chars(std.system, std.user, std.schema), cfg)
+            est = lq.estimate
+            base = std_q.estimate.input_tokens if std_q.estimate is not None else 0
+            seconds = (
+                est.input_tokens / TYPICAL_INPUT_TOKENS_PER_S + est.typical_output_tokens / TYPICAL_OUTPUT_TOKENS_PER_S
+            )
+            compare = AdvancedCompare(
+                games_with_moves=req.moves,
+                token_ratio=round(est.input_tokens / base, 1) if base else None,
+                standard_usd=std_q.estimate.typical_usd if std_q.estimate is not None else None,
+                budget_share=round(est.typical_usd / spend.budget_usd, 3) if spend.budget_usd else None,
+                minutes=max(1, round(seconds / 60)),
+            )
+        return CoachQuote(q, compare, None)
 
-    def start_ai(self, report_id: Any) -> str:
+    def notes_preview(self, report_id: Any) -> list[NoteItem]:
+        """FR-10.60: exactly the notes Include my notes would send."""
+        return self._ai_request(report_id, CoachAiOptions(include_notes=True)).notes
+
+    def start_ai(self, report_id: Any, options: Any = None) -> str:
         """Run the AI coaching. The UI calls this only after you Confirm the estimate (FR-8.11)."""
-        quote = self.quote_ai(report_id)
-        if quote.state not in ("ok", "cached"):
-            raise AppError(quote.message or "AI coaching can't run now.", code=quote.state)
+        opts = CoachAiOptions.from_json(options)
+        quote = self.quote_ai(report_id, opts.to_json())
+        if quote.quote.state not in ("ok", "cached"):
+            raise AppError(quote.quote.message or "AI coaching can't run now.", code=quote.quote.state)
+        holder: dict[str, int | None] = {"run": quote.cached_run}
 
         def run(progress: ProgressFn, cancel: CancelToken) -> str:
             try:
-                return self._coach_ai(report_id, progress)
+                msg, run_id = self._coach_ai(report_id, opts, progress)
             except AppError as e:
                 raise JobFailed(e.code, e.message, e.retryable) from None
+            holder["run"] = run_id
+            return msg
 
-        return self._runner.submit("coach_ai", run)
+        job = self._runner.submit("coach_ai", run)
+        self._ai_jobs[job] = holder
+        return job
 
-    def _coach_ai(self, report_id: Any, progress: ProgressFn) -> str:
-        row, kind, user, keys = self._ai_request(report_id)
+    def ai_job_run(self, job_id: str) -> int | None:
+        """The AI run a finished Get AI coaching job made (or reused)."""
+        h = self._ai_jobs.get(job_id)
+        return h["run"] if h else None
+
+    def _coach_ai(self, report_id: Any, opts: CoachAiOptions, progress: ProgressFn) -> tuple[str, int | None]:
+        req = self._ai_request(report_id, opts)
         cfg = self._llm_settings.config("coach")
-        if self._cached(row, cfg):
-            return "AI coaching (saved)."
+        cached = self._cached_run(req.row.id, opts, cfg, req.fmt)
+        if cached is not None:
+            return "AI coaching (saved).", cached.id
         progress(None, "Asking the AI to coach you…")
-        result = self._llm_usage.run(kind, SYSTEM_PROMPT, user, SCHEMA_NAME, SCHEMA)
+        result = self._llm_usage.run(
+            req.kind, req.system, req.user, req.schema_name, req.schema, timeout_s=COACH_TIMEOUT_S
+        )
         r = result.response
         if r.status == "truncated":
             raise AppError(
@@ -685,24 +882,79 @@ class CoachService:
             )
         if r.status == "refused":
             raise AppError("The model declined. Try another model.", code="llm_refused")
-        coaching = validate(r.text, keys, fallback_preset(row.report))
-        if coaching is None:
+        data: dict[str, Any] | None = None
+        if req.fmt == "keyed":
+            coaching = validate(r.text, req.keys, req.fallback)
+            data = coaching.to_json() if coaching is not None else None
+        else:
+            assert req.sent is not None
+            diag = validate_diagnosis(r.text, req.sent, req.fallback)
+            if diag is not None:
+                data = {**diag.to_json(), "labels": req.labels, "seen": self._observe(req.row, diag)}
+        if data is None:
             raise AppError(
                 "The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
                 code="llm_bad_answer",
                 retryable=True,
             )
-        self._reports.set_llm(
-            row.id,
-            {**coaching.to_json(), "provider": result.provider, "model": result.model, "cost_usd": result.cost_usd},
-        )
-        return f"AI coaching for ${result.cost_usd:.4f}."
+        data.update({"provider": result.provider, "model": result.model, "cost_usd": result.cost_usd})
+        run_id = None
+        if self._ai_runs is not None:
+            run_id = self._ai_runs.add(
+                req.row.id, self._clock.now().isoformat(timespec="seconds"), req.fmt, advanced=opts.advanced,
+                include_notes=opts.include_notes, game_cap=opts.game_cap if opts.advanced else None,
+                provider=result.provider, model=result.model, cost_usd=result.cost_usd, result=data,
+            )  # fmt: skip
+        return f"AI coaching for ${result.cost_usd:.4f}.", run_id
+
+    def _observe(self, row: Any, diag: Diagnosis) -> list[int]:
+        """FR-10.57: observations (findings with no measured key) are noted per subject and report. The
+        result is how many reports have seen each finding, in finding order (0 for tracked weaknesses)."""
+        out: list[int] = []
+        for f in diag.findings:
+            if f.key is not None or self._observations is None:
+                out.append(0)
+            elif f.topic:
+                out.append(self._observations.note(row.subject, f.topic, "", "", f.title, row.id))
+            else:
+                out.append(self._observations.note(row.subject, "", f.category, title_key(f.title), f.title, row.id))
+        return out
+
+    def ai_runs(self, report_id: Any) -> list[AiRunView]:
+        """Every AI answer for this report, oldest first, each with the findings that no earlier answer had
+        (Adam, v0.11 planning)."""
+        row, _ = self.report(report_id)
+        runs = self._ai_runs.for_report(row.id) if self._ai_runs is not None else []
+        if not runs and row.llm:  # a v0.10 answer stored on the report only
+            llm = row.llm
+            return [
+                AiRunView(0, row.created_at, "keyed", False, False, None, str(llm.get("provider") or ""),
+                          str(llm.get("model") or ""), float(llm.get("cost_usd") or 0), llm, ())
+            ]  # fmt: skip
+        out: list[AiRunView] = []
+        seen: set[str] = set()
+        for r in runs:
+            new: list[int] = []
+            ids: list[str] = []
+            if r.format == "diagnosis":
+                for i, f in enumerate(r.result.get("findings") or []):
+                    ident = finding_id(f)
+                    ids.append(ident)
+                    if out and ident not in seen:
+                        new.append(i)
+            out.append(
+                AiRunView(r.id, r.created_at, r.format, r.advanced, r.include_notes, r.game_cap, r.provider, r.model,
+                          r.cost_usd, r.result, tuple(new))
+            )  # fmt: skip
+            seen.update(ids)
+        return out
 
     def ai_result(self, report_id: Any) -> tuple[Coaching, dict[str, Any]] | None:
-        row, _ = self.report(report_id)
-        if not row.llm:
-            return None
-        return Coaching.from_json(row.llm), {k: row.llm.get(k) for k in ("provider", "model", "cost_usd")}
+        """The latest keyed (v0.10-format) answer."""
+        for r in reversed(self.ai_runs(report_id)):
+            if r.format == "keyed":
+                return Coaching.from_json(r.result), {"provider": r.provider, "model": r.model, "cost_usd": r.cost_usd}
+        return None
 
     # ------------------------------------------------------------ the Suggested mix (FR-10.28–10.31)
 

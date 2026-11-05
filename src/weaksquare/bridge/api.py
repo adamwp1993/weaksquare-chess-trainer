@@ -876,7 +876,7 @@ class Api:
 
     @bridge_call
     def get_coach_ai_quote(self, report_id: int) -> dto.GameAiQuote:
-        return _game_quote_dto(self._coach.quote_ai(report_id))
+        return _game_quote_dto(self._coach.quote_ai(report_id).quote)
 
     @bridge_call
     def start_coach_ai(self, report_id: int) -> str:
