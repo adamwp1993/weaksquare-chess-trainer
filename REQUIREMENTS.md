@@ -539,7 +539,7 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
 - **FR-10.60** **Include my notes** (a per-run option, **off by default**): adds your mistake-reason notes (§7.3) for the games and puzzles in the run to the prompt. Before Confirm, you see exactly which notes will be sent. *(v0.11 planning:)* that's the latest reason and note for your moves in the run's games, plus your puzzle and Retry notes in the report's period. Web addresses are removed from notes before the preview and before sending (FR-8.16).
 
 ### 10.12 Training plan and training journal (v0.12; Adam, 2026-11-04)
-**Goal:** turn the Coach's diagnosis into a routine you can follow, and keep a record of what you did and what you learned, so the Coach (and you) can see what's working. Requested by Adam during the v0.10 manual test. The plan and the journal live in the Coach, and v0.12 also makes every option explain itself (FR-10.72) (Adam, 2026-11-05, during the v0.11 manual test).
+**Goal:** turn the Coach's diagnosis into a routine you can follow, and keep a record of what you did and what you learned, so the Coach (and you) can see what's working. Requested by Adam during the v0.10 manual test. The plan and the journal live in the Coach, v0.12 also makes every option explain itself (FR-10.72), and every report compares itself with your earlier ones (FR-10.73) (Adam, 2026-11-05, during the v0.11 manual test).
 
 **Training plan**
 - **FR-10.61** **Built from your weaknesses:** a plan of **1–4 weeks** (default 2) from your latest Coach report (with v0.11's whole-game weaknesses when present). You set **days per week** (default 5) and **minutes per day** (default 20). The top weaknesses get the most time; a weakness reported as fixed later (v1.0) keeps a small maintenance share.
@@ -567,6 +567,14 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
 
 **Easier to use** (Adam, 2026-11-05)
 - **FR-10.72** **Every option explains itself:** app-wide, every setting and every choice the user makes (switches, number boxes, selects, segmented controls, checkboxes such as Advanced analysis) has a **tooltip** (an ⓘ next to its label, also on keyboard focus) that says in plain words what it does and, for a choice, what each option means and costs, e.g. the Coach's **Summary** vs **Detailed** (how much is sent and written, and the cost difference). Tooltip text is plain text, kept in one place in the front end, and is written for the user, matching the User Guide. Later versions add a tooltip for every option they add.
+
+**Since last report** (Adam, 2026-11-05)
+- **FR-10.73** **Each report compares itself with your earlier ones:** a **Since last report** section in every report on games, and the AI coaching sees the same numbers.
+  - **Compared with:** the previous report of the same subject (you, or that other player, whose reports never mix with yours, §10.1), plus the trend across up to the **5** latest reports. Reports on your puzzle history compare only with other puzzle-history reports.
+  - **What it shows:** for each weakness in either report, its rate per 10 games then and now and the change, with **New** (not in the earlier report) and **Gone** (no longer in the top list) marked; overall game health (blunders, mistakes and inaccuracies per 10 games); the whole-game measures that both reports have (score per opening family, conversion and save rates, low-clock mistakes, late castling); puzzle first-try accuracy for each weakness's themes; and the days and new games between the two reports.
+  - **Guards:** a change is called **better** or **worse** only when both reports have at least **5 games** in that group (FR-10.53's guard) and at least 5 of the newer report's games weren't in the older one; otherwise it says *not enough new games yet*. When the two reports share games, it says how many. Reports made with different analysis settings (think time, thresholds) are flagged, because their rates aren't directly comparable.
+  - **To the AI:** with AI coaching on, the prompt gets this section as **aggregates only**: weakness keys and their rates per report, labeled *this report*, *1 report ago* and so on, with days between them. It gets no games, positions or text from earlier reports, and the AI is asked to say what improved, what got worse and whether earlier advice seems to be working. A finding about a trend must name the weakness key it's about, and it's checked like any other (FR-10.55).
+  - It describes the change; it doesn't set a weakness's status. Statuses, baselines and the Progress page are v1.0 (§10.8), which reuses these comparisons.
 
 ## 11. Game Review: import a game, analyze it, explain better moves
 

@@ -218,6 +218,7 @@ Scope:
 - **Training plan** (FR-10.61–10.65): 1–4 weeks of daily sessions from your latest Coach report, sized by days per week and minutes per day; tasks of a closed set of types (puzzle sessions, puzzles from your games, Retry, game review, lesson pointers, reflections) that open where they happen. Each day is a **checklist**: tasks tick themselves off, and you can tick or untick any box by hand. The plan and journal are **tabs in the Coach** (Report, Plan, Journal), and the main page has a **Today's plan** card with the same checkboxes (Adam, 2026-11-05). A new migration stores plans, days and tasks.
 - **AI coaching includes the plan** (FR-10.66): the LLM proposes a plan in a strict schema, validated task by task with the deterministic plan filling gaps; the next run gets the plan's progress as aggregates.
 - **Training journal** (FR-10.67–10.71): your notes, the automatic daily log, game reflections from Game Review, a Journal tab in the Coach with filters and search, and an opt-in **Include my journal** for AI coaching with a preview.
+- **Since last report** (FR-10.73, Adam, 2026-11-05): each report on games has a section comparing it with your previous report and the trend over the last 5: each weakness's rate then and now (New and Gone marked), game health, the whole-game measures, puzzle accuracy for the weakness themes, with the 5-game guard and a warning when analysis settings differ. AI coaching gets the same numbers (aggregates only) and says what improved, what got worse and whether earlier advice is working.
 - **Tooltips** (FR-10.72, Adam, 2026-11-05): every setting and option in the app gets an ⓘ tooltip saying what it does and what each choice means (e.g. Summary vs Detailed), from one text table.
 - **Docs:** User Guide chapters on the plan and the journal; the privacy section says what Include my journal sends.
 
@@ -229,9 +230,10 @@ Scope:
 - The daily log is computed from stored data and matches Stats for the same day (test).
 - A game reflection appears in the game and in the journal, and links back to the position.
 - Prompt tests: journal text appears only with Include my journal; the preview shows exactly what is sent; no platform ids or URLs.
+- Since last report: the rates and changes match the two stored reports; New and Gone are right; below 5 games or 5 new games it says *not enough new games yet*; different analysis settings are flagged; another player's reports never compare with yours; the AI prompt's trend part has aggregates only (tests).
 - Every setting and option control has a non-empty tooltip from the text table (a Playwright test walks Settings and the Coach and fails on a control without one).
 
-**Adam's manual test:** run the Coach → build a 2-week plan at 5 days × 20 min → follow two days from the Today card (puzzle task, Retry task, a review with a reflection) → check they tick off, tick one by hand, and the Coach's Plan tab adds up → write two journal notes → run AI coaching with Include my journal (check the preview) → use the AI's plan and compare it with the deterministic one.
+**Adam's manual test:** run the Coach → build a 2-week plan at 5 days × 20 min → follow two days from the Today card (puzzle task, Retry task, a review with a reflection) → check they tick off, tick one by hand, and the Coach's Plan tab adds up → write two journal notes → run the Coach again after the two days and read **Since last report** against the earlier report → run AI coaching with Include my journal (check the preview and what it says about the trend) → use the AI's plan and compare it with the deterministic one.
 
 ---
 
