@@ -69,7 +69,7 @@ export function EngineSettingsPanel() {
           <NumberInput
             label="Think time (s)"
             description="Per position"
-            value={settings.think_s}
+            defaultValue={settings.think_s}
             min={0.2}
             max={10}
             step={0.5}
@@ -80,7 +80,7 @@ export function EngineSettingsPanel() {
           <NumberInput
             label="Threads"
             description={`1 to ${settings.max_threads}`}
-            value={settings.threads}
+            defaultValue={settings.threads}
             min={1}
             max={settings.max_threads}
             allowDecimal={false}
@@ -90,7 +90,7 @@ export function EngineSettingsPanel() {
           <NumberInput
             label="Hash (MB)"
             description="16 to 2048"
-            value={settings.hash_mb}
+            defaultValue={settings.hash_mb}
             min={16}
             max={2048}
             step={64}

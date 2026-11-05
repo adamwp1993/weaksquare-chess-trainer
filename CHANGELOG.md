@@ -28,6 +28,9 @@ Candidates: v0.11-rc1 (2026-11-05)
 ### Changed
 - **AI coaching** on reports with games now sends a short digest of each game (labelled G1, G2…, no names, dates, links or raw clocks) as well as the report's numbers, so its estimate is higher than in v0.10. Reports on your puzzle history only work as before. [FR-8.16] [FR-10.54]
 
+### Fixed
+- The number boxes in Settings (Engine, Games and AI) step up and down again with the arrow keys and their up/down buttons. Before, the engine's think time per position couldn't be raised above 1 that way, and a box went back to its saved value while you changed it. [FR-7.4] [FR-11.8]
+
 ## [v0.10] - 2026-11-04
 Candidates: v0.10-rc1 (2026-11-04), v0.10-rc2 (2026-11-04)
 

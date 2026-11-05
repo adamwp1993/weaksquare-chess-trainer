@@ -11,6 +11,9 @@ export function GamesSettingsPanel() {
   const [user, setUser] = useState("");
   const [profile, setProfile] = useState<ChesscomProfile | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // The number boxes keep what you type (so the steppers work) and are remounted when a value is refused,
+  // so they go back to the saved one (v0.11-rc1 manual test).
+  const [inputsKey, setInputsKey] = useState(0);
 
   useEffect(() => {
     api.getGamesSettings().then((v) => {
@@ -26,6 +29,7 @@ export function GamesSettingsPanel() {
       setMsg({ ok: true, text: said });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
+      setInputsKey((k) => k + 1);
     }
   };
   const verify = async () => {
@@ -87,21 +91,21 @@ export function GamesSettingsPanel() {
         onChange={(e) => save({ sync_on_open: e.currentTarget.checked }, "Saved.")}
         data-testid="games-sync-on-open"
       />
-      <Group gap="sm">
-        <NumberInput label="First sync: days back" min={1} max={3650} w={170} value={s.first_sync_days}
+      <Group gap="sm" key={`sync${inputsKey}`}>
+        <NumberInput label="First sync: days back" min={1} max={3650} w={170} defaultValue={s.first_sync_days}
           onBlur={(e) => save({ first_sync_days: num(e.currentTarget.value) }, "Saved.")} />
-        <NumberInput label="First sync: at most (games)" min={1} max={5000} w={190} value={s.first_sync_max}
+        <NumberInput label="First sync: at most (games)" min={1} max={5000} w={190} defaultValue={s.first_sync_max}
           onBlur={(e) => save({ first_sync_max: num(e.currentTarget.value) }, "Saved.")} />
       </Group>
-      <Group gap="sm">
-        <NumberInput label="Analysis: seconds per position" min={0.1} max={5} step={0.1} decimalScale={2} w={210} value={s.think_s}
+      <Group gap="sm" key={`analysis${inputsKey}`}>
+        <NumberInput label="Analysis: seconds per position" min={0.1} max={5} step={0.1} decimalScale={2} w={210} defaultValue={s.think_s}
           onBlur={(e) => save({ think_s: num(e.currentTarget.value) }, "Saved. New analyses use it.")} data-testid="games-think" />
-        <NumberInput label="Key moments" min={1} max={10} w={130} value={s.key_moments}
+        <NumberInput label="Key moments" min={1} max={10} w={130} defaultValue={s.key_moments}
           onBlur={(e) => save({ key_moments: num(e.currentTarget.value) }, "Saved.")} />
-        <NumberInput label="Retry tolerance (cp)" min={0} max={300} w={160} value={s.tolerance_cp}
+        <NumberInput label="Retry tolerance (cp)" min={0} max={300} w={160} defaultValue={s.tolerance_cp}
           onBlur={(e) => save({ tolerance_cp: num(e.currentTarget.value) }, "Saved.")} />
       </Group>
-      <Group gap="sm">
+      <Group gap="sm" key={`grades${inputsKey}`}>
         {(["inaccuracy", "mistake", "blunder"] as const).map((k) => (
           <NumberInput
             key={k}
@@ -109,12 +113,12 @@ export function GamesSettingsPanel() {
             min={1}
             max={2000}
             w={160}
-            value={s.thresholds[k]}
+            defaultValue={s.thresholds[k]}
             onBlur={(e) => save({ thresholds: { ...s.thresholds, [k]: num(e.currentTarget.value) } }, "Saved. New analyses use it.")}
           />
         ))}
       </Group>
-      <Group gap="sm" align="flex-end">
+      <Group gap="sm" align="flex-end" key={`puzzles${inputsKey}`}>
         <Select
           label="Puzzles from your games"
           w={280}
@@ -135,7 +139,7 @@ export function GamesSettingsPanel() {
           data-testid="games-puzzle-level"
         />
         <NumberInput label="Checking a puzzle: seconds per position" min={0.2} max={5} step={0.1} decimalScale={2} w={250}
-          value={s.puzzle_think_s} onBlur={(e) => save({ puzzle_think_s: num(e.currentTarget.value) }, "Saved.")} />
+          defaultValue={s.puzzle_think_s} onBlur={(e) => save({ puzzle_think_s: num(e.currentTarget.value) }, "Saved.")} />
       </Group>
       <Text size="xs" c="dimmed">
         A mistake becomes a puzzle only if it has one clear answer (Lichess's rules), so inaccuracies add few puzzles.

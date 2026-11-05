@@ -227,3 +227,50 @@ def test_a_coach_preset_with_a_name_you_use_can_replace_it_or_take_another(page)
     box.get_by_test_id("coach-preset-name").fill("Coach mix, November")
     box.get_by_test_id("coach-preset-save-as").click()
     box.get_by_text("Saved as “Coach mix, November”.").wait_for()
+
+
+def _reopen_settings(page) -> None:  # type: ignore[no-untyped-def]
+    page.keyboard.press("Escape")
+    page.get_by_test_id("engine-settings").wait_for(state="detached")
+    page.get_by_test_id("gear").click()
+
+
+def _step_up(page, test_id: str) -> None:  # type: ignore[no-untyped-def]
+    box = page.get_by_test_id(test_id)
+    box.scroll_into_view_if_needed()
+    box.click()
+    page.keyboard.press("ArrowUp")
+    page.keyboard.press("ArrowUp")
+    box.blur()
+
+
+def test_the_settings_number_boxes_step_and_keep_what_you_type(page) -> None:  # type: ignore[no-untyped-def]
+    """Regression (v0.11-rc1 manual test): the think time per position couldn't go above 1. The settings
+    number boxes were tied to the saved value, so the arrow keys and the up/down buttons did nothing."""
+    page.goto(page.base_url + "/?ai=on")
+    page.get_by_test_id("gear").click()
+    _step_up(page, "engine-think")  # 1 → 2 (step 0.5)
+    _step_up(page, "games-think")  # 0.3 → 0.5 (step 0.1)
+    _step_up(page, "ai-cap")
+    page.wait_for_timeout(300)
+    _reopen_settings(page)
+    assert page.get_by_test_id("engine-think").input_value() == "2"
+    assert page.get_by_test_id("games-think").input_value() == "0.5"
+    assert float(page.get_by_test_id("ai-cap").input_value()) > 0.5
+    think = page.get_by_test_id("engine-think")
+    think.fill("4.5")
+    think.blur()
+    page.wait_for_timeout(300)
+    _reopen_settings(page)
+    assert page.get_by_test_id("engine-think").input_value() == "4.5"
+
+
+def test_a_refused_games_setting_goes_back_to_the_saved_value(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("gear").click()
+    box = page.get_by_test_id("games-think")
+    box.scroll_into_view_if_needed()
+    box.fill("9")
+    box.blur()
+    page.get_by_test_id("games-settings-msg").filter(has_text="0.1–5").wait_for()
+    page.wait_for_function("() => document.querySelector('[data-testid=games-think]').value === '0.3'")
