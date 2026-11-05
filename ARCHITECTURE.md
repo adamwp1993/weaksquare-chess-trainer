@@ -233,6 +233,16 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.11: Whole-game schema (`user/0009_whole_game.sql`): digests, AI runs, observations
+- Context: FR-10.52 stores the digests; FR-10.57 asks for a migration for the new kinds and recurring observations; Adam wants every AI answer of a report kept, so a standard and an Advanced run can be compared (v0.11 planning).
+- Decision:
+  - **`game_digests(game_id, color, analysis_key, digest_json, built_at)`**, one per game and side, since a game you played against another player you ran the Coach on counts for both. `analysis_key` holds the analysis think time, engine, thresholds and `core/digest.DIGEST_VERSION`; a different key rebuilds the digest from the stored analysis, with no engine.
+  - **`coach_ai_runs`**: every AI answer, with its options (`advanced`, `include_notes`, `game_cap`), model and cost, and `format` `keyed` (v0.10) or `diagnosis` (v0.11). The migration copies each v0.10 `coach_reports.llm_json` in as a `keyed` run and leaves `llm_json` alone.
+  - **`coach_observations`**, unique per subject plus `topic_key` (or category plus a normalized title when there's no topic); `times_seen` counts reports, not runs.
+  - **The new weakness kinds aren't a table.** `opening`, `endgame`, `phase`, `time` and `habit:castledLate` live in the report JSON, as v0.10's kinds do; v1.0's `weaknesses` and `weakness_metrics` tables will take them all.
+- Alternatives: digests inside the report JSON (rejected: they're per game and reused across runs); a column per option on `coach_reports` (rejected: one report has several answers).
+- Consequences: `coach_reports.llm_json` is no longer written; the AI runs table is the source.
+
 ### 2026-11-04, v0.11 (pre-planning): npm override pins minimatch to ^11.0.4 (Dependabot alert #1)
 - Context: Dependabot alert #1: minimatch 10.2.6 (>= 7.0.0, < 11.0.1) can be made to use excessive CPU and memory by a crafted glob pattern. It reaches `web/package-lock.json` only as a transitive **dev** dependency of `eslint` 10.14.0 and `typescript-eslint` 8.72.1, both already at their latest versions, which still ask for minimatch 10. ESLint only reads our own config's globs, so the real risk was low.
 - Decision: an `overrides` entry in `web/package.json` (`"minimatch": "^11.0.4"`) with the lock file regenerated. `npm audit` reports 0 vulnerabilities; ESLint, `tsc --noEmit` and the build pass, and ESLint still ignores `dist/` and still reports errors.

@@ -176,3 +176,209 @@ class CoachReportsRepo:
             if gid.isdigit() and ply.isdigit():
                 out[(int(gid), int(ply))] = str(reason)
         return out
+
+    # ---- notes (FR-10.60, v0.11) ----
+
+    def game_notes(self, game_ids: list[int]) -> list[NoteRow]:
+        """The latest reason and note per move of these games, where that latest entry has a note; plus
+        the notes on Retry attempts of these games."""
+        wanted = set(game_ids)
+        out: list[NoteRow] = []
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT m.source, m.ref_id, m.reason, m.note, m.created_at FROM mistake_reasons m"
+                " WHERE m.source = 'game' AND m.id ="
+                " (SELECT MAX(id) FROM mistake_reasons WHERE source = 'game' AND ref_id = m.ref_id)"
+                " AND m.note IS NOT NULL AND TRIM(m.note) <> '' ORDER BY m.id"
+            ).fetchall()
+            for src, ref, reason, note, at in rows:
+                gid, _, ply = str(ref).partition(":")
+                if gid.isdigit() and ply.isdigit() and int(gid) in wanted:
+                    out.append(NoteRow(str(src), int(gid), int(ply), reason, str(note), str(at)))
+            retry = conn.execute(
+                "SELECT m.source, r.game_id, r.ply, m.reason, m.note, m.created_at FROM mistake_reasons m"
+                " JOIN retry_attempts r ON CAST(r.id AS TEXT) = m.ref_id"
+                " WHERE m.source = 'retry' AND m.id ="
+                " (SELECT MAX(id) FROM mistake_reasons WHERE source = 'retry' AND ref_id = m.ref_id)"
+                " AND m.note IS NOT NULL AND TRIM(m.note) <> '' ORDER BY m.id"
+            ).fetchall()
+            out.extend(
+                NoteRow(str(s), int(g), int(p), r, str(n), str(a)) for s, g, p, r, n, a in retry if int(g) in wanted
+            )
+        return out
+
+    def puzzle_notes(self, since: str | None, until: str | None) -> list[NoteRow]:
+        """The latest reason and note per puzzle attempt (Standard and Danger spotting) made in this
+        period, where that entry has a note."""
+        q = (
+            "SELECT m.source, m.reason, m.note, m.created_at FROM mistake_reasons m"
+            " WHERE m.source IN ('puzzle', 'danger') AND m.id ="
+            " (SELECT MAX(id) FROM mistake_reasons WHERE source = m.source AND ref_id = m.ref_id)"
+            " AND m.note IS NOT NULL AND TRIM(m.note) <> ''"
+        )
+        args: list[str] = []
+        if since:
+            q += " AND m.created_at >= ?"
+            args.append(since)
+        if until:
+            q += " AND m.created_at <= ?"
+            args.append(until)
+        with self._db.session() as conn:
+            rows = conn.execute(q + " ORDER BY m.id", args).fetchall()
+        return [NoteRow(str(s), None, None, r, str(n), str(a)) for s, r, n, a in rows]
+
+
+@dataclass(frozen=True)
+class NoteRow:
+    source: str  # game / retry / puzzle / danger
+    game_id: int | None
+    ply: int | None  # 0-based
+    reason: str | None
+    note: str
+    created_at: str
+
+
+class DigestsRepo:
+    """Game digests (FR-10.52, v0.11)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get(self, game_ids: list[int]) -> dict[tuple[int, str], tuple[str, dict[str, Any]]]:
+        """(game id, color) → (analysis key, digest JSON)."""
+        out: dict[tuple[int, str], tuple[str, dict[str, Any]]] = {}
+        with self._db.session() as conn:
+            for i in range(0, len(game_ids), 500):
+                chunk = game_ids[i : i + 500]
+                rows = conn.execute(
+                    "SELECT game_id, color, analysis_key, digest_json FROM game_digests"
+                    f" WHERE game_id IN ({','.join('?' * len(chunk))})",
+                    chunk,
+                ).fetchall()
+                for gid, color, key, data in rows:
+                    out[(int(gid), str(color))] = (str(key), json.loads(data))
+        return out
+
+    def put(self, game_id: int, color: str, key: str, digest: dict[str, Any], built_at: str) -> None:
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO game_digests (game_id, color, analysis_key, digest_json, built_at) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(game_id, color) DO UPDATE SET analysis_key = excluded.analysis_key,"
+                " digest_json = excluded.digest_json, built_at = excluded.built_at",
+                (game_id, color, key, json.dumps(digest), built_at),
+            )
+
+
+@dataclass(frozen=True)
+class AiRunRow:
+    id: int
+    report_id: int
+    created_at: str
+    format: str  # keyed (v0.10) / diagnosis (v0.11)
+    advanced: bool
+    include_notes: bool
+    game_cap: int | None
+    provider: str
+    model: str
+    cost_usd: float
+    result: dict[str, Any]
+
+
+_RUN_COLS = (
+    "id, report_id, created_at, format, advanced, include_notes, game_cap, provider, model, cost_usd, result_json"
+)
+
+
+def _run(r: Any) -> AiRunRow:
+    return AiRunRow(
+        int(r[0]), int(r[1]), str(r[2]), str(r[3]), bool(r[4]), bool(r[5]), None if r[6] is None else int(r[6]),
+        str(r[7]), str(r[8]), float(r[9] or 0), json.loads(r[10]),
+    )  # fmt: skip
+
+
+class AiRunsRepo:
+    """Every AI coaching answer for a report (Adam, v0.11 planning)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def add(
+        self, report_id: int, created_at: str, fmt: str, *, advanced: bool, include_notes: bool,
+        game_cap: int | None, provider: str, model: str, cost_usd: float, result: dict[str, Any],
+    ) -> int:  # fmt: skip
+        with self._db.transaction() as conn:
+            cur = conn.execute(
+                f"INSERT INTO coach_ai_runs ({_RUN_COLS.split(', ', 1)[1]}) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    report_id, created_at, fmt, int(advanced), int(include_notes), game_cap, provider, model,
+                    cost_usd, json.dumps(result),
+                ),
+            )  # fmt: skip
+            return int(cur.lastrowid or 0)
+
+    def for_report(self, report_id: int) -> list[AiRunRow]:
+        with self._db.session() as conn:
+            rows = conn.execute(
+                f"SELECT {_RUN_COLS} FROM coach_ai_runs WHERE report_id = ? ORDER BY id", (report_id,)
+            ).fetchall()
+        return [_run(r) for r in rows]
+
+    def get(self, run_id: int) -> AiRunRow | None:
+        with self._db.session() as conn:
+            r = conn.execute(f"SELECT {_RUN_COLS} FROM coach_ai_runs WHERE id = ?", (run_id,)).fetchone()
+        return _run(r) if r else None
+
+
+@dataclass(frozen=True)
+class ObservationRow:
+    id: int
+    subject: str
+    topic_key: str
+    category: str
+    title_key: str
+    title: str
+    first_report_id: int | None
+    last_report_id: int | None
+    times_seen: int
+
+
+class ObservationsRepo:
+    """Findings that can't be measured, noted when they recur across a subject's reports (FR-10.57).
+    Several AI runs of one report count once."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def note(self, subject: str, topic_key: str, category: str, title_key: str, title: str, report_id: int) -> int:
+        """Record one sighting; returns how many reports have seen it."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT id, last_report_id, times_seen FROM coach_observations"
+                " WHERE subject = ? AND topic_key = ? AND category = ? AND title_key = ?",
+                (subject, topic_key, category, title_key),
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    "INSERT INTO coach_observations (subject, topic_key, category, title_key, title,"
+                    " first_report_id, last_report_id, times_seen) VALUES (?,?,?,?,?,?,?,1)",
+                    (subject, topic_key, category, title_key, title, report_id, report_id),
+                )
+                return 1
+            seen = int(row[2]) + (0 if row[1] == report_id else 1)
+            conn.execute(
+                "UPDATE coach_observations SET title = ?, last_report_id = ?, times_seen = ? WHERE id = ?",
+                (title, report_id, seen, int(row[0])),
+            )
+            return seen
+
+    def all(self, subject: str) -> list[ObservationRow]:
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT id, subject, topic_key, category, title_key, title, first_report_id, last_report_id,"
+                " times_seen FROM coach_observations WHERE subject = ? ORDER BY id",
+                (subject,),
+            ).fetchall()
+        return [
+            ObservationRow(int(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), str(r[5]), r[6], r[7], int(r[8]))
+            for r in rows
+        ]
