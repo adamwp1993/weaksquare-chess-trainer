@@ -412,7 +412,7 @@ R3_B11 = [
 ]  # fmt: skip
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B11")
+# QA v0.11-B11 regression (fixed)
 @pytest.mark.parametrize("text", R3_B11)
 def test_qa_r3_strip_urls_leaves_capitalized_tld_words_after_a_missing_space(text: str) -> None:
     assert strip_urls(text) == text
@@ -425,7 +425,7 @@ R3_B12 = [
 ]  # fmt: skip
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B12")
+# QA v0.11-B12 regression (fixed)
 @pytest.mark.parametrize("text", R3_B12)
 def test_qa_r3_strip_urls_leaves_a_missing_space_before_a_question_or_slash(text: str) -> None:
     assert strip_urls(text) == text
@@ -439,7 +439,7 @@ R3_B13 = [
 ]  # fmt: skip
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B13")
+# QA v0.11-B13 regression (fixed)
 @pytest.mark.parametrize("url", R3_B13)
 def test_qa_r3_strip_urls_removes_idn_underscore_and_port_hosts(url: str) -> None:
     assert url not in strip_urls(f"see {url} later")
@@ -447,7 +447,7 @@ def test_qa_r3_strip_urls_removes_idn_underscore_and_port_hosts(url: str) -> Non
 
 # QA v0.11-B14: the host patterns backtrack quadratically on a long run of dotted labels with no ending,
 # so a degenerate AI answer (every field is filtered whole, before it's clipped) holds the backend for seconds
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B14")
+# QA v0.11-B14 regression (fixed)
 def test_qa_r3_strip_urls_is_fast_on_a_long_run_of_dotted_labels() -> None:
     import time
 

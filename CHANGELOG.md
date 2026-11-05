@@ -12,6 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
+Candidates: v0.11-rc1 (2026-11-05)
 
 ### Added
 - **Whole-game measures** in every Coach report on games, worked out on your PC from each game's analysis: per opening family (score, eval at move 15, early mistakes), mistakes per phase, how often you win from +2 and save from −2, results and mistakes per endgame type, mistakes on a low clock against the rest, and castling late. A group needs 5 games before it counts; below that it says *not enough data yet*. [FR-10.52] [FR-10.53]
