@@ -375,3 +375,83 @@ def test_qa_r2_the_gap_table_sends_only_its_columns_and_at_most_ten_rows() -> No
     user, _ = build_prompt(report, [("G1", digest(make_rows(ITALIAN)))], [], "summary", catalog())
     assert "QaPzl01" not in user and "123456789" not in user and "evil.example" not in user
     assert '"theme":"t9"' in user and '"theme":"t10"' not in user
+
+
+# ---- Round 3 (QA, 2026-11-05): try to break the B9 and B10 fixes ----
+
+R3_CAUGHT = [
+    "evil.example?q=1", "evil.example#frag", "evil.example:8080/x", "10.0.0.1:8080/x", "192.168.0.1",
+    "foo.bar.baz.example/x", "evil.example/", "EVIL.CO.UK", "LICHESS.ORG", "go.example/x", "//evil.example/x",
+    "xn--caf-dma.example/x", "HTTPS://X.Y",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("url", R3_CAUGHT)
+def test_qa_r3_strip_urls_catches_more_shapes(url: str) -> None:
+    out = strip_urls(f"look at {url} now")
+    assert "example" not in out and "192.168" not in out and "10.0.0.1" not in out
+    assert "[link removed]" in out
+
+
+R3_CHESS = [
+    "1.e4 e5 2.Nf3", "12.Rd1/Rd2", "1.d4/1.c4", "at 1.30 left", "+1.5 eval", "O-O-O.", "O-O.", "e8=Q+.",
+    "23.Qxh7#", "1.e4 e5 2.Nf3?! Nc6 3.Bc4#", "Rd1.Be2", "e4.Bc4?", "e4.Na3/Nc3?", "Rxd8+.Kxd8 Qd1/",
+    "score 1.5/2", "2026.11.05", "v1.2.3", "bad.It is", "Nf3.To be safe",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("text", R3_CHESS)
+def test_qa_r3_strip_urls_keeps_chess_text(text: str) -> None:
+    assert strip_urls(text) == text
+
+
+# QA v0.11-B11: a missing space before a capitalized word that is also a TLD outside WORDS is removed as a link
+R3_B11 = [
+    "This was a blunder.Today I learned", "Lost on time.Live games are hard", "Endgame.Page 3 of the book",
+    "Lost the exchange.Net result -2", "Check the club.Club night", "Then.Online blitz", "Rook.Link the rooks",
+]  # fmt: skip
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B11")
+@pytest.mark.parametrize("text", R3_B11)
+def test_qa_r3_strip_urls_leaves_capitalized_tld_words_after_a_missing_space(text: str) -> None:
+    assert strip_urls(text) == text
+
+
+# QA v0.11-B12: a missing space before a word and then ?, / or # is removed as a link, move and all
+R3_B12 = [
+    "Played Nf3.Why?", "I castled.Why?", "Good trade.Knight/bishop imbalance", "Ng5.Black/White to move",
+    "Bad move.Really?!", "e8=Q.Why?",
+]  # fmt: skip
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B12")
+@pytest.mark.parametrize("text", R3_B12)
+def test_qa_r3_strip_urls_leaves_a_missing_space_before_a_question_or_slash(text: str) -> None:
+    assert strip_urls(text) == text
+
+
+# QA v0.11-B13: an address with a path is kept when its host has a non-ASCII letter or an underscore,
+# and a host with a port but no path is kept
+R3_B13 = [
+    "café.example/menu", "lichéss.org/x", "пример.рф/x",
+    "my_site.example/x", "evil.example:8080",
+]  # fmt: skip
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B13")
+@pytest.mark.parametrize("url", R3_B13)
+def test_qa_r3_strip_urls_removes_idn_underscore_and_port_hosts(url: str) -> None:
+    assert url not in strip_urls(f"see {url} later")
+
+
+# QA v0.11-B14: the host patterns backtrack quadratically on a long run of dotted labels with no ending,
+# so a degenerate AI answer (every field is filtered whole, before it's clipped) holds the backend for seconds
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B14")
+def test_qa_r3_strip_urls_is_fast_on_a_long_run_of_dotted_labels() -> None:
+    import time
+
+    text = "a." * 4000 + "1"
+    start = time.perf_counter()
+    strip_urls(text)
+    assert time.perf_counter() - start < 0.25

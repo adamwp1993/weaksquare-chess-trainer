@@ -284,3 +284,119 @@ Because of B9, the item "a URL written by the LLM is never shown" is still **not
 ## For Adam's manual test (in addition to round 1)
 - Once B9 is fixed: put a note with a short link on an unusual TLD (for example `.blog` or `.club`) and check the notes preview.
 - Double-click **Confirm** with a real key and a low cap: check that only one `llm_usage` row is added.
+
+# Round 3 (2026-11-05): re-verification of B9 and B10
+
+Branch `v0.11` at `b47c240`. I changed no product code, migrations, config or docs. I added tests under `tests/` only and committed nothing. I didn't run `-m live`.
+
+## Verdict: **PASS WITH ISSUES** (4 new minor bugs, all in `core/urls.strip_urls`; no blocker or major)
+
+B9 and B10 are fixed as specified, and every automated suite is green. My attempts to break the new patterns found four minor problems:
+- **B11:** a capitalized ending outside `WORDS`, such as `Today`, `Live`, `Page`, `Net`, `Club`, `Online` or `Link`, still turns a missing space into a link.
+- **B12:** the new "host with a path" rule turns a missing space followed by `?`, `/` or `#` into a link. It removes a SAN move along with the word: `Played Nf3.Why?` becomes `Played [link removed]`.
+- **B13:** hosts with non-ASCII letters or an underscore, and `host:port` with no path, are kept.
+- **B14:** the regex is quadratic on long runs of dotted labels.
+
+Chess text with normal spacing is never affected.
+
+## Re-verification
+
+| Bug | Result | Evidence |
+|---|---|---|
+| B9 any host with a path / IPv4 | **Fixed** | Round-2 regressions pass with no markers: `test_qa_r2_strip_urls_removes_any_host_with_a_path[8]`, `test_qa_r2_an_llm_url_on_another_tld_is_never_shown`, integration `test_qa_r2_a_note_with_an_address_on_another_tld_is_not_sent`. Also caught in round 3: `?query`, `#frag`, `:8080/x`, `10.0.0.1:8080/x`, bare `192.168.0.1`, deep sub-domains, trailing `/`, `EVIL.CO.UK`, `LICHESS.ORG`, `//host/x`, punycode with a path, and `HTTPS://X.Y`. Test: `test_qa_r3_strip_urls_catches_more_shapes[13]` |
+| B10 missing space before a two-letter word | **Fixed** for the 16 `WORDS` | `test_qa_r2_strip_urls_leaves_two_letter_words_after_a_missing_space[6]` passes. Also kept: `bad.It is`, `Nf3.To be safe`. Still broken: other capitalized endings (B11) |
+
+Chess text that survives (`test_qa_r3_strip_urls_keeps_chess_text[19]`): `1.e4 e5 2.Nf3`, `12.Rd1/Rd2`, `1.d4/1.c4`, `1.30`, `+1.5`, `O-O-O.`, `O-O.`, `e8=Q+.`, `23.Qxh7#`, `2.Nf3?! … 3.Bc4#`, `Rd1.Be2`, `e4.Bc4?`, `e4.Na3/Nc3?`, `Rxd8+.Kxd8 Qd1/`, `1.5/2`, `2026.11.05`, `v1.2.3`. `e.g.` and `i.e.` were already covered in round 2. SAN after a dot survives because a piece move ends in a digit, and the path rule needs letters right before `/?#`.
+
+## New bugs
+
+### v0.11-B11 (minor): a capitalized TLD that is an ordinary word still breaks a missing-space sentence
+- **Requirement:** FR-10.60 (notes are sent as written, minus web addresses). This is the B10 class: the fix lowered the case only for the 16 entries in `WORDS`.
+- **Steps:** add the note `This was a blunder.Today I learned`, tick **Include my notes**, and look at the preview.
+- **Expected:** the note unchanged. **Actual:** `This was a [link removed] I learned`. These do the same: `time.Live`, `Endgame.Page`, `exchange.Net`, `club.Club`, `Then.Online`, `Rook.Link`. Also `Site`, `App`, `Info`, `Tech`, `Shop`, `Ai` and `Dev` (probe). In lower case the 16 `WORDS` still match, as designed (`blundered.it was bad` gives `[link removed] was bad`). Adam may want to reconsider that too.
+- **Evidence:** strict xfail `test_qa_r3_strip_urls_leaves_capitalized_tld_words_after_a_missing_space[7]`.
+
+### v0.11-B12 (minor): a missing space followed by `?`, `/` or `#` is removed as a link, move included
+- **Requirement:** FR-10.60. ARCHITECTURE.md §7 (round-2 entry) says a missing space "isn't taken for a link".
+- **Cause:** the B9 rule `(?:label\.)+[a-z]{2,24}[/?#]\S*` accepts any word as a TLD, in any case.
+- **Steps:** add the note `Played Nf3.Why?`, then tick **Include my notes**.
+- **Expected:** unchanged. **Actual:** `Played [link removed]`. Other examples:
+  - `I castled.Why?` gives `I [link removed]`
+  - `Ng5.Black/White to move` gives `[link removed] to move`
+  - `Good trade.Knight/bishop` gives `Good [link removed] imbalance`
+  - `Bad move.Really?!`
+  - `e8=Q.Why?` gives `e8=[link removed]`
+- **Note:** this affects the AI's text as well (its missing spaces), but well-spaced text is unaffected.
+- **Evidence:** strict xfail `test_qa_r3_strip_urls_leaves_a_missing_space_before_a_question_or_slash[6]`.
+
+### v0.11-B13 (minor): an address on an internationalized or underscore host, or `host:port` without a path, is kept
+- **Requirement:** FR-8.16, FR-10.59 ("never a URL"), FR-10.60.
+- **Cause:** labels are ASCII `[a-z0-9-]` and must start at `\b`.
+  - In `café.example/menu`, `é` is a word character, so no match can start inside the host.
+  - In `my_site.example/x`, `_` blocks the label.
+  - `evil.example:8080` has no path, and `.example` isn't on the TLD list.
+  - `localhost:8080/x` is also kept (no dot).
+- **Steps:** add the note `see café.example/menu`, then tick **Include my notes**.
+- **Expected:** `[link removed]`. **Actual:** sent unchanged. Also kept: `lichéss.org/x`, `пример.рф/x`, `my_site.example/x`, `evil.example:8080`. These are rare shapes, so I rate this minor rather than major like B9. AI text is rendered escaped and never as a link.
+- **Evidence:** strict xfail `test_qa_r3_strip_urls_removes_idn_underscore_and_port_hosts[5]`.
+
+### v0.11-B14 (minor): `strip_urls` is quadratic on a long run of dotted labels
+- **Requirement:** NFR responsiveness. LLM output is untrusted (CLAUDE.md).
+- **Cause:** `(?:label\.)+` is retried from every label start when no ending follows.
+- **Where it applies:** `core/coach_diagnosis._text` and `core/coach_llm._text` filter each AI field **whole, before** clipping it, and Coach output can reach 5000 tokens, or ×4 at High reasoning. Notes are capped at 200 characters, so they aren't affected.
+- **Steps:** `strip_urls("a." * N + "1")`.
+- **Measured:**
+
+  | Input | Time |
+  |---|---|
+  | `"a."` repeated, 1 KB | 0.08 s |
+  | `"a."` repeated, 2 KB | 0.32 s |
+  | `"a."` repeated, 4 KB | 1.3 s |
+  | `"a."` repeated, 20 KB | 31.7 s |
+  | `"Nf3."` repeated, 20 KB | 10.2 s |
+- **Expected:** linear time (a few ms).
+- **Evidence:** strict xfail `test_qa_r3_strip_urls_is_fast_on_a_long_run_of_dotted_labels` (4 KB must take under 0.25 s; it takes about 5 s while the suite is running).
+
+## Evidence: commands run (Git Bash; `npm.cmd` as written)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1962 passed, 1 skipped, 18 xfailed** (363 s), rc 0. The 18 xfails are B11–B13; B14's test was added after this run started |
+| `uv run pytest tests/unit/test_qa_v011_core.py tests/integration/test_qa_v011_coach.py` | 140 passed, 19 xfailed (B11–B14). With `--runxfail -k r3`, each of the 19 fails on its own assertion |
+| `uv run pytest -m e2e` | **312 passed** (778 s), rc 0 |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0. **36 passed, 1 skipped** (512 s), rc 0 |
+| `uv run ruff check .` / `uv run ruff format --check .` | All checks passed / 394 files already formatted |
+| `uv run mypy src` | Success: no issues found in 124 source files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | Detect hardcoded secrets Passed; keyring only in secret_store.py Passed |
+| `python scripts/check_docs.py` / `--strict` | `check_docs: 0 error(s), 0 warning(s) [version v0.11]`, both rc 0 |
+| `uv run python scripts/gen_types.py` | no drift |
+| Not re-run | `-m engine`, `-m fulldb`: the fix commit only changes `core/urls.py`, which neither suite touches (both green in round 2). Setup, fetch, live and credential rows: same reasons as round 1 |
+
+## Regression check
+- `b47c240` changes only `src/weaksquare/core/urls.py` in product code. The test edits only remove the xfail markers; no assertion was weakened.
+- The other edits are an ARCHITECTURE.md §7 note, a `plans/v0.11.md` note, and two regenerated screenshots. I viewed `coach-report.png`: the layout is correct, nothing is clipped, and it is the same as round 2.
+- All builder and QA round 1/2 tests for the v0.11 Done-when items pass in the runs above.
+- **Done-when status:** the item "a URL written by the LLM is never shown" now holds for every common shape. B13's rare shapes are the remaining gap.
+
+## Scope, architecture, security (fix commit)
+- No migration, dependency or lockfile change.
+- `core/urls.py` is still pure (regex only).
+- New fixtures use only `evil.example`, `example`, private IPs and made-up words. No token patterns. pre-commit's secret scan passes.
+
+## Docs
+- The User Guide (line 874) lists the address shapes as examples only, so it's still accurate.
+- The `core/urls.py` docstring and the ARCHITECTURE.md round-2 note claim more than the code does: a missing space before a capitalized word that is also a TLD (B11) or before `?`/`/` (B12) is still taken for a link. Update them when B11/B12 are fixed.
+
+## Tests added in round 3 (uncommitted)
+- `tests/unit/test_qa_v011_core.py`:
+  - `test_qa_r3_strip_urls_catches_more_shapes[13]`
+  - `test_qa_r3_strip_urls_keeps_chess_text[19]`
+  - `test_qa_r3_strip_urls_leaves_capitalized_tld_words_after_a_missing_space[7]` (xfail B11)
+  - `test_qa_r3_strip_urls_leaves_a_missing_space_before_a_question_or_slash[6]` (xfail B12)
+  - `test_qa_r3_strip_urls_removes_idn_underscore_and_port_hosts[5]` (xfail B13)
+  - `test_qa_r3_strip_urls_is_fast_on_a_long_run_of_dotted_labels` (xfail B14)
+
+## For Adam's manual test (in addition to rounds 1 and 2)
+- Put a note `course: mychess.blog/rook-endings` on one of your moves and tick **Include my notes**: the preview should show `[link removed]` (B9).
+- Put a note `Blundered.No time` and check that it's unchanged (B10). Then try `Played Nf3.Why?` to see B12 for yourself, and decide whether B11–B14 must be fixed before `v0.11-rc1`.
