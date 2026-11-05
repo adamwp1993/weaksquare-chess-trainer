@@ -127,9 +127,13 @@ class LlmUsageService:
                            cap=cfg.run_cap_usd)  # fmt: skip
         return Quote("ok", None, provider, model, est, cfg.run_cap_usd)
 
-    def run(self, kind: str, system: str, user: str, schema_name: str, schema: dict[str, Any]) -> RunResult:
+    def run(
+        self, kind: str, system: str, user: str, schema_name: str, schema: dict[str, Any], *,
+        timeout_s: float | None = None,
+    ) -> RunResult:  # fmt: skip
         """Check, send and log one request of `kind` (logged under its feature). Raises AppError when it's
-        blocked or the provider fails."""
+        blocked or the provider fails. `timeout_s` overrides the request's default (v0.11: the Coach's
+        bigger prompts)."""
         with self._lock:
             feature = FEATURE_OF[kind]
             cfg = self._settings.config(feature)
@@ -149,6 +153,7 @@ class LlmUsageService:
                 schema=schema,
                 max_tokens=max_tokens_for(kind, cfg.reasoning),
                 reasoning=cfg.reasoning,  # type: ignore[arg-type]
+                **({"timeout_s": timeout_s} if timeout_s is not None else {}),
             )
             try:
                 response = self._settings.provider(cfg.provider).generate(key, request)

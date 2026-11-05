@@ -20,7 +20,13 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
-from weaksquare.adapters.db.repos.coach import CoachRepo, CoachReportsRepo
+from weaksquare.adapters.db.repos.coach import (
+    AiRunsRepo,
+    CoachRepo,
+    CoachReportsRepo,
+    DigestsRepo,
+    ObservationsRepo,
+)
 from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzleSource, CustomPuzzlesRepo, RetryRepo
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
@@ -384,6 +390,7 @@ def build_services(
     coach = CoachService(
         games, games_repo, analysis, game_puzzles, custom_puzzles, CoachReportsRepo(db), stats, StatsRepo(db),
         account, lichess, SettingsRepo(db), clock, runner, analysis_repo, llm_settings, llm_usage,
+        digests=DigestsRepo(db), ai_runs=AiRunsRepo(db), observations=ObservationsRepo(db),
     )  # fmt: skip
     return Services(
         db=db,

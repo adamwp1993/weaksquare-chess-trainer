@@ -81,6 +81,11 @@ weaksquare-chess-trainer/
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tagging.py            # Lichess theme tags for a tactic line, via vendor/lichess_puzzler (v0.10)
 │  │  ├─ habits.py             # habit tags from attack maps          (v0.10)
+│  │  ├─ digest.py             # one game's digest from its analysis (v0.11)
+│  │  ├─ game_measures.py      # whole-game measures and weaknesses, the 5-game guard (v0.11)
+│  │  ├─ coach_diagnosis.py    # the whole-game AI prompt, schema and evidence rule (v0.11)
+│  │  ├─ lessons.py            # lesson topics, the curated Lichess map, search links (v0.11)
+│  │  ├─ urls.py               # strip web addresses from notes and AI text (v0.11)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
@@ -232,6 +237,49 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.11: QA fixes (v0.11-B1 to B14)
+- Context: QA round 1 (`qa/QA-v0.11.md`), FAIL: three major and five minor bugs; round 2, FAIL: B9 (major) and B10 (minor) in the URL filter; round 3, PASS WITH ISSUES: B11–B14 (minor), also in the URL filter.
+- Decision:
+  - **B1, B2:** one `core/urls.strip_urls`, used on your notes, on all AI text (the diagnosis, the v0.10 keyed coaching) and on AI preset names. It catches any `scheme://`, `www.` and bare domains on a list of common top-level domains (`youtu.be`, `bit.ly`, `.co.uk`, `.de`…), and needs a word boundary after the domain, so "Qd1.Coming back" is left alone.
+  - **B3:** `user/0010_observation_reports.sql` adds `coach_observations.report_ids` (backfilled from the first and last report), and `times_seen` counts distinct reports in any order.
+  - **B4:** `Measures.phases_enough` (5 games) guards mistakes per phase, shown with *not enough data yet*.
+  - **B5:** `CoachService.start_ai` is single-flight per report and options (a second call while that job runs returns the same job), and the Confirm button holds a guard until the job ends, so a double-click sends and bills one request.
+  - **Round 2, B9, B10:** `strip_urls` also removes IPv4 addresses and **any** dotted host followed by a path, query or fragment, whatever its top-level domain; a bare host without a path counts on the TLD list, and an ending that is also a short English word (No, To, It, At, Be…) counts only in lower case, so a missing space ("Blundered.No time") isn't taken for a link while "Lichess.Org" still is.
+  - **Round 3, B11–B14:** `strip_urls` is rewritten to check one whitespace-separated word at a time (linear time, no regex backtracking: B14). A word is an address with a scheme, `www.` or `//`; as an IPv4 address or any host with a port (B13); as a dotted host (Unicode letters and `_` allowed, B13) followed by a path, query or fragment; or as a bare host on the TLD list. The ending must be letters in lower case or all capitals; a capitalized ending is a missing space ("blunder.Today", "Nf3.Why?", B11, B12) except `.Com` and `.Org`; and a bare host whose ending is a short English word needs a path.
+  - **B6:** the diagnosis prompt keeps v0.10's puzzles-vs-games table; the privacy section lists the key moments' themes and reason labels. **B7:** "1 game" in the measures. **B8:** the plan ticks lesson pointers.
+- Consequences: each fix has a regression test (QA's xfail tests now pass).
+
+### 2026-11-04, v0.11: Lesson links are built and opened by the backend (`open_lesson`)
+- Context: FR-10.59: the LLM picks topics only and never writes URLs; Adam chose Lichess Practice and Learn only for the curated map.
+- Decision: **`core/lessons.py`** holds the topic catalog (themes, endgame types, concepts, and the opening families of the report's games), the curated map (Lichess Practice study links and Lichess Learn, checked against lichess.org/practice on 2026-11-04; Lichess resolves the study id and ignores the slug), `ALLOWED_HOSTS = {"lichess.org"}`, and the YouTube and chess.com search templates. The screen receives titles and site names only. **`Api.open_lesson(report_id, topic, target)`** asks `CoachService.lesson_url` for the URL (a curated index re-checked against the allowlist, or a search template you turned on in Settings → Coach) and calls `Desktop.open_in_browser`. The custom search site is validated (https, one `{q}`, a host with a dot) when saved and when used.
+- Alternatives: sending URLs to the screen as `<a href>` links (rejected: the screen would hold URLs the user can't tell apart, and a bug could let an AI string through); fetching the pages to check them at run time (rejected: the app never visits those sites).
+- Consequences: a new curated page is a code change with a test (every curated URL's host must be on the allowlist).
+
+### 2026-11-04, v0.11: Adam's requests during the build: Explain in Retry, preset management
+- Context: Adam asked mid-build for Explain this move in Retry your mistakes, and for overwriting, renaming and deleting presets more easily.
+- Decision: **Retry** renders the existing `MoveExplain` for the mistake's ply once there's a result (never before the attempt), with its Show me drawn on the Retry board. **Presets:** front end only, since `save_preset(overwrite)`, `rename_preset` and `delete_preset` already existed: Update (overwrite the loaded preset), a Manage presets list (overwrite, rename or delete any preset, unusable ones included, without loading it), and Replace or another name on a Coach preset's name clash.
+- Consequences: REQUIREMENTS FR-3.13 and FR-11.15 note both.
+
+### 2026-11-04, v0.11: The whole-game diagnosis: G labels, the evidence rule, per-run options, stored runs
+- Context: FR-10.54–10.60: an open-ended diagnosis that must cite real games and plies, an opt-in Advanced run with move lists, opt-in notes, and every answer kept (Adam, v0.11 planning).
+- Decision:
+  - **`core/coach_diagnosis.py`** builds the prompt from the report's allow-listed aggregates, the measures, one digest per game labelled `G1…` (in the report's game order), the v0.10 examples (now with a game label and 1-based ply), and only with the options the SAN move lists (`core/game_explain.san_moves`, from the parsed moves, so no PGN text) or your notes (`strip_urls`). It returns the text and a `Sent` record (citable plies per label, measured keys, topic ids) that `validate` checks every citation, key and topic against. The label → game id map is stored with the run, never sent.
+  - **`services/coach.CoachAiOptions`** (advanced, game cap 10–50, include notes) is an argument of `quote_ai` / `start_ai` only. It's not part of `CoachParams`, so it's never in `coach.last_params`, and a call with no options is a standard run.
+  - **Advanced's comparison** builds the standard prompt too and quotes both; the minutes come from `TYPICAL_INPUT_TOKENS_PER_S` and `TYPICAL_OUTPUT_TOKENS_PER_S` in `core/llm/defaults.py`. Coach requests use `COACH_TIMEOUT_S` (180 s) through a new `timeout_s` argument of `LlmUsageService.run`.
+  - **Runs** go to `coach_ai_runs`. A cached answer means the same report, options (and cap), format, provider and model. `ai_runs` marks the findings no earlier run had, matched by key, else topic, else category and normalized title. Puzzle-history reports keep the v0.10 keyed prompt (`format = 'keyed'`).
+- Alternatives: one prompt for both report kinds (rejected: a puzzle-history report has no games to cite); storing options on the report (rejected: several runs per report).
+- Consequences: v1.0's checkpoint summary must call `quote_ai` / `start_ai` with no options, which can't be Advanced.
+
+### 2026-11-04, v0.11: Whole-game schema (`user/0009_whole_game.sql`): digests, AI runs, observations
+- Context: FR-10.52 stores the digests; FR-10.57 asks for a migration for the new kinds and recurring observations; Adam wants every AI answer of a report kept, so a standard and an Advanced run can be compared (v0.11 planning).
+- Decision:
+  - **`game_digests(game_id, color, analysis_key, digest_json, built_at)`**, one per game and side, since a game you played against another player you ran the Coach on counts for both. `analysis_key` holds the analysis think time, engine, thresholds and `core/digest.DIGEST_VERSION`; a different key rebuilds the digest from the stored analysis, with no engine.
+  - **`coach_ai_runs`**: every AI answer, with its options (`advanced`, `include_notes`, `game_cap`), model and cost, and `format` `keyed` (v0.10) or `diagnosis` (v0.11). The migration copies each v0.10 `coach_reports.llm_json` in as a `keyed` run and leaves `llm_json` alone.
+  - **`coach_observations`**, unique per subject plus `topic_key` (or category plus a normalized title when there's no topic); `times_seen` counts reports, not runs.
+  - **The new weakness kinds aren't a table.** `opening`, `endgame`, `phase`, `time` and `habit:castledLate` live in the report JSON, as v0.10's kinds do; v1.0's `weaknesses` and `weakness_metrics` tables will take them all.
+- Alternatives: digests inside the report JSON (rejected: they're per game and reused across runs); a column per option on `coach_reports` (rejected: one report has several answers).
+- Consequences: `coach_reports.llm_json` is no longer written; the AI runs table is the source.
 
 ### 2026-11-04, v0.11 (pre-planning): npm override pins minimatch to ^11.0.4 (Dependabot alert #1)
 - Context: Dependabot alert #1: minimatch 10.2.6 (>= 7.0.0, < 11.0.1) can be made to use excessive CPU and memory by a crafted glob pattern. It reaches `web/package-lock.json` only as a transitive **dev** dependency of `eslint` 10.14.0 and `typescript-eslint` 8.72.1, both already at their latest versions, which still ask for minimatch 10. ESLint only reads our own config's globs, so the real risk was low.

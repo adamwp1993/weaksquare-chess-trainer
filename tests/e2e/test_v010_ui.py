@@ -151,7 +151,8 @@ def test_ai_coaching_needs_a_confirm(page) -> None:  # type: ignore[no-untyped-d
     page.get_by_test_id("narrative-estimate").filter(has_text="no names, usernames").wait_for()  # the Confirm dialog
     page.get_by_test_id("coach-ai-confirm-button").click()
     page.get_by_test_id("coach-ai-result").wait_for(timeout=5000)
-    assert "Allowed: Fork" in page.get_by_test_id("coach-ai-result").inner_text()
+    text = page.get_by_test_id("coach-ai-result").inner_text()
+    assert "You walk into knight forks" in text and "tracked: allowed: fork" in text.lower()  # v0.11: the diagnosis
     page.get_by_test_id("coach-ai-preset-0-load").click()
     page.get_by_test_id("trainer-page").wait_for()
 
@@ -192,10 +193,11 @@ def test_manual_the_coach_model_is_picked_in_the_ai_coaching_box(page) -> None: 
     page.get_by_test_id("coach-ai-start").click()
     page.get_by_test_id("coach-ai-confirm-button").click()
     page.get_by_test_id("coach-ai-result").wait_for(timeout=5000)
-    assert page.get_by_test_id("coach-ai-start").count() == 0  # the saved answer is on this model
+    # v0.11: the button stays (every answer is kept); on this model and these options it shows the saved one
+    page.get_by_test_id("coach-ai-start").filter(has_text="Show the saved answer").wait_for()
     model.click()
     page.get_by_role("option", name="claude-sonnet-5-5  ·  about").click()
-    page.get_by_test_id("coach-ai-start").filter(has_text="Ask claude-sonnet-5-5 instead").wait_for()
+    page.get_by_test_id("coach-ai-start").filter(has_text="Ask claude-sonnet-5-5 with these options").wait_for()
     page.get_by_test_id("coach-ai-result").wait_for()  # the saved answer stays until you ask again
     page.get_by_test_id("coach-ai-start").click()
     page.get_by_test_id("coach-ai-confirm-button").click()

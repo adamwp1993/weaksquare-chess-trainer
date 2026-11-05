@@ -221,7 +221,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
             <NumberInput
               label="Per-run cap ($)"
               description="A request that could cost more is blocked"
-              value={settings.run_cap_usd}
+              defaultValue={settings.run_cap_usd}
               min={0}
               max={1000}
               step={0.1}
@@ -232,7 +232,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
             <NumberInput
               label="Monthly budget ($)"
               description="Warns at 80%, blocks at 100%"
-              value={settings.monthly_budget_usd}
+              defaultValue={settings.monthly_budget_usd}
               min={0}
               max={1000}
               step={1}

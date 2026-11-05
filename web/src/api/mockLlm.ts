@@ -13,7 +13,7 @@ import { Chess } from "chess.js";
 import type { LlmPriceChange, LlmProvider, LlmSettingsChange } from "./ApiClient";
 import { ApiCallError } from "./ApiClient";
 import type {
-  CoachAi,
+  CoachAiRun,
   ExplainQuote,
   Explanation,
   GameAiQuote,
@@ -97,7 +97,7 @@ export class MockLlm {
     coach: { choice: "same", model: "", reasoning: "low" },
   };
   private spentBy: Record<Feature, number> = { explain: 0, game_review: 0, coach: 0 };
-  private gameCache = new Map<string, Explanation | GameNarrative | CoachAi>();
+  private gameCache = new Map<string, Explanation | GameNarrative | CoachAiRun>();
   readonly calls: string[] = [];
 
   constructor(
@@ -391,7 +391,7 @@ export class MockLlm {
   }
 
   /** One Game Review request as a job: `make` builds the answer, `done` runs once it's stored. */
-  startGame(kind: GameKind, what: string, make: (provider: string, model: string, costUsd: number) => Explanation | GameNarrative | CoachAi, done?: () => void): string {
+  startGame(kind: GameKind, what: string, make: (provider: string, model: string, costUsd: number) => Explanation | GameNarrative | CoachAiRun, done?: () => void): string {
     const q = this.gameQuote(kind, what);
     if (q.state !== "ok" && q.state !== "cached") throw new ApiCallError({ code: q.state, message: q.message ?? "", retryable: false });
     const id = this.newJobId();
@@ -419,7 +419,7 @@ export class MockLlm {
     return id;
   }
 
-  gameResult(what: string, feature: Other = "game_review"): Explanation | GameNarrative | CoachAi | null {
+  gameResult(what: string, feature: Other = "game_review"): Explanation | GameNarrative | CoachAiRun | null {
     return this.gameCache.get(this.gameKey(what, feature)) ?? null;
   }
 }

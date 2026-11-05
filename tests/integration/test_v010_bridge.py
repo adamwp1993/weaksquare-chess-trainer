@@ -79,5 +79,5 @@ def test_a_coach_report_and_the_suggestion_through_the_bridge(services, paths, a
     sug = ok(api.get_suggestion())
     assert sug["label"].startswith("Suggested — from Coach run #1, ") and sug["active"] and not sug["pending"]
     assert ok(api.get_coach_defaults())["params"]["source"] == "games"
-    assert ok(api.get_coach_ai_quote(rid))["state"] == "not_configured"
-    assert ok(api.get_coach_ai(rid)) is None
+    assert ok(api.get_coach_ai_quote(rid))["quote"]["state"] == "not_configured"
+    assert ok(api.list_coach_ai_runs(rid)) == []  # v0.11: the AI runs replace get_coach_ai

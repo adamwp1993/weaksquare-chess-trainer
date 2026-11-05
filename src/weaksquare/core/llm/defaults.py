@@ -59,6 +59,12 @@ TYPICAL_OUTPUT_TOKENS = {
     "coach_detailed": 3000,
 }
 
+# v0.11 (FR-10.56): the "about N minutes" of an AI coaching run. A typical speed, not a measurement:
+# output tokens per second, and input tokens read per second, across the default models.
+TYPICAL_OUTPUT_TOKENS_PER_S = 50
+TYPICAL_INPUT_TOKENS_PER_S = 2000
+COACH_TIMEOUT_S = 180.0  # v0.11 planning: whole-game prompts are larger than v0.10's
+
 DEFAULT_RUN_CAP_USD = 0.50  # FR-8.12
 DEFAULT_MONTHLY_BUDGET_USD = 5.00  # FR-8.13
 WARN_FRACTION = 0.8  # FR-8.13: warn at 80%

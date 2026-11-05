@@ -7,7 +7,7 @@ secret in a DTO (SR-1).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from weaksquare.core.filters import FilterSpec, RatioBucket
@@ -96,6 +96,10 @@ class UiSettings:
     reasons_ask: Literal["always", "game_review", "off"]  # FR-5.8: when to ask why you missed (game_review: v0.8)
     rushed_s: int  # FR-5.9: a deciding move faster than this suggests Rushed
     show_best: bool = False  # v0.10, FR-11.35: Game Review shows the better move (default off)
+    lesson_sites: list[Literal["youtube", "chesscom", "custom"]] = field(
+        default_factory=lambda: ["youtube", "chesscom"]
+    )
+    lesson_custom_url: str = ""  # v0.11, FR-10.59: an https address with {q}
 
 
 @dataclass(frozen=True)
@@ -1027,7 +1031,7 @@ class CoachExample:
 @dataclass(frozen=True)
 class CoachWeakness:
     key: str  # missed:<theme> / allowed:<theme> / habit:<habit> / puzzle:<theme>
-    kind: Literal["missed", "allowed", "habit", "puzzle"]
+    kind: Literal["missed", "allowed", "habit", "puzzle", "opening", "endgame", "phase", "time"]
     name: str
     label: str
     count: int
@@ -1084,6 +1088,8 @@ class CoachReport:
     low_clock_errors: int
     preset: CoachPresetView | None
     notes: list[str]
+    whole_game: list[CoachWeakness] = field(default_factory=list)  # v0.11, FR-10.57
+    measures: CoachMeasures | None = None  # v0.11, FR-10.53; None for older reports
 
 
 @dataclass(frozen=True)
@@ -1115,23 +1121,170 @@ class CoachDefaults:
 
 
 @dataclass(frozen=True)
-class CoachAiNote:
-    key: str
-    label: str
-    explanation: str
-    drill: str
+class CoachOpeningRow:
+    family: str
+    games: int
+    score: float  # % (a draw counts half)
+    avg_eval_end: int | None  # your view at move 15, cp
+    errors_first15: int
+    enough: bool  # at least 5 games (FR-10.53); otherwise "not enough data yet"
 
 
 @dataclass(frozen=True)
-class CoachAi:
+class CoachEndgameRow:
+    type: str
+    label: str
+    games: int
+    wins: int
+    draws: int
+    losses: int
+    errors: int
+    enough: bool
+
+
+@dataclass(frozen=True)
+class CoachRateRow:
+    games: int
+    hits: int  # converted (won) or saved (not lost)
+    rate: float | None  # %
+    enough: bool
+
+
+@dataclass(frozen=True)
+class CoachTimeRow:
+    games: int
+    low_moves: int
+    low_errors: int
+    low_blunders: int
+    low_error_rate: float | None  # mistakes and blunders per 100 moves
+    other_moves: int
+    other_errors: int
+    other_blunders: int
+    other_error_rate: float | None
+    enough: bool
+
+
+@dataclass(frozen=True)
+class CoachKingRow:
+    games: int
+    late: int
+    late_score: float | None
+    on_time_score: float | None
+    enough: bool
+
+
+@dataclass(frozen=True)
+class CoachMeasures:
+    """FR-10.53, free: whole-game measures over the report's games."""
+
+    games: int
+    min_games: int
+    openings: list[CoachOpeningRow]
+    errors_per10_by_phase: dict[str, float]
+    conversion: CoachRateRow
+    saves: CoachRateRow
+    endgames: list[CoachEndgameRow]
+    time: CoachTimeRow
+    king: CoachKingRow
+    phases_enough: bool = False  # mistakes per phase: at least 5 games (QA v0.11-B4)
+
+
+@dataclass(frozen=True)
+class CoachAdvancedCompare:
+    """FR-10.56: an Advanced run against a standard one, for the Confirm dialog."""
+
+    games_with_moves: int
+    token_ratio: float | None
+    standard_usd: float | None
+    budget_share: float | None  # of the monthly budget
+    minutes: int
+
+
+@dataclass(frozen=True)
+class CoachAiQuote:
+    quote: GameAiQuote
+    compare: CoachAdvancedCompare | None  # Advanced only
+    cached_run: int | None  # 'cached': the stored answer that will show again, free
+
+
+@dataclass(frozen=True)
+class CoachAiRunSummary:
+    id: int
+    created_at: str
+    format: Literal["keyed", "diagnosis"]
+    advanced: bool
+    include_notes: bool
+    game_cap: int | None
+    provider: str
+    model: str
+    cost_usd: float
+    findings: int
+    new: int  # findings no earlier run of this report had
+
+
+@dataclass(frozen=True)
+class CoachEvidence:
+    label: str  # G3
+    game_id: int  # opens Game Review (FR-10.55); never sent to the AI
+    ply: int  # 0-based, as Game Review takes it
+    move: str  # "23... Nf6", from your own analysis, not from the AI
+
+
+@dataclass(frozen=True)
+class CoachLesson:
+    """FR-10.59 pointers for a topic. No URLs: the backend builds and opens them."""
+
+    topic: str
+    label: str
+    drill: CoachPresetView | None  # "Learn X"
+    curated: list[str]  # titles, opened as "curated:<index>"
+    sites: list[Literal["youtube", "chesscom", "custom"]]
+
+
+@dataclass(frozen=True)
+class CoachFinding:
+    key: str | None  # a measured weakness (tracked) or None
+    label: str | None  # that weakness's label
+    category: Literal["tactical", "strategic", "opening", "endgame", "time", "other"]
+    title: str
+    explanation: str
+    advice: str
+    tentative: bool  # fewer than 3 games cited (FR-10.55)
+    observation: bool  # can't be measured (FR-10.57)
+    seen: int  # observations: how many of your reports have found it
+    new: bool  # no earlier AI run of this report had it
+    evidence: list[CoachEvidence]
+    lesson: CoachLesson | None
+
+
+@dataclass(frozen=True)
+class CoachAiRun:
+    id: int
+    created_at: str
+    format: Literal["keyed", "diagnosis"]
+    advanced: bool
+    include_notes: bool
+    game_cap: int | None
     summary: str
-    weaknesses: list[CoachAiNote]
+    findings: list[CoachFinding]
     presets: list[CoachPresetView]
     fallback_preset: bool  # no AI preset survived validation: the report's own (FR-10.23)
     discarded: int
     provider: str
     model: str
     cost_usd: float
+
+
+@dataclass(frozen=True)
+class CoachNote:
+    """One note Include my notes would send (FR-10.60), exactly as sent."""
+
+    game: str | None  # G label, or None for a puzzle note
+    ply: int | None  # 1-based, as sent
+    move: str | None
+    reason: str | None
+    text: str
+    source: Literal["game", "retry", "puzzle", "danger"]
 
 
 @dataclass(frozen=True)
@@ -1159,7 +1312,19 @@ EXPORTED += [
     CoachReportSummary,
     PlayerSubject,
     CoachDefaults,
-    CoachAiNote,
-    CoachAi,
+    CoachOpeningRow,
+    CoachEndgameRow,
+    CoachRateRow,
+    CoachTimeRow,
+    CoachKingRow,
+    CoachMeasures,
+    CoachAdvancedCompare,
+    CoachAiQuote,
+    CoachAiRunSummary,
+    CoachEvidence,
+    CoachLesson,
+    CoachFinding,
+    CoachAiRun,
+    CoachNote,
     SuggestionView,
 ]

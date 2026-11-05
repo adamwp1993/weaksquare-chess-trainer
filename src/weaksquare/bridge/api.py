@@ -34,6 +34,7 @@ from weaksquare.core.llm.defaults import (
     TYPICAL_PROMPT_CHARS,
     PriceRow,
 )
+from weaksquare.core.preset_suggestion import validate_coach_preset
 from weaksquare.core.reasons import REASONS
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
@@ -248,6 +249,8 @@ class Api:
             reasons_ask=s.reasons_ask if s.reasons_ask in ("game_review", "off") else "always",  # type: ignore[arg-type]
             rushed_s=s.rushed_s,
             show_best=s.show_best,
+            lesson_sites=list(s.lesson_sites),  # type: ignore[arg-type]
+            lesson_custom_url=s.lesson_custom_url,
         )
 
     def _time_offset(self) -> int | None:
@@ -272,6 +275,8 @@ class Api:
             "reasons.ask",
             "reasons.rushed_s",
             "review.show_best",
+            "coach.lesson_sites",
+            "coach.lesson_custom_url",
         ],
         value: Any,
     ) -> None:
@@ -871,38 +876,136 @@ class Api:
             [dto.CoachGapRow(**g) for g in rep.get("gap") or []], dict(rep.get("reasons") or {}),
             int(rep.get("low_clock_errors") or 0),
             _preset_dto("The report's mix", preset) if isinstance(preset, dict) else None,
-            [str(n) for n in rep.get("notes") or []],
+            [str(n) for n in rep.get("notes") or []], ws("whole_game"), _measures_dto(rep.get("measures")),
         )  # fmt: skip
 
     @bridge_call
-    def get_coach_ai_quote(self, report_id: int) -> dto.GameAiQuote:
-        return _game_quote_dto(self._coach.quote_ai(report_id))
+    def get_coach_ai_quote(self, report_id: int, options: dict | None = None) -> dto.CoachAiQuote:  # type: ignore[type-arg]
+        """The estimate for Get AI coaching (FR-10.25) with this run's options (FR-10.56, 10.60)."""
+        q = self._coach.quote_ai(report_id, options)
+        c = q.compare
+        compare = (
+            dto.CoachAdvancedCompare(c.games_with_moves, c.token_ratio, c.standard_usd, c.budget_share, c.minutes)
+            if c is not None
+            else None
+        )
+        return dto.CoachAiQuote(_game_quote_dto(q.quote), compare, q.cached_run)
 
     @bridge_call
-    def start_coach_ai(self, report_id: int) -> str:
-        """Get AI coaching (FR-10.21–10.25). The UI calls this only after you Confirm the estimate."""
-        return self._coach.start_ai(report_id)
+    def start_coach_ai(self, report_id: int, options: dict | None = None) -> str:  # type: ignore[type-arg]
+        """Get AI coaching. The UI calls this only after you Confirm the estimate. Options are per run
+        and never saved (FR-10.56)."""
+        return self._coach.start_ai(report_id, options)
 
     @bridge_call
-    def get_coach_ai(self, report_id: int) -> dto.CoachAi | None:
-        found = self._coach.ai_result(report_id)
-        if found is None:
+    def get_coach_ai_job_run(self, job_id: str) -> int | None:
+        """The AI run a finished Get AI coaching job made (or showed again)."""
+        return self._coach.ai_job_run(job_id)
+
+    @bridge_call
+    def list_coach_ai_runs(self, report_id: int) -> list[dto.CoachAiRunSummary]:
+        out = []
+        for r in self._coach.ai_runs(report_id):
+            count = len(r.result.get("findings") or r.result.get("weaknesses") or [])
+            out.append(
+                dto.CoachAiRunSummary(
+                    r.id, r.created_at, r.format, r.advanced, r.include_notes, r.game_cap,  # type: ignore[arg-type]
+                    r.provider, r.model, round(r.cost_usd, 6), count, len(r.new),
+                )
+            )  # fmt: skip
+        return out
+
+    @bridge_call
+    def get_coach_ai_run(self, report_id: int, run_id: int) -> dto.CoachAiRun | None:
+        runs = self._coach.ai_runs(report_id)
+        run = next((r for r in runs if r.id == run_id), None)
+        if run is None:
             return None
-        c, meta = found
         row, _ = self._coach.report(report_id)
         labels = {
             str(w.get("key")): str(w.get("label"))
-            for g in ("missed", "allowed", "habits", "puzzles")
+            for g in ("missed", "allowed", "habits", "puzzles", "whole_game")
             for w in row.report.get(g) or []
             if isinstance(w, dict)
         }
-        return dto.CoachAi(
-            c.summary,
-            [dto.CoachAiNote(w.key, labels.get(w.key, w.key), w.explanation, w.drill) for w in c.weaknesses],
-            [dto.CoachPresetView(p.name, p.spec().to_json(), p.mode, []) for p in c.presets],
-            c.fallback_preset, c.discarded, str(meta.get("provider") or ""), str(meta.get("model") or ""),
-            float(meta.get("cost_usd") or 0.0),
+        res = run.result
+        presets = []
+        for p in res.get("presets") or []:
+            v, _ = validate_coach_preset(p)
+            if v is not None:
+                presets.append(dto.CoachPresetView(v.name, v.spec().to_json(), v.mode, []))
+        findings: list[dto.CoachFinding] = []
+        if run.format == "keyed":
+            for w in res.get("weaknesses") or []:
+                key = str(w.get("key"))
+                findings.append(
+                    dto.CoachFinding(
+                        key, labels.get(key, key), "tactical", labels.get(key, key), str(w.get("explanation") or ""),
+                        str(w.get("drill") or ""), False, False, 0, False, [], None,
+                    )
+                )  # fmt: skip
+        else:
+            games = {str(k): int(v) for k, v in (res.get("labels") or {}).items()}
+            moves: dict[int, list[str]] = {}
+            seen = list(res.get("seen") or [])
+            for i, f in enumerate(res.get("findings") or []):
+                evidence = []
+                for e in f.get("evidence") or []:
+                    gid = games.get(str(e.get("game")))
+                    ply = int(e.get("ply") or 0) - 1
+                    if gid is None or ply < 0:
+                        continue
+                    sans = moves.setdefault(gid, self._coach.move_labels(gid))
+                    if ply < len(sans):
+                        evidence.append(dto.CoachEvidence(str(e["game"]), gid, ply, sans[ply]))
+                key = f.get("key")
+                topic = f.get("topic")
+                lesson = self._lesson_dto(report_id, topic) if isinstance(topic, str) else None
+                findings.append(
+                    dto.CoachFinding(
+                        key, labels.get(key) if key else None, f.get("category") or "other", str(f.get("title") or ""),
+                        str(f.get("explanation") or ""), str(f.get("advice") or ""), bool(f.get("tentative")),
+                        key is None, int(seen[i]) if i < len(seen) else 0, i in run.new, evidence, lesson,
+                    )
+                )  # fmt: skip
+        return dto.CoachAiRun(
+            run.id, run.created_at, run.format, run.advanced, run.include_notes, run.game_cap,  # type: ignore[arg-type]
+            str(res.get("summary") or ""), findings, presets, bool(res.get("fallback_preset")),
+            int(res.get("discarded") or 0), run.provider, run.model, round(run.cost_usd, 6),
         )  # fmt: skip
+
+    def _lesson_dto(self, report_id: int, topic: str) -> dto.CoachLesson | None:
+        lv = self._coach.lesson(report_id, topic)
+        if lv is None:
+            return None
+        drill = None
+        if lv.drill is not None:
+            v, _ = validate_coach_preset(lv.drill)
+            if v is not None:
+                drill = dto.CoachPresetView(v.name, v.spec().to_json(), v.mode, [])
+        return dto.CoachLesson(lv.topic, lv.label, drill, list(lv.curated), list(lv.sites))  # type: ignore[arg-type]
+
+    @bridge_call
+    def get_coach_notes_preview(self, report_id: int) -> list[dto.CoachNote]:
+        """FR-10.60: exactly the notes Include my notes would send."""
+        row, _ = self._coach.report(report_id)
+        out = []
+        games: dict[str, int] = {}
+        if row.game_ids:
+            games = {f"G{n}": gid for n, (gid, _) in enumerate(self._coach.digests(row.game_ids, row.subject), start=1)}
+        for n in self._coach.notes_preview(report_id):
+            move = None
+            if n.game in games and n.ply is not None:
+                sans = self._coach.move_labels(games[n.game])
+                move = sans[n.ply - 1] if 0 < n.ply <= len(sans) else None
+            out.append(dto.CoachNote(n.game, n.ply, move, n.reason, n.text, n.source))  # type: ignore[arg-type]
+        return out
+
+    @bridge_call
+    def open_lesson(self, report_id: int, topic: str, target: str) -> None:
+        """FR-10.59: open a lesson pointer in your default browser. The screen sends only the topic and
+        the target; the URL is built and checked here."""
+        self._desktop.open_in_browser(self._coach.lesson_url(report_id, topic, target))
 
     @bridge_call
     def get_suggestion(self) -> dto.SuggestionView | None:
@@ -1081,6 +1184,22 @@ def _weakness_dto(w: dict[str, Any], trend: dict[str, float], has_prev: bool) ->
         [dto.CoachExample(int(e["game_id"]), int(e["ply"]), int(e["cp_loss"])) for e in w.get("examples") or []],
         w.get("puzzle_accuracy"), trend.get(key) if has_prev else None,
     )  # fmt: skip
+
+
+def _measures_dto(m: Any) -> dto.CoachMeasures | None:
+    """FR-10.53 as stored on a v0.11 report; None for older reports or anything malformed."""
+    if not isinstance(m, dict):
+        return None
+    try:
+        return dto.CoachMeasures(
+            int(m["games"]), int(m.get("min_games") or 5), [dto.CoachOpeningRow(**o) for o in m.get("openings") or []],
+            {str(k): float(v) for k, v in (m.get("errors_per10_by_phase") or {}).items()},
+            dto.CoachRateRow(**m["conversion"]), dto.CoachRateRow(**m["saves"]),
+            [dto.CoachEndgameRow(**e) for e in m.get("endgames") or []], dto.CoachTimeRow(**m["time"]),
+            dto.CoachKingRow(**m["king"]), bool(m.get("phases_enough")),
+        )  # fmt: skip
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _preset_dto(name: str, p: dict[str, Any]) -> dto.CoachPresetView:

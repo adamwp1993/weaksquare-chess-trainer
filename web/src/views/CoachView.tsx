@@ -1,15 +1,14 @@
 // v0.10 The Coach (REQUIREMENTS §10.1–10.6): run settings, a run with progress and cancel, the free
 // report (Missed / Allowed themes, habits, mistake reasons, examples, puzzle history, the gap table,
 // the trend and the preset), saved reports, and optional AI coaching behind the estimate and Confirm.
+// v0.11 (§10.11): the whole-game measures and weaknesses, and the whole-game AI diagnosis (CoachAiPanel).
 // Every text from the backend (and the AI) is plain React text, never HTML.
 import {
   Alert,
-  Badge,
   Button,
   Chip,
   Grid,
   Group,
-  Modal,
   Paper,
   Progress,
   SegmentedControl,
@@ -24,11 +23,10 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { CoachParams, TrainingMode } from "../api/ApiClient";
-import type { CoachAi, CoachPresetView, CoachReport, CoachReportSummary, CoachWeakness, FilterSpec, GameAiQuote } from "../api/types";
-import { FeatureModelPicker } from "../components/FeatureModelPicker";
-import { EstimateLines } from "../components/GameAiPanel";
-import { dollars, useLlmSettings } from "../state/llm";
-import { modeLabel } from "../state/modes";
+import type { CoachReport, CoachReportSummary, CoachWeakness, FilterSpec } from "../api/types";
+import { CoachAiPanel } from "../components/CoachAiPanel";
+import { PresetBox } from "../components/CoachPresetBox";
+import { WholeGameMeasures } from "../components/WholeGameMeasures";
 import { useJob } from "../state/useJob";
 
 const SOURCES = [
@@ -45,7 +43,6 @@ const REASON_LABEL: Record<string, string> = {
   rushed: "rushed",
   misclick: "misclick",
 };
-const BLOCKED = new Set(["not_configured", "no_model", "no_price", "over_budget", "over_cap"]);
 
 function reasons(r: Record<string, number>): string {
   const total = Object.values(r).reduce((a, b) => a + b, 0);
@@ -119,182 +116,6 @@ function WeaknessTable({
   );
 }
 
-function PresetBox({
-  p,
-  testid,
-  onLoad,
-}: {
-  p: CoachPresetView;
-  testid: string;
-  onLoad: (spec: FilterSpec, mode: TrainingMode) => void;
-}) {
-  const [saved, setSaved] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const spec = p.spec as unknown as FilterSpec;
-  return (
-    <Paper withBorder p="sm" data-testid={testid}>
-      <Stack gap={6}>
-        <Group justify="space-between">
-          <Text fw={600} size="sm">
-            {p.name}
-          </Text>
-          <Badge variant="light">{modeLabel(p.mode as TrainingMode)}</Badge>
-        </Group>
-        {p.why.length > 0 && (
-          <Stack gap={2} data-testid={`${testid}-why`}>
-            {p.why.map((line, i) => (
-              <Text key={i} size="xs">
-                {line}
-              </Text>
-            ))}
-          </Stack>
-        )}
-        <Group gap="xs">
-          <Button size="xs" onClick={() => onLoad(spec, p.mode as TrainingMode)} data-testid={`${testid}-load`}>
-            Load preset
-          </Button>
-          <Button
-            size="xs"
-            variant="default"
-            onClick={() =>
-              api.savePreset(p.name, spec, false).then(
-                () => setSaved(`Saved as “${p.name}”.`),
-                (e: Error) => setError(e.message),
-              )
-            }
-            data-testid={`${testid}-save`}
-          >
-            Save as preset
-          </Button>
-        </Group>
-        {saved && <Text size="xs" c="dimmed">{saved}</Text>}
-        {error && <Text size="xs" c="red">{error}</Text>}
-      </Stack>
-    </Paper>
-  );
-}
-
-function AiCoaching({
-  report,
-  onLoad,
-}: {
-  report: CoachReport;
-  onLoad: (spec: FilterSpec, mode: TrainingMode) => void;
-}) {
-  const settings = useLlmSettings();
-  const feature = settings?.features.find((f) => f.feature === "coach");
-  const [quote, setQuote] = useState<GameAiQuote | null>(null);
-  const [ai, setAi] = useState<CoachAi | null>(null);
-  const [confirm, setConfirm] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const job = useJob(jobId);
-
-  useEffect(() => {
-    let alive = true;
-    api.getCoachAiQuote(report.id).then((q) => alive && setQuote(q), (e: Error) => alive && setError(e.message));
-    api.getCoachAi(report.id).then((x) => alive && setAi(x), () => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [report.id, settings]);
-  useEffect(() => {
-    if (job?.state === "done") api.getCoachAi(report.id).then(setAi, (e: Error) => setError(e.message));
-  }, [job?.state, job?.id, report.id]);
-
-  const run = async () => {
-    setConfirm(false);
-    setError(null);
-    try {
-      setJobId(await api.startCoachAi(report.id));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  const blocked = !quote || BLOCKED.has(quote.state);
-  const running = job?.state === "running";
-  return (
-    <Paper withBorder p="sm" data-testid="coach-ai">
-      <Stack gap="xs">
-        <Group justify="space-between">
-          <Title order={5}>AI coaching (optional)</Title>
-          {feature && (
-            <Text size="xs" c="dimmed">
-              {feature.effective_model || "no model"}
-            </Text>
-          )}
-        </Group>
-        {/* Adam, v0.10 manual test: the Coach's model is picked here too (the same setting as Settings → AI). */}
-        <FeatureModelPicker feature="coach" compact onError={setError} />
-        {(!ai || (feature?.effective_model && ai.model !== feature.effective_model)) && (
-          <Group>
-            <Button
-              size="xs"
-              color="indigo"
-              disabled={blocked || running}
-              loading={running}
-              onClick={() => (quote?.state === "cached" ? run() : setConfirm(true))}
-              data-testid="coach-ai-start"
-            >
-              {ai ? `Ask ${feature?.effective_model} instead` : "Get AI coaching"}
-            </Button>
-            {quote && blocked && <Text size="xs" c="dimmed">{quote.message}</Text>}
-          </Group>
-        )}
-        {running && job && <Text size="xs" c="dimmed">{job.message}</Text>}
-        {(error ?? (job?.state === "failed" ? job.message : null)) && (
-          <Alert color="red" data-testid="coach-ai-error">
-            {error ?? job?.message}
-          </Alert>
-        )}
-        {ai && (
-          <Stack gap="xs" data-testid="coach-ai-result">
-            <Text size="sm">{ai.summary}</Text>
-            {ai.weaknesses.map((w) => (
-              <Paper key={w.key} withBorder p="xs">
-                <Text size="sm" fw={600}>
-                  {w.label}
-                </Text>
-                <Text size="sm">{w.explanation}</Text>
-                <Text size="sm" c="dimmed">
-                  Drill: {w.drill}
-                </Text>
-              </Paper>
-            ))}
-            {ai.fallback_preset && (
-              <Text size="xs" c="dimmed">The AI's presets weren't usable, so this is the report's own mix.</Text>
-            )}
-            {ai.presets.map((p, i) => (
-              <PresetBox key={i} p={p} testid={`coach-ai-preset-${i}`} onLoad={onLoad} />
-            ))}
-            <Text size="xs" c="dimmed">
-              {ai.model} · {dollars(ai.cost_usd)}
-            </Text>
-          </Stack>
-        )}
-      </Stack>
-      <Modal opened={confirm && !!quote && quote.state === "ok"} onClose={() => setConfirm(false)} title="Get AI coaching?" data-testid="coach-ai-confirm">
-        {quote && (
-          <Stack>
-            <EstimateLines
-              q={quote}
-              sends="It sends this report's numbers and a few example positions (FEN and moves only): no names, usernames, dates, links or clocks."
-            />
-            <Group justify="flex-end">
-              <Button variant="default" onClick={() => setConfirm(false)}>
-                Cancel
-              </Button>
-              <Button color="indigo" onClick={run} data-testid="coach-ai-confirm-button">
-                Confirm
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
-    </Paper>
-  );
-}
-
 function ReportView({
   report,
   onExample,
@@ -338,6 +159,8 @@ function ReportView({
       <WeaknessTable title="Tactics you allowed" items={r.allowed} testid="coach-allowed" onExample={onExample} />
       <WeaknessTable title="Tactics you missed" items={r.missed} testid="coach-missed" onExample={onExample} />
       <WeaknessTable title="Habits" items={r.habits} testid="coach-habits" onExample={onExample} />
+      <WeaknessTable title="Whole-game weaknesses" items={r.whole_game} testid="coach-whole-game" onExample={onExample} />
+      {r.measures && <WholeGameMeasures m={r.measures} />}
       {r.puzzles.length > 0 && (
         <Stack gap={4} data-testid="coach-puzzles">
           <Title order={5}>Puzzle themes you fail most</Title>
@@ -377,7 +200,7 @@ function ReportView({
         <Text size="sm" c="dimmed">No tagged tactical mistakes in these games. Well played.</Text>
       )}
       {r.preset && <PresetBox p={r.preset} testid="coach-preset" onLoad={onLoad} />}
-      <AiCoaching report={r} onLoad={onLoad} />
+      <CoachAiPanel report={r} onLoad={onLoad} onEvidence={onExample} />
     </Stack>
   );
 }
@@ -567,7 +390,7 @@ export function CoachView({
               )}
               <Select
                 label="AI detail level"
-                description="Only matters if you ask for AI coaching: Summary sends about 5k tokens, Detailed about 20k."
+                description="Only matters if you ask for AI coaching: Summary sends 3 key moments per game, Detailed 5 and more examples."
                 value={params.detail}
                 onChange={(v) => set({ detail: (v as CoachParams["detail"]) ?? "summary" })}
                 data={[

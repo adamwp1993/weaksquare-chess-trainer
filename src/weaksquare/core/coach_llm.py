@@ -23,6 +23,7 @@ from typing import Any
 import chess
 
 from weaksquare.core.preset_suggestion import COACH_MODES, CoachPreset, preset_themes, validate_coach_preset
+from weaksquare.core.urls import strip_urls
 
 SCHEMA_NAME = "coach"
 SUMMARY_EXAMPLES = 12
@@ -215,7 +216,7 @@ class Coaching:
 def _text(v: Any, limit: int) -> str | None:
     if not isinstance(v, str):
         return None
-    t = " ".join(v.split())
+    t = " ".join(strip_urls(v).split())  # QA v0.11-B1: never a URL the LLM wrote
     return t[:limit] if t else None
 
 
