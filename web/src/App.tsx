@@ -17,13 +17,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { TrainingMode } from "./api/ApiClient";
 import type {
+  CoachLesson,
   FilterSpec,
+  PlanTask,
+  PlanTaskAction,
   PuzzleDbStatus,
   SoundSettings,
   SuggestionView,
   ThemeGroup,
+  TodayPlan,
   UpdateOffer,
 } from "./api/types";
+import type { JournalDraft } from "./components/JournalTab";
+import { LessonTaskModal } from "./components/LessonTaskModal";
+import { TodayCard } from "./components/TodayCard";
 import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
 import { SpendIndicator } from "./components/SpendIndicator";
@@ -35,7 +42,7 @@ import { useLichess } from "./state/lichess";
 import { useJob } from "./state/useJob";
 import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
-import { CoachView } from "./views/CoachView";
+import { CoachView, type CoachTab } from "./views/CoachView";
 import { GamesView } from "./views/GamesView";
 import { ImportGameDialog } from "./views/ImportGameDialog";
 import { ImportPuzzlesDialog } from "./views/ImportPuzzlesDialog";
@@ -67,8 +74,20 @@ export function App() {
     | { kind: "trainer" }
     | { kind: "games" }
     | { kind: "coach" }
-    | { kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" }
-  >({ kind: "trainer" });
+    | {
+        kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" | "trainer";
+        retry?: boolean; hideBest?: boolean;
+      }
+  >({ kind: "trainer" }); // prettier-ignore
+  // v0.12 (§10.12): the Coach's tab, the plan shared by its Plan tab and the Today card, and what a task's Start opened.
+  const [coachTab, setCoachTab] = useState<CoachTab>("report");
+  const [today, setToday] = useState<TodayPlan | null>(null);
+  const [planVersion, setPlanVersion] = useState(0);
+  const planChanged = useCallback(() => setPlanVersion((v) => v + 1), []);
+  const [planSession, setPlanSession] = useState<{ title: string; remaining: number | null } | null>(null);
+  const [lessonTask, setLessonTask] = useState<{ id: number; lesson: CoachLesson } | null>(null);
+  const [journalDraft, setJournalDraft] = useState<JournalDraft | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
   const [sendIds, setSendIds] = useState<number[]>([]); // Send to Coach (FR-11.30)
   const [suggestion, setSuggestion] = useState<SuggestionView | null>(null); // FR-10.28–10.31
   const [catalog, setCatalog] = useState<ThemeGroup[]>([]);
@@ -216,6 +235,7 @@ export function App() {
     setStarting(true);
     setStartError(null);
     setStartNotice(null);
+    setPlanSession(null); // a session of your own: back to your filters and mode
     try {
       const info = await api.startSession(forMode(spec, asMode), rated, asMode, showLength);
       setSessionId(info.session_id);
@@ -235,6 +255,39 @@ export function App() {
       setStarting(false);
     }
   };
+
+  // FR-10.65: ticks come from what the app saw, so the plan is read again whenever something may have happened.
+  useEffect(() => {
+    if (!started) return;
+    api.getTodayPlan().then(setToday, () => undefined);
+  }, [started, planVersion, historyVersion, page]);
+
+  const sessionFromTask = useCallback((a: PlanTaskAction, title: string) => {
+    if (!a.session) return;
+    setSessionId(a.session.session_id);
+    setPlanSession({ title, remaining: a.remaining });
+    setPage({ kind: "trainer" });
+  }, []);
+
+  // FR-10.63: Start opens the task's screen. A puzzle task's session never goes through your filters or mode.
+  const startPlanTask = useCallback(
+    (task: PlanTask) => {
+      setPlanError(null);
+      const back = page.kind === "coach" ? ("coach" as const) : ("trainer" as const);
+      api.startPlanTask(task.id, rated).then((a) => {
+        if (a.kind === "session") sessionFromTask(a, task.title);
+        else if ((a.kind === "retry" || a.kind === "review") && a.game_id !== null) {
+          setPage({ kind: "review", gameId: a.game_id, from: back, retry: a.kind === "retry", hideBest: a.kind === "review" });
+        } else if (a.kind === "lesson" && a.lesson) setLessonTask({ id: task.id, lesson: a.lesson });
+        else if (a.kind === "reflection") {
+          setJournalDraft({ prompt: a.prompt, game_id: a.game_id, weakness_key: a.weakness_key, plan_day_id: a.plan_day_id, plan_task_id: task.id });
+          setCoachTab("journal");
+          setPage({ kind: "coach" });
+        }
+      }, (e: Error) => setPlanError(e.message)); // prettier-ignore
+    },
+    [page.kind, rated, sessionFromTask],
+  );
 
   // §6: switching mode while a session is running starts a new one in that mode, like Start.
   // If the new session can't start (e.g. nothing is due), the mode stays as it was and the running
@@ -361,15 +414,24 @@ export function App() {
               setPage({ kind: "trainer" });
             }}
             onRunDone={reloadFilters}
+            tab={coachTab}
+            onTab={setCoachTab}
+            planVersion={planVersion}
+            onPlanChanged={planChanged}
+            onStartTask={startPlanTask}
+            journalDraft={journalDraft}
+            onClearDraft={() => setJournalDraft(null)}
           />
         )}
         {page.kind === "review" && (
           <ReviewView
-            key={`${page.gameId}:${page.ply ?? ""}`}
+            key={`${page.gameId}:${page.ply ?? ""}:${page.retry ? "r" : ""}${page.hideBest ? "h" : ""}`}
             gameId={page.gameId}
             initialPly={page.ply}
-            backLabel={page.from === "coach" ? "← Coach" : "← My games"}
-            onBack={() => setPage({ kind: page.from === "coach" ? "coach" : "games" })}
+            startRetry={page.retry ?? false}
+            hideBest={page.hideBest ?? false}
+            backLabel={page.from === "coach" ? "← Coach" : page.from === "trainer" ? "← Puzzles" : "← My games"}
+            onBack={() => setPage({ kind: page.from === "coach" ? "coach" : page.from === "trainer" ? "trainer" : "games" })}
             coordinates={coordinates}
             autoExplain={page.explain ?? false}
             onTrain={(p) => {
@@ -402,6 +464,27 @@ export function App() {
                     Sign in again
                   </Button>
                 </Group>
+              </Alert>
+            </Grid.Col>
+          )}
+          {today && (
+            <Grid.Col span={12}>
+              <TodayCard
+                today={today}
+                compact={sessionId !== null}
+                onChanged={planChanged}
+                onStart={startPlanTask}
+                onOpenPlan={() => {
+                  setCoachTab("plan");
+                  setPage({ kind: "coach" });
+                }}
+              />
+            </Grid.Col>
+          )}
+          {planError && (
+            <Grid.Col span={12}>
+              <Alert color="red" withCloseButton onClose={() => setPlanError(null)} data-testid="plan-start-error">
+                {planError}
               </Alert>
             </Grid.Col>
           )}
@@ -490,6 +573,11 @@ export function App() {
                 {startError}
               </Alert>
             )}
+            {planSession && sessionId !== null && (
+              <Alert color="blue" mb="sm" p="xs" data-testid="plan-session-banner">
+                Plan task: {planSession.title}. This session uses the task's own filters and mode; yours are unchanged.
+              </Alert>
+            )}
             {sessionId === null ? (
               <Paper withBorder p="xl" radius="md">
                 <Text c="dimmed">
@@ -502,7 +590,10 @@ export function App() {
               <TrainerView
                 key={sessionId}
                 sessionId={sessionId}
-                onNewSession={() => setSessionId(null)}
+                onNewSession={() => {
+                  setSessionId(null);
+                  setPlanSession(null);
+                }}
                 onHistoryChange={historyChanged}
                 coordinates={coordinates}
                 wide={collapsed}
@@ -637,6 +728,16 @@ export function App() {
         onClose={() => setPuzzlesOpen(false)}
         onDone={historyChanged}
       />
+      {lessonTask && (
+        <LessonTaskModal
+          taskId={lessonTask.id}
+          lesson={lessonTask.lesson}
+          rated={rated}
+          onClose={() => setLessonTask(null)}
+          onChanged={planChanged}
+          onSession={(a) => sessionFromTask(a, `Lesson drill: ${lessonTask.lesson.label}`)}
+        />
+      )}
       <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
       <ShortcutsHelp
         opened={shortcutsOpen}

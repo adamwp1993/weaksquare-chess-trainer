@@ -12,6 +12,7 @@ import {
 import { useMemo, useState } from "react";
 import type { LadderInfo, OpeningFamily } from "../api/types";
 import { LENGTH_OPTIONS } from "../state/filters";
+import { Labeled, OptionInfo } from "./OptionInfo";
 
 // A number box that only commits on blur or Enter, so typing "1600" isn't clamped keystroke by
 // keystroke (v0.1-B3). Re-mounted (via `key`) whenever the committed value changes elsewhere.
@@ -68,9 +69,10 @@ export function RatingSlider({
   const vmax = max ?? hi;
   const emit = (a: number, b: number) => onChange(a <= lo ? null : a, b >= hi ? null : b);
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-option-group>
       <Text size="sm" fw={500}>
         Rating
+        <OptionInfo id="filters.rating" />
       </Text>
       <RangeSlider
         min={lo}
@@ -117,9 +119,10 @@ export function MoveCountSelect({
 }) {
   const all = value.length === 0 || value.length === LENGTH_OPTIONS.length;
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-option-group>
       <Text size="sm" fw={500}>
         Number of moves
+        <OptionInfo id="filters.lengths" />
       </Text>
       {setByLadder && (
         <Text size="xs" c="dimmed" data-testid="lengths-by-ladder">
@@ -164,9 +167,10 @@ export function SideSelect({
   onChange: (side: "either" | "white" | "black") => void;
 }) {
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-option-group>
       <Text size="sm" fw={500}>
         You play
+        <OptionInfo id="filters.side" />
       </Text>
       <SegmentedControl
         size="xs"
@@ -188,7 +192,7 @@ export function QueueControls({ value, onChange }: { value: number | null; onCha
   return (
     <Group align="end" gap="sm">
       <NumberInput
-        label="Puzzles"
+        label={<Labeled id="filters.count">Puzzles</Labeled>}
         size="xs"
         w={100}
         min={1}
@@ -197,7 +201,7 @@ export function QueueControls({ value, onChange }: { value: number | null; onCha
         value={value ?? 20}
         onChange={(v) => typeof v === "number" && v >= 1 && v <= 500 && onChange(v)}
       />
-      <Switch label="Endless" checked={endless} onChange={(e) => onChange(e.currentTarget.checked ? null : 20)} mb={6} />
+      <Switch label={<Labeled id="filters.endless">Endless</Labeled>} checked={endless} onChange={(e) => onChange(e.currentTarget.checked ? null : 20)} mb={6} />
     </Group>
   );
 }
@@ -261,9 +265,10 @@ export function QualityControls({
   onChange: (minPopularity: number | null, minPlays: number | null) => void;
 }) {
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-option-group>
       <Text size="sm" fw={500}>
         Quality
+        <OptionInfo id="filters.quality" />
       </Text>
       <Group grow gap="xs" align="start">
         <OptionalNumberInput
@@ -324,7 +329,7 @@ export function HistoryControls({
       </Text>
       <Checkbox
         size="xs"
-        label="Exclude solved here"
+        label={<Labeled id="filters.excludeSolved">Exclude solved here</Labeled>}
         description={onlyMisses ? "Not needed while Only my misses is on." : "Puzzles you only failed can still come up."}
         checked={excludeSolved && !onlyMisses}
         disabled={onlyMisses}
@@ -333,7 +338,7 @@ export function HistoryControls({
       />
       <Checkbox
         size="xs"
-        label="Only my misses"
+        label={<Labeled id="filters.onlyMisses">Only my misses</Labeled>}
         description="Puzzles whose last attempt here was a fail."
         checked={onlyMisses}
         onChange={(e) => onChange(excludeSolved, e.currentTarget.checked)}
@@ -341,7 +346,7 @@ export function HistoryControls({
       />
       <Checkbox
         size="xs"
-        label="Exclude played on Lichess"
+        label={<Labeled id="filters.excludePlayed">Exclude played on Lichess</Labeled>}
         description={playedNote}
         checked={excludePlayed && !onlyMisses && playedCount !== null}
         disabled={onlyMisses || playedCount === null}
@@ -379,7 +384,7 @@ export function OpeningSelect({
   }, [catalog]);
   return (
     <MultiSelect
-      label="Openings"
+      label={<Labeled id="filters.openings">Openings</Labeled>}
       size="xs"
       placeholder={value.length === 0 ? "Any opening" : undefined}
       data={data}
@@ -426,9 +431,10 @@ export function OrderSelect({
   ladderAllowed?: boolean;
 }) {
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-option-group>
       <Text size="sm" fw={500}>
         Order
+        <OptionInfo id="filters.order" />
       </Text>
       <SegmentedControl
         size="xs"

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { ApiCallError } from "../api/ApiClient";
 import type { FilterSpec, Preset } from "../api/types";
+import { Labeled } from "./OptionInfo";
 
 type Dialog = { kind: "save" } | { kind: "rename"; name: string } | { kind: "delete"; name: string } | null;
 
@@ -81,7 +82,7 @@ export function PresetMenu({ spec, onLoad }: { spec: FilterSpec; onLoad: (spec: 
     <Stack gap={4}>
       <Group gap="xs" align="end" wrap="nowrap">
         <Select
-          label="Preset"
+          label={<Labeled id="preset.load">Preset</Labeled>}
           size="xs"
           placeholder="Load a preset"
           data={presets.map((p) => ({ value: p.name, label: p.spec ? p.name : `${p.name} (can't be used)` }))}
@@ -194,6 +195,7 @@ export function PresetMenu({ spec, onLoad }: { spec: FilterSpec; onLoad: (spec: 
              title={dialog?.kind === "rename" ? "Rename preset" : "Save these filters as a preset"}>
         <Stack gap="sm">
           <TextInput
+            data-no-tip="a name you type"
             label="Name"
             value={name}
             maxLength={60}

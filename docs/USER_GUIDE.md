@@ -17,7 +17,9 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   AI explanations and what they cost .......................... v0.7
   Your game library and Game Review ........................... v0.8, v0.9
   Importing your own puzzles .................................. v0.8
-  The Coach ................................................... v0.10, v0.11
+  The Coach ................................................... v0.10, v0.11, v0.12
+  Your training plan .......................................... v0.12
+  Your training journal ....................................... v0.12
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
   The About screen ............................................ v0.1
@@ -49,6 +51,8 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
     - **Get AI coaching** (v0.10, the Coach) sends one report: its numbers (how often each weakness happened per 10 games, how much it cost, your mistake-reason counts, the puzzles-vs-games table, your puzzle accuracy per theme) and 12 example positions (20 at **Detailed**), each as a position (FEN), the move played, Stockfish's best line and its themes, labelled E1, E2 and so on. **No player names or usernames, no dates, links, clocks, game IDs or PGNs** are sent, whoever the report is about. It also sends the list of puzzle themes the model may recommend from.
       - *From v0.11*, a **standard run** on a report with games also sends the whole-game measures and one summary per game, labelled G1, G2…: which color you played, the result, the opening's name and ECO code, the number of moves, when each side castled, your development by move 10, the pawn structure at move 15, trades made while ahead or behind, the eval at move 15, mistakes per phase, the endgame type, whether you held +2 or −2, your mistakes under 10% of your clock, and 3 key moments (5 at **Detailed**), each as a position (FEN), the move with its number and the best move in SAN, the evals, the grade, Missed or Allowed, its Lichess themes, the reason you picked for it (for example *didn't look*), and your clock as a **percentage** of your starting time, never the clock itself. The report's numbers still include the puzzles-vs-games table. Example positions carry their game label and move number. It also sends the list of lesson topics the AI may pick from. Still no names, usernames, ratings, dates, links, raw clocks, comments, game IDs or PGNs.
+      - *From v0.12*, on your own reports, it also sends **how your plan is going**, as numbers only: tasks done and skipped per type and weakness, minutes, and puzzle accuracy per theme. It sends your plan's shape (weeks, days a week, minutes a day). On any report with an earlier one, it also sends **Since last report**, as numbers only: weakness keys and their rates per report, labelled *this report*, *1 report ago* and so on, with the days between them. No games, positions or text from earlier reports. The AI's plan is checked task by task on your PC.
+      - **Include my journal** (v0.12, off unless you tick it) also sends your journal entries on the report's games and from its period on, **as written**, with web addresses removed: the newest 30, up to 1,000 characters each, shown to you first. A game goes as its G label or not at all, never as a game ID or link, and no entry date is sent. A name you typed yourself goes too, so edit the entry first if you'd rather it didn't. Your journal otherwise stays on this PC.
       - **Advanced analysis** (v0.11, off unless you tick it) also sends the moves of up to your chosen number of games (10–50) in SAN only, rebuilt by the app from the moves, so no PGN headers, clocks or comments.
       - **Include my notes** (v0.11, off unless you tick it) also sends your mistake-reason notes, exactly as listed in its preview, with web addresses removed.
     - What each request cost is kept in `user.db`, on this PC only.
@@ -63,6 +67,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Another player's games:** when you enter someone's username, the app fetches that player's **public** games: from lichess.org (`/api/games/user/<name>`, with your sign-in when you're signed in, which Lichess allows at a faster rate) or from their chess.com monthly archives, one request at a time. They're stored in `user.db` with their own label.
     - **Your Lichess puzzle dashboard:** with the **Puzzle history** or **Both** source and while you're signed in, the app reads your per-theme puzzle results for the last 30 days from lichess.org (`/api/puzzle/dashboard/30`). Nothing is sent but the request.
     - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
+    - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -775,7 +780,7 @@ Every time one of your games is analyzed (from the Coach, **Analyze selected** o
 ## The Coach
 *Added in v0.10.*
 
-The Coach looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
+The Coach has three tabs: **Report** (this chapter), [**Plan**](#your-training-plan) and [**Journal**](#your-training-journal). It looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
 
 ### Running the Coach
 ![The Coach](img/coach-report.png)
@@ -799,6 +804,24 @@ To coach a hand-picked set of games, tick them in **My games** and press **Send 
 - **Saved reports** are listed on the left. Click one to see it again.
 
 Only your own moves count, and the first six moves (the opening) aren't counted in the tactics tables.
+
+### Since last report
+*Added in v0.12.*
+
+![Since last report](img/coach-since-last-report.png)
+
+Every report after your first compares itself with your previous one of the same kind, so you can see whether the work is paying off. Another player's reports only ever compare with that player's, and a report on your puzzle history compares only with other puzzle-history reports.
+
+- **Each weakness** in either report: its rate per 10 games then and now, marked **New** (not in the last report) or **Gone** (no longer in the top list).
+- **Better or worse** only when both reports have at least 5 games and at least 5 of this report's games are new. Otherwise it says *not enough new games yet*, however big the change looks.
+- **Last N reports:** from your third report on, the trend across up to your 5 latest.
+- **Puzzles on its themes:** your first-try accuracy on that weakness's themes, up to the last report and since. Each side needs at least 10 attempts.
+- **Overall:** blunders, mistakes and inaccuracies per 10 games, and the whole-game measures both reports have.
+
+**Gotchas:**
+- If the two reports share games, it says how many. Overlapping reports change less, so run the Coach after playing some new games.
+- Reports made with different analysis settings (think time or thresholds) are flagged, because their rates aren't directly comparable. Reports from before v0.12 didn't record their settings, so they say so.
+- It describes the change. It doesn't decide whether a weakness is fixed.
 
 ### Whole-game measures
 *Added in v0.11.*
@@ -833,14 +856,14 @@ After each Coach run on your games, the app builds a **Suggested mix** and, if y
 - **It never overwrites your choices.** If you've changed your filters since the last suggestion, a banner appears instead: **Apply** uses the new mix, **Compare** shows your filters next to it, and **Dismiss** keeps yours.
 
 ### AI coaching (optional)
-*Changed in v0.11.*
+*Changed in v0.12.*
 
 ![AI coaching](img/coach-ai-diagnosis.png)
 
 Under a report, **Get AI coaching** sends its numbers, the game summaries and a few example positions to the AI, which acts as a tutor. You get a short summary, 3–8 weaknesses across tactics, strategy, openings, endgames and time (and anything else it can show, not only those), and 1–3 puzzle presets you can **Load** or **Save**.
 1. Pick its model right in the AI coaching box, or in **Settings → AI → Coach**: it's the same setting (**Same as Explain** by default).
 2. Before the run, the **AI detail level**: **Summary** (3 key moments per game, 12 example positions) or **Detailed** (5 key moments per game, 20 positions with the moves before each).
-3. Optionally tick **Advanced analysis** or **Include my notes** (below). Both are off every time you open a report.
+3. Optionally tick **Advanced analysis**, **Include my notes** or **Include my journal** (below). All are off every time you open a report.
 4. Press **Get AI coaching**, read the estimate and press **Confirm**.
 
 **Each weakness:**
@@ -850,7 +873,11 @@ Under a report, **Get AI coaching** sends its numbers, the game summaries and a 
 - **Tentative** when it rests on fewer than 3 games.
 - **Learn it:** see [Lesson pointers](#lesson-pointers).
 
-**Every answer is kept.** A report can have several AI answers: standard, Advanced, with notes, on different models. **Answers for this report** switches between them, and findings that no earlier answer had are marked **New in this run**. Asking again with the same options and model shows the saved answer for free (**Show the saved answer**).
+*Added in v0.12:*
+- **Since last report:** with an earlier report, the AI says what improved, what got worse and whether earlier advice seems to be working. A statement that disagrees with [the numbers](#since-last-report) is left out, so it can't call something better than it is.
+- **The AI's training plan,** in the shape of the settings on your [Plan](#your-training-plan) tab, which the AI box repeats before you ask. Each task is checked: an unknown theme, mode, game or topic is left out, and the [free plan](#your-training-plan) fills what's left of that day. The line above it says how many tasks came from each. **Compare with the free plan** shows them side by side. **Use this plan** makes it your plan, starting on your next training day; if you already have one, it asks first.
+
+**Every answer is kept.** A report can have several AI answers: standard, Advanced, with notes, on different models. An answer from before v0.12 has no plan, so asking on that report makes a new run. **Answers for this report** switches between them, and findings that no earlier answer had are marked **New in this run**. Asking again with the same options and model shows the saved answer for free (**Show the saved answer**).
 
 The AI's presets are checked like any filter: unknown themes and impossible values are dropped, and if none is usable you get the report's own mix. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply, and the estimate before **Confirm** shows the real cost. For what it sends, see [Your data and privacy](#your-data-and-privacy). Reports on your puzzle history only (no games) get the v0.10 coaching, without these options.
 
@@ -874,6 +901,17 @@ Your [mistake-reason](#mistake-reasons) notes often say what you were thinking. 
 - Web addresses in your notes (links like `https://…`, `www.…`, `youtu.be/…` or `bit.ly/…`) are removed before the preview and before sending.
 - It's off every time you open a report. It's only offered on your own reports.
 
+### Include my journal
+*Added in v0.12.*
+
+![What will be sent](img/coach-journal-preview.png)
+
+**Include my journal** adds your [journal](#your-training-journal) notes and reflections to the request: those on the report's games, and those dated from the report's first game on, the newest 30, up to 1,000 characters each.
+- Ticking it opens a preview of exactly the words that go, each with its game label and move. **Don't include them** unticks it. With **Include my notes** on too, both are listed.
+- Entries are sent **as written**, so a name you typed yourself goes too. Edit the entry first if you'd rather it didn't. Web addresses are removed, and no entry date is sent.
+- Edit your journal and ask again, and it's a new request; with the same words, you get the saved answer for free.
+- It's off every time you open a report, and it's only offered on your own reports.
+
 ### Lesson pointers
 *Added in v0.11.*
 
@@ -887,9 +925,73 @@ The links open in your default browser. The AI only picks the topic; every link 
 ### Gotchas
 - **The first run on your games takes a while:** Stockfish analyzes every move at 0.3 s (Settings → Games), so 50 new games take about 20 minutes. Games already analyzed are reused, and every game the Coach analyzed opens in Game Review at once.
 - **Games without a known side** (an imported game where you didn't say which side you played) aren't counted.
-- **Checkpoints and tracking whether a weakness is fixed** come in a later version. Until then, compare reports with the change column.
+- **Checkpoints and tracking whether a weakness is fixed** come in a later version. Until then, read [Since last report](#since-last-report).
 - **Whole-game measures need enough games:** with 25 games, few openings or endgame types reach 5 games. Run the Coach on 50 or more for them to count.
 - **The game summaries come from the analysis.** If you change the analysis settings (think time or grading thresholds), the summaries are rebuilt from the new analysis the next time you run the Coach.
+
+## Your training plan
+*Added in v0.12.*
+
+![The Plan tab](img/plan-tab.png)
+
+The Coach's **Plan** tab turns your latest report into a routine: daily checklists that tick themselves off as you do the work. It's free and stays on your PC.
+
+**To build one:**
+1. Run the Coach at least once. A plan is built from your latest report of your own games or puzzles.
+2. In the **Plan** tab, choose **Weeks** (1–4), **Minutes per day** (10–120) and your **Training days**.
+3. Press **Preview the plan**. Nothing is saved yet.
+4. Press **Start this plan**. It starts today if today is one of your training days, otherwise on the next one.
+
+Your top weaknesses get the most time. A day has 2 to 4 tasks that add up to your minutes, and each week has one reflection.
+
+**A new plan replaces the current one only when you confirm.** The old one stays under **Earlier plans**, with what you did.
+
+**The tasks:**
+
+| Task | **Start** opens | It ticks itself when |
+|---|---|---|
+| Puzzle session, e.g. *12 Danger-spotting puzzles: Fork* | a session with the task's own filters and mode | that many are decided, across sessions if you stop and resume |
+| Puzzles from your games | a session on your puzzles at that severity | the same |
+| Retry your mistakes in a game | that game in Retry mode | you've tried every mistake |
+| Review a game | that game in Game Review, best moves hidden | you've visited every key moment and the final move |
+| Lesson | its drill and links | you open a link or start the drill |
+| Reflection | the Journal tab with the question | you save the entry |
+
+**A puzzle task never changes your filters, mode or presets.** A banner says when a session is using the task's own. Likewise, a review task hides best moves for that game without changing your **Show best moves** setting.
+
+**The checkboxes:**
+- Tick or untick any box by hand. **Your choice always wins:** a box you unticked stays unticked even if the app sees the task done, until you tick it again.
+- **⋯** skips a task or swaps it for another: the next task for the same weakness, otherwise for the next weakness.
+- **Carry over missed tasks** (on by default): on your next training day, the unfinished tasks of the last one are added, up to one day's worth. Older ones, or all of them with this off, are marked **Missed**.
+
+![Today's plan](img/today-card.png)
+
+**Today's plan** on the main page shows today's checklist, with the same boxes and **Start** buttons. Ticking in either place updates both. It shrinks to one line while a session is running, and on a rest day it names your next training day.
+
+**Minutes spent** are real solving time for puzzle tasks, and the task's planned minutes for other finished tasks, so the total is approximate.
+
+**Gotchas:**
+- Puzzles you solve outside a task don't tick it, even with the same themes: Start them from the task.
+- Without Stockfish, a Retry move off the stored lines can't be graded, so it isn't recorded. Tick that task by hand.
+- A plan uses the games and weaknesses of the report it was built from. Run the Coach again and build a new plan when you want it updated.
+
+## Your training journal
+*Added in v0.12.*
+
+![The Journal tab](img/journal-tab.png)
+
+The Coach's **Journal** tab keeps a record of what you did and what you learned, newest first. It stays on this PC unless you choose [Include my journal](#include-my-journal) for one AI run.
+
+**What's in it:**
+- **Your notes:** write up to 5,000 characters and press **Save**. **Tag a weakness** links a note to one from your report. **Edit** and **Delete** are on each entry.
+- **Game reflections:** in Game Review, **Add a note** saves a note on the game, or with **On this move**, on the move on the board. The move gets a ✎ marker, the game lists its notes, and the journal entry links back to that position.
+- **The daily log:** written by the app from what you did: puzzles by mode and source with first-try accuracy and the themes you missed most, games synced, analyzed and reviewed, Retry results, plan tasks done, and Coach runs with their top weakness. It matches [Stats](#stats) for that day: Danger spotting counts only under its mode, and misclicks are left out.
+
+**Finding things:** **Show** picks the kinds of entry, **Weakness** and **From** / **To** narrow it down, and **Search** finds words in your entries. **Show older days** loads the 30 days before. The daily log has no words or tags of its own, so it's hidden while you search or filter by weakness.
+
+**Gotchas:**
+- Games analyzed before v0.12 aren't counted as analyzed on any day, because that wasn't recorded then. Games reviewed before v0.12 aren't counted either.
+- The notes you write when you say why you missed something ([mistake reasons](#mistake-reasons)) aren't part of the journal. **Include my notes** sends those.
 
 ## Keyboard shortcuts
 *Added in v0.2.*
@@ -910,6 +1012,11 @@ The links open in your default browser. The AI only picks the topic; every link 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 
 **Board coordinates:** press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved.
+
+## Finding out what an option does
+*Added in v0.12.*
+
+Every setting and option has an **ⓘ** next to its label. Hover over it, or reach it with Tab, to read what it does and, for a choice, what each choice means and costs. For example, the Coach's **AI detail level** says what Summary and Detailed send and what they cost. Clicking the ⓘ doesn't change the option.
 
 ## Appearance and sounds
 *Added in v0.2.*

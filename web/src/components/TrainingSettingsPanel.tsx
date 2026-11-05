@@ -1,6 +1,7 @@
 import { Button, Group, NumberInput, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { Labeled, OptionInfo } from "./OptionInfo";
 
 // Settings → Training (v0.5): the depth ladder's threshold and window (FR-4.5) and the Spaced
 // repetition boxes (FR-4.6); v0.6: when to ask why you missed (FR-5.8) and the Rushed threshold
@@ -54,7 +55,7 @@ export function TrainingSettingsPanel() {
       </Text>
       <Group grow align="end">
         <NumberInput
-          label="Move up at (%)"
+          label={<Labeled id="training.ladderThreshold">Move up at (%)</Labeled>}
           min={10}
           max={100}
           value={threshold}
@@ -63,7 +64,7 @@ export function TrainingSettingsPanel() {
           data-testid="ladder-threshold"
         />
         <NumberInput
-          label="Over the last (puzzles)"
+          label={<Labeled id="training.ladderWindow">Over the last (puzzles)</Labeled>}
           min={3}
           max={100}
           value={window}
@@ -81,7 +82,7 @@ export function TrainingSettingsPanel() {
       </Text>
       <Group align="end" gap="xs">
         <TextInput
-          label="Review boxes (days)"
+          label={<Labeled id="training.srsBoxes">Review boxes (days)</Labeled>}
           value={intervals}
           onChange={(e) => setIntervals(e.currentTarget.value)}
           style={{ flex: 1 }}
@@ -99,8 +100,11 @@ export function TrainingSettingsPanel() {
         Why you missed it
       </Text>
       <Group align="end" gap="md">
-        <Stack gap={2}>
-          <Text size="sm">Ask why you missed</Text>
+        <Stack gap={2} data-option-group>
+          <Text size="sm">
+            Ask why you missed
+            <OptionInfo id="training.askReasons" />
+          </Text>
           <SegmentedControl
             size="xs"
             value={ask}
@@ -125,7 +129,7 @@ export function TrainingSettingsPanel() {
         </Stack>
         {rushed !== null && (
           <NumberInput
-            label="Suggest Rushed under (seconds)"
+            label={<Labeled id="training.rushed">Suggest Rushed under (seconds)</Labeled>}
             min={1}
             max={30}
             value={rushed}
@@ -172,7 +176,7 @@ export function DebugPanel({ offset, onOffset }: { offset: number; onOffset: (da
     <Stack gap="xs" data-testid="debug-settings">
       <Group align="end" gap="xs">
         <NumberInput
-          label="Fast-forward (days)"
+          label={<Labeled id="training.fastForward">Fast-forward (days)</Labeled>}
           min={0}
           max={3650}
           value={days}

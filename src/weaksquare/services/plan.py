@@ -276,6 +276,12 @@ class PlanService:
         ctx = self.context(report)
         return self._fit(build_plan(data, params, ctx), ctx)
 
+    def preview_replaces(self) -> bool:
+        return self._plans.current() is not None
+
+    def has_report(self) -> bool:
+        return self.latest_report() is not None
+
     def preview(self, data: Any = None) -> Preview:
         """The plan these settings would make, not saved. It needs one report of yours."""
         params = PlanParams.from_json(data) if data is not None else self.params()
@@ -471,6 +477,16 @@ class PlanService:
         info = self._sessions.start(spec, bool(rated), mode, False)
         self._plans.link_session(info.session_id, t.id)
         return TaskAction("session", t.id, session=info, remaining=left, mode=mode)
+
+    def lesson_ref(self, task_id: Any) -> tuple[int, str]:
+        """(report id, topic) of a lesson task: the backend builds the link from these (FR-10.59)."""
+        place = self._place(task_id)
+        if place.task.type != LESSON:
+            raise ValidationError("This task isn't a lesson.")
+        report = self._report_for_plan(place.plan_id)
+        if report is None:
+            raise NotFoundError("The report behind this lesson is gone. Swap or skip this task.")
+        return int(report.id), str(place.task.params.get("topic"))
 
     def lesson_opened(self, task_id: Any) -> None:
         """FR-10.64 (v0.12 planning): a lesson task ticks when you open one of its links or start its drill."""

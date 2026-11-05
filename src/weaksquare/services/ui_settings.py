@@ -13,6 +13,7 @@ from weaksquare.core.errors import ValidationError
 from weaksquare.core.filters import SAVED_FILTERS_VERSION, FilterSpec, upgrade_saved
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, validate_threshold, validate_window
 from weaksquare.core.lessons import DEFAULT_SITES, validate_custom_template
+from weaksquare.core.plan import PlanParams
 from weaksquare.core.reasons import DEFAULT_RUSHED_S, validate_rushed_s
 from weaksquare.core.srs import DEFAULT_INTERVALS, validate_intervals
 
@@ -37,6 +38,8 @@ RUSHED_S_KEY = "reasons.rushed_s"  # FR-5.9: a deciding move faster than this su
 # v0.11 (FR-10.59): which search links lesson pointers show, and an optional custom search site
 LESSON_SITES_KEY = "coach.lesson_sites"
 LESSON_CUSTOM_URL_KEY = "coach.lesson_custom_url"
+PLAN_PARAMS_KEY = "plan.params"  # v0.12, FR-10.61: weeks, weekdays and minutes for the next plan
+PLAN_CARRY_KEY = "plan.carry_over"  # v0.12, FR-10.64: default on
 LESSON_SITES = ("youtube", "chesscom", "custom")
 REASONS_ASK = ("always", "game_review", "off")
 TRAINING_MODES = ("standard", "commit_line", "name_idea", "danger_spotting", "spaced_repetition")
@@ -138,7 +141,13 @@ def _filters(value: Any) -> Any:
     return FilterSpec.from_json(value).to_json()
 
 
+def _plan_params(value: Any) -> dict[str, Any]:
+    return PlanParams.from_json(value).to_json()
+
+
 VALIDATORS: dict[str, Callable[[Any], Any]] = {
+    PLAN_PARAMS_KEY: _plan_params,
+    PLAN_CARRY_KEY: _bool("carry_over"),
     LAST_FILTERS_KEY: _filters,
     COORDINATES_KEY: _bool("coordinates"),
     COLOR_SCHEME_KEY: _color_scheme,

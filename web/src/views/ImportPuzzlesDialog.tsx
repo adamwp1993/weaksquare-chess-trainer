@@ -49,6 +49,7 @@ export function ImportPuzzlesDialog({ opened, onClose, onDone }: { opened: boole
           <b>My puzzles</b> and are checked strictly, like Lichess puzzles.
         </Text>
         <TextInput
+          data-no-tip="a name you type, with its own description"
           label="Set label"
           description="For example the book's title. You can filter My puzzles by it."
           value={label}

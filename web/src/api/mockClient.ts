@@ -36,10 +36,15 @@ import type {
   ReasonSource,
   SettingValues,
   TrainingMode,
+  JournalEntryInput,
+  JournalFilters,
+  PlanParams,
 } from "./ApiClient";
 import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
 import { MockCoach } from "./mockCoach";
+import { MockPlan } from "./mockPlan";
+import { defaultFilters } from "../state/filters";
 import { gameNarrative, moveExplanation } from "./mockGameAi";
 import { MockGames } from "./mockGames";
 import { type ExplainTarget, MockLlm } from "./mockLlm";
@@ -47,44 +52,45 @@ import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
   AccountStatus,
   Analysis,
-  EngineSettings,
-  EngineStatus,
-  Refutation,
+  AppInfo,
   AttemptRating,
   BucketCounts,
+  CoachJournalLine,
   CommitFeedback,
   DangerFeedback,
   DangerReveal,
+  EngineSettings,
+  EngineStatus,
+  Explanation,
+  FilterSpec,
+  GameNarrative,
+  GameReview,
+  HelpResponse,
   IdeaResult,
-  ReasonPrompt,
-  ReasonStats,
+  Job,
   LadderInfo,
   LadderPreview,
-  PlyGrade,
-  SrsStatus,
-  AppInfo,
-  FilterSpec,
-  HelpResponse,
-  Job,
+  LlmSettings,
   MoveFeedback,
   OpeningFamily,
+  PlyGrade,
   Preset,
   PuzzleDbStatus,
   PuzzleView,
   RatingHistory,
+  ReasonPrompt,
+  ReasonStats,
+  Refutation,
+  ReviewMove,
   SessionInfo,
   SessionStats,
+  SrsStatus,
   StatRow,
   StatsReport,
   SyncStatus,
-  UpdateOffer,
   ThemeGroup,
   UiSettings,
-  Explanation,
-  GameNarrative,
-  GameReview,
-  LlmSettings,
-  ReviewMove,
+  UpdateOffer,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -342,6 +348,7 @@ export class MockClient implements ApiClient {
   private readonly llm: MockLlm;
   private readonly games: MockGames;
   private readonly coach: MockCoach;
+  private readonly plan: MockPlan;
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
@@ -358,7 +365,17 @@ export class MockClient implements ApiClient {
       },
       quote: (kind, what) => this.llm.gameQuote(kind, what),
       startAi: (kind, what, make) => this.llm.startGame(kind, what, make),
+      aiPlan: () => this.plan.aiPlan(),
     });
+    this.plan = new MockPlan(params, {
+      calls: this.calls,
+      hasReport: () => this.coach.list().some((r) => r.is_me),
+      startSession: (spec, rated, mode) =>
+        this.startSession({ ...defaultFilters(), ...spec } as FilterSpec, rated, mode as TrainingMode, false),
+    });
+    if (typeof window !== "undefined") {
+      (window as unknown as { __mockPlanProgress: (id: number, n: number) => void }).__mockPlanProgress = (id, n) => this.plan.progress(id, n);
+    }
     if (params.get("showbest") === "1") this.settings.show_best = true;
     const scenario = params.get("scenario");
     // ?scheme=dark|auto starts the mock in that saved scheme; ?sounds=off with sounds off.
@@ -1056,6 +1073,89 @@ export class MockClient implements ApiClient {
     this.coach.openLesson(reportId, topic, target);
   }
 
+  // ---- v0.12: the training plan and journal -------------------------------------------------------
+  async getCoachJournalPreview(reportId: number): Promise<CoachJournalLine[]> {
+    return this.coach.journalPreview(reportId);
+  }
+
+  async getPlanSettings() {
+    return this.plan.getSettings();
+  }
+
+  async previewPlan(params: PlanParams | null) {
+    return this.plan.preview(params);
+  }
+
+  async createPlan(params: PlanParams, confirmed: boolean) {
+    return this.plan.create(params, confirmed);
+  }
+
+  async useAiPlan(runId: number, confirmed: boolean) {
+    return this.plan.useAi(runId, confirmed);
+  }
+
+  async getCurrentPlan() {
+    return this.plan.current();
+  }
+
+  async getTodayPlan() {
+    return this.plan.today();
+  }
+
+  async listPlans() {
+    return this.plan.history();
+  }
+
+  async setPlanTaskTick(taskId: number, done: boolean) {
+    this.plan.tick(taskId, done);
+  }
+
+  async skipPlanTask(taskId: number, skipped: boolean) {
+    this.plan.skip(taskId, skipped);
+  }
+
+  async swapPlanTask(taskId: number) {
+    return this.plan.swap(taskId);
+  }
+
+  async startPlanTask(taskId: number, rated: boolean) {
+    return this.plan.start(taskId, rated);
+  }
+
+  async startPlanLessonDrill(taskId: number, rated: boolean) {
+    this.plan.openLesson(taskId, "curated:0");
+    const session = await this.startSession({ ...defaultFilters(), queue_size: 20 }, rated, "standard", false);
+    return { kind: "session" as const, task_id: taskId, session, remaining: 20, mode: "standard", game_id: null, lesson: null, prompt: null, weakness_key: null, plan_day_id: null };
+  }
+
+  async openPlanLesson(taskId: number, target: string) {
+    this.plan.openLesson(taskId, target);
+  }
+
+  async markReviewPly(gameId: number, ply: number) {
+    return this.plan.markPly(gameId, ply);
+  }
+
+  async getJournal(filters: JournalFilters) {
+    return this.plan.timeline(filters);
+  }
+
+  async addJournalEntry(entry: JournalEntryInput) {
+    return this.plan.add(entry);
+  }
+
+  async editJournalEntry(entryId: number, text: string, weaknessKey: string | null) {
+    return this.plan.edit(entryId, text, weaknessKey);
+  }
+
+  async deleteJournalEntry(entryId: number) {
+    this.plan.remove(entryId);
+  }
+
+  async getGameNotes(gameId: number) {
+    return this.plan.gameNotes(gameId);
+  }
+
   async getSuggestion() {
     return this.coach.getSuggestion();
   }
@@ -1175,6 +1275,7 @@ export class MockClient implements ApiClient {
 
   async setSetting<K extends keyof SettingValues>(key: K, value: SettingValues[K]) {
     this.calls.push(`setting:${key}=${JSON.stringify(value)}`);
+    this.plan.setSetting(key, value);
     if (key === "mixer.filters") this.settings = { ...this.settings, last_filters: value as FilterSpec };
     if (key === "ui.coordinates") this.settings = { ...this.settings, coordinates: value as boolean };
     if (key === "ui.color_scheme") this.settings = { ...this.settings, color_scheme: value as UiSettings["color_scheme"] };

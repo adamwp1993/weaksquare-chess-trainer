@@ -24,6 +24,7 @@ import type { AnalysisQueue, GamePage, GameSummary } from "../api/types";
 import { PLATFORM_LABEL, TIME_CLASSES, cap, gameDate, resultLabel } from "../state/games";
 import { useLlmSettings } from "../state/llm";
 import { useJob } from "../state/useJob";
+import { Labeled, OptionInfo } from "../components/OptionInfo";
 
 const PAGE = 50;
 
@@ -161,7 +162,7 @@ export function GamesView({
         <Group gap="sm" align="end" wrap="wrap">
           {players.length > 0 && (
             <Select
-              label="Player"
+              label={<Labeled id="library.player">Player</Labeled>}
               size="xs"
               w={180}
               data={[{ value: "me", label: "You" }, ...players.map((p) => ({ value: p.subject, label: p.label }))]}
@@ -172,7 +173,7 @@ export function GamesView({
             />
           )}
           <MultiSelect
-            label="Platform"
+            label={<Labeled id="library.platform">Platform</Labeled>}
             size="xs"
             w={170}
             data={Object.entries(PLATFORM_LABEL).map(([value, label]) => ({ value, label }))}
@@ -181,7 +182,7 @@ export function GamesView({
             data-testid="filter-platform"
           />
           <MultiSelect
-            label="Time"
+            label={<Labeled id="library.time">Time</Labeled>}
             size="xs"
             w={170}
             data={TIME_CLASSES.map((t) => ({ value: t, label: cap(t) }))}
@@ -189,7 +190,7 @@ export function GamesView({
             onChange={(v) => set({ time_classes: v })}
           />
           <MultiSelect
-            label="Result"
+            label={<Labeled id="library.result">Result</Labeled>}
             size="xs"
             w={150}
             data={[
@@ -202,7 +203,7 @@ export function GamesView({
             data-testid="filter-result"
           />
           <MultiSelect
-            label="Your color"
+            label={<Labeled id="library.color">Your color</Labeled>}
             size="xs"
             w={150}
             data={[
@@ -213,7 +214,7 @@ export function GamesView({
             onChange={(v) => set({ colors: v as LibraryFilters["colors"] })}
           />
           <MultiSelect
-            label="Status"
+            label={<Labeled id="library.status">Status</Labeled>}
             size="xs"
             w={170}
             data={[
@@ -225,9 +226,10 @@ export function GamesView({
             onChange={(v) => set({ statuses: v as LibraryFilters["statuses"] })}
             data-testid="filter-status"
           />
-          <Stack gap={2}>
+          <Stack gap={2} data-option-group>
             <Text size="xs" fw={500}>
               Rated
+              <OptionInfo id="library.rated" />
             </Text>
             <SegmentedControl
               size="xs"
@@ -240,10 +242,10 @@ export function GamesView({
               ]}
             />
           </Stack>
-          <TextInput label="Opponent" size="xs" w={140} value={filters.opponent ?? ""} onChange={(e) => set({ opponent: e.currentTarget.value })} data-testid="filter-opponent" />
-          <TextInput label="Opening or ECO" size="xs" w={150} value={filters.opening ?? ""} onChange={(e) => set({ opening: e.currentTarget.value })} />
-          <TextInput label="From" type="date" size="xs" w={140} value={filters.date_from ?? ""} onChange={(e) => set({ date_from: e.currentTarget.value || null })} />
-          <TextInput label="To" type="date" size="xs" w={140} value={filters.date_to ?? ""} onChange={(e) => set({ date_to: e.currentTarget.value || null })} />
+          <TextInput label={<Labeled id="library.opponent">Opponent</Labeled>} size="xs" w={140} value={filters.opponent ?? ""} onChange={(e) => set({ opponent: e.currentTarget.value })} data-testid="filter-opponent" />
+          <TextInput label={<Labeled id="library.opening">Opening or ECO</Labeled>} size="xs" w={150} value={filters.opening ?? ""} onChange={(e) => set({ opening: e.currentTarget.value })} />
+          <TextInput label={<Labeled id="library.from">From</Labeled>} type="date" size="xs" w={140} value={filters.date_from ?? ""} onChange={(e) => set({ date_from: e.currentTarget.value || null })} />
+          <TextInput label={<Labeled id="library.to">To</Labeled>} type="date" size="xs" w={140} value={filters.date_to ?? ""} onChange={(e) => set({ date_to: e.currentTarget.value || null })} />
         </Group>
       </Paper>
 
@@ -290,7 +292,7 @@ export function GamesView({
             {rows.map((g) => (
               <Table.Tr key={g.id} data-testid={`game-row-${g.id}`}>
                 <Table.Td>
-                  <Checkbox size="xs" checked={selected.has(g.id)} onChange={() => toggle(g.id)} aria-label="Select game" />
+                  <Checkbox data-no-tip="selects this row" size="xs" checked={selected.has(g.id)} onChange={() => toggle(g.id)} aria-label="Select game" />
                 </Table.Td>
                 <Table.Td style={{ whiteSpace: "nowrap" }}>{gameDate(g.played_at)}</Table.Td>
                 <Table.Td>{PLATFORM_LABEL[g.source]}</Table.Td>

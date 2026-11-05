@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { GamesSettingsChange } from "../api/ApiClient";
 import type { ChesscomProfile, GamesSettings } from "../api/types";
+import { Labeled } from "./OptionInfo";
 
 export function GamesSettingsPanel() {
   const [s, setS] = useState<GamesSettings | null>(null);
@@ -60,7 +61,7 @@ export function GamesSettingsPanel() {
       </Text>
       <Group align="end" gap="xs">
         <TextInput
-          label="chess.com username"
+          label={<Labeled id="games.chesscom">chess.com username</Labeled>}
           description="Public games only: chess.com needs no login, so linking by username grants nothing."
           value={user}
           onChange={(e) => setUser(e.currentTarget.value)}
@@ -86,30 +87,30 @@ export function GamesSettingsPanel() {
         </Text>
       )}
       <Switch
-        label="Sync new games when the app opens"
+        label={<Labeled id="games.syncOnOpen">Sync new games when the app opens</Labeled>}
         checked={s.sync_on_open}
         onChange={(e) => save({ sync_on_open: e.currentTarget.checked }, "Saved.")}
         data-testid="games-sync-on-open"
       />
       <Group gap="sm" key={`sync${inputsKey}`}>
-        <NumberInput label="First sync: days back" min={1} max={3650} w={170} defaultValue={s.first_sync_days}
+        <NumberInput label={<Labeled id="games.firstDays">First sync: days back</Labeled>} min={1} max={3650} w={170} defaultValue={s.first_sync_days}
           onBlur={(e) => save({ first_sync_days: num(e.currentTarget.value) }, "Saved.")} />
-        <NumberInput label="First sync: at most (games)" min={1} max={5000} w={190} defaultValue={s.first_sync_max}
+        <NumberInput label={<Labeled id="games.firstMax">First sync: at most (games)</Labeled>} min={1} max={5000} w={190} defaultValue={s.first_sync_max}
           onBlur={(e) => save({ first_sync_max: num(e.currentTarget.value) }, "Saved.")} />
       </Group>
       <Group gap="sm" key={`analysis${inputsKey}`}>
-        <NumberInput label="Analysis: seconds per position" min={0.1} max={5} step={0.1} decimalScale={2} w={210} defaultValue={s.think_s}
+        <NumberInput label={<Labeled id="games.think">Analysis: seconds per position</Labeled>} min={0.1} max={5} step={0.1} decimalScale={2} w={210} defaultValue={s.think_s}
           onBlur={(e) => save({ think_s: num(e.currentTarget.value) }, "Saved. New analyses use it.")} data-testid="games-think" />
-        <NumberInput label="Key moments" min={1} max={10} w={130} defaultValue={s.key_moments}
+        <NumberInput label={<Labeled id="games.keyMoments">Key moments</Labeled>} min={1} max={10} w={130} defaultValue={s.key_moments}
           onBlur={(e) => save({ key_moments: num(e.currentTarget.value) }, "Saved.")} />
-        <NumberInput label="Retry tolerance (cp)" min={0} max={300} w={160} defaultValue={s.tolerance_cp}
+        <NumberInput label={<Labeled id="games.tolerance">Retry tolerance (cp)</Labeled>} min={0} max={300} w={160} defaultValue={s.tolerance_cp}
           onBlur={(e) => save({ tolerance_cp: num(e.currentTarget.value) }, "Saved.")} />
       </Group>
       <Group gap="sm" key={`grades${inputsKey}`}>
         {(["inaccuracy", "mistake", "blunder"] as const).map((k) => (
           <NumberInput
             key={k}
-            label={`${k[0].toUpperCase()}${k.slice(1)} from (cp)`}
+            label={<Labeled id={`games.${k}`}>{`${k[0].toUpperCase()}${k.slice(1)} from (cp)`}</Labeled>}
             min={1}
             max={2000}
             w={160}
@@ -120,7 +121,7 @@ export function GamesSettingsPanel() {
       </Group>
       <Group gap="sm" align="flex-end" key={`puzzles${inputsKey}`}>
         <Select
-          label="Puzzles from your games"
+          label={<Labeled id="games.puzzleLevel">Puzzles from your games</Labeled>}
           w={280}
           data={[
             { value: "blunders", label: "Blunders only" },
@@ -138,7 +139,7 @@ export function GamesSettingsPanel() {
           }
           data-testid="games-puzzle-level"
         />
-        <NumberInput label="Checking a puzzle: seconds per position" min={0.2} max={5} step={0.1} decimalScale={2} w={250}
+        <NumberInput label={<Labeled id="games.puzzleThink">Checking a puzzle: seconds per position</Labeled>} min={0.2} max={5} step={0.1} decimalScale={2} w={250}
           defaultValue={s.puzzle_think_s} onBlur={(e) => save({ puzzle_think_s: num(e.currentTarget.value) }, "Saved.")} />
       </Group>
       <Text size="xs" c="dimmed">

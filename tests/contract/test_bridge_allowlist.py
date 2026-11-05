@@ -131,6 +131,26 @@ ALLOWLIST = {
     "get_game_narrative_quote",  # v0.9: Explain my game (FR-11.18)
     "start_game_narrative",  # v0.9
     "get_game_narrative",  # v0.9
+    "get_coach_journal_preview",  # v0.12: FR-10.71
+    "get_plan_settings",  # v0.12: the training plan (FR-10.61-10.66)
+    "preview_plan",  # v0.12
+    "create_plan",  # v0.12
+    "use_ai_plan",  # v0.12: FR-10.66
+    "get_current_plan",  # v0.12
+    "get_today_plan",  # v0.12: the Today card (FR-10.65)
+    "list_plans",  # v0.12
+    "set_plan_task_tick",  # v0.12: FR-10.64
+    "skip_plan_task",  # v0.12
+    "swap_plan_task",  # v0.12
+    "start_plan_task",  # v0.12: FR-10.63
+    "start_plan_lesson_drill",  # v0.12
+    "open_plan_lesson",  # v0.12
+    "mark_review_ply",  # v0.12: FR-10.64, 10.68
+    "get_journal",  # v0.12: the journal (FR-10.67-10.70)
+    "add_journal_entry",  # v0.12
+    "edit_journal_entry",  # v0.12
+    "delete_journal_entry",  # v0.12
+    "get_game_notes",  # v0.12: FR-10.69
 }
 
 

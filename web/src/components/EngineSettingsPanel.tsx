@@ -6,6 +6,7 @@ import type { EngineSettings } from "../api/types";
 import { useEngineStatus } from "../state/engine";
 import { useJob } from "../state/useJob";
 import { EngineInstallBanner } from "./EngineInstallBanner";
+import { Labeled } from "./OptionInfo";
 
 // Settings → Engine (FR-7.4, 7.5): which engine is in use, Install / Reinstall, think time, threads,
 // hash, and the advanced custom engine (saved only after the same self-test the installer runs).
@@ -67,7 +68,7 @@ export function EngineSettingsPanel() {
       {settings && (
         <Group grow align="flex-start" key={inputsKey}>
           <NumberInput
-            label="Think time (s)"
+            label={<Labeled id="engine.think">Think time (s)</Labeled>}
             description="Per position"
             defaultValue={settings.think_s}
             min={0.2}
@@ -78,7 +79,7 @@ export function EngineSettingsPanel() {
             data-testid="engine-think"
           />
           <NumberInput
-            label="Threads"
+            label={<Labeled id="engine.threads">Threads</Labeled>}
             description={`1 to ${settings.max_threads}`}
             defaultValue={settings.threads}
             min={1}
@@ -88,7 +89,7 @@ export function EngineSettingsPanel() {
             data-testid="engine-threads"
           />
           <NumberInput
-            label="Hash (MB)"
+            label={<Labeled id="engine.hash">Hash (MB)</Labeled>}
             description="16 to 2048"
             defaultValue={settings.hash_mb}
             min={16}

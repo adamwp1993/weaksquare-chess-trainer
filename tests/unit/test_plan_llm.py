@@ -161,6 +161,17 @@ def test_a_game_is_used_at_most_once_per_task_type() -> None:
     assert sum(1 for x in out.days[0].tasks if x.type == REVIEW) == 1
 
 
+def test_a_game_keeps_its_own_label_when_another_game_shares_it() -> None:
+    same = Context(engine_ready=True, games={1: "the same label"}, retry_games=frozenset({1, 2}))
+    draft = build_plan(REPORT, PARAMS, same)
+
+    def other(label: str, kind: str) -> tuple[int, str] | None:
+        return (2, "the same label") if label == "G2" else None
+
+    out, _ = validate_plan(plan([t(RETRY, game="G2"), GOOD]), draft, same, KEYS, TOPICS, other)
+    assert out.days[0].tasks[0].title == "Retry your mistakes in the same label"
+
+
 def test_a_lesson_uses_only_a_topic_that_was_sent() -> None:
     out, _ = check(plan([t(LESSON, topic="theme:fork"), GOOD]))
     assert out.days[0].tasks[0].params == {"topic": "theme:fork"}

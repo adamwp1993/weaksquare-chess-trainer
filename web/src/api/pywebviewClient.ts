@@ -16,65 +16,76 @@ import {
   type ReasonSource,
   type SettingValues,
   type TrainingMode,
+  JournalEntryInput,
+  JournalFilters,
+  PlanParams,
 } from "./ApiClient";
 import type {
+  AccountStatus,
+  Analysis,
+  AnalysisQueue,
+  ApiError,
+  AppInfo,
+  AttemptRating,
+  BucketCounts,
+  ChesscomProfile,
   CoachAiQuote,
   CoachAiRun,
   CoachAiRunSummary,
-  CoachNote,
   CoachDefaults,
+  CoachJournalLine,
+  CoachNote,
   CoachReport,
   CoachReportSummary,
-  SuggestionView,
-  AccountStatus,
-  Analysis,
-  ExplainQuote,
-  GameAiQuote,
-  GameNarrative,
-  Explanation,
-  LlmPrice,
-  LlmSettings,
-  LlmSpend,
-  EngineSettings,
-  EngineStatus,
-  Refutation,
-  AttemptRating,
-  BucketCounts,
   CommitFeedback,
   DangerFeedback,
-  ReasonPrompt,
-  ReasonStats,
-  LadderPreview,
-  SrsStatus,
-  ApiError,
-  AppInfo,
+  EngineSettings,
+  EngineStatus,
+  ExplainQuote,
+  Explanation,
   FilterSpec,
-  HelpResponse,
-  Job,
-  MoveFeedback,
-  OpeningFamily,
-  Preset,
-  PuzzleDbStatus,
-  PuzzleView,
-  RatingHistory,
-  SessionInfo,
-  SessionStats,
-  StatsReport,
-  SyncStatus,
-  UpdateOffer,
-  ThemeGroup,
-  UiSettings,
-  AnalysisQueue,
-  ChesscomProfile,
+  GameAiQuote,
   GameImport,
+  GameNarrative,
   GamePage,
   GameReview,
   GameStats,
   GamesSettings,
+  HelpResponse,
+  Job,
+  JournalEntry,
+  JournalTimeline,
+  LadderPreview,
+  LlmPrice,
+  LlmSettings,
+  LlmSpend,
+  MoveFeedback,
+  OpeningFamily,
+  PlanPreview,
+  PlanSettings,
+  PlanTaskAction,
+  Preset,
+  PuzzleDbStatus,
   PuzzleImportReport,
   PuzzleSet,
+  PuzzleView,
+  RatingHistory,
+  ReasonPrompt,
+  ReasonStats,
+  Refutation,
   RetryResult,
   SavedPuzzle,
+  SessionInfo,
+  SessionStats,
+  SrsStatus,
+  StatsReport,
+  SuggestionView,
+  SyncStatus,
+  ThemeGroup,
+  TodayPlan,
+  TrainingPlan,
+  UiSettings,
+  UpdateOffer,
 } from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -578,6 +589,86 @@ export class PywebviewClient implements ApiClient {
 
   openLesson(reportId: number, topic: string, target: string) {
     return this.call<void>("open_lesson", reportId, topic, target);
+  }
+
+  getCoachJournalPreview(reportId: number) {
+    return this.call<CoachJournalLine[]>("get_coach_journal_preview", reportId);
+  }
+
+  getPlanSettings() {
+    return this.call<PlanSettings>("get_plan_settings");
+  }
+
+  previewPlan(params: PlanParams | null) {
+    return this.call<PlanPreview>("preview_plan", params);
+  }
+
+  createPlan(params: PlanParams, confirmed: boolean) {
+    return this.call<TrainingPlan>("create_plan", params, confirmed);
+  }
+
+  useAiPlan(runId: number, confirmed: boolean) {
+    return this.call<TrainingPlan>("use_ai_plan", runId, confirmed);
+  }
+
+  getCurrentPlan() {
+    return this.call<TrainingPlan | null>("get_current_plan");
+  }
+
+  getTodayPlan() {
+    return this.call<TodayPlan | null>("get_today_plan");
+  }
+
+  listPlans() {
+    return this.call<TrainingPlan[]>("list_plans");
+  }
+
+  setPlanTaskTick(taskId: number, done: boolean) {
+    return this.call<void>("set_plan_task_tick", taskId, done);
+  }
+
+  skipPlanTask(taskId: number, skipped: boolean) {
+    return this.call<void>("skip_plan_task", taskId, skipped);
+  }
+
+  swapPlanTask(taskId: number) {
+    return this.call<number>("swap_plan_task", taskId);
+  }
+
+  startPlanTask(taskId: number, rated: boolean) {
+    return this.call<PlanTaskAction>("start_plan_task", taskId, rated);
+  }
+
+  startPlanLessonDrill(taskId: number, rated: boolean) {
+    return this.call<PlanTaskAction>("start_plan_lesson_drill", taskId, rated);
+  }
+
+  openPlanLesson(taskId: number, target: string) {
+    return this.call<void>("open_plan_lesson", taskId, target);
+  }
+
+  markReviewPly(gameId: number, ply: number) {
+    return this.call<boolean>("mark_review_ply", gameId, ply);
+  }
+
+  getJournal(filters: JournalFilters) {
+    return this.call<JournalTimeline>("get_journal", filters);
+  }
+
+  addJournalEntry(entry: JournalEntryInput) {
+    return this.call<JournalEntry>("add_journal_entry", entry);
+  }
+
+  editJournalEntry(entryId: number, text: string, weaknessKey: string | null) {
+    return this.call<JournalEntry>("edit_journal_entry", entryId, text, weaknessKey);
+  }
+
+  deleteJournalEntry(entryId: number) {
+    return this.call<void>("delete_journal_entry", entryId);
+  }
+
+  getGameNotes(gameId: number) {
+    return this.call<JournalEntry[]>("get_game_notes", gameId);
   }
 
   getSuggestion() {

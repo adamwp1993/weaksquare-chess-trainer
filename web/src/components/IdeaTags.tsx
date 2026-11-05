@@ -2,6 +2,7 @@ import { Badge, Button, Group, MultiSelect, Paper, Stack, Text } from "@mantine/
 import { useState } from "react";
 import type { IdeaResult as IdeaResultData } from "../api/types";
 import { IDEA_PAYOFF, IDEA_SETUP, MAX_TAGS_PER_SLOT } from "../state/ideas";
+import { Labeled } from "./OptionInfo";
 
 // Name the idea first (FR-4.3): tag the idea before you move, then see how your tags compared.
 
@@ -18,7 +19,7 @@ export function IdeaTags({ busy, onStart }: { busy: boolean; onStart: (setup: st
           Name the idea
         </Text>
         <MultiSelect
-          label="Setup"
+          label={<Labeled id="idea.setup">Setup</Labeled>}
           description="How you get there: deflect, attract, clear a line…"
           placeholder={setup.length ? undefined : "Pick up to 3"}
           data={options(IDEA_SETUP)}
@@ -31,7 +32,7 @@ export function IdeaTags({ busy, onStart }: { busy: boolean; onStart: (setup: st
           data-testid="idea-setup"
         />
         <MultiSelect
-          label="Payoff"
+          label={<Labeled id="idea.payoff">Payoff</Labeled>}
           description="What it wins: a fork, a pin, a mate pattern…"
           placeholder={payoff.length ? undefined : "Pick up to 3"}
           data={options(IDEA_PAYOFF)}

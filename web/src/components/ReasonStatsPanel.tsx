@@ -5,6 +5,7 @@ import { api } from "../api";
 import type { ReasonSource, TrainingMode } from "../api/ApiClient";
 import type { ModeDetails, ReasonStats, StatRow } from "../api/types";
 import { MODES } from "../state/modes";
+import { Labeled } from "./OptionInfo";
 
 const pct = (x: number | null) => (x === null ? "–" : `${Math.round(x * 100)}%`);
 const share = (n: number, d: number) => (d ? n / d : null);
@@ -93,7 +94,7 @@ export function ReasonStatsPanel({ themes }: { themes: StatRow[] }) {
     <Stack gap="sm" data-testid="stats-reasons">
       <Group gap="sm" align="end">
         <Select
-          label="From"
+          label={<Labeled id="stats.reasonFrom">From</Labeled>}
           data={[
             { value: "puzzles", label: "Puzzles" },
             { value: "games", label: "My games (and Retry)" },
@@ -108,7 +109,7 @@ export function ReasonStatsPanel({ themes }: { themes: StatRow[] }) {
         />
         <Select
           disabled={source === "games"}
-          label="Theme"
+          label={<Labeled id="stats.reasonTheme">Theme</Labeled>}
           placeholder="All themes"
           data={themes.map((t) => ({ value: t.key, label: t.label }))}
           value={theme}
@@ -119,7 +120,7 @@ export function ReasonStatsPanel({ themes }: { themes: StatRow[] }) {
           data-testid="reasons-theme"
         />
         <Select
-          label="Mode"
+          label={<Labeled id="stats.reasonMode">Mode</Labeled>}
           placeholder="All modes"
           data={MODES.map((m) => ({ value: m.value, label: m.label }))}
           value={mode}

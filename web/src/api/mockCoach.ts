@@ -8,18 +8,23 @@ import type {
   CoachAiRun,
   CoachAiRunSummary,
   CoachDefaults,
+  CoachComparison,
   CoachEvidence,
   CoachFinding,
   CoachLesson,
+  CoachJournalLine,
+  CoachMeasureChange,
   CoachMeasures,
   CoachNote,
   CoachPresetView,
   CoachReport,
   CoachReportSummary,
   CoachWeakness,
+  CoachWeaknessChange,
   FilterSpec,
   GameAiQuote,
   Job,
+  PlanPreview,
   SuggestionView,
 } from "./types";
 
@@ -30,12 +35,18 @@ export const DEFAULT_PARAMS: CoachParams = {
   time_classes: ["rapid", "classical"], color: "both", detail: "summary", game_ids: [],
 }; // prettier-ignore
 
+function changeOf(trend: number | null): CoachWeakness["change"] {
+  if (trend === null) return null;
+  return trend < 0 ? "better" : trend > 0 ? "worse" : "same";
+}
+
 function w(
   key: string, label: string, count: number, per10: number, severity: number, themes: string[],
   reasons: Record<string, number>, mode: string | null = null, trend: number | null = null,
 ): CoachWeakness {
   const [kind, name] = key.split(":") as [CoachWeakness["kind"], string];
   return {
+    change: changeOf(trend),
     key, kind, name, label, count, per10, severity, score: Math.round((per10 * severity) / 10) / 10, themes, mode,
     reasons, examples: [{ game_id: 1, ply: 6, cp_loss: 640 }, { game_id: 1, ply: 8, cp_loss: 410 }],
     puzzle_accuracy: kind === "allowed" && name === "fork" ? 0.86 : null, trend,
@@ -73,6 +84,7 @@ interface Hooks {
   setFilters: (spec: FilterSpec, mode: string) => void;
   quote: (kind: GameKind, what: string) => GameAiQuote;
   startAi: (kind: GameKind, what: string, make: (provider: string, model: string, costUsd: number) => CoachAiRun) => string;
+  aiPlan: () => PlanPreview;
 }
 
 export class MockCoach {
@@ -178,9 +190,34 @@ export class MockCoach {
         w("endgame:rook", "Rook endgames", 2, 6.7, 300, ["rookEndgame"], {}),
       ] : [],
       measures: games >= 24 ? measures(games) : null, // the mock's measures assume a full run
+      comparison: second && games ? this.comparison() : null,
     }; // prettier-ignore
     this.reports.push(report);
     return report;
+  }
+
+  /** FR-10.73 for the mock's second report of yours: rates, New and Gone, and a measure with too few games. */
+  private comparison(): CoachComparison {
+    const m = (key: string, label: string, unit: "per10" | "pct", then: number, now: number, verdict: CoachMeasureChange["verdict"]): CoachMeasureChange => ({
+      key, label, unit, then, now, delta: Math.round((now - then) * 100) / 100, verdict,
+    }); // prettier-ignore
+    const row = (key: string, label: string, then: number | null, now: number, flag: "new" | "gone" | null, verdict: CoachWeaknessChange["verdict"], series: (number | null)[]): CoachWeaknessChange => ({
+      key, label, then, now, delta: then === null ? null : Math.round((now - then) * 100) / 100, flag, verdict, series,
+      puzzle: key === "allowed:fork" ? { then: 71, now: 86, then_attempts: 40, now_attempts: 24, verdict: "better" } : null,
+    }); // prettier-ignore
+    return {
+      earlier_id: 1, earlier_created_at: "2026-11-04T09:00:00", days_between: 12, new_games: 22, shared_games: 8, enough_new_games: true,
+      settings: "same", puzzle_history: false, reports: 2,
+      weaknesses: [
+        row("allowed:fork", "Allowed: Fork", 10, 13.3, null, "worse", [10, 13.3]),
+        row("missed:pin", "Missed: Pin", 13.3, 10, null, "better", [13.3, 10]),
+        row("missed:mateIn2", "Missed: Mate in 2", 6.7, 6.7, null, "same", [6.7, 6.7]),
+        row("habit:hungPiece", "Hung a piece", null, 6.7, "new", "not_enough", [null, 6.7]),
+        row("missed:skewer", "Missed: Skewer", 3.3, 0, "gone", "better", [3.3, 0]),
+      ],
+      health: [m("health:blunders", "Blunders", "per10", 15, 13.3, "better"), m("health:mistakes", "Mistakes", "per10", 6.7, 6.7, "same"), m("health:inaccuracies", "Inaccuracies", "per10", 8, 10, "worse")],
+      measures: [m("conversion", "Winning positions converted", "pct", 45, 54.5, "better"), m("opening_score:French Defense", "Score in the French Defense", "pct", 50, 33.3, "not_enough")],
+    }; // prettier-ignore
   }
 
   private preset(): CoachPresetView {
@@ -245,7 +282,7 @@ export class MockCoach {
   }
 
   private what(id: number, o: CoachAiOptions): string {
-    return `coach:${id}:${o.advanced ? `adv${o.game_cap}` : "std"}:${o.include_notes ? "notes" : "nonotes"}`;
+    return `coach:${id}:${o.advanced ? `adv${o.game_cap}` : "std"}:${o.include_notes ? "notes" : "nonotes"}:${o.include_journal ? "journal" : "nojournal"}`;
   }
 
   private check(o: CoachAiOptions) {
@@ -282,7 +319,7 @@ export class MockCoach {
     this.check(o);
     const r = this.get(id);
     const what = this.what(id, o);
-    this.h.calls.push(`coachAi:${id}:${o.advanced ? `advanced:${o.game_cap}` : "standard"}:${o.include_notes ? "notes" : "nonotes"}`);
+    this.h.calls.push(`coachAi:${id}:${o.advanced ? `advanced:${o.game_cap}` : "standard"}:${o.include_notes ? "notes" : "nonotes"}${o.include_journal ? ":journal" : ""}`);
     const runs = this.runs.get(id) ?? [];
     let job = "";
     job = this.h.startAi(this.kind(id), what, (provider, model, cost) => {
@@ -307,7 +344,7 @@ export class MockCoach {
     return (this.runs.get(id) ?? []).map((x) => ({
       id: x.id, created_at: x.created_at, format: x.format, advanced: x.advanced, include_notes: x.include_notes,
       game_cap: x.game_cap, provider: x.provider, model: x.model, cost_usd: x.cost_usd, findings: x.findings.length,
-      new: x.findings.filter((f) => f.new).length,
+      new: x.findings.filter((f) => f.new).length, include_journal: x.include_journal,
     })); // prettier-ignore
   }
 
@@ -321,6 +358,14 @@ export class MockCoach {
       { game: "G1", ply: 7, move: "4. Nxe5", reason: "didntLook", text: "I only looked at my own attack, see [link removed]", source: "game" },
       { game: "G2", ply: 9, move: "5. Bd3", reason: "miscalculated", text: "thought the bishop was protected", source: "game" },
       { game: null, ply: null, move: null, reason: "unknownPattern", text: "never seen this back-rank trick", source: "puzzle" },
+    ]; // prettier-ignore
+  }
+
+  journalPreview(id: number): CoachJournalLine[] {
+    if (!this.get(id).is_me) return [];
+    return [
+      { text: "The knight on e5 was the whole game. I saw it one move too late.", kind: "reflection", game: "G1", ply: 7, move: "4. Nxe5", weakness: "allowed:fork" },
+      { text: "I keep missing forks when I'm short of time.", kind: "note", game: null, ply: null, move: null, weakness: "allowed:fork" },
     ]; // prettier-ignore
   }
 
@@ -379,7 +424,13 @@ export class MockCoach {
       summary: "Most of your losses come from forks you allow, about 13 per 10 games, usually because you didn't check your opponent's replies. Your clock is the next problem: most of your late blunders come under 10% of your time.",
       findings,
       presets: [{ name: "Forks you allow", spec: { ...(r.preset?.spec ?? {}), ratios: [], themes: ["fork"] }, mode: "danger_spotting", why: [] }],
-      fallback_preset: false, discarded: 1, provider, model, cost_usd: cost,
+      fallback_preset: false, discarded: 1, provider, model, cost_usd: cost, include_journal: o.include_journal,
+      trend: r.comparison ? [
+        { key: "missed:pin", label: "Missed: Pin", change: "improved", comment: "Down from 13.3 to 10 per 10 games, and the pin drills are showing up in your games." },
+        { key: "allowed:fork", label: "Allowed: Fork", change: "worse", comment: "Up from 10 to 13.3 per 10 games, even though your fork puzzles improved: the gap is in checking your opponent's replies." },
+      ] : [],
+      plan: r.is_me ? this.h.aiPlan() : null,
+      plan_check: r.is_me ? { ai_tasks: 24, dropped: 2, filled: 2, fallback: false } : null,
     }; // prettier-ignore
   }
 }

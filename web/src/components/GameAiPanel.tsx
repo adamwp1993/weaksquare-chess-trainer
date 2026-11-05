@@ -10,6 +10,7 @@ import { dollars, useLlmSettings } from "../state/llm";
 import { useJob } from "../state/useJob";
 import { ExplanationView } from "./ExplainPanel";
 import { FeatureModelPicker } from "./FeatureModelPicker";
+import { Labeled } from "./OptionInfo";
 
 const BLOCKED = new Set(["not_configured", "no_model", "no_price", "over_budget", "over_cap"]);
 
@@ -210,7 +211,7 @@ export function GameNarrativePanel({
           <Select
             size="xs"
             w={170}
-            aria-label="Key moments to explain"
+            label={<Labeled id="review.aiMoments">Key moments</Labeled>}
             data={N_OPTIONS}
             value={n === null ? null : String(n)}
             placeholder="Moments: default"

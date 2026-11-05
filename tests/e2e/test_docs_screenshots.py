@@ -591,6 +591,54 @@ def test_coach_notes_preview(page) -> None:  # type: ignore[no-untyped-def]
     shot(page, "coach-notes-preview")
 
 
+def test_coach_since_last_report(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.12, FR-10.73: a second report compared with the first."""
+    page.goto(page.base_url + "/?coach=report")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-run").click()
+    since = page.get_by_test_id("since-last-report")
+    since.wait_for(timeout=5000)
+    since.scroll_into_view_if_needed()
+    page.mouse.move(1270, 890)
+    since.screenshot(path=str(IMG / "coach-since-last-report.png"), animations="disabled")
+
+
+def test_coach_journal_preview(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.12, FR-10.71: exactly what Include my journal sends, and the warning."""
+    _coach_ai(page)
+    page.get_by_test_id("coach-ai-journal").check()
+    page.get_by_test_id("coach-journal-line").first.wait_for()
+    shot(page, "coach-journal-preview")
+
+
+def test_plan_tab(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.12, FR-10.65: the plan with today open."""
+    page.goto(page.base_url + "/?coach=report&plan=current")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-plan").click()
+    page.get_by_test_id("plan-today-badge").wait_for()
+    page.wait_for_timeout(400)
+    shot(page, "plan-tab")
+
+
+def test_today_card(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.12, FR-10.65: Today's plan on the main page."""
+    page.goto(page.base_url + "/?coach=report&plan=current")
+    card = page.get_by_test_id("today-card")
+    card.wait_for()
+    page.mouse.move(1270, 890)
+    card.screenshot(path=str(IMG / "today-card.png"), animations="disabled")
+
+
+def test_journal_tab(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.12, FR-10.70: notes, a reflection and the daily log."""
+    page.goto(page.base_url + "/?coach=report&journal=some")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-journal").click()
+    page.get_by_test_id("journal-log").wait_for()
+    shot(page, "journal-tab")
+
+
 def test_suggested_mix_banner(page) -> None:  # type: ignore[no-untyped-def]
     """FR-10.31: the banner when a new suggestion waits behind filters you changed."""
     page.goto(page.base_url + "/?coach=banner")

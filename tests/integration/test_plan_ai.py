@@ -246,6 +246,29 @@ def _two_reports(services: Any, paths: Any) -> tuple[int, int]:
     return a, b
 
 
+def test_a_puzzle_history_report_gets_a_plan_with_no_game_tasks(services) -> None:  # type: ignore[no-untyped-def]
+    weak = {"key": "puzzle:fork", "kind": "puzzle", "name": "fork", "label": "Puzzles: Fork", "score": 3.0, "themes": ["fork"], "count": 9, "per10": 0, "severity": 0, "reasons": {}, "puzzle_accuracy": 0.5, "mode": None, "examples": []}  # fmt: skip
+    rid = CoachReportsRepo(services.db).add(
+        "2026-11-05T10:00:00+00:00", "me", "You", "puzzles", {"detail": "summary"},
+        {"source": "puzzles", "games": 0, "puzzles": [weak], "weaknesses": [weak], "whole_game": []}, [],
+    )  # fmt: skip
+    configure(services)
+    keyed = {"summary": "s", "weaknesses": [], "presets": [], "trend": []}
+    keyed["plan"] = {"weeks": [{"days": [{"tasks": [
+        {"type": "puzzles", "minutes": 10, "weakness_key": "puzzle:fork", "themes": ["fork"], "mode": "standard", "count": 5,
+         "rating_min": None, "rating_max": None, "severities": [], "game": None, "topic": None, "prompt": None},
+        {"type": "retry", "minutes": 10, "weakness_key": None, "themes": [], "mode": None, "count": None, "rating_min": None,
+         "rating_max": None, "severities": [], "game": "G1", "topic": None, "prompt": None},
+    ]}]}]}  # fmt: skip
+    fake(services).queue(json.dumps(keyed))
+    _wait(services, services.coach.start_ai(rid))
+    req = fake(services).requests[-1]
+    assert "plan" in req.schema["required"] and "trend" in req.schema["required"]
+    res = _runs(services, rid)[-1].result
+    assert res["plan_check"]["dropped"] == 1  # a puzzle report has no games to retry
+    assert {t["type"] for d in res["plan"]["days"] for t in d["tasks"]} <= {"puzzles", "reflection", "lesson"}
+
+
 def test_a_first_report_has_no_trend(services, paths) -> None:  # type: ignore[no-untyped-def]
     rid = _report(services, paths)
     assert services.coach.comparison(rid) is None

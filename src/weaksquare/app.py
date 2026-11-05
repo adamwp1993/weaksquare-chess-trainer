@@ -522,6 +522,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         game_explain=services.game_explain,
         game_puzzles=services.game_puzzles,
         coach=services.coach,
+        plan=services.plan,
+        journal=services.journal,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

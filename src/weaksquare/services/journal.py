@@ -137,6 +137,9 @@ class JournalService:
         self._entry(entry_id)
         self._repo.delete(entry_id)
 
+    def get(self, entry_id: Any) -> Any:
+        return self._entry(entry_id)
+
     def _entry(self, entry_id: Any) -> Any:
         found = self._repo.get(_id(entry_id, "entry_id"))
         if found is None:

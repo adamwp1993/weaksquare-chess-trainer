@@ -1028,6 +1028,246 @@ class CoachExample:
     cp_loss: int
 
 
+# ---- v0.12: Since last report (FR-10.73) -------------------------------------------------------------
+Verdict = Literal["better", "worse", "same", "not_enough"]
+
+
+@dataclass(frozen=True)
+class CoachPuzzleChange:
+    """First-try accuracy on a weakness's themes: up to the older report, then between the two."""
+
+    then: float | None  # %
+    now: float | None
+    then_attempts: int
+    now_attempts: int
+    verdict: Verdict
+
+
+@dataclass(frozen=True)
+class CoachWeaknessChange:
+    key: str
+    label: str
+    then: float | None
+    now: float | None
+    delta: float | None
+    flag: Literal["new", "gone"] | None
+    verdict: Verdict
+    series: list[float | None]  # oldest first, this report last
+    puzzle: CoachPuzzleChange | None
+
+
+@dataclass(frozen=True)
+class CoachMeasureChange:
+    key: str
+    label: str
+    unit: Literal["per10", "pct"]
+    then: float | None
+    now: float | None
+    delta: float | None
+    verdict: Verdict
+
+
+@dataclass(frozen=True)
+class CoachComparison:
+    earlier_id: int
+    earlier_created_at: str
+    days_between: int
+    new_games: int
+    shared_games: int
+    enough_new_games: bool
+    settings: Literal["same", "different", "unknown"]
+    puzzle_history: bool  # the rates are first-try accuracy (%), not per 10 games
+    reports: int  # how many reports the series cover
+    weaknesses: list[CoachWeaknessChange]
+    health: list[CoachMeasureChange]
+    measures: list[CoachMeasureChange]
+
+
+@dataclass(frozen=True)
+class CoachTrendNote:
+    """An AI statement about a trend that held up against the numbers (FR-10.73)."""
+
+    key: str
+    label: str
+    change: Literal["improved", "worse", "same"]
+    comment: str
+
+
+# ---- v0.12: the training plan (FR-10.61-10.66) --------------------------------------------------------
+PlanTaskType = Literal["puzzles", "game_puzzles", "retry", "review", "lesson", "reflection"]
+
+
+@dataclass(frozen=True)
+class PlanSettings:
+    weeks: int
+    weekdays: list[int]  # Monday = 0
+    minutes: int
+    carry_over: bool
+    has_report: bool  # a plan needs one report of yours
+
+
+@dataclass(frozen=True)
+class PlanPreviewTask:
+    type: PlanTaskType
+    title: str
+    minutes: int
+    weakness_key: str | None
+
+
+@dataclass(frozen=True)
+class PlanPreviewDay:
+    week: int
+    position: int
+    date: str | None  # None on an AI plan: it gets its dates when you use it
+    tasks: list[PlanPreviewTask]
+
+
+@dataclass(frozen=True)
+class PlanPreview:
+    weeks: int
+    weekdays: list[int]
+    minutes: int
+    start_date: str | None
+    replaces: bool  # a current plan would be replaced: confirm first
+    days: list[PlanPreviewDay]
+
+
+@dataclass(frozen=True)
+class AiPlanCheck:
+    ai_tasks: int
+    dropped: int
+    filled: int
+    fallback: bool
+
+
+@dataclass(frozen=True)
+class PlanTask:
+    id: int
+    type: PlanTaskType
+    title: str
+    weakness_key: str | None
+    minutes: int
+    status: Literal["left", "done", "skipped", "carried", "missed"]
+    auto: bool  # the app saw it done
+    manual: Literal["done", "undone"] | None  # your hand choice, which wins
+    progress: int | None  # puzzle tasks: decided attempts so far
+    count: int | None  # puzzle tasks: how many
+    minutes_spent: int
+    carried: bool  # copied from an earlier day
+
+
+@dataclass(frozen=True)
+class PlanDay:
+    id: int
+    week: int
+    position: int
+    date: str
+    is_today: bool
+    tasks: list[PlanTask]
+
+
+@dataclass(frozen=True)
+class TrainingPlan:
+    id: int
+    created_at: str
+    source: Literal["deterministic", "ai"]
+    status: Literal["current", "replaced"]
+    weeks: int
+    weekdays: list[int]
+    minutes_per_day: int
+    start_date: str
+    ended_at: str | None
+    done: int
+    skipped: int
+    left: int
+    minutes_spent: int
+    today: str
+    days: list[PlanDay]
+
+
+@dataclass(frozen=True)
+class TodayPlan:
+    plan_id: int
+    today: str
+    day: PlanDay | None  # None on a rest day
+    next_date: str | None
+    finished: bool
+
+
+@dataclass(frozen=True)
+class PlanTaskAction:
+    """What Start does (FR-10.63)."""
+
+    kind: Literal["session", "retry", "review", "lesson", "reflection"]
+    task_id: int
+    session: SessionInfo | None
+    remaining: int | None
+    mode: str | None
+    game_id: int | None
+    lesson: CoachLesson | None
+    prompt: str | None
+    weakness_key: str | None
+    plan_day_id: int | None
+
+
+# ---- v0.12: the journal (FR-10.67-10.70) --------------------------------------------------------------
+@dataclass(frozen=True)
+class JournalEntry:
+    id: int
+    created_at: str
+    updated_at: str
+    entry_date: str
+    kind: Literal["note", "reflection"]
+    text: str
+    game_id: int | None
+    ply: int | None  # 0-based
+    move: str | None  # "23... Nf6"
+    game_label: str | None
+    weakness_key: str | None
+    plan_day_id: int | None
+    plan_task_id: int | None
+
+
+@dataclass(frozen=True)
+class DayLogTally:
+    key: str
+    label: str
+    attempts: int
+    solved: int
+    accuracy: float | None
+
+
+@dataclass(frozen=True)
+class DayLog:
+    date: str
+    overall: DayLogTally
+    by_mode: list[DayLogTally]
+    by_source: list[DayLogTally]
+    missed_themes: list[str]
+    misclicks: int
+    games_synced: int
+    games_analyzed: int
+    games_reviewed: int
+    retries: int
+    retries_found: int
+    plan_tasks_done: int
+    coach_runs: list[str]  # each run's top weakness
+
+
+@dataclass(frozen=True)
+class JournalItem:
+    date: str
+    entry: JournalEntry | None
+    log: DayLog | None
+
+
+@dataclass(frozen=True)
+class JournalTimeline:
+    items: list[JournalItem]
+    window_start: str
+    older: bool
+
+
 @dataclass(frozen=True)
 class CoachWeakness:
     key: str  # missed:<theme> / allowed:<theme> / habit:<habit> / puzzle:<theme>
@@ -1044,6 +1284,8 @@ class CoachWeakness:
     examples: list[CoachExample]
     puzzle_accuracy: float | None
     trend: float | None  # change in per10 against your previous report (FR-10.20); None: no previous
+    # v0.12 (FR-10.73): what may be said about that change: better / worse / same / not_enough / new / gone.
+    change: Literal["better", "worse", "same", "not_enough", "new", "gone"] | None = None
 
 
 @dataclass(frozen=True)
@@ -1090,6 +1332,7 @@ class CoachReport:
     notes: list[str]
     whole_game: list[CoachWeakness] = field(default_factory=list)  # v0.11, FR-10.57
     measures: CoachMeasures | None = None  # v0.11, FR-10.53; None for older reports
+    comparison: CoachComparison | None = None  # v0.12, FR-10.73; None with no earlier report
 
 
 @dataclass(frozen=True)
@@ -1220,6 +1463,7 @@ class CoachAiRunSummary:
     cost_usd: float
     findings: int
     new: int  # findings no earlier run of this report had
+    include_journal: bool = False  # v0.12, FR-10.71
 
 
 @dataclass(frozen=True)
@@ -1273,6 +1517,22 @@ class CoachAiRun:
     provider: str
     model: str
     cost_usd: float
+    include_journal: bool = False  # v0.12, FR-10.71
+    trend: list[CoachTrendNote] = field(default_factory=list)  # v0.12, FR-10.73
+    plan: PlanPreview | None = None  # v0.12, FR-10.66: always complete; None for another player's report
+    plan_check: AiPlanCheck | None = None
+
+
+@dataclass(frozen=True)
+class CoachJournalLine:
+    """One entry Include my journal would send (FR-10.71), exactly as sent."""
+
+    text: str
+    kind: Literal["note", "reflection"]
+    game: str | None  # G label of this report's games; None otherwise
+    ply: int | None  # 1-based, as sent
+    move: str | None
+    weakness: str | None
 
 
 @dataclass(frozen=True)
@@ -1326,5 +1586,26 @@ EXPORTED += [
     CoachFinding,
     CoachAiRun,
     CoachNote,
+    CoachJournalLine,
+    CoachPuzzleChange,
+    CoachWeaknessChange,
+    CoachMeasureChange,
+    CoachComparison,
+    CoachTrendNote,
+    PlanSettings,
+    PlanPreviewTask,
+    PlanPreviewDay,
+    PlanPreview,
+    AiPlanCheck,
+    PlanTask,
+    PlanDay,
+    TrainingPlan,
+    TodayPlan,
+    PlanTaskAction,
+    JournalEntry,
+    DayLogTally,
+    DayLog,
+    JournalItem,
+    JournalTimeline,
     SuggestionView,
 ]

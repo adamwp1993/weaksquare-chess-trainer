@@ -56,6 +56,8 @@ An open-source (AGPL-3.0-or-later), single-user Windows desktop app for chess ta
   - Notes go only with **Include my notes** (FR-10.60).
   - From v0.12, journal entries go only with **Include my journal** (FR-10.71), after a preview; the training plan's progress goes as aggregates only (FR-10.66).
   - The LLM never writes a URL: lesson links are built by the app (FR-10.59).
+- **Every option has a tooltip (FR-10.72):** a new setting or choice gets an entry in `web/src/text/tooltips.ts` and an `OptionInfo` or `Labeled`. `tests/e2e/test_v012_tooltips.py` walks the screens and fails without one.
+- **A plan task never touches the Mixer (FR-10.63):** its session starts from `core.plan.task_spec`, never through `mixer.filters`, `trainer.mode` or presets. Ticks are worked out from stored events when the plan is read, and a hand choice always wins (FR-10.64).
 - **Fix tracking (§10.8):** a weakness's status is decided by its **game rate** over the rolling window against a frozen baseline, never by puzzle accuracy alone. Respect the sample-size guard. The Suggested preset never silently overwrites the user's manual filters.
 - **Stockfish (§9.1):** never commit, vendor or hard-code a download of the binary. Install it only through `services/engine_install.py` (pinned manifest, SHA-256 checked before extracting). Validate every position and move list with python-chess before sending it, because Stockfish 19 terminates on invalid input.
 - **One analysis pipeline:** Game Review (v0.8) builds `game_analysis`, and the Coach (v0.10) reuses it. Don't write a second analyzer.

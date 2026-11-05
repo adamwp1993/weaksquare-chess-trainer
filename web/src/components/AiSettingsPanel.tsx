@@ -18,6 +18,7 @@ import { dollars, publishLlm, useLlmSettings } from "../state/llm";
 import { useJob } from "../state/useJob";
 import { FeatureModelPicker } from "./FeatureModelPicker";
 import { PriceTable } from "./PriceTable";
+import { Labeled, OptionInfo } from "./OptionInfo";
 
 const REASONING: { value: LlmSettings["reasoning"]; label: string }[] = [
   { value: "low", label: "Low" },
@@ -113,7 +114,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
         Puzzle Explain
       </Text>
       <Select
-        label="AI provider (optional)"
+        label={<Labeled id="ai.provider">AI provider (optional)</Labeled>}
         description="Explain sends the puzzle position and moves to this provider. You pay them directly."
         data={[
           { value: "none", label: "None" },
@@ -128,7 +129,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
       {info && (
         <>
           <Autocomplete
-            label="Model"
+            label={<Labeled id="ai.model">Model</Labeled>}
             description="Pick one; nothing is chosen for you. You can also type another model ID."
             placeholder="Choose a model"
             data={options}
@@ -154,6 +155,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
           )}
           <Group align="flex-end" gap="xs" wrap="nowrap">
             <PasswordInput
+              data-no-tip="your key: it has its own description"
               style={{ flex: 1 }}
               label={`${info.label} API key`}
               description={info.key_stored ? "A key is saved in Windows Credential Manager." : "Saved in Windows Credential Manager, never in a file."}
@@ -185,9 +187,10 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
         </>
       )}
       {full && info && (
-            <Stack gap={2}>
+            <Stack gap={2} data-option-group>
               <Text size="sm" fw={500}>
                 Puzzle Explain reasoning
+                <OptionInfo id="ai.reasoning" />
               </Text>
               <SegmentedControl
                 data={REASONING}
@@ -219,7 +222,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
         <>
           <Group grow align="flex-start" key={inputsKey}>
             <NumberInput
-              label="Per-run cap ($)"
+              label={<Labeled id="ai.runCap">Per-run cap ($)</Labeled>}
               description="A request that could cost more is blocked"
               defaultValue={settings.run_cap_usd}
               min={0}
@@ -230,7 +233,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
               data-testid="ai-cap"
             />
             <NumberInput
-              label="Monthly budget ($)"
+              label={<Labeled id="ai.budget">Monthly budget ($)</Labeled>}
               description="Warns at 80%, blocks at 100%"
               defaultValue={settings.monthly_budget_usd}
               min={0}

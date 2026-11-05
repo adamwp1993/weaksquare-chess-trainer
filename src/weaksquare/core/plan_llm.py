@@ -209,7 +209,7 @@ def _task(
         if found is None:
             return None
         gid, name = found
-        at = ctx if name in ctx.games.values() else replace(ctx, games={**ctx.games, gid: name})
+        at = ctx if gid in ctx.games else replace(ctx, games={**ctx.games, gid: name})
         make = plans.retry_task if kind == plans.RETRY else plans.review_task
         return make(at, minutes, key, gid)
     if kind == plans.LESSON:

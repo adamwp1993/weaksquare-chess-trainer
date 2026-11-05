@@ -16,6 +16,7 @@ import {
   Stack,
   Switch,
   Table,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -23,11 +24,18 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { CoachParams, TrainingMode } from "../api/ApiClient";
-import type { CoachReport, CoachReportSummary, CoachWeakness, FilterSpec } from "../api/types";
+import type { CoachReport, CoachReportSummary, CoachWeakness, FilterSpec, PlanTask } from "../api/types";
 import { CoachAiPanel } from "../components/CoachAiPanel";
 import { PresetBox } from "../components/CoachPresetBox";
+import { JournalTab, type JournalDraft } from "../components/JournalTab";
+import { Labeled, OptionInfo } from "../components/OptionInfo";
+
+import { PlanTab } from "../components/PlanTab";
+import { SinceLastReport } from "../components/SinceLastReport";
 import { WholeGameMeasures } from "../components/WholeGameMeasures";
 import { useJob } from "../state/useJob";
+
+export type CoachTab = "report" | "plan" | "journal";
 
 const SOURCES = [
   { value: "puzzles", label: "Puzzle history", note: "No engine time, the fewest AI tokens: the themes you fail when you know it's a puzzle." },
@@ -53,10 +61,25 @@ function reasons(r: Record<string, number>): string {
     .join(", ");
 }
 
-function trendText(t: number | null): string {
-  if (t === null) return "";
-  if (t === 0) return "no change";
-  return t < 0 ? `▼ ${Math.abs(t)} (better)` : `▲ ${t} (worse)`;
+/** FR-10.73: better or worse only where the guards allow it. */
+function trendText(w: CoachWeakness): string {
+  const t = w.trend;
+  switch (w.change) {
+    case "new":
+      return "New";
+    case "gone":
+      return "Gone";
+    case "not_enough":
+      return "not enough new games yet";
+    case "same":
+      return "no change";
+    case "better":
+      return `▼ ${Math.abs(t ?? 0)} (better)`;
+    case "worse":
+      return `▲ ${t ?? 0} (worse)`;
+    default:
+      return "";
+  }
 }
 
 function WeaknessTable({
@@ -94,7 +117,7 @@ function WeaknessTable({
               <Table.Td ta="right">{w.per10}</Table.Td>
               <Table.Td ta="right">{w.severity ? `${(w.severity / 100).toFixed(1)}` : "—"}</Table.Td>
               <Table.Td>
-                <Text size="xs">{trendText(w.trend)}</Text>
+                <Text size="xs">{trendText(w)}</Text>
               </Table.Td>
               <Table.Td>
                 <Text size="xs">{reasons(w.reasons)}</Text>
@@ -120,10 +143,12 @@ function ReportView({
   report,
   onExample,
   onLoad,
+  onPlanChanged,
 }: {
   report: CoachReport;
   onExample: (gameId: number, ply: number) => void;
   onLoad: (spec: FilterSpec, mode: TrainingMode) => void;
+  onPlanChanged: () => void;
 }) {
   const r = report;
   const period = r.first_played && r.last_played ? `${r.first_played.slice(0, 10)} to ${r.last_played.slice(0, 10)}` : null;
@@ -156,6 +181,7 @@ function ReportView({
           {Object.keys(r.reasons).length > 0 && <Text size="sm">Why: {reasons(r.reasons)}</Text>}
         </Group>
       )}
+      {r.comparison && <SinceLastReport c={r.comparison} />}
       <WeaknessTable title="Tactics you allowed" items={r.allowed} testid="coach-allowed" onExample={onExample} />
       <WeaknessTable title="Tactics you missed" items={r.missed} testid="coach-missed" onExample={onExample} />
       <WeaknessTable title="Habits" items={r.habits} testid="coach-habits" onExample={onExample} />
@@ -200,7 +226,7 @@ function ReportView({
         <Text size="sm" c="dimmed">No tagged tactical mistakes in these games. Well played.</Text>
       )}
       {r.preset && <PresetBox p={r.preset} testid="coach-preset" onLoad={onLoad} />}
-      <CoachAiPanel report={r} onLoad={onLoad} onEvidence={onExample} />
+      <CoachAiPanel report={r} onLoad={onLoad} onEvidence={onExample} onPlanChanged={onPlanChanged} />
     </Stack>
   );
 }
@@ -211,7 +237,21 @@ export function CoachView({
   onReview,
   onLoad,
   onRunDone,
+  tab,
+  onTab,
+  planVersion,
+  onPlanChanged,
+  onStartTask,
+  journalDraft,
+  onClearDraft,
 }: {
+  tab: CoachTab;
+  onTab: (t: CoachTab) => void;
+  planVersion: number;
+  onPlanChanged: () => void;
+  onStartTask: (t: PlanTask) => void;
+  journalDraft: JournalDraft | null;
+  onClearDraft: () => void;
   /** Send to Coach (FR-11.30): exactly these games. */
   sendIds: number[];
   onClearSend: () => void;
@@ -276,7 +316,25 @@ export function CoachView({
     }
   };
 
+  const mine = report?.is_me ? report : null;
+  const weaknesses = mine
+    ? [...mine.allowed, ...mine.missed, ...mine.habits, ...mine.whole_game].map((w) => ({ value: w.key, label: w.label }))
+    : [];
   return (
+    <Tabs value={tab} onChange={(v) => onTab((v as CoachTab) ?? "report")} data-testid="coach-tabs">
+      <Tabs.List mb="md">
+        <Tabs.Tab value="report" data-testid="coach-tab-report">
+          Report
+        </Tabs.Tab>
+        <Tabs.Tab value="plan" data-testid="coach-tab-plan">
+          Plan
+        </Tabs.Tab>
+        <Tabs.Tab value="journal" data-testid="coach-tab-journal">
+          Journal
+        </Tabs.Tab>
+      </Tabs.List>
+      {/* The Report tab stays mounted so a Coach run or an AI answer carries on while you look at the others. */}
+      <Tabs.Panel value="report">
     <Grid gap="lg" data-testid="coach-page">
       <Grid.Col span={{ base: 12, md: 4 }}>
         <Stack gap="md">
@@ -286,7 +344,12 @@ export function CoachView({
               <Text size="sm" c="dimmed">
                 Finds what costs you points, on your PC and for free. The AI part is optional.
               </Text>
+              <Text size="sm" fw={500}>
+                What to read
+                <OptionInfo id="coach.source" />
+              </Text>
               <SegmentedControl
+                data-option-for="coach.source"
                 fullWidth
                 value={params.source}
                 onChange={(v) => set({ source: v as CoachParams["source"] })}
@@ -310,7 +373,12 @@ export function CoachView({
               ) : (
                 params.source !== "puzzles" && (
                   <>
+                    <Text size="sm" fw={500}>
+                      Whose games
+                      <OptionInfo id="coach.whose" />
+                    </Text>
                     <SegmentedControl
+                      data-option-for="coach.whose"
                       fullWidth
                       value={whose}
                       onChange={(v) => setWhose(v as "me" | "other")}
@@ -321,7 +389,14 @@ export function CoachView({
                       data-testid="coach-whose"
                     />
                     {whose === "me" && (
+                      <Text size="sm" fw={500}>
+                        Which of your games
+                        <OptionInfo id="coach.platforms" />
+                      </Text>
+                    )}
+                    {whose === "me" && (
                       <SegmentedControl
+                        data-option-for="coach.platforms"
                         fullWidth
                         size="xs"
                         value={params.platforms.length === 1 ? params.platforms[0] : "all"}
@@ -337,6 +412,7 @@ export function CoachView({
                     {whose === "other" && (
                       <Group grow align="flex-end">
                         <TextInput
+                          data-no-tip="a name or link you type"
                           label="Username or profile link"
                           placeholder="lichess.org/@/name"
                           value={params.player ?? ""}
@@ -344,7 +420,7 @@ export function CoachView({
                           data-testid="coach-player"
                         />
                         <Select
-                          label="On"
+                          label={<Labeled id="coach.platform">On</Labeled>}
                           value={params.platform}
                           onChange={(v) => set({ platform: (v as CoachParams["platform"]) ?? "lichess" })}
                           data={[
@@ -356,7 +432,7 @@ export function CoachView({
                       </Group>
                     )}
                     <Select
-                      label="Games"
+                      label={<Labeled id="coach.count">Games</Labeled>}
                       value={String(params.count)}
                       onChange={(v) => set({ count: Number(v) as CoachParams["count"] })}
                       data={["25", "50", "100", "200"].map((v) => ({ value: v, label: `Last ${v}` }))}
@@ -364,7 +440,11 @@ export function CoachView({
                       data-testid="coach-count"
                     />
                     <Chip.Group multiple value={params.time_classes} onChange={(v) => set({ time_classes: v })}>
-                      <Group gap={4}>
+                      <Group gap={4} data-option-group>
+                        <Text size="sm" fw={500}>
+                          Time controls
+                          <OptionInfo id="coach.timeClasses" />
+                        </Text>
                         {TIME_CLASSES.map((t) => (
                           <Chip key={t} value={t} size="xs">
                             {t}
@@ -373,8 +453,9 @@ export function CoachView({
                       </Group>
                     </Chip.Group>
                     <Group grow>
-                      <Switch label="Rated only" checked={params.rated_only} onChange={(e) => set({ rated_only: e.currentTarget.checked })} />
+                      <Switch label={<Labeled id="coach.ratedOnly">Rated only</Labeled>} checked={params.rated_only} onChange={(e) => set({ rated_only: e.currentTarget.checked })} />
                       <Select
+                        label={<Labeled id="coach.color">Color</Labeled>}
                         value={params.color}
                         onChange={(v) => set({ color: (v as CoachParams["color"]) ?? "both" })}
                         data={[
@@ -389,7 +470,7 @@ export function CoachView({
                 )
               )}
               <Select
-                label="AI detail level"
+                label={<Labeled id="coach.detail">AI detail level</Labeled>}
                 description="Only matters if you ask for AI coaching: Summary sends 3 key moments per game, Detailed 5 and more examples."
                 value={params.detail}
                 onChange={(v) => set({ detail: (v as CoachParams["detail"]) ?? "summary" })}
@@ -440,7 +521,7 @@ export function CoachView({
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 8 }}>
         {report ? (
-          <ReportView key={report.id} report={report} onExample={onReview} onLoad={onLoad} />
+          <ReportView key={report.id} report={report} onExample={onReview} onLoad={onLoad} onPlanChanged={onPlanChanged} />
         ) : (
           <Text c="dimmed" data-testid="coach-empty">
             Run the Coach to get your first report.
@@ -448,5 +529,20 @@ export function CoachView({
         )}
       </Grid.Col>
     </Grid>
+      </Tabs.Panel>
+      <Tabs.Panel value="plan">{tab === "plan" && <PlanTab version={planVersion} onChanged={onPlanChanged} onStart={onStartTask} />}</Tabs.Panel>
+      <Tabs.Panel value="journal">
+        {tab === "journal" && (
+          <JournalTab
+            key={journalDraft?.plan_task_id ?? "journal"}
+            weaknesses={weaknesses}
+            draft={journalDraft}
+            onClearDraft={onClearDraft}
+            onOpen={onReview}
+            onChanged={onPlanChanged}
+          />
+        )}
+      </Tabs.Panel>
+    </Tabs>
   );
 }
