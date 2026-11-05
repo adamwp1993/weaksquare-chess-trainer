@@ -233,6 +233,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-04, v0.11 (pre-planning): npm override pins minimatch to ^11.0.4 (Dependabot alert #1)
+- Context: Dependabot alert #1: minimatch 10.2.6 (>= 7.0.0, < 11.0.1) can be made to use excessive CPU and memory by a crafted glob pattern. It reaches `web/package-lock.json` only as a transitive **dev** dependency of `eslint` 10.14.0 and `typescript-eslint` 8.72.1, both already at their latest versions, which still ask for minimatch 10. ESLint only reads our own config's globs, so the real risk was low.
+- Decision: an `overrides` entry in `web/package.json` (`"minimatch": "^11.0.4"`) with the lock file regenerated. `npm audit` reports 0 vulnerabilities; ESLint, `tsc --noEmit` and the build pass, and ESLint still ignores `dist/` and still reports errors.
+- Alternatives: waiting for eslint to move to minimatch 11, rejected because the alert stays open in the meantime; dismissing the alert as dev-only, rejected because the fix is one line.
+- Consequences: remove the override once `eslint` and `typescript-eslint` depend on minimatch 11 themselves (check at each version's dependency review). If a future eslint breaks on minimatch 11, the override is the first thing to suspect.
+
 ### 2026-11-04, v0.10: QA fixes (v0.10-B1 to B8)
 - Context: QA round 1 (`qa/QA-v0.10.md`), PASS WITH ISSUES: two major and six minor bugs.
 - Decision:
