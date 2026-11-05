@@ -12,6 +12,7 @@ from typing import Any, Literal, Protocol
 from weaksquare.core.errors import ValidationError
 from weaksquare.core.filters import SAVED_FILTERS_VERSION, FilterSpec, upgrade_saved
 from weaksquare.core.ladder import DEFAULT_THRESHOLD, DEFAULT_WINDOW, validate_threshold, validate_window
+from weaksquare.core.lessons import DEFAULT_SITES, validate_custom_template
 from weaksquare.core.reasons import DEFAULT_RUSHED_S, validate_rushed_s
 from weaksquare.core.srs import DEFAULT_INTERVALS, validate_intervals
 
@@ -33,6 +34,10 @@ TIME_OFFSET_KEY = "debug.time_offset_days"  # FR-4.6 fast-forward, --dev runs on
 REASONS_ASK_KEY = "reasons.ask"  # FR-5.8: when to ask why you missed: always / game_review (v0.8) / off
 SHOW_BEST_KEY = "review.show_best"  # FR-11.35 (v0.10): Game Review shows the better move, default off
 RUSHED_S_KEY = "reasons.rushed_s"  # FR-5.9: a deciding move faster than this suggests Rushed
+# v0.11 (FR-10.59): which search links lesson pointers show, and an optional custom search site
+LESSON_SITES_KEY = "coach.lesson_sites"
+LESSON_CUSTOM_URL_KEY = "coach.lesson_custom_url"
+LESSON_SITES = ("youtube", "chesscom", "custom")
 REASONS_ASK = ("always", "game_review", "off")
 TRAINING_MODES = ("standard", "commit_line", "name_idea", "danger_spotting", "spaced_repetition")
 
@@ -70,6 +75,8 @@ class UiSettings:
     reasons_ask: str = "always"
     rushed_s: int = DEFAULT_RUSHED_S
     show_best: bool = False  # v0.10, FR-11.35
+    lesson_sites: tuple[str, ...] = DEFAULT_SITES  # v0.11, FR-10.59
+    lesson_custom_url: str = ""
 
 
 def _bool(name: str) -> Callable[[Any], Any]:
@@ -112,6 +119,21 @@ def _reasons_ask(value: Any) -> Any:
     return value
 
 
+def _lesson_sites(value: Any) -> Any:
+    if not isinstance(value, list) or not all(v in LESSON_SITES for v in value):
+        raise ValidationError("lesson sites must be a list of youtube, chesscom and custom")
+    return list(dict.fromkeys(value))
+
+
+def _custom_url(value: Any) -> Any:
+    if not isinstance(value, str):
+        raise ValidationError("the custom search address must be text")
+    try:
+        return validate_custom_template(value)
+    except ValueError as e:
+        raise ValidationError(str(e)) from None
+
+
 def _filters(value: Any) -> Any:
     return FilterSpec.from_json(value).to_json()
 
@@ -131,6 +153,8 @@ VALIDATORS: dict[str, Callable[[Any], Any]] = {
     REASONS_ASK_KEY: _reasons_ask,
     RUSHED_S_KEY: validate_rushed_s,
     SHOW_BEST_KEY: _bool("show_best"),
+    LESSON_SITES_KEY: _lesson_sites,
+    LESSON_CUSTOM_URL_KEY: _custom_url,
 }
 
 
@@ -170,7 +194,15 @@ class UiSettingsService:
             reasons_ask=self.reasons_ask(),
             rushed_s=self.rushed_s(),
             show_best=self._valid(SHOW_BEST_KEY, False),
+            lesson_sites=self.lesson_sites(),
+            lesson_custom_url=self.lesson_custom_url(),
         )
+
+    def lesson_sites(self) -> tuple[str, ...]:
+        return tuple(self._valid(LESSON_SITES_KEY, list(DEFAULT_SITES)))
+
+    def lesson_custom_url(self) -> str:
+        return str(self._valid(LESSON_CUSTOM_URL_KEY, ""))
 
     def _valid(self, key: str, default: Any) -> Any:
         """A stored value, or the default if it's missing or was written by another version."""

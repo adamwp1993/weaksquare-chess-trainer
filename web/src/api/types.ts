@@ -126,6 +126,8 @@ export interface UiSettings {
   reasons_ask: "always" | "game_review" | "off";
   rushed_s: number;
   show_best: boolean;
+  lesson_sites: ("youtube" | "chesscom" | "custom")[];
+  lesson_custom_url: string;
 }
 
 export interface SessionInfo {
@@ -786,7 +788,7 @@ export interface CoachExample {
 
 export interface CoachWeakness {
   key: string;
-  kind: "missed" | "allowed" | "habit" | "puzzle";
+  kind: "missed" | "allowed" | "habit" | "puzzle" | "opening" | "endgame" | "phase" | "time";
   name: string;
   label: string;
   count: number;
@@ -838,6 +840,8 @@ export interface CoachReport {
   low_clock_errors: number;
   preset: CoachPresetView | null;
   notes: string[];
+  whole_game: CoachWeakness[];
+  measures: CoachMeasures | null;
 }
 
 export interface CoachReportSummary {
@@ -863,22 +867,148 @@ export interface CoachDefaults {
   running_job: string | null;
 }
 
-export interface CoachAiNote {
-  key: string;
-  label: string;
-  explanation: string;
-  drill: string;
+export interface CoachOpeningRow {
+  family: string;
+  games: number;
+  score: number;
+  avg_eval_end: number | null;
+  errors_first15: number;
+  enough: boolean;
 }
 
-export interface CoachAi {
+export interface CoachEndgameRow {
+  type: string;
+  label: string;
+  games: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  errors: number;
+  enough: boolean;
+}
+
+export interface CoachRateRow {
+  games: number;
+  hits: number;
+  rate: number | null;
+  enough: boolean;
+}
+
+export interface CoachTimeRow {
+  games: number;
+  low_moves: number;
+  low_errors: number;
+  low_blunders: number;
+  low_error_rate: number | null;
+  other_moves: number;
+  other_errors: number;
+  other_blunders: number;
+  other_error_rate: number | null;
+  enough: boolean;
+}
+
+export interface CoachKingRow {
+  games: number;
+  late: number;
+  late_score: number | null;
+  on_time_score: number | null;
+  enough: boolean;
+}
+
+export interface CoachMeasures {
+  games: number;
+  min_games: number;
+  openings: CoachOpeningRow[];
+  errors_per10_by_phase: Record<string, number>;
+  conversion: CoachRateRow;
+  saves: CoachRateRow;
+  endgames: CoachEndgameRow[];
+  time: CoachTimeRow;
+  king: CoachKingRow;
+}
+
+export interface CoachAdvancedCompare {
+  games_with_moves: number;
+  token_ratio: number | null;
+  standard_usd: number | null;
+  budget_share: number | null;
+  minutes: number;
+}
+
+export interface CoachAiQuote {
+  quote: GameAiQuote;
+  compare: CoachAdvancedCompare | null;
+  cached_run: number | null;
+}
+
+export interface CoachAiRunSummary {
+  id: number;
+  created_at: string;
+  format: "keyed" | "diagnosis";
+  advanced: boolean;
+  include_notes: boolean;
+  game_cap: number | null;
+  provider: string;
+  model: string;
+  cost_usd: number;
+  findings: number;
+  new: number;
+}
+
+export interface CoachEvidence {
+  label: string;
+  game_id: number;
+  ply: number;
+  move: string;
+}
+
+export interface CoachLesson {
+  topic: string;
+  label: string;
+  drill: CoachPresetView | null;
+  curated: string[];
+  sites: ("youtube" | "chesscom" | "custom")[];
+}
+
+export interface CoachFinding {
+  key: string | null;
+  label: string | null;
+  category: "tactical" | "strategic" | "opening" | "endgame" | "time" | "other";
+  title: string;
+  explanation: string;
+  advice: string;
+  tentative: boolean;
+  observation: boolean;
+  seen: number;
+  new: boolean;
+  evidence: CoachEvidence[];
+  lesson: CoachLesson | null;
+}
+
+export interface CoachAiRun {
+  id: number;
+  created_at: string;
+  format: "keyed" | "diagnosis";
+  advanced: boolean;
+  include_notes: boolean;
+  game_cap: number | null;
   summary: string;
-  weaknesses: CoachAiNote[];
+  findings: CoachFinding[];
   presets: CoachPresetView[];
   fallback_preset: boolean;
   discarded: number;
   provider: string;
   model: string;
   cost_usd: number;
+}
+
+export interface CoachNote {
+  game: string | null;
+  ply: number | null;
+  move: string | null;
+  reason: string | null;
+  text: string;
+  source: "game" | "retry" | "puzzle" | "danger";
 }
 
 export interface SuggestionView {

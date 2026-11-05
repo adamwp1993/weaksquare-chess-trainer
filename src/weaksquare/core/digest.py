@@ -190,7 +190,8 @@ def _board_after(rows: Sequence[MoveRow], upto: int) -> chess.Board:
     return board
 
 
-def _numbered(row: MoveRow) -> str:
+def numbered_san(row: MoveRow) -> str:
+    """ "23. Nf3" or "23... Nf6": the move with its number, from its own position."""
     board = chess.Board(row.fen_before)
     n = board.fullmove_number
     return f"{n}. {row.move_san}" if row.mover == "white" else f"{n}... {row.move_san}"
@@ -320,7 +321,7 @@ def build_digest(
         moments.append(
             Moment(
                 ply=r.ply + 1,
-                move=_numbered(r),
+                move=numbered_san(r),
                 fen=r.fen_before,
                 played=r.move_san,
                 best=_san(r.fen_before, r.best_move),

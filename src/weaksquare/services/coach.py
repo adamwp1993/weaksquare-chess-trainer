@@ -45,7 +45,7 @@ from weaksquare.core.coach_llm import (
     fallback_preset,
     validate,
 )
-from weaksquare.core.digest import DIGEST_VERSION, Digest, build_digest
+from weaksquare.core.digest import DIGEST_VERSION, Digest, build_digest, numbered_san
 from weaksquare.core.errors import AppError, NotFoundError, ValidationError
 from weaksquare.core.filters import MY_TIME_CLASSES, FilterSpec
 from weaksquare.core.game_explain import san_moves
@@ -62,12 +62,22 @@ from weaksquare.core.games import (
     username_from,
     valid_username,
 )
-from weaksquare.core.lessons import catalog
+from weaksquare.core.lessons import (
+    DEFAULT_SITES,
+    SEARCH_SITES,
+    catalog,
+    curated,
+    drill_preset,
+    is_allowed,
+    search_url,
+    topic,
+    validate_custom_template,
+)
 from weaksquare.core.lichess import Dashboard
 from weaksquare.core.llm.defaults import COACH_TIMEOUT_S, TYPICAL_INPUT_TOKENS_PER_S, TYPICAL_OUTPUT_TOKENS_PER_S
 from weaksquare.core.stats import AttemptRow
 from weaksquare.core.stats import Report as StatsReport
-from weaksquare.core.suggested_mix import Suggestion, build_suggestion, report_preset
+from weaksquare.core.suggested_mix import DEFAULT_RATING, Suggestion, build_suggestion, report_preset
 from weaksquare.jobs.runner import CancelToken, JobCancelled, JobFailed, JobRunner, ProgressFn
 from weaksquare.services.llm_usage import prompt_chars
 
@@ -87,6 +97,8 @@ SUGGESTED_KEY = "mixer.suggested"
 APPLIED_KEY = "mixer.suggested_applied"
 FILTERS_KEY = "mixer.filters"
 MODE_KEY = "trainer.mode"
+LESSON_SITES_KEY = "coach.lesson_sites"  # v0.11, written through services/ui_settings.py
+LESSON_CUSTOM_URL_KEY = "coach.lesson_custom_url"
 POSITIONS_PER_GAME = 80  # for the time estimate
 RECENT_ATTEMPTS = 50
 
@@ -339,6 +351,17 @@ class AiRunView:
     cost_usd: float
     result: dict[str, Any]
     new: tuple[int, ...]  # indexes of findings no earlier run of this report had
+
+
+@dataclass(frozen=True)
+class LessonView:
+    """FR-10.59 for one topic, as the screen gets it: no URLs."""
+
+    topic: str
+    label: str
+    drill: dict[str, Any] | None  # "Learn X": a preset in the AI preset's shape
+    curated: list[str]  # titles; open with target "curated:<index>"
+    sites: list[str]  # youtube / chesscom / custom, as chosen in Settings
 
 
 def finding_id(f: Any) -> str:
@@ -948,6 +971,69 @@ class CoachService:
             )  # fmt: skip
             seen.update(ids)
         return out
+
+    def move_labels(self, game_id: int) -> list[str]:
+        """Every move of an analyzed game as numbered SAN ("23... Nf6"), by 0-based ply: what an
+        evidence chip shows, from your own analysis rather than the AI's text (FR-10.55)."""
+        if self._rows is None:
+            return []
+        return [numbered_san(r) for r in self._rows.rows(game_id)]
+
+    # ------------------------------------------------------------ lesson pointers (FR-10.59)
+
+    @staticmethod
+    def _families(row: Any) -> list[str]:
+        ms = row.report.get("measures") if isinstance(row.report, dict) else None
+        return [str(o.get("family")) for o in (ms or {}).get("openings") or [] if isinstance(o, dict)]
+
+    def lesson_sites(self) -> tuple[list[str], str]:
+        """(the search sites you chose, your custom template) from Settings → Coach."""
+        raw = self._settings.get(LESSON_SITES_KEY)
+        sites = [s for s in raw if s in (*SEARCH_SITES, "custom")] if isinstance(raw, list) else list(DEFAULT_SITES)
+        custom = self._settings.get(LESSON_CUSTOM_URL_KEY)
+        try:
+            template = validate_custom_template(custom) if isinstance(custom, str) else ""
+        except ValueError:
+            template = ""
+        if not template and "custom" in sites:
+            sites.remove("custom")
+        return sites, template
+
+    def lesson(self, report_id: Any, topic_id: str) -> LessonView | None:
+        """A topic's pointers: the in-app drill first, then the curated pages, then the search sites. No
+        URL leaves the backend: the screen gets titles and site names only."""
+        row, _ = self.report(report_id)
+        t = topic(topic_id, self._families(row)) if isinstance(topic_id, str) else None
+        if t is None:
+            return None
+        sites, _ = self.lesson_sites()
+        return LessonView(
+            t.id, t.label, drill_preset(t, self._rating() or DEFAULT_RATING),
+            [title for title, _ in curated(t.id)], sites,
+        )  # fmt: skip
+
+    def lesson_url(self, report_id: Any, topic_id: Any, target: Any) -> str:
+        """The URL behind one pointer, built here only (FR-10.59). Refuses anything off the curated
+        allowlist or the search sites you chose."""
+        if not isinstance(topic_id, str) or not isinstance(target, str):
+            raise ValidationError("Unknown lesson.")
+        row, _ = self.report(report_id)
+        t = topic(topic_id, self._families(row))
+        if t is None:
+            raise ValidationError("Unknown lesson topic.")
+        if target.startswith("curated:"):
+            links = curated(t.id)
+            idx = target.split(":", 1)[1]
+            if not idx.isdigit() or int(idx) >= len(links) or not is_allowed(links[int(idx)][1]):
+                raise ValidationError("Unknown lesson link.")
+            return links[int(idx)][1]
+        sites, template = self.lesson_sites()
+        if target not in sites:
+            raise ValidationError("That search site is turned off in Settings → Coach.")
+        try:
+            return search_url(target, t, template)
+        except ValueError as e:
+            raise ValidationError(str(e)) from None
 
     def ai_result(self, report_id: Any) -> tuple[Coaching, dict[str, Any]] | None:
         """The latest keyed (v0.10-format) answer."""
