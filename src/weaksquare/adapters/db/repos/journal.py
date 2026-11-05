@@ -101,6 +101,27 @@ class JournalRepo:
             rows = conn.execute(sql + " ORDER BY entry_date DESC, id DESC LIMIT ?", (*args, limit)).fetchall()
         return [_entry(r) for r in rows]
 
+    def earliest_date(self) -> str | None:
+        with self._db.session() as conn:
+            r = conn.execute("SELECT MIN(entry_date) FROM journal_entries").fetchone()
+        return str(r[0]) if r and r[0] else None
+
+    def games_with_entries(self) -> list[int]:
+        """Every game an entry is on, for the Game filter (FR-10.70), newest entry first."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT game_id FROM journal_entries WHERE game_id IS NOT NULL GROUP BY game_id ORDER BY MAX(id) DESC"
+            ).fetchall()
+        return [int(r[0]) for r in rows]
+
+    def day_exists(self, day_id: int) -> bool:
+        with self._db.session() as conn:
+            return conn.execute("SELECT 1 FROM plan_days WHERE id = ?", (day_id,)).fetchone() is not None
+
+    def task_exists(self, task_id: int) -> bool:
+        with self._db.session() as conn:
+            return conn.execute("SELECT 1 FROM plan_tasks WHERE id = ?", (task_id,)).fetchone() is not None
+
     def for_game(self, game_id: int) -> list[EntryRow]:
         """FR-10.69: a game's notes, in order of the move they're on (notes on the whole game first)."""
         with self._db.session() as conn:
@@ -181,9 +202,26 @@ class DailyLogRepo:
         return [RetryFact(str(r[0]), bool(r[1])) for r in rows]
 
     def plan_tasks_done(self, since: str, until: str) -> list[str]:
+        """QA v0.12-B6: done by what the app saw or by your hand, on the day it first was; not if you unticked it."""
         return self._times(
-            "SELECT done_at FROM plan_tasks WHERE removed = 0 AND done_at >= ? AND done_at < ?", since, until
+            "SELECT COALESCE(done_at, manual_at) AS at FROM plan_tasks WHERE removed = 0"
+            " AND (manual_state = 'done' OR (manual_state IS NULL AND done_at IS NOT NULL))"
+            " AND at >= ? AND at < ?",
+            since, until,
+        )  # fmt: skip
+
+    def earliest(self) -> str | None:
+        """When anything the log reports first happened (QA v0.12-B7: is there an older page?)."""
+        sql = (
+            "SELECT MIN(t) FROM (SELECT MIN(finished_at) AS t FROM attempts"
+            " UNION ALL SELECT MIN(g.fetched_at) FROM games g JOIN game_subjects s ON s.game_id = g.id AND s.subject = 'me'"
+            " UNION ALL SELECT MIN(created_at) FROM retry_attempts"
+            " UNION ALL SELECT MIN(completed_at) FROM review_passes"
+            " UNION ALL SELECT MIN(created_at) FROM coach_reports WHERE subject = 'me')"
         )
+        with self._db.session() as conn:
+            r = conn.execute(sql).fetchone()
+        return str(r[0]) if r and r[0] else None
 
     def reports(self, since: str, until: str) -> list[ReportFact]:
         with self._db.session() as conn:

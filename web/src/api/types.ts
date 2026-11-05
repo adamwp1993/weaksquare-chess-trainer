@@ -1227,10 +1227,16 @@ export interface JournalItem {
   log: DayLog | null;
 }
 
+export interface JournalGame {
+  id: number;
+  label: string;
+}
+
 export interface JournalTimeline {
   items: JournalItem[];
   window_start: string;
   older: boolean;
+  games: JournalGame[];
 }
 
 export interface SuggestionView {

@@ -49,7 +49,7 @@ export function GameNotes({
           </Text>
         )}
         {notes.map((n) => (
-          <Text key={n.id} size="sm" style={{ whiteSpace: "pre-wrap" }} data-testid={`game-note-${n.id}`}>
+          <Text key={n.id} size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }} data-testid={`game-note-${n.id}`}>
             {n.ply !== null ? (
               <Anchor size="sm" component="button" onClick={() => onGo(n.ply!)} data-testid={`game-note-go-${n.id}`}>
                 {n.move ?? `Move ${n.ply + 1}`}:

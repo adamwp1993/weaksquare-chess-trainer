@@ -1141,7 +1141,12 @@ class Api:
             dto.JournalItem(i.date, self._entry_dto(i.entry) if i.entry is not None else None, _day_log_dto(i.log) if i.log is not None else None)
             for i in t.items
         ]  # fmt: skip
-        return dto.JournalTimeline(items, t.window_start, t.older)
+        games = [dto.JournalGame(gid, self._game_label(gid)) for gid in t.games]
+        return dto.JournalTimeline(items, t.window_start, t.older, games)
+
+    def _game_label(self, game_id: int) -> str:
+        g = self._games.get(game_id)
+        return f"{g.white or '?'} – {g.black or '?'}"
 
     @bridge_call
     def add_journal_entry(self, entry: dict) -> dto.JournalEntry:  # type: ignore[type-arg]
@@ -1172,8 +1177,7 @@ class Api:
     def _entry_dto(self, e: Any) -> dto.JournalEntry:
         move = label = None
         if e.game_id is not None:
-            g = self._games.get(e.game_id)
-            label = f"{g.white or '?'} – {g.black or '?'}"
+            label = self._game_label(e.game_id)
             if e.ply is not None:
                 sans = self._coach.move_labels(e.game_id)
                 move = sans[e.ply] if 0 <= e.ply < len(sans) else None

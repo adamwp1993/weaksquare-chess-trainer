@@ -12,9 +12,10 @@ from typing import Any, Protocol
 from weaksquare.core.clock import Clock
 from weaksquare.core.daily_log import DayFacts, DayLog, build_day, top_weakness
 from weaksquare.core.errors import NotFoundError, ValidationError
+from weaksquare.core.games import GameError, parse_single_pgn
 from weaksquare.core.stats import AttemptRow
 from weaksquare.core.themes import display_name
-from weaksquare.core.urls import strip_urls
+from weaksquare.core.urls import is_address, strip_urls
 
 MAX_ENTRY = 5000  # FR-10.67
 MAX_KEY = 200
@@ -22,6 +23,7 @@ WINDOW_DAYS = 30  # one page of the timeline
 PROMPT_ENTRIES = 30  # FR-10.71
 PROMPT_ENTRY_CHARS = 1000
 KINDS = ("note", "reflection", "log")
+WEAKNESS_KINDS = ("missed", "allowed", "habit", "puzzle", "opening", "endgame", "phase", "time")
 
 
 class Games(Protocol):
@@ -43,7 +45,8 @@ class TimelineItem:
 class Timeline:
     items: tuple[TimelineItem, ...]
     window_start: str  # the oldest date this page covers
-    older: bool  # a further page may have something
+    older: bool  # a further page has something
+    games: tuple[int, ...] = ()  # every game an entry is on, for the Game filter (FR-10.70)
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,13 @@ def _date(value: Any, field: str) -> str | None:
         except ValueError:
             pass
     raise ValidationError(f"{field} must be a date.")
+
+
+def _moves_in(game: Any) -> int:
+    try:
+        return len(parse_single_pgn(game.pgn).moves)
+    except GameError:
+        return 0
 
 
 def _id(value: Any, field: str) -> int | None:
@@ -104,6 +114,10 @@ class JournalService:
             return None
         if not isinstance(key, str) or len(key) > MAX_KEY:
             raise ValidationError("Unknown weakness.")
+        # QA v0.12-B10: a tag goes to the AI with Include my journal, so it can only be a weakness key.
+        kind, _, name = key.partition(":")
+        if kind not in WEAKNESS_KINDS or not name or any(is_address(w) for w in name.split()):
+            raise ValidationError("Unknown weakness.")
         return key
 
     # ------------------------------------------------------------ entries (FR-10.67, 10.69)
@@ -114,18 +128,26 @@ class JournalService:
     ) -> int:  # fmt: skip
         body = self._text(text)
         gid, at_ply = _id(game_id, "game_id"), _id(ply, "ply")
+        day, task = _id(plan_day_id, "plan_day_id"), _id(plan_task_id, "plan_task_id")
         if at_ply is not None and gid is None:
             raise ValidationError("A note on a move needs its game.")
-        if gid is not None and self._games.get(gid) is None:
+        game = self._games.get(gid) if gid is not None else None
+        if gid is not None and game is None:
             raise NotFoundError("That game isn't in your library.")
-        if at_ply is not None and at_ply < 0:
+        if at_ply is not None and not 0 <= at_ply < _moves_in(game):
             raise ValidationError("That move isn't in this game.")
+        # QA v0.12-B8: what an entry links to must exist, and its date can't be in the future.
+        if day is not None and not self._repo.day_exists(day):
+            raise NotFoundError("That plan day doesn't exist.")
+        if task is not None and not self._repo.task_exists(task):
+            raise NotFoundError("That plan task doesn't exist.")
+        when = _date(entry_date, "The date") or self._today().isoformat()
+        if when > self._today().isoformat():
+            raise ValidationError("A journal entry can't be dated in the future.")
         return int(
             self._repo.add(
-                self._now(), _date(entry_date, "The date") or self._today().isoformat(),
-                "reflection" if gid is not None else "note", body, game_id=gid, ply=at_ply,
-                weakness_key=self._weakness(weakness_key), plan_day_id=_id(plan_day_id, "plan_day_id"),
-                plan_task_id=_id(plan_task_id, "plan_task_id"),
+                self._now(), when, "reflection" if gid is not None else "note", body, game_id=gid, ply=at_ply,
+                weakness_key=self._weakness(weakness_key), plan_day_id=day, plan_task_id=task,
             )
         )  # fmt: skip
 
@@ -233,13 +255,22 @@ class JournalService:
         last = date.fromisoformat(date_to) if date_to else today
         if before is not None:
             last = min(last, date.fromisoformat(before) - timedelta(days=1))
-        first = last - timedelta(days=WINDOW_DAYS - 1)
-        floor = date.fromisoformat(date_from) if date_from else None
-        if floor is not None and first < floor:
-            first = floor
-        older = floor is None or first > floor
         want = set(kinds) or set(KINDS)
         entry_kinds = [k for k in ("note", "reflection") if k in want]
+        floor = date.fromisoformat(date_from) if date_from else None
+        games = tuple(self._repo.games_with_entries())
+        # QA v0.12-B7: a search or a filter that only entries can match looks at all of them. Only the daily log,
+        # which is computed day by day, comes a window at a time.
+        if gid or weakness or query or "log" not in want:
+            found = self._repo.search(
+                kinds=entry_kinds, game_id=gid, weakness_key=weakness, date_from=date_from,
+                date_to=last.isoformat(), query=query,
+            )  # fmt: skip
+            return Timeline(tuple(TimelineItem(e.entry_date, entry=e) for e in found), date_from or "", False, games)
+        first = last - timedelta(days=WINDOW_DAYS - 1)
+        if floor is not None and first < floor:
+            first = floor
+        older = self._has_older(first, floor)
         items: list[TimelineItem] = []
         if first <= last and entry_kinds:
             for e in self._repo.search(
@@ -247,12 +278,19 @@ class JournalService:
                 date_to=last.isoformat(), query=query,
             ):  # fmt: skip
                 items.append(TimelineItem(e.entry_date, entry=e))
-        if first <= last and "log" in want and not (gid or weakness or query):
+        if first <= last and "log" in want:
             for d, log in self.day_logs(first, last).items():
                 items.append(TimelineItem(d, log=log))
         # Newest day first; within a day, your own words above the log, newest entry first.
         items.sort(key=lambda i: (i.date, i.log is None, i.entry.id if i.entry is not None else 0), reverse=True)
-        return Timeline(tuple(items), first.isoformat(), older)
+        return Timeline(tuple(items), first.isoformat(), older, games)
+
+    def _has_older(self, first: date, floor: date | None) -> bool:
+        """Is there anything before this window to page back to? (QA v0.12-B7.)"""
+        if floor is not None and first <= floor:
+            return False
+        dates = [self._repo.earliest_date(), self._log.earliest()]
+        return any(d is not None and d[:10] < first.isoformat() for d in dates)
 
     # ------------------------------------------------------------ Include my journal (FR-10.71)
 

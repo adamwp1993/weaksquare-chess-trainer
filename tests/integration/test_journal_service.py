@@ -51,8 +51,10 @@ def test_exactly_the_limit_is_allowed(services) -> None:  # type: ignore[no-unty
 def test_a_chosen_date_must_be_a_date(services) -> None:  # type: ignore[no-untyped-def]
     with pytest.raises(ValidationError):
         services.journal.add("t", entry_date="not a date")
-    eid = services.journal.add("t", entry_date="2026-10-01")
-    assert services.journal._repo.get(eid).entry_date == "2026-10-01"
+    eid = services.journal.add("t", entry_date="2025-10-01")
+    assert services.journal._repo.get(eid).entry_date == "2025-10-01"
+    with pytest.raises(ValidationError):  # QA v0.12-B8: it would never show
+        services.journal.add("t", entry_date="2026-01-02")
 
 
 # ---- FR-10.69: game reflections ----
@@ -181,7 +183,8 @@ def test_prompt_items_label_games_strip_urls_and_cut(services) -> None:  # type:
     assert len(outside.text) == PROMPT_ENTRY_CHARS and outside.ply is None
 
 
-def test_prompt_items_cover_the_reports_games_and_entries_since_its_first_game(services) -> None:  # type: ignore[no-untyped-def]
+def test_prompt_items_cover_the_reports_games_and_entries_since_its_first_game(services, clock) -> None:  # type: ignore[no-untyped-def]
+    clock.advance(days=400)
     gid = _games(services, 1)[0]
     services.journal.add("Old but on this game.", entry_date="2020-01-01", game_id=gid)
     services.journal.add("Old and unrelated.", entry_date="2020-01-01")
@@ -190,7 +193,8 @@ def test_prompt_items_cover_the_reports_games_and_entries_since_its_first_game(s
     assert texts == {"Old but on this game.", "Recent."}
 
 
-def test_prompt_items_keep_the_newest_entries(services) -> None:  # type: ignore[no-untyped-def]
+def test_prompt_items_keep_the_newest_entries(services, clock) -> None:  # type: ignore[no-untyped-def]
+    clock.advance(days=400)
     for n in range(PROMPT_ENTRIES + 5):
         services.journal.add(f"note {n}", entry_date="2026-11-04")
     items = services.journal.prompt_items({}, "2026-01-01")

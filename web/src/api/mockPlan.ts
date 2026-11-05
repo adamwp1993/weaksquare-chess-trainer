@@ -365,6 +365,7 @@ export class MockPlan {
     );
     const items: JournalItem[] = [...entries].reverse().map((entry) => ({ date: entry.entry_date, entry, log: null }));
     if (kinds.includes("log") && !q && !f.weakness_key && !f.game_id) items.push({ date: "2026-11-04", entry: null, log: this.log() });
-    return { items, window_start: "2026-10-07", older: !f.before };
+    const games = this.entries.filter((e) => e.game_id !== null).map((e) => ({ id: e.game_id as number, label: e.game_label ?? "" }));
+    return { items, window_start: "2026-10-07", older: !f.before && !q && !f.weakness_key && !f.game_id, games: games.filter((g, i) => games.findIndex((x) => x.id === g.id) === i) };
   }
 }

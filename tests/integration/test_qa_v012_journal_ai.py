@@ -231,15 +231,12 @@ def test_qa_the_trend_part_has_aggregates_only_and_nothing_from_another_player(a
     assert not re.search(r'"(game_id|ply|examples|name|created_at|earlier_id|id)"', json.dumps(trend))
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B10: a journal entry's weakness tag isn't checked or cleaned before it goes to the LLM"
-)
 def test_qa_a_weakness_tag_can_not_carry_a_url_to_the_llm(api: Api, paths: Any) -> None:
     plant_managed_install(paths)
     svc = _svc(api)
     _games(svc, 1)
     rid = _run(svc, {"source": "games", **ANY_GAME})
-    got = api.add_journal_entry({"text": "plain", "weakness_key": "https://evil.example/u", "entry_date": "2030-01-01"})
+    got = api.add_journal_entry({"text": "plain", "weakness_key": "https://evil.example/u"})
     if got["ok"]:
         lines = _ok(api.get_coach_journal_preview(rid))
         assert all("evil.example" not in str(x) for x in lines)
@@ -249,6 +246,7 @@ def test_qa_a_weakness_tag_can_not_carry_a_url_to_the_llm(api: Api, paths: Any) 
 
 
 def test_qa_the_preview_is_exactly_what_is_sent_in_scope_order_cut_and_labels(api: Api, paths: Any, clock: Any) -> None:
+    clock.advance(days=1500)  # after the fixture games and every date below: an entry can't be in the future
     plant_managed_install(paths)
     svc = _svc(api)
     ids = _games(svc, 2)
@@ -295,7 +293,8 @@ def test_qa_the_preview_is_exactly_what_is_sent_in_scope_order_cut_and_labels(ap
     assert [s.get("weakness") for s in sent] == [p["weakness"] for p in preview]
 
 
-def test_qa_only_the_newest_30_entries_go(api: Api, paths: Any) -> None:
+def test_qa_only_the_newest_30_entries_go(api: Api, paths: Any, clock: Any) -> None:
+    clock.advance(days=1500)  # after the fixture games and every date below: an entry can't be in the future
     plant_managed_install(paths)
     svc = _svc(api)
     _games(svc, 1)
@@ -306,7 +305,8 @@ def test_qa_only_the_newest_30_entries_go(api: Api, paths: Any) -> None:
     assert [p["text"] for p in preview] == [f"Entry {i}" for i in range(34, 4, -1)]
 
 
-def test_qa_journal_text_never_goes_without_the_option_even_from_a_task(api: Api, paths: Any) -> None:
+def test_qa_journal_text_never_goes_without_the_option_even_from_a_task(api: Api, paths: Any, clock: Any) -> None:
+    clock.advance(days=1500)  # after the fixture games and every date below: an entry can't be in the future
     plant_managed_install(paths)
     svc = _svc(api)
     gid = _games(svc, 1)[0]
@@ -374,7 +374,8 @@ def _setup_saved(api: Api, paths: Any) -> tuple[int, int, Any]:
     return rid, gid, svc
 
 
-def test_qa_saved_answers_follow_the_journal_text_in_scope_not_anything_else(api: Api, paths: Any) -> None:
+def test_qa_saved_answers_follow_the_journal_text_in_scope_not_anything_else(api: Api, paths: Any, clock: Any) -> None:
+    clock.advance(days=1500)  # after the fixture games and every date below: an entry can't be in the future
     rid, gid, svc = _setup_saved(api, paths)
     on = {"include_journal": True}
     entry = _ok(api.add_journal_entry({"text": "First.", "game_id": gid}))
@@ -494,9 +495,6 @@ def _weak(key: str, per10: float, **kw: Any) -> dict[str, Any]:
             "themes": [], "mode": None, "reasons": {}, "examples": [], **kw}  # fmt: skip
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B2: a whole-game weakness gone below the 5-game group guard is called better"
-)
 def test_qa_a_whole_game_weakness_whose_group_fell_below_5_games_is_not_called_better() -> None:
     w = _weak("opening:Sicilian", 6.0)
     old = {"source": "games", "games": 20, "whole_game": [w], "weaknesses": [],
@@ -578,7 +576,6 @@ def test_qa_a_reflection_shows_in_game_and_journal_and_survives_the_game_notes_r
     assert e["ply"] == 2 and e["move"]
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B8: a note can be saved on a move the game doesn't have")
 def test_qa_a_note_on_a_move_past_the_end_of_the_game_is_refused(api: Api) -> None:
     gid = _secret_game(api, 0)
     assert api.add_journal_entry({"text": "No such move.", "game_id": gid, "ply": 9999})["ok"] is False
@@ -593,9 +590,6 @@ def test_qa_an_entry_of_exactly_the_limit_is_kept_and_one_more_is_refused(api: A
     assert api.edit_journal_entry(e["id"], "y" * 5001, "missed:fork")["ok"] is False
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B8: a task or day that doesn't exist crashes the call instead of a plain refusal"
-)
 def test_qa_bad_links_on_a_journal_entry_get_a_plain_refusal(api: Api) -> None:
     for field in ("plan_task_id", "plan_day_id"):
         got = api.add_journal_entry({"text": "x", field: 987654})
@@ -614,16 +608,12 @@ def test_qa_search_treats_wildcards_literally_and_is_case_insensitive(api: Api) 
     assert _jdates(_ok(api.get_journal({"query": "' OR 1=1 --"}))) == []
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B7: search and filters only look at the newest 30 days until you page back"
-)
 def test_qa_search_finds_an_old_entry(api: Api, clock: Any) -> None:
     _ok(api.add_journal_entry({"text": "An old thought about pins."}))
     clock.advance(days=60)
     assert _jdates(_ok(api.get_journal({"query": "pins"}))) == ["An old thought about pins."]
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B8: an entry dated in the future is stored but never shown")
 def test_qa_an_entry_dated_tomorrow_is_not_lost(api: Api, clock: Any) -> None:
     tomorrow = (clock.now() + timedelta(days=1)).date().isoformat()
     got = api.add_journal_entry({"text": "From the future.", "entry_date": tomorrow})
@@ -710,9 +700,6 @@ def test_qa_the_daily_log_counts_each_fact_on_its_day(api: Api, paths: Any, cloc
     assert len(items) == 1 and items[0]["log"]["games_reviewed"] == 1  # nothing moved to the new day
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B6: a task you ticked by hand isn't counted under Plan tasks done in the daily log"
-)
 def test_qa_the_daily_log_counts_a_task_ticked_by_hand(api: Api) -> None:
     plan = _plan_with(api, [[Task(REFLECTION, 10, "x", {"prompt": "x"}), _puzzles_task(1)]])
     _ok(api.set_plan_task_tick(plan["days"][0]["tasks"][0]["id"], True))

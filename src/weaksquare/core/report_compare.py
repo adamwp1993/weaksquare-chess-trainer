@@ -161,6 +161,36 @@ def _settings_state(a: Any, b: Any) -> str:
     return "same" if a == b else "different"
 
 
+def _group_games(data: Mapping[str, Any], key: str) -> int | None:
+    """How many games a whole-game weakness's own group has in a report (FR-10.73's "in that group"). None for a
+    weakness that's measured over the whole report, whose group is the report's games."""
+    kind, _, name = key.partition(":")
+    ms = data.get("measures")
+    measures = ms if isinstance(ms, Mapping) else {}
+
+    def named(rows_key: str, field: str) -> int:
+        for row in measures.get(rows_key) or ():
+            if isinstance(row, Mapping) and row.get(field) == name:
+                return int(row.get("games") or 0)
+        return 0
+
+    if kind == "opening":
+        return named("openings", "family")
+    if kind == "endgame":
+        return named("endgames", "type")
+    group = {"phase:conversion": "conversion", "time:low_clock": "time", "habit:castledLate": "king"}.get(key)
+    return int(_group(measures, group).get("games") or 0) if group else None
+
+
+def _group_enough(cur: Side, old: Side, key: str, enough: bool) -> bool:
+    """QA v0.12-B2: a weakness that only fell below its group's 5 games hasn't improved: there's no longer a
+    rate to compare."""
+    a, b = _group_games(old.data, key), _group_games(cur.data, key)
+    if a is None or b is None:
+        return enough
+    return enough and a >= MIN_GROUP_GAMES and b >= MIN_GROUP_GAMES
+
+
 def _weakness_rows(
     cur: Side, chain: Sequence[Side], enough: bool, puzzle: Mapping[str, PuzzleChange]
 ) -> list[WeaknessChange]:
@@ -176,7 +206,9 @@ def _weakness_rows(
         then = float(old_rates[key].get("per10") or 0.0) if was else None
         now = float(now_rates[key].get("per10") or 0.0) if in_now else 0.0
         flag = "new" if key not in old_rates else "gone" if key not in now_top else None
-        verdict = _verdict(then, now, enough=enough, higher_is_better=False, same=SAME_RATE)
+        verdict = _verdict(
+            then, now, enough=_group_enough(cur, old, key, enough), higher_is_better=False, same=SAME_RATE
+        )
         out.append(
             WeaknessChange(
                 key, str(w.get("label") or key), then, now, _delta(then, now), flag, verdict,

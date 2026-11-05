@@ -32,7 +32,6 @@ def _shot(page: Page, name: str, full: bool = True) -> None:
 # ---- FR-10.69, 10.70 ----
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B3: the journal's link opens the position before the move the note is on")
 def test_qa_a_notes_link_opens_the_very_move_the_note_is_on(page: Page) -> None:
     _open(page, "coach=report&journal=some")
     _coach(page, "journal")
@@ -49,7 +48,6 @@ def test_qa_a_note_links_inside_the_game_go_to_their_move(page: Page) -> None:
     expect(page.get_by_test_id("move-6")).to_have_attribute("data-variant", "filled")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B4: the Journal tab has no game filter (FR-10.70)")
 def test_qa_the_journal_can_be_filtered_by_game(page: Page) -> None:
     _open(page, "coach=report&journal=some")
     _coach(page, "journal")
@@ -69,12 +67,11 @@ def test_qa_html_in_your_own_words_is_only_text(page: Page) -> None:
     assert page.evaluate("window.__pwned") is None
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B14: one long word in a note makes the whole page scroll sideways")
 def test_qa_the_longest_entry_of_one_unbroken_word_stays_inside_its_box(page: Page) -> None:
     _open(page, "coach=report")
     _coach(page, "journal")
     page.get_by_test_id("journal-text").fill("y" * 5000)
-    expect(page.get_by_test_id("journal-composer")).to_contain_text("5000 / 5,000")
+    expect(page.get_by_test_id("journal-composer")).to_contain_text("5,000 / 5,000")
     page.get_by_test_id("journal-save").click()
     entry = page.locator('[data-testid^="journal-entry-"]').first
     expect(entry).to_be_visible()

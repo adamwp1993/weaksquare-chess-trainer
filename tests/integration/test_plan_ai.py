@@ -79,7 +79,7 @@ def test_another_players_report_gets_no_plan_and_no_journal(services, paths) -> 
 def test_journal_text_goes_only_with_the_option_and_the_preview_is_what_is_sent(services, paths) -> None:  # type: ignore[no-untyped-def]
     rid = _report(services, paths)
     gid = services.coach.report(rid)[0].game_ids[0]
-    services.journal.add("I rushed this one, https://lichess.org/AbCd1234 shows it.", game_id=gid, ply=12, weakness_key="missed:mateIn1")  # fmt: skip
+    services.journal.add("I rushed this one, https://lichess.org/AbCd1234 shows it.", game_id=gid, ply=2, weakness_key="missed:mateIn1")  # fmt: skip
     configure(services)
     fake(services).queue(_with())
     _wait(services, services.coach.start_ai(rid))
@@ -90,7 +90,7 @@ def test_journal_text_goes_only_with_the_option_and_the_preview_is_what_is_sent(
     _wait(services, services.coach.start_ai(rid, {"include_journal": True}))
     user = fake(services).requests[-1].user
     assert len(preview) == 1 and preview[0].text in user
-    assert preview[0].game == "G1" and preview[0].ply == 13  # the report's label, 1-based
+    assert preview[0].game == "G1" and preview[0].ply == 3  # the report's label, 1-based
     assert "lichess.org" not in user and "AbCd1234" not in user
     assert f'"game_id":{gid}' not in user
 

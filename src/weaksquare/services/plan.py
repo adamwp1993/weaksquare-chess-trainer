@@ -132,7 +132,9 @@ class PlanService:
     def __init__(
         self, plans: Any, passes: Any, reports: Any, games: Any, review: Any, sessions: Any, puzzles: Any,
         stats: Any, settings: Settings, engine: Any, game_puzzles: Any, account: Any, clock: Clock,
+        puzzle_db: Any = None,
     ) -> None:  # fmt: skip
+        self._puzzle_db = puzzle_db
         self._plans = plans
         self._passes = passes
         self._reports = reports
@@ -219,6 +221,10 @@ class PlanService:
             frozenset(retry), tuple(families),
         )  # fmt: skip
 
+    def _puzzles_ready(self) -> bool:
+        """QA v0.12-B13: a games-only Coach run needs no puzzle database, so a plan can be built without one."""
+        return self._puzzle_db is None or bool(self._puzzle_db.status().installed)
+
     def _available(self, t: Task, memo: dict[str, int]) -> int:
         spec, _ = task_spec(t.type, t.params)
         key = repr(replace(spec, queue_size=None))
@@ -229,7 +235,7 @@ class PlanService:
     def fit_task(self, t: Task, ctx: Context, memo: dict[str, int] | None = None) -> Task:
         """A puzzle task needs enough puzzles. Its rating band widens, then opens up, before it gives way to
         the general session (so Start never meets *no puzzles match*)."""
-        if t.type not in (PUZZLES, GAME_PUZZLES):
+        if t.type not in (PUZZLES, GAME_PUZZLES) or not self._puzzles_ready():
             return t
         memo = {} if memo is None else memo
         need = int(t.params.get("count") or 1)
@@ -325,7 +331,8 @@ class PlanService:
 
     def _facts(self, plan: PlanRow) -> Facts:
         tasks = [t for d in plan.days for t in d.tasks]
-        raw = self._plans.attempt_facts()
+        until = plan.ended_at  # QA v0.12-B9: an ended plan stays as it was
+        raw = self._plans.attempt_facts(until)
         attempts: dict[int, int] = {}
         seconds: dict[int, int] = {}
         by_id = {t.id: t for t in tasks}
@@ -333,17 +340,17 @@ class PlanService:
             n, ms = raw.get(t.id, (0, 0))
             source = by_id.get(t.carried_from) if t.carried_from is not None else None
             attempts[t.id] = n + (attempts.get(source.id, 0) if source else 0)
-            seconds[t.id] = round(ms / 1000) + (seconds.get(source.id, 0) if source else 0)
+            seconds[t.id] = round(ms / 1000)  # QA v0.12-B5: a copy keeps the progress, not the time spent
         retry_games = {int(t.params["game_id"]) for t in tasks if t.type == RETRY and isinstance(t.params.get("game_id"), int)}  # fmt: skip
         needed = {g: frozenset(self._review.retry_plies(g)) for g in retry_games}
         return Facts(
             attempts=attempts,
             seconds=seconds,
             retry_needed=needed,
-            retry_tried=self._plans.retries_since(sorted(retry_games), plan.created_at),
-            reviewed_tasks=self._passes.completed_tasks(),
-            reviewed_games=self._passes.completed_games(plan.created_at),
-            entry_tasks=self._plans.entry_tasks(),
+            retry_tried=self._plans.retries_since(sorted(retry_games), plan.created_at, until),
+            reviewed_tasks=self._passes.completed_tasks(until),
+            reviewed_games=self._passes.completed_games(plan.created_at, until),
+            entry_tasks=self._plans.entry_tasks(until),
         )
 
     def _sync(self, plan: PlanRow) -> tuple[PlanRow, Facts]:
@@ -421,7 +428,7 @@ class PlanService:
         if not isinstance(done, bool):
             raise ValidationError("done must be true or false")
         self._place(task_id)
-        self._plans.set_manual(task_id, "done" if done else "undone")
+        self._plans.set_manual(task_id, "done" if done else "undone", self._now())
 
     def skip(self, task_id: Any, skipped: Any = True) -> None:
         if not isinstance(skipped, bool):
@@ -437,7 +444,12 @@ class PlanService:
         ctx = self.context(report)
         old = Task(t.type, t.minutes, t.title, t.params, t.weakness_key)
         today = [Task(x.type, x.minutes, x.title, x.params, x.weakness_key) for x in place.day.tasks if x.id != t.id]
-        return int(self._plans.swap(t.id, self.fit_task(swap_for(old, data, ctx, today), ctx)))
+        # QA v0.12-B11: what this slot has already been counts, so Swap keeps moving on.
+        return int(
+            self._plans.swap(
+                t.id, self.fit_task(swap_for(old, data, ctx, [*today, *self._plans.swapped_away(t.id)]), ctx)
+            )
+        )
 
     def _report_for_plan(self, plan_id: int) -> Any:
         plan = self._plans.get(plan_id)
@@ -470,6 +482,8 @@ class PlanService:
 
     def _start_session(self, place: Any, rated: bool) -> TaskAction:
         t = place.task
+        if not self._puzzles_ready():
+            raise ValidationError("Import the puzzle database first: this task needs its puzzles.")
         plan = self._plans.get(place.plan_id)
         facts = self._facts(plan)
         left = max(1, int(t.params.get("count") or 1) - facts.attempts.get(t.id, 0))

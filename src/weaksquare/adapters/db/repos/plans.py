@@ -145,10 +145,31 @@ class PlansRepo:
         )  # fmt: skip
         return int(cur.lastrowid or 0)
 
-    def set_manual(self, task_id: int, state: str | None) -> None:
+    def set_manual(self, task_id: int, state: str | None, at: str) -> None:
         """Your hand choice. Ticking or unticking also takes a skip back."""
         with self._db.transaction() as conn:
-            conn.execute("UPDATE plan_tasks SET manual_state = ?, skipped_at = NULL WHERE id = ?", (state, task_id))
+            conn.execute(
+                "UPDATE plan_tasks SET manual_state = ?, manual_at = ?, skipped_at = NULL WHERE id = ?",
+                (state, at, task_id),
+            )
+
+    def swapped_away(self, task_id: int) -> list[Task]:
+        """QA v0.12-B11: what this task's slot has been before, following `swapped_from`."""
+        out: list[Task] = []
+        with self._db.session() as conn:
+            current: int | None = task_id
+            while current is not None:
+                r = conn.execute(f"SELECT {_TASK_COLS} FROM plan_tasks WHERE id = ?", (current,)).fetchone()
+                if r is None:
+                    break
+                row = _task(r)
+                current = row.swapped_from
+                if current is not None:
+                    prev = conn.execute(f"SELECT {_TASK_COLS} FROM plan_tasks WHERE id = ?", (current,)).fetchone()
+                    if prev is not None:
+                        p = _task(prev)
+                        out.append(Task(p.type, p.minutes, p.title, p.params, p.weakness_key))
+        return out
 
     def set_skipped(self, task_id: int, at: str | None) -> None:
         with self._db.transaction() as conn:
@@ -189,34 +210,40 @@ class PlansRepo:
 
     # ---- what the app saw (FR-10.64) ----
 
-    def attempt_facts(self) -> dict[int, tuple[int, int]]:
+    def attempt_facts(self, until: str | None = None) -> dict[int, tuple[int, int]]:
         """Task id → (decided attempts, milliseconds) in the sessions started from it, kept tasks and swapped
-        ones alike."""
+        ones alike. `until`: an ended plan's end (QA v0.12-B9)."""
         with self._db.session() as conn:
             rows = conn.execute(
                 "SELECT s.plan_task_id, COUNT(a.id), COALESCE(SUM(a.time_ms), 0) FROM sessions s"
-                " JOIN attempts a ON a.session_id = s.id WHERE s.plan_task_id IS NOT NULL GROUP BY s.plan_task_id"
+                " JOIN attempts a ON a.session_id = s.id WHERE s.plan_task_id IS NOT NULL"
+                " AND (? IS NULL OR a.finished_at <= ?) GROUP BY s.plan_task_id",
+                (until, until),
             ).fetchall()
         return {int(r[0]): (int(r[1]), int(r[2])) for r in rows}
 
-    def retries_since(self, game_ids: Sequence[int], since: str) -> dict[int, frozenset[int]]:
+    def retries_since(self, game_ids: Sequence[int], since: str, until: str | None = None) -> dict[int, frozenset[int]]:
         """Game id → plies with a recorded Retry try since this time."""
         out: dict[int, set[int]] = {}
         with self._db.session() as conn:
             for chunk in _chunks(list(game_ids)):
                 rows = conn.execute(
-                    "SELECT game_id, ply FROM retry_attempts WHERE created_at >= ?"
+                    "SELECT game_id, ply FROM retry_attempts WHERE created_at >= ? AND (? IS NULL OR created_at <= ?)"
                     f" AND game_id IN ({','.join('?' * len(chunk))})",
-                    (since, *chunk),
+                    (since, until, until, *chunk),
                 ).fetchall()
                 for g, p in rows:
                     out.setdefault(int(g), set()).add(int(p))
         return {k: frozenset(v) for k, v in out.items()}
 
-    def entry_tasks(self) -> frozenset[int]:
+    def entry_tasks(self, until: str | None = None) -> frozenset[int]:
         """Tasks a journal entry was saved from."""
         with self._db.session() as conn:
-            rows = conn.execute("SELECT DISTINCT plan_task_id FROM journal_entries WHERE plan_task_id IS NOT NULL").fetchall()  # fmt: skip
+            rows = conn.execute(
+                "SELECT DISTINCT plan_task_id FROM journal_entries WHERE plan_task_id IS NOT NULL"
+                " AND (? IS NULL OR created_at <= ?)",
+                (until, until),
+            ).fetchall()
         return frozenset(int(r[0]) for r in rows)
 
     def task_ids_with_sessions(self, plan_id: int) -> list[int]:
@@ -237,14 +264,15 @@ class ReviewPassesRepo:
         self._db = db
 
     def start(self, game_id: int, task_id: int | None, at: str) -> int:
-        """An open pass for this game takes the task on; otherwise a new one starts."""
+        """A task resumes its own open pass; otherwise a new one starts, so moves you looked at before the task
+        don't count towards it (QA v0.12-B12)."""
         with self._db.transaction() as conn:
             r = conn.execute(
-                "SELECT id FROM review_passes WHERE game_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1",
+                "SELECT id, plan_task_id FROM review_passes WHERE game_id = ? AND completed_at IS NULL"
+                " ORDER BY id DESC LIMIT 1",
                 (game_id,),
             ).fetchone()
-            if r is not None:
-                conn.execute("UPDATE review_passes SET plan_task_id = ? WHERE id = ?", (task_id, int(r[0])))
+            if r is not None and r[1] == task_id:
                 return int(r[0])
             cur = conn.execute(
                 "INSERT INTO review_passes (game_id, plan_task_id, started_at) VALUES (?,?,?)", (game_id, task_id, at)
@@ -273,17 +301,21 @@ class ReviewPassesRepo:
             )
             return done
 
-    def completed_tasks(self) -> frozenset[int]:
+    def completed_tasks(self, until: str | None = None) -> frozenset[int]:
         with self._db.session() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT plan_task_id FROM review_passes"
-                " WHERE plan_task_id IS NOT NULL AND completed_at IS NOT NULL"
+                "SELECT DISTINCT plan_task_id FROM review_passes WHERE plan_task_id IS NOT NULL"
+                " AND completed_at IS NOT NULL AND (? IS NULL OR completed_at <= ?)",
+                (until, until),
             ).fetchall()
         return frozenset(int(r[0]) for r in rows)
 
-    def completed_games(self, since: str) -> frozenset[int]:
+    def completed_games(self, since: str, until: str | None = None) -> frozenset[int]:
+        """Games stepped through in a pass that began and ended in this time."""
         with self._db.session() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT game_id FROM review_passes WHERE completed_at >= ?", (since,)
+                "SELECT DISTINCT game_id FROM review_passes WHERE started_at >= ? AND completed_at >= ?"
+                " AND (? IS NULL OR completed_at <= ?)",
+                (since, since, until, until),
             ).fetchall()
         return frozenset(int(r[0]) for r in rows)

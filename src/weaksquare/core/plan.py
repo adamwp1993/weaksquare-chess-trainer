@@ -423,10 +423,10 @@ def swap_for(task: Task, report: Mapping[str, Any], ctx: Context, today: Sequenc
     taken = [*today, task]
     for w in ordered:
         for t in _options(w, task.minutes, ctx):
-            if not any(_same(t, x) for x in taken):
+            if not any(_same(t, x) or t.title == x.title for x in taken):
                 return t
     general = general_task(ctx, task.minutes)
-    return general if not any(_same(general, x) for x in taken) else reflection_task(
+    return general if not any(_same(general, x) or general.title == x.title for x in taken) else reflection_task(
         task.minutes, task.weakness_key, "What's the one thing to remember from today?"
     )  # fmt: skip
 
@@ -571,7 +571,8 @@ def to_carry(plan: PlanRow, today: date, f: Facts) -> tuple[DayRow, list[TaskRow
     last = max(earlier, key=lambda d: d.date)
     copied = {t.carried_from for d in plan.days for t in d.tasks if t.carried_from is not None}
     out: list[TaskRow] = []
-    room = plan.params.minutes
+    # QA v0.12-B1: what's already on today counts, so reading the plan again never carries more.
+    room = plan.params.minutes - sum(t.minutes for t in current.tasks if t.carried_from is not None)
     for t in last.tasks:
         if is_done(t, f) or t.skipped_at is not None or t.id in copied:
             continue

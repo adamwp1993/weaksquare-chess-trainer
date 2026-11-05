@@ -1262,10 +1262,17 @@ class JournalItem:
 
 
 @dataclass(frozen=True)
+class JournalGame:
+    id: int
+    label: str
+
+
+@dataclass(frozen=True)
 class JournalTimeline:
     items: list[JournalItem]
     window_start: str
     older: bool
+    games: list[JournalGame]  # every game an entry is on, for the Game filter (FR-10.70)
 
 
 @dataclass(frozen=True)
@@ -1606,6 +1613,7 @@ EXPORTED += [
     DayLogTally,
     DayLog,
     JournalItem,
+    JournalGame,
     JournalTimeline,
     SuggestionView,
 ]

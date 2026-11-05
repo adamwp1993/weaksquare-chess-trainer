@@ -5,7 +5,7 @@ import { Alert, Anchor, Badge, Button, Chip, Group, Paper, Select, Stack, Text, 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { JournalFilters } from "../api/ApiClient";
-import type { DayLog, JournalEntry, JournalItem } from "../api/types";
+import type { DayLog, JournalEntry, JournalGame, JournalItem } from "../api/types";
 import { Labeled, OptionInfo } from "./OptionInfo";
 import { dayLabel } from "./PlanChecklist";
 
@@ -88,7 +88,7 @@ function EntryView({
             </Badge>
           )}
           {e.game_id !== null && (
-            <Anchor size="xs" component="button" onClick={() => onOpen(e.game_id!, e.ply ?? 0)} data-testid={`journal-open-${e.id}`}>
+            <Anchor size="xs" component="button" onClick={() => onOpen(e.game_id!, e.ply === null ? 0 : e.ply + 1)} data-testid={`journal-open-${e.id}`}>
               {e.game_label}
               {e.move ? ` · ${e.move}` : ""}
             </Anchor>
@@ -112,7 +112,7 @@ function EntryView({
         )}
       </Group>
       {editing === null ? (
-        <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+        <Text size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
           {e.text}
         </Text>
       ) : (
@@ -142,7 +142,8 @@ export function JournalTab({
   weaknesses: { value: string; label: string }[]; // from your latest report, for tagging and the filter
   draft: JournalDraft | null; // a reflection task's Start
   onClearDraft: () => void;
-  onOpen: (gameId: number, ply: number) => void;
+  /** Opens Game Review with this many moves played: a note on a move shows that move. */
+  onOpen: (gameId: number, movesPlayed: number) => void;
   onChanged: () => void; // an entry saved from a task ticks it
 }) {
   const [text, setText] = useState("");
@@ -153,12 +154,23 @@ export function JournalTab({
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<JournalFilters>({ kinds: [] });
   const [query, setQuery] = useState("");
+  const [filterGames, setFilterGames] = useState<JournalGame[]>([]);
+  // FR-10.67: what the composer can tag, besides a weakness.
+  const [gameTag, setGameTag] = useState<string | null>(draft?.game_id ? String(draft.game_id) : null);
+  const [dayTag, setDayTag] = useState<string | null>(draft?.plan_day_id ? String(draft.plan_day_id) : null);
+  const [gameOptions, setGameOptions] = useState<{ value: string; label: string }[]>([]);
+  const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => {
+    api.listGames({ limit: 50 }).then((p) => setGameOptions(p.games.map((g) => ({ value: String(g.id), label: `${g.white ?? "?"} – ${g.black ?? "?"} (${(g.played_at ?? "").slice(0, 10)})` }))), () => undefined); // prettier-ignore
+    api.getCurrentPlan().then((p) => setDayOptions((p?.days ?? []).map((d) => ({ value: String(d.id), label: `Week ${d.week} · ${dayLabel(d.date)}` }))), () => undefined); // prettier-ignore
+  }, []);
 
   const load = useCallback(() => {
     api.getJournal({ ...filters, query: query.trim() || undefined }).then((t) => {
       setItems(t.items);
       setWindowStart(t.window_start);
       setOlder(t.older);
+      setFilterGames(t.games);
     }, (e: Error) => setError(e.message)); // prettier-ignore
   }, [filters, query]);
   useEffect(load, [load]);
@@ -175,12 +187,14 @@ export function JournalTab({
     setError(null);
     api
       .addJournalEntry({
-        text, weakness_key: tag, game_id: draft?.game_id ?? null, plan_day_id: draft?.plan_day_id ?? null,
+        text, weakness_key: tag, game_id: gameTag ? Number(gameTag) : null, plan_day_id: dayTag ? Number(dayTag) : null,
         plan_task_id: draft?.plan_task_id ?? null,
       }) // prettier-ignore
       .then(() => {
         setText("");
         setTag(null);
+        setGameTag(null);
+        setDayTag(null);
         onClearDraft();
         load();
         onChanged();
@@ -218,9 +232,30 @@ export function JournalTab({
               data={weaknesses}
               data-testid="journal-tag"
             />
+            <Select
+              w={280}
+              size="xs"
+              clearable
+              searchable
+              label={<Labeled id="journal.tagGame">Tag a game (optional)</Labeled>}
+              value={gameTag}
+              onChange={setGameTag}
+              data={gameOptions}
+              data-testid="journal-tag-game"
+            />
+            <Select
+              w={200}
+              size="xs"
+              clearable
+              label={<Labeled id="journal.tagDay">Tag a plan day (optional)</Labeled>}
+              value={dayTag}
+              onChange={setDayTag}
+              data={dayOptions}
+              data-testid="journal-tag-day"
+            />
             <Group gap="xs">
-              <Text size="xs" c="dimmed">
-                {text.length} / {MAX.toLocaleString()}
+              <Text size="xs" c="dimmed" data-testid="journal-count">
+                {text.length.toLocaleString("en-US")} / {MAX.toLocaleString("en-US")}
               </Text>
               <Button size="xs" onClick={add} disabled={!text.trim()} data-testid="journal-save">
                 Save
@@ -262,6 +297,16 @@ export function JournalTab({
             onChange={(v) => setFilters({ ...filters, weakness_key: v ?? undefined })}
             data={weaknesses}
             data-testid="journal-filter-weakness"
+          />
+          <Select
+            w={220}
+            size="xs"
+            clearable
+            label={<Labeled id="journal.filterGame">Game</Labeled>}
+            value={filters.game_id ? String(filters.game_id) : null}
+            onChange={(v) => setFilters({ ...filters, game_id: v ? Number(v) : undefined })}
+            data={filterGames.map((g) => ({ value: String(g.id), label: g.label }))}
+            data-testid="journal-filter-game"
           />
           <TextInput
             size="xs"

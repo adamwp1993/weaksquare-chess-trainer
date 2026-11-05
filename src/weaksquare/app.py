@@ -400,7 +400,7 @@ def build_services(
     )  # fmt: skip
     plan = PlanService(
         PlansRepo(db), ReviewPassesRepo(db), CoachReportsRepo(db), games_repo, review, sessions, puzzles, StatsRepo(db),
-        SettingsRepo(db), engine, custom_puzzles, account, clock,
+        SettingsRepo(db), engine, custom_puzzles, account, clock, puzzle_db,
     )  # fmt: skip
     journal = JournalService(JournalRepo(db), DailyLogRepo(db), games_repo, StatsRepo(db), clock)
     coach.attach_plan(plan, journal)

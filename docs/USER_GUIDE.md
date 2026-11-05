@@ -813,7 +813,7 @@ Only your own moves count, and the first six moves (the opening) aren't counted 
 Every report after your first compares itself with your previous one of the same kind, so you can see whether the work is paying off. Another player's reports only ever compare with that player's, and a report on your puzzle history compares only with other puzzle-history reports.
 
 - **Each weakness** in either report: its rate per 10 games then and now, marked **New** (not in the last report) or **Gone** (no longer in the top list).
-- **Better or worse** only when both reports have at least 5 games and at least 5 of this report's games are new. Otherwise it says *not enough new games yet*, however big the change looks.
+- **Better or worse** only when both reports have at least 5 games in that group and at least 5 of this report's games are new. An opening, for example, needs 5 games of that opening in each report: one that merely dropped below 5 is **Gone**, but not better. Otherwise it says *not enough new games yet*, however big the change looks.
 - **Last N reports:** from your third report on, the trend across up to your 5 latest.
 - **Puzzles on its themes:** your first-try accuracy on that weakness's themes, up to the last report and since. Each side needs at least 10 attempts.
 - **Overall:** blunders, mistakes and inaccuracies per 10 games, and the whole-game measures both reports have.
@@ -983,11 +983,11 @@ Your top weaknesses get the most time. A day has 2 to 4 tasks that add up to you
 The Coach's **Journal** tab keeps a record of what you did and what you learned, newest first. It stays on this PC unless you choose [Include my journal](#include-my-journal) for one AI run.
 
 **What's in it:**
-- **Your notes:** write up to 5,000 characters and press **Save**. **Tag a weakness** links a note to one from your report. **Edit** and **Delete** are on each entry.
+- **Your notes:** write up to 5,000 characters and press **Save**. **Tag a weakness**, **Tag a game** and **Tag a plan day** link a note to one from your report, your latest 50 games or your current plan. **Edit** and **Delete** are on each entry.
 - **Game reflections:** in Game Review, **Add a note** saves a note on the game, or with **On this move**, on the move on the board. The move gets a ✎ marker, the game lists its notes, and the journal entry links back to that position.
 - **The daily log:** written by the app from what you did: puzzles by mode and source with first-try accuracy and the themes you missed most, games synced, analyzed and reviewed, Retry results, plan tasks done, and Coach runs with their top weakness. It matches [Stats](#stats) for that day: Danger spotting counts only under its mode, and misclicks are left out.
 
-**Finding things:** **Show** picks the kinds of entry, **Weakness** and **From** / **To** narrow it down, and **Search** finds words in your entries. **Show older days** loads the 30 days before. The daily log has no words or tags of its own, so it's hidden while you search or filter by weakness.
+**Finding things:** **Show** picks the kinds of entry, **Weakness**, **Game** and **From** / **To** narrow it down, and **Search** finds words in your entries, however old. The daily log comes 30 days at a time: **Show older days** loads the 30 before, when there's anything there. It has no words or tags of its own, so it's hidden while you search or filter by weakness or game.
 
 **Gotchas:**
 - Games analyzed before v0.12 aren't counted as analyzed on any day, because that wasn't recorded then. Games reviewed before v0.12 aren't counted either.

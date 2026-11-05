@@ -127,5 +127,5 @@ def test_the_ai_plan_was_usable_not_just_replaced_by_the_free_one(run) -> None: 
 def test_the_request_holds_no_names_and_no_journal(run) -> None:  # type: ignore[no-untyped-def]
     text = json.dumps(run["sent"])
     assert JOURNAL not in text
-    for leak in ("[White", "[Black", "[Site"):
+    for leak in ("[White", "[Black", "[Site", "opponent_b", "player_a"):  # the fixture PGN's tags and names
         assert leak not in text

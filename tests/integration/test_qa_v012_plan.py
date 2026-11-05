@@ -190,9 +190,6 @@ def test_qa_a_real_puzzle_history_report_makes_a_plan(api: Api) -> None:
     assert _ok(api.get_coach_report(rid))["comparison"] is None
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B13: with no puzzle database, Preview the plan fails with 'Something went wrong'"
-)
 def test_qa_the_plan_works_without_a_puzzle_database(paths: Any, clock: Any, desktop: FakeDesktop) -> None:
     api = _api(paths, clock, desktop, None)
     with _svc(api).db.transaction() as conn:
@@ -324,7 +321,6 @@ def test_qa_the_totals_never_count_a_task_twice_when_it_is_carried(api: Api, clo
     assert after["left"] == 3  # today's 1 plus the 2 carried; the originals say "carried" and aren't counted
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B5: a carried puzzle task's minutes are counted twice in the totals")
 def test_qa_minutes_spent_do_not_double_when_a_puzzle_task_is_carried(api: Api, clock: Any) -> None:
     plan = _plan_with(
         api,
@@ -359,7 +355,6 @@ def test_qa_the_first_read_of_a_new_day_carries_a_days_worth(api: Api, clock: An
     assert len(carried) == 2 and sum(t["minutes"] for t in carried) == 20  # 3 x 10 missed, 20 a day
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B1: each read of the plan carries more, past the one day's worth limit")
 def test_qa_reading_the_plan_again_never_carries_more_than_a_days_worth(api: Api, clock: Any) -> None:
     _three_missed(api)
     clock.advance(days=1)
@@ -463,9 +458,6 @@ def test_qa_the_dev_time_offset_moves_the_plan_day(paths: Any, desktop: FakeDesk
 # ---- swap, history, odd inputs ----
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B11: Swap goes back and forth between the first two tasks and never reaches a third"
-)
 def test_qa_swap_keeps_moving_to_the_next_task(api: Api, paths: Any) -> None:
     _real_report(api, paths, 6)
     plan = _ok(api.create_plan({"weeks": 1, "weekdays": EVERY_DAY, "minutes": 30}))
@@ -478,7 +470,6 @@ def test_qa_swap_keeps_moving_to_the_next_task(api: Api, paths: Any) -> None:
     assert len(set(titles)) >= 3, titles
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B9: an ended plan's completion still changes after it was replaced")
 def test_qa_an_old_plans_completion_stops_when_it_is_replaced(api: Api, paths: Any, clock: Any) -> None:
     plant_managed_install(paths)
     gid = _games(_svc(api), 1)[0]
@@ -495,7 +486,6 @@ def test_qa_an_old_plans_completion_stops_when_it_is_replaced(api: Api, paths: A
     assert rid
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B12: moves visited before the plan began count towards its review task")
 def test_qa_a_review_task_needs_visits_since_the_plan_began(api: Api, paths: Any, clock: Any) -> None:
     plant_managed_install(paths)
     gid = _games(_svc(api), 1)[0]

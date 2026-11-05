@@ -52,6 +52,13 @@ def test_a_v011_database_keeps_its_rows_and_gains_the_new_columns(tmp_path: Path
             assert _columns(conn, table), table
 
 
+def test_0012_adds_when_you_ticked_a_task_by_hand(tmp_path: Path) -> None:
+    db_path = tmp_path / "user.db"
+    migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)
+    with sqlite3.connect(db_path) as conn:
+        assert "manual_at" in _columns(conn, "plan_tasks")
+
+
 def test_only_one_plan_can_be_current(tmp_path: Path) -> None:
     db_path = tmp_path / "user.db"
     migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)

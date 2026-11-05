@@ -243,6 +243,19 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-05, v0.12: What QA round 1 changed in the plan and journal
+- Context: QA v0.12 round 1 found the carry-over limit reset on each read, a group's guard ignored, an ended plan still changing, and more (`qa/QA-v0.12.md`).
+- Decision:
+  - **`to_carry`** counts what's already carried into today against the limit, so reads are safe to repeat and the limit holds.
+  - **`report_compare._group_enough`** applies FR-10.73's guard to a whole-game weakness's own group, from the measures in each report.
+  - **`user/0012_plan_manual_at.sql`** records when you ticked by hand, so the daily log counts it. `done_at` stays what the app saw.
+  - **`_facts` has an upper limit,** `plan.ended_at`, so an ended plan stays as it was.
+  - **`ReviewPassesRepo.start`** resumes only the task's own pass, and `completed_games` needs a pass begun since the plan began.
+  - **The timeline** looks at all entries when a search or filter can only match entries. Only the daily log, computed day by day, comes in 30-day windows, and `older` is true only when something is there.
+  - **`JournalService.add`** checks links, moves and dates, and accepts only a real weakness key as a tag, since tags go to the AI.
+- Alternatives: editing 0011 for `manual_at`, rejected by the rule that migrations are never edited.
+- Consequences: the journal composer has no date control, so a future date can only come from a direct bridge call, and it's refused.
+
 ### 2026-11-05, v0.12: Plan ticks are worked out from stored events when read, not pushed by hooks
 - Context: a task ticks from puzzle sessions, Retry, Game Review and journal entries (FR-10.64), four services that know nothing about plans.
 - Decision: `services/plan.py` reads the events when the plan is read: attempts through the new `sessions.plan_task_id`, `retry_attempts` since the plan began, `review_passes`, and `journal_entries.plan_task_id`. The time it first sees a task done goes in `plan_tasks.done_at`, for the daily log. `plan_tasks.manual_state` (done / undone) is your hand choice, and it always wins. A lesson's `done_at` is set when you open it, because nothing else records that. A swapped task stays, marked `removed`, so its sessions stay linked.
