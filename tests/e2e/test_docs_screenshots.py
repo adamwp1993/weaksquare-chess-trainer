@@ -547,6 +547,50 @@ def test_coach_report(page) -> None:  # type: ignore[no-untyped-def]
     shot(page, "coach-report", full_page=True)
 
 
+def _coach_ai(page) -> None:  # type: ignore[no-untyped-def]
+    page.goto(page.base_url + "/?ai=on&coach=report")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-ai").wait_for()
+
+
+def test_coach_measures(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.11, FR-10.53: whole-game measures, with groups below 5 games marked."""
+    page.goto(page.base_url + "/?coach=report")
+    page.get_by_test_id("nav-coach").click()
+    m = page.get_by_test_id("coach-measures")
+    m.scroll_into_view_if_needed()
+    page.mouse.move(1270, 890)
+    m.screenshot(path=str(IMG / "coach-measures.png"), animations="disabled")
+
+
+def test_coach_ai_diagnosis(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.11, FR-10.54–10.59: the AI diagnosis with evidence, badges and lesson pointers."""
+    _coach_ai(page)
+    page.get_by_test_id("coach-ai-start").click()
+    page.get_by_test_id("coach-ai-confirm-button").click()
+    page.get_by_test_id("coach-ai-result").wait_for(timeout=5000)
+    page.mouse.move(1270, 890)
+    page.wait_for_timeout(500)
+    page.get_by_test_id("coach-ai").screenshot(path=str(IMG / "coach-ai-diagnosis.png"), animations="disabled")
+
+
+def test_coach_ai_advanced(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.11, FR-10.56: the Advanced comparison before Confirm."""
+    _coach_ai(page)
+    page.get_by_test_id("coach-ai-advanced").check()
+    page.get_by_test_id("coach-ai-start").click()
+    page.get_by_test_id("coach-ai-compare").wait_for()
+    shot(page, "coach-ai-advanced")
+
+
+def test_coach_notes_preview(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.11, FR-10.60: exactly the notes Include my notes sends."""
+    _coach_ai(page)
+    page.get_by_test_id("coach-ai-notes").check()
+    page.get_by_test_id("coach-notes-preview").get_by_test_id("coach-note").first.wait_for()
+    shot(page, "coach-notes-preview")
+
+
 def test_suggested_mix_banner(page) -> None:  # type: ignore[no-untyped-def]
     """FR-10.31: the banner when a new suggestion waits behind filters you changed."""
     page.goto(page.base_url + "/?coach=banner")

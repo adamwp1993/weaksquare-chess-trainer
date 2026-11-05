@@ -13,6 +13,20 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **Whole-game measures** in every Coach report on games, worked out on your PC from each game's analysis: per opening family (score, eval at move 15, early mistakes), mistakes per phase, how often you win from +2 and save from −2, results and mistakes per endgame type, mistakes on a low clock against the rest, and castling late. A group needs 5 games before it counts; below that it says *not enough data yet*. [FR-10.52] [FR-10.53]
+- **Whole-game weaknesses:** an opening you come out of badly, an endgame type you err in, winning positions you don't win, low-clock mistakes and late castling join the report's weaknesses when the numbers show them, ranked per 10 games. A time weakness is flagged in **Why this mix**. [FR-10.57] [FR-10.58]
+- **AI coaching reads your whole games:** it diagnoses tactical, strategic and practical weaknesses (openings, endgames, king safety, time and anything else it can show), and every weakness cites the moves in your games that show it. Click a move to open it in Game Review. Claims the app can't find in your games are left out, a weakness seen in fewer than 3 games is marked **Tentative**, and findings the app can't measure are **Observations**, noted again when they recur. [FR-10.51] [FR-10.54] [FR-10.55] [FR-10.57]
+- **Advanced analysis** (off by default, for one run at a time): also sends the moves of 10–50 of your games (SAN only), with how it compares with a standard run in tokens, cost, share of your budget and minutes before you **Confirm**. [FR-10.56]
+- **Include my notes** (off by default, for one run at a time): adds your mistake-reason notes, after a preview of exactly what's sent, with web addresses removed. [FR-10.60]
+- **Every AI answer is kept** per report: switch between standard, Advanced and with-notes answers, and see which findings are new in each. [FR-10.56]
+- **Lesson pointers:** for a weakness's topic, **Drill it here** (that topic's puzzles at a lower rating), Lichess Practice or Learn pages, and searches on YouTube, chess.com or your own site. Links open in your browser, and the app builds every link itself. Choose the search sites in **Settings → Coach**. [FR-10.59]
+- **Retry your mistakes** now offers **Explain this move** once you've tried, with **Show me** on the Retry board. [FR-11.15] [FR-11.17]
+- **Managing presets:** **Update** the loaded preset with your current filters, and **Manage presets…** to overwrite, rename or delete any preset without loading it. Saving a Coach preset under a name you already use offers **Replace it** or another name. [FR-3.13]
+
+### Changed
+- **AI coaching** on reports with games now sends a short digest of each game (labelled G1, G2…, no names, dates, links or raw clocks) as well as the report's numbers, so its estimate is higher than in v0.10. Reports on your puzzle history only work as before. [FR-8.16] [FR-10.54]
+
 ## [v0.10] - 2026-11-04
 Candidates: v0.10-rc1 (2026-11-04), v0.10-rc2 (2026-11-04)
 

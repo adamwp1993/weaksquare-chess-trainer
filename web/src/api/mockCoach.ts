@@ -44,7 +44,7 @@ function w(
 
 /** FR-10.53 for the mock report: a few groups with enough games, some without (not enough data yet). */
 function measures(games: number): CoachMeasures {
-  const n = Math.max(games, 30);
+  const n = games;
   return {
     games: n, min_games: 5,
     openings: [
@@ -148,7 +148,7 @@ export class MockCoach {
       this.players.push({ subject: `${p.platform}:${name.toLowerCase()}`, label: `${name} (${p.platform === "lichess" ? "Lichess" : "chess.com"})`, games: 3 });
     }
     const second = this.reports.filter((x) => x.is_me).length > 0 && me;
-    const games = p.source === "puzzles" ? 0 : p.game_ids.length || 3;
+    const games = p.source === "puzzles" ? 0 : p.game_ids.length || 30;
     const id = this.reports.length + 1;
     const report: CoachReport = {
       id, created_at: created, subject_label: me ? "You (player_a)" : `${name} (${p.platform === "lichess" ? "Lichess" : "chess.com"})`,
@@ -176,7 +176,7 @@ export class MockCoach {
         w("time:low_clock", "Mistakes under 10% of your clock", 4, 13.3, 450, [], {}),
         w("endgame:rook", "Rook endgames", 2, 6.7, 300, ["rookEndgame"], {}),
       ] : [],
-      measures: games ? measures(games) : null,
+      measures: games >= 24 ? measures(games) : null, // the mock's measures assume a full run
     }; // prettier-ignore
     this.reports.push(report);
     return report;

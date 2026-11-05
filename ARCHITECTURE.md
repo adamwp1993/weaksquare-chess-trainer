@@ -81,6 +81,10 @@ weaksquare-chess-trainer/
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
 │  │  ├─ tagging.py            # Lichess theme tags for a tactic line, via vendor/lichess_puzzler (v0.10)
 │  │  ├─ habits.py             # habit tags from attack maps          (v0.10)
+│  │  ├─ digest.py             # one game's digest from its analysis (v0.11)
+│  │  ├─ game_measures.py      # whole-game measures and weaknesses, the 5-game guard (v0.11)
+│  │  ├─ coach_diagnosis.py    # the whole-game AI prompt, schema and evidence rule (v0.11)
+│  │  ├─ lessons.py            # lesson topics, the curated Lichess map, search links (v0.11)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
@@ -232,6 +236,17 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.11: Lesson links are built and opened by the backend (`open_lesson`)
+- Context: FR-10.59: the LLM picks topics only and never writes URLs; Adam chose Lichess Practice and Learn only for the curated map.
+- Decision: **`core/lessons.py`** holds the topic catalog (themes, endgame types, concepts, and the opening families of the report's games), the curated map (Lichess Practice study links and Lichess Learn, checked against lichess.org/practice on 2026-11-04; Lichess resolves the study id and ignores the slug), `ALLOWED_HOSTS = {"lichess.org"}`, and the YouTube and chess.com search templates. The screen receives titles and site names only. **`Api.open_lesson(report_id, topic, target)`** asks `CoachService.lesson_url` for the URL (a curated index re-checked against the allowlist, or a search template you turned on in Settings → Coach) and calls `Desktop.open_in_browser`. The custom search site is validated (https, one `{q}`, a host with a dot) when saved and when used.
+- Alternatives: sending URLs to the screen as `<a href>` links (rejected: the screen would hold URLs the user can't tell apart, and a bug could let an AI string through); fetching the pages to check them at run time (rejected: the app never visits those sites).
+- Consequences: a new curated page is a code change with a test (every curated URL's host must be on the allowlist).
+
+### 2026-11-04, v0.11: Adam's requests during the build: Explain in Retry, preset management
+- Context: Adam asked mid-build for Explain this move in Retry your mistakes, and for overwriting, renaming and deleting presets more easily.
+- Decision: **Retry** renders the existing `MoveExplain` for the mistake's ply once there's a result (never before the attempt), with its Show me drawn on the Retry board. **Presets:** front end only, since `save_preset(overwrite)`, `rename_preset` and `delete_preset` already existed: Update (overwrite the loaded preset), a Manage presets list (overwrite, rename or delete any preset, unusable ones included, without loading it), and Replace or another name on a Coach preset's name clash.
+- Consequences: REQUIREMENTS FR-3.13 and FR-11.15 note both.
 
 ### 2026-11-04, v0.11: The whole-game diagnosis: G labels, the evidence rule, per-run options, stored runs
 - Context: FR-10.54–10.60: an open-ended diagnosis that must cite real games and plies, an opt-in Advanced run with move lists, opt-in notes, and every answer kept (Adam, v0.11 planning).

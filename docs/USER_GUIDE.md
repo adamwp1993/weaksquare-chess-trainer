@@ -17,7 +17,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   AI explanations and what they cost .......................... v0.7
   Your game library and Game Review ........................... v0.8, v0.9
   Importing your own puzzles .................................. v0.8
-  The Coach ................................................... v0.10
+  The Coach ................................................... v0.10, v0.11
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
   The About screen ............................................ v0.1
@@ -48,6 +48,9 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Explain this move** (v0.9) sends one move of one of your games: the position before it (FEN), the move you played and its grade, Stockfish's evals before and after it, its best line and top lines from that position, its reply to your move, the game phase and move number, and the attack and defence facts. Nothing else about the game.
     - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
     - **Get AI coaching** (v0.10, the Coach) sends one report: its numbers (how often each weakness happened per 10 games, how much it cost, your mistake-reason counts, the puzzles-vs-games table, your puzzle accuracy per theme) and 12 example positions (20 at **Detailed**), each as a position (FEN), the move played, Stockfish's best line and its themes, labelled E1, E2 and so on. **No player names or usernames, no dates, links, clocks, game IDs or PGNs** are sent, whoever the report is about. It also sends the list of puzzle themes the model may recommend from.
+      - *From v0.11*, a **standard run** on a report with games also sends the whole-game measures and one summary per game, labelled G1, G2…: which color you played, the result, the opening's name and ECO code, the number of moves, when each side castled, your development by move 10, the pawn structure at move 15, trades made while ahead or behind, the eval at move 15, mistakes per phase, the endgame type, whether you held +2 or −2, your mistakes under 10% of your clock, and 3 key moments (5 at **Detailed**), each as a position (FEN), the move with its number and the best move in SAN, the evals, the grade and your clock as a **percentage** of your starting time, never the clock itself. Example positions carry their game label and move number. It also sends the list of lesson topics the AI may pick from. Still no names, usernames, ratings, dates, links, raw clocks, comments, game IDs or PGNs.
+      - **Advanced analysis** (v0.11, off unless you tick it) also sends the moves of up to your chosen number of games (10–50) in SAN only, rebuilt by the app from the moves, so no PGN headers, clocks or comments.
+      - **Include my notes** (v0.11, off unless you tick it) also sends your mistake-reason notes, exactly as listed in its preview, with web addresses removed.
     - What each request cost is kept in `user.db`, on this PC only.
   - **Your games** (v0.8), only for accounts you link. Each sync fetches game metadata and PGNs, never analysis, and sends nothing about you beyond the request itself:
     - **Lichess:** with your sign-in, your own games since the last sync, from lichess.org (`/api/games/user/<you>`).
@@ -63,6 +66,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
+    - **Lesson pointers** (v0.11) open Lichess Practice or Lichess Learn pages, or a search on YouTube, chess.com or your own site, in your default browser. A search sends the topic's words (for example *chess rook endgames*) to the site you click, and nothing else. The app never visits those sites itself.
 
 ## Getting started: the puzzle database
 *Added in v0.1. Changed in v0.2: the wording says what you download.*
@@ -242,11 +246,14 @@ A preset is a named set of filters, such as "Combo night" with a 50/30/20 ratio,
 2. Click **Save as…**, type a name and click **Save**.
 3. Later, choose it from **Preset** to load those filters. You can still change them before you press Start.
 
-The **⋯** button next to it renames or deletes the preset you loaded.
+The **⋯** button next to it:
+- **Update “<name>” with these filters** *(Changed in v0.11)*: after you've loaded a preset and changed the filters, saves your changes into it.
+- **Rename…** and **Delete…** the preset you loaded.
+- **Manage presets…** *(Added in v0.11)*: a list of all your presets, with when each was last saved. For any of them, **Overwrite with these filters**, **Rename** or **Delete** it, without loading it first. Managing presets never changes the filters you have now.
 
 **Gotchas**
-- Names are up to 60 characters, and two presets can't share a name, ignoring capitals. If you save under a name that exists, the app asks before replacing it with **Replace it**.
-- Loading a preset replaces all your filters. Saving after a change doesn't update the preset unless you save it under the same name and replace it.
+- Names are up to 60 characters, and two presets can't share a name, ignoring capitals. If you save under a name that exists, the app asks before replacing it with **Replace it**. The same goes for **Save as preset** in the Coach: **Replace it**, or type another name and save (v0.11).
+- Loading a preset replaces all your filters. To keep your changes in it, use **Update** in the **⋯** menu.
 - A preset saved by a newer version of the app may use filters this version doesn't have. It's listed as **(can't be used)**, says why, and is left untouched.
 
 ## Stats
@@ -670,6 +677,7 @@ Nothing you play there changes the game, its analysis or your stats. It uses the
 ![Retry mode](img/retry-mode.png)
 
 - **Retry your mistakes** goes through your mistakes and blunders one by one, without showing the answer. Play the move you should have played. Any move within 30 centipawns of the best counts as found (Settings → Games → **Retry tolerance**). Then you see the best line and, if you missed, what your move ran into. Retries count in Stats only. They never go to Lichess, and nothing in Game Review affects a rating.
+  - *Changed in v0.11:* once you've tried, **Explain this move** is there too (with an [AI provider set up](#setting-it-up)): the same explanation as in the review, with **Show me** drawing on the Retry board. It's never offered before you try, so it can't give the move away.
 
 ### AI explanations in Game Review
 *Added in v0.9.*
@@ -767,7 +775,7 @@ Every time one of your games is analyzed (from the Coach, **Analyze selected** o
 ## The Coach
 *Added in v0.10.*
 
-The Coach looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. It runs on your PC and is free. The AI part is optional.
+The Coach looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
 
 ### Running the Coach
 ![The Coach](img/coach-report.png)
@@ -790,7 +798,23 @@ To coach a hand-picked set of games, tick them in **My games** and press **Send 
 - **The report's mix:** a puzzle preset built from your top weaknesses, with the reasons. **Load preset** puts it in your puzzle filters (your saved presets don't change); **Save as preset** saves it.
 - **Saved reports** are listed on the left. Click one to see it again.
 
-Only your own moves count, and the first six moves (the opening) aren't counted.
+Only your own moves count, and the first six moves (the opening) aren't counted in the tactics tables.
+
+### Whole-game measures
+*Added in v0.11.*
+
+![Whole-game measures](img/coach-measures.png)
+
+For a report on games, the app also writes a short summary of each game from its analysis (no extra engine time): the opening, the key moments, when each side castled, your development, the pawn structure after move 15, trades made while ahead or behind, the endgame type and your clock. From those, the report shows:
+- **Openings:** for each opening family (for example *Sicilian Defense*), how many games, your score, the average eval at move 15 and your mistakes in the first 15 moves.
+- **Phases and conversion:** mistakes per 10 games in the opening, middlegame and endgame; how often you **win from +2 or better** and **save the game from −2 or worse**. You have to hold it for a full move (your move and the reply), so a one-move swing doesn't count.
+- **Time use:** your mistakes per 100 moves under 10% of your clock, against the rest of the game.
+- **King safety and development:** how often you castle after move 12 or never, and your score when you do and don't.
+- **Endgames:** results and mistakes per endgame type (king and pawn, rook, minor piece, queen, mixed).
+
+**Not enough data yet:** a group needs at least **5 games** (5 Sicilians, 5 rook endgames…). With fewer, it's shown with that label and never counts as a weakness.
+
+**Whole-game weaknesses** join the report's tables when a measure shows a problem: an opening you come out of badly, an endgame type where you make mistakes, winning positions you don't win, mistakes on a low clock (only when they're more frequent than the rest of the time) and castling late (only when it costs you points). They're ranked per 10 games, like the tactics. The Suggested mix stays made of tactics; a time weakness shows up in **Why this mix** instead.
 
 ### Another player
 Choose **Another player**, type their username or paste their profile link (`lichess.org/@/…` or `chess.com/member/…`), and pick the site if the link doesn't say. The Coach fetches their latest public games, analyzes them and writes a report labelled with their name. Their games are kept apart from yours:
@@ -809,17 +833,63 @@ After each Coach run on your games, the app builds a **Suggested mix** and, if y
 - **It never overwrites your choices.** If you've changed your filters since the last suggestion, a banner appears instead: **Apply** uses the new mix, **Compare** shows your filters next to it, and **Dismiss** keeps yours.
 
 ### AI coaching (optional)
-Under a report, **Get AI coaching** turns its numbers and a few example positions into a short summary, a note on each of your top 3–5 weaknesses with a drill, and 1–3 puzzle presets you can **Load** or **Save**.
-1. Pick its model right in the AI coaching box, or in **Settings → AI → Coach**: it's the same setting (**Same as Explain** by default). A report is sent once, so a stronger model costs little. If the report already has an answer from another model, **Ask <model> instead** asks the new one; the old answer stays until you do.
-2. Before a run, pick the **AI detail level**: **Summary** (about 5,000 input tokens, 12 example positions) or **Detailed** (about 20,000, 20 positions with the moves before each).
-3. Press **Get AI coaching**, read the estimate and press **Confirm**.
+*Changed in v0.11.*
 
-The AI's presets are checked like any filter: unknown themes and impossible values are dropped, and if none is usable you get the report's own mix. Its answer is saved with the report, so opening it again on the same model is free. A Summary costs about $0.01 on Claude Haiku 5.5 and $0.05 on Claude Sonnet 5.5. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply. For what it sends, see [Your data and privacy](#your-data-and-privacy).
+![AI coaching](img/coach-ai-diagnosis.png)
+
+Under a report, **Get AI coaching** sends its numbers, the game summaries and a few example positions to the AI, which acts as a tutor. You get a short summary, 3–8 weaknesses across tactics, strategy, openings, endgames and time (and anything else it can show, not only those), and 1–3 puzzle presets you can **Load** or **Save**.
+1. Pick its model right in the AI coaching box, or in **Settings → AI → Coach**: it's the same setting (**Same as Explain** by default).
+2. Before the run, the **AI detail level**: **Summary** (3 key moments per game, 12 example positions) or **Detailed** (5 key moments per game, 20 positions with the moves before each).
+3. Optionally tick **Advanced analysis** or **Include my notes** (below). Both are off every time you open a report.
+4. Press **Get AI coaching**, read the estimate and press **Confirm**.
+
+**Each weakness:**
+- a category (Tactics, Strategy, Opening, Endgame, Time, Other), what goes wrong and **What to do**;
+- **In your games:** the moves that show it, such as **G3 · 23... Nf6**. Click one to open that game in Game Review at that move; **← Coach** brings you back. Games are labelled G1, G2… in the order of the report. Every move the AI cites is checked against the games that were sent, and a weakness with no real move behind it is left out (the footer says how many claims were left out).
+- **Tracked: <weakness>** when it's one of the report's measured weaknesses, or **Observation** when the app can't measure it. An observation found again in a later report says **Seen in N reports**.
+- **Tentative** when it rests on fewer than 3 games.
+- **Learn it:** see [Lesson pointers](#lesson-pointers).
+
+**Every answer is kept.** A report can have several AI answers: standard, Advanced, with notes, on different models. **Answers for this report** switches between them, and findings that no earlier answer had are marked **New in this run**. Asking again with the same options and model shows the saved answer for free (**Show the saved answer**).
+
+The AI's presets are checked like any filter: unknown themes and impossible values are dropped, and if none is usable you get the report's own mix. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply, and the estimate before **Confirm** shows the real cost. For what it sends, see [Your data and privacy](#your-data-and-privacy). Reports on your puzzle history only (no games) get the v0.10 coaching, without these options.
+
+### Advanced analysis
+*Added in v0.11.*
+
+![Advanced analysis before Confirm](img/coach-ai-advanced.png)
+
+**Advanced analysis** also sends the moves of your most recent games in the report (SAN only, for example `1. e4 e5 2. Nf3`), so the AI can see whole games and not only their summaries. Choose how many games, **10–50** (30 by default).
+- **Before Confirm** you see how it compares with a standard run, for example *about 3.8× the tokens of a standard run, ~$0.40 (8% of this month's budget), about 2 minutes*. It takes longer and uses more API tokens. The per-run cap and the monthly budget block it like any request.
+- **Never automatic:** it's off every time you open a report, and nothing turns it on for you.
+- Still **no names, ratings, dates, links, clocks or comments**: the app rebuilds the moves from the games themselves.
+
+### Include my notes
+*Added in v0.11.*
+
+![The notes preview](img/coach-notes-preview.png)
+
+Your [mistake-reason](#mistake-reasons) notes often say what you were thinking. **Include my notes** adds them to the request: your latest reason and note for each move of yours in the report's games (including Retry), and your puzzle notes since the report's first game.
+- Ticking it opens **Your notes that will be sent**: exactly the words that go, each with its game label and move. **Don't include them** unticks it.
+- Web addresses in your notes are removed before the preview and before sending.
+- It's off every time you open a report. It's only offered on your own reports.
+
+### Lesson pointers
+*Added in v0.11.*
+
+A weakness the AI tied to a lesson topic has **Learn <topic>:**
+- **Drill it here:** loads that topic's puzzles in Standard mode, 200 below your usual rating band. Use **Explain** after each one.
+- **Lichess Practice / Lichess Learn** pages for that topic, when there is one (free, no account needed).
+- **Search YouTube**, **Search chess.com** and **Search my site**, which search that site for the topic.
+
+The links open in your default browser. The AI only picks the topic; every link is built by the app (the AI never writes a web address), and the app never visits those sites itself. Choose which search links appear, and add your own search site, in **Settings → Coach**: an `https://` address with `{q}` where the search words go, for example `https://example.org/search?q={q}`.
 
 ### Gotchas
 - **The first run on your games takes a while:** Stockfish analyzes every move at 0.3 s (Settings → Games), so 50 new games take about 20 minutes. Games already analyzed are reused, and every game the Coach analyzed opens in Game Review at once.
 - **Games without a known side** (an imported game where you didn't say which side you played) aren't counted.
 - **Checkpoints and tracking whether a weakness is fixed** come in a later version. Until then, compare reports with the change column.
+- **Whole-game measures need enough games:** with 25 games, few openings or endgame types reach 5 games. Run the Coach on 50 or more for them to count.
+- **The game summaries come from the analysis.** If you change the analysis settings (think time or grading thresholds), the summaries are rebuilt from the new analysis the next time you run the Coach.
 
 ## Keyboard shortcuts
 *Added in v0.2.*
