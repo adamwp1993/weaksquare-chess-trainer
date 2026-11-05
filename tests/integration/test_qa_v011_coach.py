@@ -356,7 +356,7 @@ def test_qa_r2_migration_0010_backfills_every_shape(tmp_path) -> None:  # type: 
     assert repo.note("me", "concept:c", "", "", "T", 1) == 2
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B9: a note's address on an unlisted TLD reaches the LLM")
+# QA v0.11-B9 regression (fixed)
 def test_qa_r2_a_note_with_an_address_on_another_tld_is_not_sent(services, paths) -> None:  # type: ignore[no-untyped-def]
     rid, ids = _report(services, paths, 3)
     services.review.set_game_reason(ids[1], 8, "miscalculated", "course: chess.academy/rook-endings")

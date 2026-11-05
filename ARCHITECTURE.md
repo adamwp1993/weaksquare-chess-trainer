@@ -238,13 +238,14 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
-### 2026-11-04, v0.11: QA fixes (v0.11-B1 to B8)
-- Context: QA round 1 (`qa/QA-v0.11.md`), FAIL: three major and five minor bugs.
+### 2026-11-04, v0.11: QA fixes (v0.11-B1 to B10)
+- Context: QA round 1 (`qa/QA-v0.11.md`), FAIL: three major and five minor bugs; round 2, FAIL: B9 (major) and B10 (minor) in the URL filter.
 - Decision:
   - **B1, B2:** one `core/urls.strip_urls`, used on your notes, on all AI text (the diagnosis, the v0.10 keyed coaching) and on AI preset names. It catches any `scheme://`, `www.` and bare domains on a list of common top-level domains (`youtu.be`, `bit.ly`, `.co.uk`, `.de`…), and needs a word boundary after the domain, so "Qd1.Coming back" is left alone.
   - **B3:** `user/0010_observation_reports.sql` adds `coach_observations.report_ids` (backfilled from the first and last report), and `times_seen` counts distinct reports in any order.
   - **B4:** `Measures.phases_enough` (5 games) guards mistakes per phase, shown with *not enough data yet*.
   - **B5:** `CoachService.start_ai` is single-flight per report and options (a second call while that job runs returns the same job), and the Confirm button holds a guard until the job ends, so a double-click sends and bills one request.
+  - **Round 2, B9, B10:** `strip_urls` also removes IPv4 addresses and **any** dotted host followed by a path, query or fragment, whatever its top-level domain; a bare host without a path counts on the TLD list, and an ending that is also a short English word (No, To, It, At, Be…) counts only in lower case, so a missing space ("Blundered.No time") isn't taken for a link while "Lichess.Org" still is.
   - **B6:** the diagnosis prompt keeps v0.10's puzzles-vs-games table; the privacy section lists the key moments' themes and reason labels. **B7:** "1 game" in the measures. **B8:** the plan ticks lesson pointers.
 - Consequences: each fix has a regression test (QA's xfail tests now pass).
 

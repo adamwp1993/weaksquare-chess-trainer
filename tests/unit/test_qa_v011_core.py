@@ -302,20 +302,20 @@ def test_qa_r2_strip_urls_keeps_well_spaced_chess_text(text: str) -> None:
     assert strip_urls(text) == text
 
 
-# QA v0.11-B9 (strict xfail): an address with a path on a top-level domain missing from the list is kept
+# QA v0.11-B9 (fixed, was a strict xfail): an address with a path on a top-level domain missing from the list is kept
 R2_MISSED = [
     "mychess.blog/post", "chess.club/join", "example.live/x", "chess.academy/course", "example.kr/x",
     "example.nz/x", "evil.example/x", "192.168.0.1/admin",
 ]  # fmt: skip
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B9: strip_urls only knows ~50 TLDs; a host with a path is kept")
+# QA v0.11-B9 regression (fixed)
 @pytest.mark.parametrize("url", R2_MISSED)
 def test_qa_r2_strip_urls_removes_any_host_with_a_path(url: str) -> None:
     assert url not in strip_urls(f"see {url} later")
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B9: an LLM-written address on an unlisted TLD is shown")
+# QA v0.11-B9 regression (fixed)
 def test_qa_r2_an_llm_url_on_another_tld_is_never_shown() -> None:
     w = _w()
     w["advice"] = "Study the course at chess.academy/endgames"
@@ -324,14 +324,14 @@ def test_qa_r2_an_llm_url_on_another_tld_is_never_shown() -> None:
     assert "chess.academy" not in d.findings[0].advice
 
 
-# QA v0.11-B10 (strict xfail): a missing space before a two-letter word turns a move and a word into a link
+# QA v0.11-B10 (fixed, was a strict xfail): a missing space before a two-letter word turns a move and a word into a link
 R2_MISSING_SPACE = [
     "Blundered.No time left", "Nf3.To be safe", "Castled O-O.It was late", "Played e4.At move 3",
     "Kh1.Am I safe", "Lost.Be careful",
 ]  # fmt: skip
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.11-B10: 'word.It' / 'Nf3.To' match as a domain on .it/.to/...")
+# QA v0.11-B10 regression (fixed)
 @pytest.mark.parametrize("text", R2_MISSING_SPACE)
 def test_qa_r2_strip_urls_leaves_two_letter_words_after_a_missing_space(text: str) -> None:
     assert strip_urls(text) == text
