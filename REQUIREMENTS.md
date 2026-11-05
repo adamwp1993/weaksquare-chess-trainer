@@ -139,6 +139,9 @@ Shown when the app launches.
 - `custom_puzzles(id PK, game_id, ply, fen, solution_uci, themes, origin, kind, severity, cp_loss, phase, time_control, game_date, solve_as, status, created_at, UNIQUE(game_id, ply))`: puzzles from your own games. `origin` is manual (Save as puzzle, FR-11.16) or coach (FR-10.39). `kind` is missed / allowed. `severity` is inaccuracy / mistake / blunder. `solution_uci` holds the full line. `solve_as` is you / opponent. `status` is active / archived. They live in `user.db`, never `puzzles.db`, which is replaced on every re-import (FR-2.3). Their attempts are stored in `attempts` with ids prefixed `my:`.
 - `mistake_reasons(id PK, source, ref_id, reason, suggested_reason, note, created_at)`: why you missed something (§7.3). `source` is puzzle / game / retry / danger; `ref_id` points to an `attempts` row or a `game_analysis` (game_id, ply).
 - `coach_reports(id, created_at, sources_json, params_json, report_json, provider, model, cost_usd)`
+- `game_digests(game_id PK, analysis_key, digest_json, built_at)`: one game digest (FR-10.52), rebuilt when the analysis changes (v0.11)
+- `coach_ai_runs(id, report_id, created_at, advanced, include_notes, game_cap, provider, model, cost_usd, result_json)`: every AI coaching answer for a report, so a standard and an Advanced run can be compared (v0.11 planning)
+- `coach_observations(id, subject, topic_key, category, title, first_report_id, last_report_id, times_seen)`: findings that can't be measured, noted when they recur across runs (FR-10.57)
 
 ---
 
@@ -493,11 +496,13 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
   - **Endgame types:** results and errors per endgame type
   - **Time use:** your blunder rate under 10% of your time vs. the rest of the game
   - **King safety and development:** how often you castle late or never, and how your results change when you do
+  - *(Adam, v0.11 planning:)* each group (an opening family, an endgame type, …) needs at least **5 games**; below that it's shown as *not enough data yet* and never becomes a weakness. "From +2" means you **held** +2 or better for a full move (your move and the reply), so a one-ply blip doesn't count; the same for −2. The opening family is the opening name before its first `:`, or the ECO code when there's no name.
 - **FR-10.54** **Open-ended diagnosis (LLM):**
   - **Input:** the digests of the games in the run, the whole-game measures, and the aggregates of FR-10.21.
   - **The prompt** asks the LLM to find weaknesses across tactics, strategy and practical play, *including but not limited to* openings, phases, endgame types, king safety and time use.
   - **Output (JSON):** for each weakness, a category (tactical / strategic / opening / endgame / time / other), a plain-language explanation, practical advice, a suggested topic (FR-10.59), and **evidence**, which is a list of game references and plies.
-  - **Game references:** games are sent as local labels (G1, G2, …) that the app maps back to its own games on your PC. No game IDs or URLs are sent.
+  - **Game references:** games are sent as local labels (G1, G2, …) that the app maps back to its own games on your PC. No game IDs or URLs are sent. *(v0.11 planning:)* plies are sent 1-based (half-move numbers) next to the SAN with its move number, and the example positions of FR-10.21 carry the same game label and ply, so there's one citation format. A cited ply must be a key moment of that game's digest, or, in an Advanced run, any ply of a game whose move list was sent.
+  - *(v0.11 planning:)* this diagnosis replaces the v0.10 AI coaching prompt for reports that include games; a puzzle-history-only report keeps the v0.10 prompt. The answer has 3–8 weaknesses. One whose key matches a measured weakness that was sent is a tracked weakness; the rest are observations (FR-10.57).
 - **FR-10.55** **Evidence rule** (validated like FR-10.23):
   - Every cited game and ply must exist in the data that was sent, and citations that don't are dropped. A weakness left with no valid evidence is dropped.
   - A weakness that cites fewer than 3 games is shown as **tentative**.
@@ -507,24 +512,31 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
   - **What it adds:** the SAN move list of every game in the run, on top of the digests. Headers, names, dates, URLs, comments and clocks are still stripped.
   - **Game cap:** 30 by default, adjustable from 10 to 50.
   - **Before Confirm:** the usual estimate (FR-8.11) plus how it compares with a standard run, e.g. *"Advanced: about 4× the tokens of a standard run, ~$0.40 (8% of this month's budget), about 2 minutes. It takes longer and uses more API tokens."* The per-run cap and the monthly budget apply as usual.
-  - **Never automatic:** checkpoint summaries (FR-10.37) never use it.
+  - **Never automatic:** checkpoint summaries (FR-10.37) never use it. *(v0.11 planning:)* Advanced and Include my notes (FR-10.60) are chosen for each AI run, are off every time you open the Coach, and are never saved as defaults, so no automatic path can turn them on. The time estimate uses a typical output speed, and Coach requests get a 180-second timeout.
+  - **Every answer is kept** (Adam, v0.11 planning): each AI run of a report (standard, Advanced, with notes) is stored with its model and cost, a picker switches between them, and findings new in a run are labeled. The same options and model reuse the stored answer.
 - **FR-10.57** **Findings become tracked weaknesses** when they can be measured:
   - A finding that matches a whole-game measure (FR-10.53) or a habit check becomes a weakness of kind `opening`, `endgame`, `phase`, `time` or `habit`, with statuses decided by its **game rate** (§10.8), as for every weakness.
   - A finding that can't be measured stays an **observation**: it's shown with the report and noted when it recurs across runs, but it has no status.
   - The new kinds and the digest storage are a new migration, designed at v0.11 planning.
+  - *(v0.11 planning:)* how each kind counts an occurrence, ranked by game rate × severity like the v0.10 weaknesses until statuses arrive (v1.0):
+    - `opening:<family>`: you leave the opening (move 15) at −1.00 or worse, or make a mistake or blunder in the first 15 moves
+    - `endgame:<type>`: a mistake or blunder in the endgame phase of that endgame type
+    - `phase:conversion`: a game where you held +2 or better and didn't win
+    - `time:low_clock`: a mistake or blunder under 10% of your time, a weakness only when that error rate is above your rate the rest of the time
+    - `habit:castledLate`: castling after move 12, or never, while the opponent's queen is on the board (king safety uses the habit kind)
 - **FR-10.58** **Something to do for each weakness:**
   - tactical → a puzzle preset (FR-10.22)
   - opening → the games where it happened, and the opening trainer once it exists (v2.0)
   - endgame or conversion → the positions from your games where it happened, opened on the analysis board
   - time → flagged in "Why this mix" (FR-10.30)
 - **FR-10.59** **Lesson pointers:**
-  - **First, the in-app drill:** e.g. *"Learn zugzwang"* loads zugzwang puzzles at a lower rating band, with Explain on.
+  - **First, the in-app drill:** e.g. *"Learn zugzwang"* loads zugzwang puzzles in Standard mode 200 below your rating band, with Explain encouraged (there's no setting that turns Explain on; v0.11 planning).
   - **Then outside resources:**
-    - a **curated map** from topics (themes, endgame types, opening families) to stable free pages, such as Lichess Practice and Lichess Learn
+    - a **curated map** from topics (themes, endgame types, opening families) to stable free pages: **Lichess Practice and Lichess Learn only** (Adam, v0.11 planning); everything else goes through the search links
     - **search links** for YouTube, chess.com and any site you choose (Settings: which sites are shown, and an optional custom search URL with a `{q}` placeholder)
-  - **The LLM only picks a topic** from the app's list. It never writes a URL, and any link the app didn't build itself is dropped.
+  - **The LLM only picks a topic** from the app's list. It never writes a URL, and any link the app didn't build itself is dropped. *(v0.11 planning:)* the screen sends only the topic and the target (a curated link or a search site); the backend builds the URL, checks it against the curated host allowlist or the search templates, and opens it.
   - **Links open in your default browser.** The app never fetches those sites, and the search terms go to the site you click (the User Guide's privacy section says so).
-- **FR-10.60** **Include my notes** (a per-run option, **off by default**): adds your mistake-reason notes (§7.3) for the games and puzzles in the run to the prompt. Before Confirm, you see exactly which notes will be sent.
+- **FR-10.60** **Include my notes** (a per-run option, **off by default**): adds your mistake-reason notes (§7.3) for the games and puzzles in the run to the prompt. Before Confirm, you see exactly which notes will be sent. *(v0.11 planning:)* that's the latest reason and note for your moves in the run's games, plus your puzzle and Retry notes in the report's period. Web addresses are removed from notes before the preview and before sending (FR-8.16).
 
 ### 10.12 Training plan and training journal (v0.12; Adam, 2026-11-04)
 **Goal:** turn the Coach's diagnosis into a routine you can follow, and keep a record of what you did and what you learned, so the Coach (and you) can see what's working. Requested by Adam during the v0.10 manual test.
