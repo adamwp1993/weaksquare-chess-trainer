@@ -47,6 +47,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Test key**, and the silent check of a saved key at start-up, only ask the provider whether the model exists. That's free and sends no puzzle.
     - **Explain this move** (v0.9) sends one move of one of your games: the position before it (FEN), the move you played and its grade, Stockfish's evals before and after it, its best line and top lines from that position, its reply to your move, the game phase and move number, and the attack and defence facts. Nothing else about the game.
     - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
+    - **Get AI coaching** (v0.10, the Coach) sends one report: its numbers (how often each weakness happened per 10 games, how much it cost, your mistake-reason counts, the puzzles-vs-games table, your puzzle accuracy per theme) and 12 example positions (20 at **Detailed**), each as a position (FEN), the move played, Stockfish's best line and its themes, labelled E1, E2 and so on. **No player names or usernames, no dates, links, clocks, game IDs or PGNs** are sent, whoever the report is about. It also sends the list of puzzle themes the model may recommend from.
     - What each request cost is kept in `user.db`, on this PC only.
   - **Your games** (v0.8), only for accounts you link. Each sync fetches game metadata and PGNs, never analysis, and sends nothing about you beyond the request itself:
     - **Lichess:** with your sign-in, your own games since the last sync, from lichess.org (`/api/games/user/<you>`).
@@ -54,6 +55,11 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Importing by URL** fetches that one game: from lichess.org, or by searching your chess.com archives of the last six months.
     - **The analysis runs on your PC.** Stockfish grades your games locally, and the games and their analysis stay in `user.db`. Only the AI buttons (v0.9) send anything about a game, as described under AI explanations above.
     - **Open on Lichess / chess.com** opens the game's page in your browser, like any link.
+  - **The Coach** (v0.10):
+    - **Your games:** a run on your own games first syncs your linked accounts, exactly like **Refresh** in My games. All the analysis, tagging and puzzle-making happens on your PC.
+    - **Another player's games:** when you enter someone's username, the app fetches that player's **public** games: from lichess.org (`/api/games/user/<name>`, with your sign-in when you're signed in, which Lichess allows at a faster rate) or from their chess.com monthly archives, one request at a time. They're stored in `user.db` with their own label.
+    - **Your Lichess puzzle dashboard:** with the **Puzzle history** or **Both** source and while you're signed in, the app reads your per-theme puzzle results for the last 30 days from lichess.org (`/api/puzzle/dashboard/30`). Nothing is sent but the request.
+    - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -583,6 +589,7 @@ Once a puzzle is over (you finished the line, or used **Show answer**), the **Ex
 
 Puzzle Explain and [Game Review's AI](#ai-explanations-in-game-review) each have their own model. You can use a cheap, fast model for the many small puzzle explanations and a stronger one for the few, much bigger game explanations.
 - **Puzzle Explain** uses the provider and model described above.
+- **Coach model** (v0.10): set the same way, for [AI coaching](#ai-coaching-optional) on Coach reports.
 - **Game Review model:** **Same as Explain** (the default) uses whatever Explain uses. Or pick any model in the price table, from either provider. The list shows about what one **Explain my game** costs on each. To use a model that isn't listed, type its ID and choose **Use “…” with Anthropic** or **with OpenAI**. Like Explain's model, it needs a row in the price table before it can be used. Game Review can be set up even when puzzle Explain has no provider. The same setting is on the startup page (**Show all options**), in Settings, and on the Review page next to **Explain my game**.
 - **Keys are per provider, not per feature.** If Game Review uses a provider that has no key yet, a key field appears under its model.
 - **Reasoning** is set per feature: **Puzzle Explain reasoning** and **Game Review reasoning**.
@@ -635,12 +642,31 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 - **The board and the move list.** Step with the arrows below the board (or the **←** and **→** keys), or click a move. Your moves are in bold. The symbols mark inaccuracies (**?!**), mistakes (**?**) and blunders (**??**). A move isn't penalized when the game was already lost before it (−5 or worse), or is still won after it (+5 or better). Dropping from +8 to +1 still counts.
 - **The eval graph** shows who was better through the game, from White's side and capped at ±10. Click it to jump to a move.
 - **The summary** gives each side's inaccuracies, mistakes, blunders, average loss and the platform's accuracy.
-- **At any move,** a green arrow shows Stockfish's best move, and **Engine lines here** lists its top three lines. Click a line to step through it. After a bad move, **Why … fails: show me** steps through the punishment.
-- **Key moments** are your biggest mistakes (five by default). Each one reads *Played X, better was Y*. Click it to go there.
+- **At any move,** with **Show best moves** on, a green arrow shows Stockfish's best move, and **Engine lines here** lists its top three lines. Click a line to step through it. After a bad move, **Why … fails: show me** steps through the punishment.
+- **Key moments** are your biggest mistakes (five by default). Each one reads *Played X*, and with **Show best moves** on, *better was Y*. Click it to go there.
+
+### Show best moves and Analyze from here
+*Added in v0.10.*
+
+![Show best moves off](img/review-show-best-off.png)
+
+**Show best moves** is a switch at the top of the review. It's **off** at first, so you can look for the better move yourself before the engine tells you. The app remembers your choice for every game and the next time you open it.
+- **Off hides** the best-move arrow, **Engine lines here**, *Better was …* under a move, *better was …* on the key moments, the arrows and better lines from **Show me** and **Show on the board** in the AI's notes, the step-by-step line of **Explain this move** (its summary stays), and Stockfish's panel in Analyze from here.
+- **Off still shows** the eval graph and the eval of each move, the **?!**, **?** and **??** symbols, **Why … fails: show me**, and the AI's text.
+- Turn it on and everything appears at once. Retry mode works the same either way.
+
+![Analyze from here](img/analyze-from-here.png)
+
+**Analyze from here** (under the board) opens a free board at the position on screen. Move pieces for either side to try your own ideas.
+1. Play moves on the board. **◀ Back** and **Forward ▶** (or **←** and **→**) step through what you played; **Reset** goes back to the game position.
+2. With **Show best moves** on, Stockfish's eval and top three lines follow the position on the board, with a green arrow for its best move. With it off, they stay hidden until you turn it on.
+3. **Back to the game** returns to the game where you left it.
+
+Nothing you play there changes the game, its analysis or your stats. It uses the same engine as the analysis board after puzzles, so it answers even while games are being analyzed in the background.
 
 ### Why you missed it, Save as puzzle and Retry
 - **Mistake reasons:** open a key moment and pick why it happened with the [reason chips](#mistake-reasons) (keys **1–6**). Settings → Training → **Ask why you missed** controls this. **Game Review only** asks here but not after puzzles.
-- **Save as puzzle** turns the position before your mistake into one of [My puzzles](#my-puzzles), with Stockfish's best line as the answer (at most three of your moves).
+- **Save as puzzle** turns the position before your mistake into one of [My puzzles](#my-puzzles), with Stockfish's best line as the answer (at most three of your moves). From v0.10 it's also tagged with Lichess's themes, which stay hidden until you've solved it. You don't need to save every mistake by hand: the analysis [makes puzzles from your mistakes](#puzzles-from-your-games) by itself.
 ![Retry mode](img/retry-mode.png)
 
 - **Retry your mistakes** goes through your mistakes and blunders one by one, without showing the answer. Play the move you should have played. Any move within 30 centipawns of the best counts as found (Settings → Games → **Retry tolerance**). Then you see the best line and, if you missed, what your move ran into. Retries count in Stats only. They never go to Lichess, and nothing in Game Review affects a rating.
@@ -686,10 +712,12 @@ In **Settings → Games**:
 | **Key moments** | How many of your mistakes are listed (5). |
 | **Retry tolerance (cp)** | How close to the best move counts as found, in Retry and in puzzles saved from your games (30). |
 | **Inaccuracy / Mistake / Blunder from (cp)** | The grading thresholds (50, 100, 200). Games you've already analyzed are regraded at once, with no new analysis. Losing a forced mate, or walking into one, is always a blunder. |
+| **Puzzles from your games** (v0.10) | Which of your mistakes become [puzzles](#puzzles-from-your-games): **Blunders only**, **Mistakes and blunders** (the default) or **Inaccuracies, mistakes and blunders**. Changing it archives or restores puzzles at once, with no new analysis. A mistake becomes a puzzle only if it has one clear answer, so inaccuracies add few. |
+| **Checking a puzzle: seconds per position** (v0.10) | Stockfish's time per position when it checks that a puzzle's line has one clear answer at each step (1 s). |
 
 ### Gotchas
 - **Analysis needs Stockfish.** Without it, **Analyze** says so. See [Installing Stockfish](#installing-stockfish).
-- **Mistakes aren't tagged with themes yet.** Theme tags for game mistakes come in a later version.
+- **Theme and habit tags** (v0.10): each mistake you missed or allowed is tagged with Lichess's puzzle themes (fork, pin, back-rank mate…) by Lichess's own tagger, and each of your inaccuracies, mistakes and blunders gets habit tags (*hung a piece*, *missed a free capture*, *ignored a threat*, *moved a defender*). The [Coach](#the-coach) counts them. Games analyzed before v0.10 are tagged once, in the background, the first time you start this version.
 
 ## Importing your own puzzles
 *Added in v0.8.*
@@ -706,21 +734,92 @@ If you have puzzles in a file (for example from a book or a course you own), you
 
 4. When it's done, the **report** shows how many puzzles were added, how many were already there, and which entries were skipped, with their entry number and why.
 
-The side to move in each position is you. If a file gives only the first move, the puzzle is that move. Imported puzzles are checked **strictly**, like Lichess puzzles: only the file's moves count, except that any checkmate counts where the solution mates. Importing the same file again adds nothing twice, but the same file under another label is another set. **The file is read on your PC and never sent anywhere.**
+The side to move in each position is you. If a file gives only the first move, the puzzle is that move. Imported puzzles are checked **strictly**, like Lichess puzzles: only the file's moves count, except that any checkmate counts where the solution mates. Importing the same file again adds nothing twice, but the same file under another label is another set. From v0.10, imported puzzles are tagged with Lichess's themes on your PC (hidden until you've solved them). **The file is read on your PC and never sent anywhere.**
 
 ## My puzzles
 *Added in v0.8.*
 
 ![Puzzles from: My puzzles](img/my-puzzles-source.png)
 
-**My puzzles** holds the puzzles you saved from your games and the ones you imported. In **Choose your puzzles**, set **Puzzles from** to **My puzzles**, or to **Both** to mix them with Lichess puzzles in proportion to the two pools.
+**My puzzles** holds the puzzles made from your games, the ones you saved yourself and the ones you imported. In **Choose your puzzles**, set **Puzzles from** to **My puzzles**, or to **Both** to mix them with Lichess puzzles in proportion to the two pools.
 
-- **Filters:** origin (saved from my games / imported), set, Missed or Allowed, phase and time control. **Number of moves**, **You play** and your history (Exclude solved here, Only my misses) apply too.
-- **Not for My puzzles:** they have no rating or themes yet, so themes, rating, openings, quality and ratios apply only to Lichess puzzles, and the order is always random. With My puzzles only, those controls are greyed out.
+- **Filters:** origin (from my games, made automatically / saved from my games / imported), severity (blunders, mistakes, inaccuracies; v0.10), set, Missed or Allowed, phase and time control. **Number of moves**, **You play** and your history (Exclude solved here, Only my misses) apply too.
+- **Not for My puzzles:** they have no rating, and their themes stay hidden until you've solved them, so themes, rating, openings, quality and ratios apply only to Lichess puzzles, and the order is always random. With My puzzles only, those controls are greyed out. (The [Suggested mix](#the-suggested-mix) is the one exception: it can use ratios with **Both**, and then a fixed share of the puzzles come from your games.)
 - **Modes:** Standard, Commit the line and Spaced repetition. Name the idea and Danger spotting stay Lichess-only.
 - **There's no opponent move first:** the puzzle starts in the position you solve, and you move first.
 - **Checking moves:** a puzzle saved from your games accepts any move within the Retry tolerance of Stockfish's best, which Stockfish checks before the line continues from your move. Without Stockfish, only the saved line counts. In Commit the line, your line is graded against the saved one.
 - They **never sync to Lichess** and have no rating. Misses come back in Spaced repetition like any puzzle, and Stats show their accuracy next to Lichess puzzles'.
+- **After a puzzle from your games** (v0.10): **Open the game** opens it in Game Review at that move, and **Archive this puzzle** puts it away for good. It's kept with its attempts, but never comes up again.
+
+### Puzzles from your games
+*Added in v0.10.*
+
+Every time one of your games is analyzed (from the Coach, **Analyze selected** or **Review**), the app turns your clear mistakes into puzzles, on your PC and for free.
+- **Which mistakes:** the level in Settings → Games → **Puzzles from your games** (mistakes and blunders by default), from move 7 on.
+- **Only clear ones:** Stockfish checks each one with Lichess's rules for a puzzle: the best move must be clearly better than any other, the game mustn't already be decided, and the line goes on only while each of your moves is the only good one. A one-move win of material isn't kept. A mate in one is kept unless another move also wins easily (Lichess's rule: the best move that doesn't mate must not leave you clearly winning).
+- **Missed** (you had a tactic and didn't play it) is solved as you, from your position.
+- **Allowed** (your move let your opponent in) is solved **as your opponent**, from the position after your mistake. The board turns to their side, and the puzzle says *Find what your opponent could have played*.
+- **Solving:** any move within the Retry tolerance of Stockfish's best counts, as for puzzles you save yourself.
+- A move you saved yourself keeps your puzzle, and no second one is made. Re-running never makes duplicates. Changing the level **archives** puzzles outside it (they keep their attempts) and brings them back when you widen it again, without analyzing your games again.
+- Games you analyzed before v0.10 get their puzzles once, in the background, the first time you start this version (it needs Stockfish).
+- Another player's games (see [the Coach](#the-coach)) never make puzzles.
+
+## The Coach
+*Added in v0.10.*
+
+The Coach looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. It runs on your PC and is free. The AI part is optional.
+
+### Running the Coach
+![The Coach](img/coach-report.png)
+
+1. Press **Coach** at the top of the window.
+2. Choose the **source**:
+   - **Puzzle history:** your puzzle results per theme, here and (when you're signed in) on Lichess. No engine time.
+   - **Games:** your games, analyzed by Stockfish. It takes minutes of engine time the first time, but shows what actually costs you games, including tactics you allowed.
+   - **Both:** both, plus a table of themes you solve as puzzles but still miss or allow in games.
+3. For games, choose **whose**: **You** (your linked accounts and imported games) or **Another player** (see below). For yourself, choose **All my games**, **Lichess** or **chess.com**. Then how many of the latest games (25, 50, 100 or 200), the time controls (rapid and classical by default: bullet and blitz mistakes are mostly about the clock), **Rated only**, and the color.
+4. Press **Run the Coach**. If you're in the middle of a puzzle session when it finishes, the new mix's mode waits until that session ends. It syncs your accounts, analyzes the games that aren't analyzed yet (one at a time, with the time left and **Cancel**), tags the mistakes, makes [puzzles from them](#puzzles-from-your-games), and writes the report. You can keep solving puzzles meanwhile.
+
+To coach a hand-picked set of games, tick them in **My games** and press **Send to Coach**. The Coach then uses exactly those games.
+
+### The report
+- **Per 10 games:** your blunders, mistakes and inaccuracies, how many came on a low clock, and the mix of your [mistake reasons](#mistake-reasons).
+- **Tactics you allowed** and **Tactics you missed**, by Lichess theme, and your **Habits**, ranked by how often they happen and how much they cost. For each: how many times, how often **per 10 games**, the average eval it cost, the change since your last report (▼ is better), why you missed it (from your reason chips), and example moments. Click an example to open that position in Game Review; **← Coach** brings you back.
+- **Puzzle themes you fail most** (Puzzle history or Both), with your first-try accuracy.
+- **Puzzles vs. games** (Both): for example forks you solve 86% of the time as puzzles but allow 13 times per 10 games.
+- **The report's mix:** a puzzle preset built from your top weaknesses, with the reasons. **Load preset** puts it in your puzzle filters (your saved presets don't change); **Save as preset** saves it.
+- **Saved reports** are listed on the left. Click one to see it again.
+
+Only your own moves count, and the first six moves (the opening) aren't counted.
+
+### Another player
+Choose **Another player**, type their username or paste their profile link (`lichess.org/@/…` or `chess.com/member/…`), and pick the site if the link doesn't say. The Coach fetches their latest public games, analyzes them and writes a report labelled with their name. Their games are kept apart from yours:
+- They're **not in My games**, unless you choose them in the **Player** filter there.
+- They make **no puzzles**, and they **never change your Suggested mix**, your stats or your report trends.
+- **Load preset** and AI coaching work on their report too.
+
+### The Suggested mix
+![The Suggested mix banner](img/suggested-mix-banner.png)
+
+After each Coach run on your games, the app builds a **Suggested mix** and, if you haven't changed your filters by hand, makes it your puzzle selection. The main page then says *Suggested — from Coach run #N, <date>*. **Why this mix** explains it in plain words, for example *Allowed: Fork: 13.3 per 10 games, your #1 leak (46% of the mix)*.
+- **Built from your weaknesses:** a share of puzzles for each of your top weaknesses, the bigger the leak the bigger the share, plus a share of **long combinations** (more when your missed tactics are long) that never drops below 10%.
+- **The mode** follows your mistake reasons once a weakness has at least 5: mostly *didn't look* → **Danger spotting**, mostly *miscalculated* → **Commit the line**, mostly *unknown pattern* → the same themes at a lower rating. Mostly *rushed* is pointed out as a time issue.
+- **Your own mistakes:** with Standard or Commit the line, 20% of the puzzles come from [your games](#puzzles-from-your-games).
+- **Rating:** around your Lichess puzzle rating (1500 if unknown), adjusted so you solve about 75% at the first try.
+- **It never overwrites your choices.** If you've changed your filters since the last suggestion, a banner appears instead: **Apply** uses the new mix, **Compare** shows your filters next to it, and **Dismiss** keeps yours.
+
+### AI coaching (optional)
+Under a report, **Get AI coaching** turns its numbers and a few example positions into a short summary, a note on each of your top 3–5 weaknesses with a drill, and 1–3 puzzle presets you can **Load** or **Save**.
+1. Pick its model right in the AI coaching box, or in **Settings → AI → Coach**: it's the same setting (**Same as Explain** by default). A report is sent once, so a stronger model costs little. If the report already has an answer from another model, **Ask <model> instead** asks the new one; the old answer stays until you do.
+2. Before a run, pick the **AI detail level**: **Summary** (about 5,000 input tokens, 12 example positions) or **Detailed** (about 20,000, 20 positions with the moves before each).
+3. Press **Get AI coaching**, read the estimate and press **Confirm**.
+
+The AI's presets are checked like any filter: unknown themes and impossible values are dropped, and if none is usable you get the report's own mix. Its answer is saved with the report, so opening it again on the same model is free. A Summary costs about $0.01 on Claude Haiku 5.5 and $0.05 on Claude Sonnet 5.5. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply. For what it sends, see [Your data and privacy](#your-data-and-privacy).
+
+### Gotchas
+- **The first run on your games takes a while:** Stockfish analyzes every move at 0.3 s (Settings → Games), so 50 new games take about 20 minutes. Games already analyzed are reused, and every game the Coach analyzed opens in Game Review at once.
+- **Games without a known side** (an imported game where you didn't say which side you played) aren't counted.
+- **Checkpoints and tracking whether a weakness is fixed** come in a later version. Until then, compare reports with the change column.
 
 ## Keyboard shortcuts
 *Added in v0.2.*

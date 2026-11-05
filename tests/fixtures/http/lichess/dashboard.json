@@ -1,0 +1,52 @@
+{
+  "days": 30,
+  "global": {
+    "nb": 120,
+    "firstWins": 82,
+    "replayWins": 9,
+    "puzzleRatingAvg": 1790,
+    "performance": 1760
+  },
+  "themes": {
+    "fork": {
+      "theme": "Fork",
+      "results": {
+        "nb": 40,
+        "firstWins": 22,
+        "replayWins": 4,
+        "puzzleRatingAvg": 1750,
+        "performance": 1640
+      }
+    },
+    "pin": {
+      "theme": "Pin",
+      "results": {
+        "nb": 18,
+        "firstWins": 14,
+        "replayWins": 1,
+        "puzzleRatingAvg": 1820,
+        "performance": 1880
+      }
+    },
+    "hangingPiece": {
+      "theme": "Hanging piece",
+      "results": {
+        "nb": 25,
+        "firstWins": 21,
+        "replayWins": 2,
+        "puzzleRatingAvg": 1700,
+        "performance": 1840
+      }
+    },
+    "mateIn2": {
+      "theme": "Mate in 2",
+      "results": {
+        "nb": 12,
+        "firstWins": 6,
+        "replayWins": 1,
+        "puzzleRatingAvg": 1810,
+        "performance": 1600
+      }
+    }
+  }
+}

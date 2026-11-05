@@ -25,6 +25,7 @@ from weaksquare.core.engine import EngineLine, EngineNotInstalled
 from weaksquare.core.errors import ValidationError
 from weaksquare.core.game_review import MoveRow, Thresholds, grade_game, regrade
 from weaksquare.core.games import GameError, GameRow, low_clock, parse_single_pgn
+from weaksquare.core.tagging import tag_game
 from weaksquare.core.tolerance import DEFAULT_TOLERANCE_CP, validate_tolerance
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
 
@@ -58,6 +59,10 @@ class AnalysisStore(Protocol):
     def rows(self, game_id: int) -> list[MoveRow]: ...
 
     def regrade(self, fn: Callable[[MoveRow], MoveRow]) -> int: ...
+
+    def set_tags(self, game_id: int, tags: Sequence[tuple[int, Sequence[str], Sequence[str]]]) -> None: ...
+
+    def analyzed_games(self) -> list[int]: ...
 
 
 class BackgroundEngine(Protocol):
@@ -99,6 +104,14 @@ class AnalysisService:
         self._current: int | None = None
         self._job: str | None = None
         self._draining = False  # set under the lock: a game queued as the job exits starts a new one
+        self._listeners: list[Callable[[int, ProgressFn, CancelToken], None]] = []
+
+    def add_listener(self, fn: Callable[[int, ProgressFn, CancelToken], None]) -> None:
+        """Called in the analysis job after each game is stored (v0.10: puzzles from your games)."""
+        self._listeners.append(fn)
+
+    def thresholds_decided(self) -> int:
+        return self.settings().thresholds.decided
 
     # ------------------------------------------------------------ settings
 
@@ -159,7 +172,8 @@ class AnalysisService:
                 {"inaccuracy": t.inaccuracy, "mistake": t.mistake, "blunder": t.blunder, "decided": t.decided},
             )
             # v0.8-B1: games already analyzed are regraded from their stored evals (no engine pass).
-            self._store.regrade(lambda row: regrade(row, t))
+            if self._store.regrade(lambda row: regrade(row, t)):
+                self.retag()  # v0.10: a new Missed / Allowed / error set means new tags
         if tolerance_cp is not None:
             try:
                 self._settings.set(TOLERANCE_KEY, validate_tolerance(tolerance_cp))
@@ -171,6 +185,30 @@ class AnalysisService:
                 raise ValidationError(f"Key moments must be a whole number from {lo} to {hi}.")
             self._settings.set(KEY_MOMENTS_KEY, key_moments)
         return self.settings()
+
+    # ------------------------------------------------------------ tags (v0.10)
+
+    def regrade_stored(self) -> int:
+        """Grade every stored move again at today's thresholds and rules (no engine). The v0.10 backfill
+        uses it so moves analyzed before v0.10 get the v0.10-B2 Missed/Allowed rule."""
+        th = self.settings().thresholds
+        return self._store.regrade(lambda row: regrade(row, th))
+
+    def retag(self, game_ids: Sequence[int] | None = None, cancel: CancelToken | None = None) -> int:
+        """Work out the themes and habits again from the stored analysis (no engine), for these games or
+        every analyzed game. Used after a threshold change and as the v0.10 backfill. Returns the games
+        whose tags changed."""
+        changed = 0
+        for gid in self._store.analyzed_games() if game_ids is None else game_ids:
+            if cancel is not None:
+                cancel.raise_if_cancelled()
+            rows = self._store.rows(gid)
+            tagged = tag_game(rows)
+            diff = [(n.ply, n.themes, n.habits) for o, n in zip(rows, tagged, strict=True) if o != n]
+            if diff:
+                self._store.set_tags(gid, diff)
+                changed += 1
+        return changed
 
     # ------------------------------------------------------------ the queue
 
@@ -281,4 +319,7 @@ class AnalysisService:
         now = self.settings().thresholds
         if now != st.thresholds:  # v0.8-B10: the thresholds changed while this game was analyzed
             rows = [regrade(r, now) for r in rows]
+        rows = tag_game(rows)  # v0.10: themes and habits (FR-10.12, 10.27), from the analysis only
         self._store.replace(game.id, rows, "analyzed", st.think_s, engine)
+        for fn in self._listeners:
+            fn(game.id, lambda f, m: progress((done + 1) / total if f is None else f, m), cancel)

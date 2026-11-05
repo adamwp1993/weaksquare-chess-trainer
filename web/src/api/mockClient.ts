@@ -19,6 +19,8 @@
 // v0.7: the AI settings and Explain live in mockLlm.ts (`?ai=on|warn|over|failed|nomodel`).
 // v0.8: the game library, Review and puzzle files live in mockGames.ts (`?games=empty`, `?chesscom=…`,
 // `?file=none`, `?mine=1` starts with one imported puzzle of your own).
+// v0.10: the Coach lives in mockCoach.ts (`?coach=report` starts with one report, `?coach=banner` also with a
+// suggestion waiting behind the banner); `?showbest=1` starts with Show best moves on.
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
@@ -35,13 +37,15 @@ import type {
   SettingValues,
   TrainingMode,
 } from "./ApiClient";
-import { ApiCallError } from "./ApiClient";
+import { ApiCallError, type CoachParams } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
+import { MockCoach } from "./mockCoach";
 import { gameNarrative, moveExplanation } from "./mockGameAi";
 import { MockGames } from "./mockGames";
 import { type ExplainTarget, MockLlm } from "./mockLlm";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
+  CoachAi,
   AccountStatus,
   Analysis,
   EngineSettings,
@@ -298,6 +302,7 @@ export class MockClient implements ApiClient {
     time_offset_days: null,
     reasons_ask: "always",
     rushed_s: 3,
+    show_best: false,
   };
   private reasons = new Map<number, ReasonKey>(); // attempt id -> its latest reason (§7.3)
   private attemptSession = new Map<number, { session: number; win: boolean; mode: TrainingMode }>();
@@ -335,12 +340,26 @@ export class MockClient implements ApiClient {
   readonly calls: string[] = [];
   private readonly llm: MockLlm;
   private readonly games: MockGames;
+  private readonly coach: MockCoach;
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
     this.llm = new MockLlm(params, (job) => this.emit(job), () => `job-${this.nextJob++}`);
     this.games = new MockGames(params, (job) => this.emit(job), () => `job-${this.nextJob++}`,
       () => (this.account.state === "signed_in" ? this.account.username : null)); // prettier-ignore
+    this.coach = new MockCoach(params, {
+      emit: (job) => this.emit(job),
+      jobId: () => `job-${this.nextJob++}`,
+      calls: this.calls,
+      filters: () => this.settings.last_filters,
+      setFilters: (spec, mode) => {
+        this.settings = { ...this.settings, last_filters: spec, mode: mode as TrainingMode };
+      },
+      quote: (kind, what) => this.llm.gameQuote(kind, what),
+      startAi: (kind, what, make) => this.llm.startGame(kind, what, make),
+      aiResult: (what) => this.llm.gameResult(what, "coach") as CoachAi | null,
+    });
+    if (params.get("showbest") === "1") this.settings.show_best = true;
     const scenario = params.get("scenario");
     // ?scheme=dark|auto starts the mock in that saved scheme; ?sounds=off with sounds off.
     const scheme = params.get("scheme");
@@ -815,7 +834,7 @@ export class MockClient implements ApiClient {
   }
 
   // ---- v0.9: a model per AI feature and Game Review AI ------------------------------------------
-  async setLlmFeature(feature: "game_review", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
+  async setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
     return this.llm.setFeature(feature, choice, model, reasoning);
   }
 
@@ -969,6 +988,70 @@ export class MockClient implements ApiClient {
     return this.games.puzzleSets();
   }
 
+  // ---- v0.10: Game Review additions, your puzzles, the Coach (mockCoach.ts) ------------------------
+  async analyzeGamePosition(gameId: number, fen: string, purpose: "panel" | "board"): Promise<Analysis> {
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to analyze positions.", retryable: false });
+    }
+    this.games.review(gameId);
+    const key = `review:${purpose}`;
+    const gen = (this.latest.get(key) ?? 0) + 1;
+    this.latest.set(key, gen);
+    this.calls.push(`analyzeGame:${gameId}:${purpose}`);
+    await this.think();
+    if (this.latest.get(key) !== gen) return { fen, lines: [], game_over: null, superseded: true };
+    return mockAnalysis(fen, new Chess(fen).turn() === "w" ? "white" : "black");
+  }
+
+  async archiveMyPuzzle(puzzleId: number) {
+    this.calls.push(`archivePuzzle:${puzzleId}`);
+    this.games.archive(String(puzzleId));
+  }
+
+  async getCoachDefaults() {
+    return this.coach.defaults();
+  }
+
+  async startCoachRun(params: CoachParams) {
+    return this.coach.start(params);
+  }
+
+  async getCoachRunResult(jobId: string) {
+    return this.coach.result(jobId);
+  }
+
+  async listCoachReports() {
+    return this.coach.list();
+  }
+
+  async getCoachReport(reportId: number) {
+    return this.coach.get(reportId);
+  }
+
+  async getCoachAiQuote(reportId: number) {
+    return this.coach.aiQuote(reportId);
+  }
+
+  async startCoachAi(reportId: number) {
+    return this.coach.startAi(reportId);
+  }
+
+  async getCoachAi(reportId: number) {
+    return this.coach.ai(reportId);
+  }
+
+  async getSuggestion() {
+    return this.coach.getSuggestion();
+  }
+
+  async applySuggestion() {
+    return this.coach.apply();
+  }
+
+  async dismissSuggestion() {
+    return this.coach.dismiss();
+  }
+
   async getAppInfo(): Promise<AppInfo> {
     return {
       version: "0.6.0",
@@ -1093,6 +1176,7 @@ export class MockClient implements ApiClient {
       }
       this.settings = { ...this.settings, reasons_ask: value as "always" | "off" };
     }
+    if (key === "review.show_best") this.settings = { ...this.settings, show_best: value as boolean };
     if (key === "reasons.rushed_s") {
       const n = value as number;
       if (!Number.isInteger(n) || n < 1 || n > 30) {
@@ -1253,7 +1337,10 @@ export class MockClient implements ApiClient {
       max_plies: s.mode === "commit_line" ? (s.showLength ? puzzle.moves.length - 1 : 60) : null,
       candidate: null,
       source: puzzle.source === "my" ? "my" : "lichess",
-      strict_without_engine: puzzle.source === "my" && puzzle.origin === "manual" && this.engine.state !== "ready",
+      strict_without_engine: puzzle.source === "my" && puzzle.origin !== "import" && this.engine.state !== "ready",
+      solve_as_opponent: puzzle.solve_as === "opponent",
+      game_id: puzzle.game_id ?? null,
+      game_ply: puzzle.ply ?? null,
     };
   }
 
@@ -1272,6 +1359,7 @@ export class MockClient implements ApiClient {
       number: s.served, puzzle_id: puzzle.id, fen: puzzle.fen, opponent_move: "",
       player_color: chess.turn() === "w" ? "white" : "black", rating: puzzle.rating, opponent_sound: null,
       already_played: false, mode: s.mode, solution_plies: null, max_plies: null, candidate, source: "lichess", strict_without_engine: false,
+      solve_as_opponent: false, game_id: null, game_ply: null,
     };
   }
 

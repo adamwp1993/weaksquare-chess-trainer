@@ -22,7 +22,7 @@ from typing import Any, Protocol
 import chess
 
 from weaksquare.core.clock import Clock
-from weaksquare.core.engine import EngineLine, score_for
+from weaksquare.core.engine import EngineLine, EngineNotInstalled, score_for, validate_fen
 from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.game_review import (
     ERRORS,
@@ -38,6 +38,7 @@ from weaksquare.core.game_review import (
 from weaksquare.core.games import GameRow, parse_single_pgn
 from weaksquare.core.puzzle import Color, NewCustomPuzzle
 from weaksquare.core.reasons import ReasonContext, is_forcing_reply, reason_info, suggest, validate_note
+from weaksquare.core.tagging import best_line_themes
 from weaksquare.core.tolerance import within_tolerance
 from weaksquare.services.analysis import ReviewSettings
 
@@ -46,6 +47,8 @@ RETRY_CLASSES = ("mistake", "blunder")
 
 class Games(Protocol):
     def get(self, game_id: int) -> GameRow | None: ...
+
+    def subjects(self, game_id: int) -> dict[str, str | None]: ...
 
 
 class Analysis(Protocol):
@@ -66,6 +69,8 @@ class InteractiveEngine(Protocol):
     ) -> Any: ...
 
     def status(self) -> Any: ...
+
+    def ticket(self, key: Any) -> int: ...
 
 
 class CustomPuzzles(Protocol):
@@ -224,7 +229,12 @@ class ReviewService:
         return self._clock.now().astimezone(UTC).isoformat(timespec="seconds")
 
     def _yours(self, game: GameRow, mover: str) -> bool:
-        return game.user_color == "both" or game.user_color == mover
+        """Your move in your game. Another player's game (FR-10.3) is reviewed from their side, but nothing
+        in it is recorded as yours: no reasons, no Retry (v0.10-B1)."""
+        return self._mine(game) and (game.user_color == "both" or game.user_color == mover)
+
+    def _mine(self, game: GameRow) -> bool:
+        return "me" in self._games.subjects(game.id)
 
     def _suggestion(self, row: MoveRow) -> str | None:
         reply = row.refutation[0] if row.refutation else None
@@ -281,10 +291,12 @@ class ReviewService:
         colors = ("white", "black") if game.user_color == "both" else (game.user_color,) if game.user_color else ()
         moments: list[int] = []
         retry: list[int] = []
+        mine = self._mine(game)
         if analyzed:
             for c in colors:
                 moments += [r.ply for r in key_moments(rows, c, st.key_moments)]
-                retry += [r.ply for r in rows if r.mover == c and r.classification in RETRY_CLASSES]
+                if mine:
+                    retry += [r.ply for r in rows if r.mover == c and r.classification in RETRY_CLASSES]
         summaries = (
             (side_summary(rows, "white", game.accuracy_white), side_summary(rows, "black", game.accuracy_black))
             if analyzed
@@ -299,7 +311,7 @@ class ReviewService:
             summaries=summaries,
             key_moments=tuple(sorted(moments)),
             retry_plies=tuple(sorted(retry)),
-            ask_reasons=self._ask.reasons_ask() in ("always", "game_review"),
+            ask_reasons=mine and self._ask.reasons_ask() in ("always", "game_review"),
         )
 
     def _row(self, game: GameRow, ply: int) -> MoveRow:
@@ -388,16 +400,33 @@ class ReviewService:
         if not row.lines or not row.lines[0].pv:
             raise ConflictError("There's no engine line to save for this move.", retryable=False)
         line = saved_line(row.lines[0].pv)
+        themes = best_line_themes(self._analysis.rows(game_id), ply)  # rows[ply] is this move (_row)
         return self._puzzles.add(
             NewCustomPuzzle(
                 fen=row.fen_before, solution=line, player_color=row.mover, origin="manual", strict=False,
                 game_id=game_id, ply=ply, kind=row.kind,
                 severity=row.classification if row.classification in ERRORS else None,
                 cp_loss=row.cp_loss, phase=row.phase, time_class=game.time_class,
-                game_date=(game.played_at or "")[:10] or None,
+                game_date=(game.played_at or "")[:10] or None, themes=themes,
             ),
             self._now(),
         )  # fmt: skip
+
+    # ------------------------------------------------------------ Analyze from here (v0.10, FR-11.34)
+
+    def analyze_position(self, game_id: int, fen: Any, purpose: Any = "board") -> Any:
+        """Eval and top lines for any position on the free analysis board opened from a game, on the
+        **interactive** engine (never the background one, ARCHITECTURE §3 decision 12). The position is
+        validated first (FR-7.6). Nothing here touches the game, its analysis or any stats."""
+        if purpose not in ("panel", "board"):
+            raise ValidationError("Unknown analysis purpose.")
+        game = self._game(game_id)
+        board = validate_fen(fen)
+        if self._engine.status().state != "ready":
+            raise EngineNotInstalled("Install Stockfish to analyze positions.")
+        color = game.user_color if game.user_color in ("white", "black") else ("white" if board.turn else "black")
+        key = ("review", game.id, purpose)
+        return self._engine.analyse(board, color, key=key, gen=self._engine.ticket(key))
 
     # ------------------------------------------------------------ reasons
 

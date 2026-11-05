@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import sqlite3
 from typing import Any
@@ -48,6 +49,8 @@ def _where(f: LibraryFilter) -> tuple[str, list[Any]]:
     any_of(f"({_RES})", f.results)
     any_of("user_color", f.colors)
     any_of("analysis_status", f.statuses)
+    parts.append("EXISTS (SELECT 1 FROM game_subjects s WHERE s.game_id = games.id AND s.subject = ?)")
+    params.append(f.player)
     if f.rated is not None:
         parts.append("rated = ?")
         params.append(int(f.rated))
@@ -66,6 +69,22 @@ def _where(f: LibraryFilter) -> tuple[str, list[Any]]:
     return (" WHERE " + " AND ".join(parts)) if parts else "", params
 
 
+ME = "me"
+
+
+def _has_subject(conn: sqlite3.Connection, game_id: int, subject: str) -> bool:
+    found = conn.execute("SELECT 1 FROM game_subjects WHERE game_id = ? AND subject = ?", (game_id, subject))
+    return found.fetchone() is not None
+
+
+def _add_subject(conn: sqlite3.Connection, game_id: int, subject: str, color: str | None) -> None:
+    conn.execute(
+        "INSERT INTO game_subjects (game_id, subject, color) VALUES (?,?,?)"
+        " ON CONFLICT(game_id, subject) DO UPDATE SET color = COALESCE(game_subjects.color, excluded.color)",
+        (game_id, subject, color),
+    )
+
+
 def _like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -74,8 +93,11 @@ class GamesRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    def add(self, rec: GameRecord, moves_hash: str, user_color: str | None, fetched_at: str) -> tuple[int, bool]:
-        """(id, created). An existing game is reused with its analysis (FR-11.7), and missing details (URL,
+    def add(
+        self, rec: GameRecord, moves_hash: str, user_color: str | None, fetched_at: str, subject: str = ME
+    ) -> tuple[int, bool]:
+        """(id, created). `subject` is whose game this is (v0.10, FR-10.3): 'me', or another player's
+        subject, and `user_color` is then that player's color. A game that becomes yours takes your color. An existing game is reused with its analysis (FR-11.7), and missing details (URL,
         platform id, color) are filled in from the new copy. A platform game matches its own platform id,
         or a paste/file copy with the same moves. A paste or file matches any game with the same moves.
         Two platform games with different ids are different games, even with identical moves (a short
@@ -97,6 +119,9 @@ class GamesRepo:
                 ).fetchone()
             if existing is not None:
                 gid = int(existing[0])
+                if subject == ME and not _has_subject(conn, gid, ME) and user_color is not None:
+                    conn.execute("UPDATE games SET user_color = ? WHERE id = ?", (user_color, gid))
+                _add_subject(conn, gid, subject, user_color)
                 conn.execute(
                     "UPDATE games SET url = COALESCE(url, ?), user_color = COALESCE(user_color, ?),"
                     " platform_accuracy_white = COALESCE(platform_accuracy_white, ?),"
@@ -124,7 +149,9 @@ class GamesRepo:
                     json.dumps(rec.extra) if rec.extra else None, fetched_at,
                 ),
             )  # fmt: skip
-            return int(cur.lastrowid or 0), True
+            gid = int(cur.lastrowid or 0)
+            _add_subject(conn, gid, subject, user_color)
+            return gid, True
 
     def get(self, game_id: int) -> GameRow | None:
         with self._db.session() as conn:
@@ -144,6 +171,21 @@ class GamesRepo:
     def set_user_color(self, game_id: int, color: str) -> None:
         with self._db.transaction() as conn:
             conn.execute("UPDATE games SET user_color = ? WHERE id = ?", (color, game_id))
+            conn.execute("UPDATE game_subjects SET color = ? WHERE game_id = ? AND subject = 'me'", (color, game_id))
+
+    def subjects(self, game_id: int) -> dict[str, str | None]:
+        """Whose games this game counts for, with their color (v0.10)."""
+        with self._db.session() as conn:
+            rows = conn.execute("SELECT subject, color FROM game_subjects WHERE game_id = ?", (game_id,)).fetchall()
+        return {str(r[0]): r[1] for r in rows}
+
+    def players(self) -> builtins.list[tuple[str, int]]:
+        """The other players you ran the Coach on, with their game counts (the Player filter)."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT subject, COUNT(*) FROM game_subjects WHERE subject <> 'me' GROUP BY subject ORDER BY subject"
+            ).fetchall()
+        return [(str(r[0]), int(r[1])) for r in rows]
 
     def set_analysis(self, game_id: int, status: str, think_s: float | None, engine: str | None) -> None:
         with self._db.transaction() as conn:

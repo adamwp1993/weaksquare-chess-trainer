@@ -71,7 +71,10 @@ export function TrainerView({
   onHistoryChange,
   coordinates = true,
   wide = false,
+  onOpenGame,
 }: {
+  /** v0.10: a puzzle from your games links back to its game in Game Review (FR-10.44). */
+  onOpenGame?: (gameId: number, ply: number) => void;
   /** FR-1.14: the filters panel is hidden, so the board may grow (within the window's height). */
   wide?: boolean;
   sessionId: number;
@@ -769,6 +772,11 @@ export function TrainerView({
           )}
         </div>
         <Stack gap="sm" style={{ flex: "0 0 260px" }}>
+          {view?.solve_as_opponent && (
+            <Text size="sm" fw={600} data-testid="solve-as-opponent">
+              Find what your opponent could have played.
+            </Text>
+          )}
           {view?.strict_without_engine && (
             <Text size="xs" c="dimmed" data-testid="strict-note">
               Stockfish isn't installed, so only this puzzle's saved line counts.
@@ -820,6 +828,24 @@ export function TrainerView({
                     </Badge>
                   ))}
                 </Group>
+                {view?.game_id != null && (
+                  <Group gap="xs" data-testid="my-puzzle-links">
+                    {onOpenGame && (
+                      <Button size="compact-xs" variant="subtle" onClick={() => onOpenGame(view.game_id!, view.game_ply ?? 0)} data-testid="open-puzzle-game">
+                        Open the game
+                      </Button>
+                    )}
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => api.archiveMyPuzzle(Number(view.puzzle_id)).then(() => setMessage({ text: "Archived: it won't come up again.", color: "gray" }))}
+                      data-testid="archive-puzzle"
+                    >
+                      Archive this puzzle
+                    </Button>
+                  </Group>
+                )}
                 {outcome.idea && <IdeaResult idea={outcome.idea} />}
                 {outcome.danger && <DangerVerdict fen={view?.fen ?? ""} reveal={outcome.danger} />}
                 {outcome.level_up && (

@@ -162,7 +162,7 @@ Every control changes the pool, and the **live match count** updates as you edit
 | FR-3.12 | Queue size | Fixed N or endless | |
 | FR-3.13 | **Presets** | Save / load / rename / delete named filter sets | Stored as JSON |
 | FR-3.14 | Hidden labels | Themes are **not shown** while solving | Revealed after the puzzle ends |
-| FR-3.15 | Puzzle source | Lichess DB / **My puzzles** / Both | "My puzzles" = `custom_puzzles`: saved from Game Review (§11), imported from your own files (§10.10) or created by the Coach (§10.9). These never sync to Lichess. Extra filters for My puzzles: origin, set label, Missed / Allowed, phase, time control; severity level (FR-10.40) from v0.10. Themes, rating, openings, quality, played on Lichess, ratios and the orders other than Random (easy → hard, by theme, depth ladder) apply only to Lichess puzzles: with My puzzles or Both, the order is random. Number of moves, side to move and the history filters apply to both. **Both** mixes the two pools in proportion to their sizes. In v0.8 My puzzles works in Standard, Commit the line and Spaced repetition; Name the idea and Danger spotting stay Lichess-only. A custom puzzle starts from the position you solve (no opponent move first). *(Adam, v0.8 planning: renamed from "My games".)* |
+| FR-3.15 | Puzzle source | Lichess DB / **My puzzles** / Both | "My puzzles" = `custom_puzzles`: saved from Game Review (§11), imported from your own files (§10.10) or created by the Coach (§10.9). These never sync to Lichess. Extra filters for My puzzles: origin, set label, Missed / Allowed, phase, time control; severity level (FR-10.40) from v0.10. Themes, rating, openings, quality, played on Lichess, ratios and the orders other than Random (easy → hard, by theme, depth ladder) apply only to Lichess puzzles: with My puzzles or Both, the order is random. *(v0.10 planning: ratios also work with **Both**, where each ratio group is a Lichess pool and My puzzles fill a fixed share of the slots, `my_share`, used by the Suggested mix, FR-10.44. Without a share, Both mixes by pool size as before.)* Number of moves, side to move and the history filters apply to both. **Both** mixes the two pools in proportion to their sizes. In v0.8 My puzzles works in Standard, Commit the line and Spaced repetition; Name the idea and Danger spotting stay Lichess-only. A custom puzzle starts from the position you solve (no opponent move first). *(Adam, v0.8 planning: renamed from "My games".)* |
 
 ---
 
@@ -334,7 +334,9 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   - from v0.11, the Coach's **game digests** (FR-10.52), which carry SAN only for the opening and the key moments
   - from v0.11, with **Advanced analysis** switched on and confirmed (FR-10.56), the SAN move lists of the games in that run, up to its game cap
 
-  Otherwise the Coach sends aggregates and example positions (§10). (Rule changed by Adam, 2026-11-03, for whole-game coaching.)
+  - from v0.12, with **Include my journal** switched on and previewed (FR-10.71), your journal notes and reflections for the report's period, as written
+
+  Otherwise the Coach sends aggregates and example positions (§10), and from v0.12 the current training plan's progress as aggregates (FR-10.66). (Rule changed by Adam, 2026-11-03, for whole-game coaching; journal added 2026-11-04.)
 
 ---
 
@@ -353,6 +355,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
   | Both | Minutes | Low | Gaps between puzzles and games (e.g. solving forks in puzzles but walking into them in games) |
 
 - **FR-10.3** **Accounts:** defaults to your **linked accounts** (§11.5), and you can override them per run. Lichess username and/or chess.com username. Accept either a plain username or a profile URL (`lichess.org/@/<user>`, `chess.com/member/<user>`).
+  - **Another player** (Adam, v0.10 planning): you can enter any Lichess or chess.com username and run the Coach on that player's public games. Their games are stored once and tagged with that player (a game you played against them counts for both of you). They stay out of My Games unless you pick them with the **Player** filter. Their run saves a report labeled with their name, and **Load preset** works from it. It never changes your Suggested mix (§10.7), creates no My puzzles (§10.9) and never counts in your stats or report trends. Optional AI coaching works for their report with the same guardrails (§9.3); the prompt never contains a username.
 - **FR-10.4** **Game filters:** count **25 / 50 / 100 / 200 (default 50)**; rated only (default on); time controls (default **rapid + classical**, since bullet and blitz mistakes come from the clock, not from tactics); color.
 - **FR-10.5** **Detail level** for LLM coaching: **Summary** (~5k input tokens: aggregates plus 10–15 example positions) or **Detailed** (~20k input tokens: aggregates plus your 20 worst moments with context).
 
@@ -362,12 +365,13 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.8** Cache games locally (`games`). Re-runs fetch only newer games.
 
 ### 10.3 Finding and tagging mistakes (local, free)
-- **FR-10.9** Analyze **only the user's moves**. Use Lichess's existing evals when the game has them; otherwise run a quick Stockfish pass (default ~0.15 s per position), then a deeper check on candidate mistakes.
-- **FR-10.10** **Thresholds** (configurable): mistake = eval drop of at least 100 cp; blunder = at least 200 cp or a mate swing. Skip the first 6 moves (opening book) and positions already decided (beyond ±500 cp).
+- **FR-10.9** The Coach reports on **the player's own moves** only. The analysis itself is the shared Game Review pipeline (§11.2, FR-10.26) at its think time (default 0.3 s per position), run locally even when Lichess already has evals (FR-11.3), so every game the Coach analyzed opens in Game Review without a re-analysis. *(Adam, v0.10 planning: replaces the earlier quick 0.15 s pass and the use of Lichess's evals.)*
+- **FR-10.10** **Thresholds** (configurable): mistake = eval drop of at least 100 cp; blunder = at least 200 cp or a mate swing. The Coach skips the first 6 moves (opening book) and positions already decided (beyond ±500 cp) when it aggregates and when it makes puzzles (§10.9); Game Review's grading is unchanged (v0.10 planning).
 - **FR-10.11** Each mistake is classified as:
   - **Missed:** you had a winning tactic. Its line comes from Stockfish's principal variation from your position.
   - **Allowed:** your move let the opponent win material or mate. Its line comes from Stockfish's principal variation after your move.
   - **Other:** a positional or untaggable mistake.
+  - *(v0.10-B2:)* a move that walks into a forced mate counts as **Allowed** even when you had a winning tactic before it.
 - **FR-10.12** Tag the Missed and Allowed lines with the **lichess-puzzler tagger**, so the themes match the puzzle DB exactly (`fork`, `capturingDefender`, `deflection`, and so on).
 - **FR-10.13** Also record the phase (opening / middlegame / endgame), low clock (under 10% of time remaining, when clock data exists), and color.
 - **FR-10.14** Show progress and estimated time remaining, and allow cancel. Analysis runs in the background without blocking solving.
@@ -398,7 +402,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.26** The Coach **reuses the Game Review analysis pipeline** (§11.2) and its stored `game_analysis`. Games that were already reviewed aren't re-analyzed, and any game the Coach analyzed opens in Game Review with one click.
 
 ### 10.7 Suggested default puzzle mix
-- **FR-10.28** **First run:** after the first Coach run, the app builds a **Suggested** preset, and it becomes the default puzzle selection on the main page, labeled *"Suggested — from checkpoint #N, <date>"*. Before any Coach run exists, the default is a broad mix (all themes, all lengths, rating band around your Lichess puzzle rating or 1500).
+- **FR-10.28** **First run:** after the first Coach run, the app builds a **Suggested** preset, and it becomes the default puzzle selection on the main page, labeled *"Suggested — from checkpoint #N, <date>"*. Until checkpoints arrive (v1.0) the label reads *"Suggested — from Coach run #N, <date>"*, and weaknesses are ranked by game rate × severity without statuses (v0.10 planning). Before any Coach run exists, the default is a broad mix (all themes, all lengths, rating band around your Lichess puzzle rating or 1500).
 - **FR-10.29** **How the mix is built** (deterministic; the LLM may refine it, validated as in FR-10.23):
   - **Priority:** Regressed weaknesses first, then New/Training weaknesses ranked by game rate × severity, then Improving ones. Fixed weaknesses keep a small **maintenance share** (default 10%).
   - Each weakness contributes its related themes and drill mode (e.g. `ignoredThreat` → Danger spotting).
@@ -442,24 +446,24 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 
 ### 10.9 Puzzles from your games
 - **FR-10.39** **Created by the analysis:** when the Coach analyzes your games (default your last 50, up to 200, FR-10.4; checkpoints add only new games), it turns qualifying mistakes into puzzles in `custom_puzzles` with `origin = coach`. It's part of the same background job and the same pipeline (FR-10.26). Games already analyzed aren't analyzed again. Re-runs never create duplicates (one puzzle per game and ply). Everything stays local and never syncs to Lichess.
+  - *(Adam, v0.10 planning:)* puzzles are made after **any** analysis of your games (Coach runs, Analyze selected and Review), since it's one pipeline. Games analyzed before v0.10 get a one-time backfill from their stored analysis. Another player's games (FR-10.3) never make puzzles. A puzzle you saved by hand at the same ply is kept, and no Coach puzzle is added there.
 - **FR-10.40** **Severity level (user setting):** which mistakes become puzzles. **Blunders only** / **Mistakes and blunders** (default) / **Inaccuracies, mistakes and blunders**. The levels use the shared thresholds (FR-11.9).
   - Changing the level rebuilds the set from the stored `game_analysis`, with no new engine pass over the games. Only new candidates get the quality check (FR-10.41).
   - Narrowing the level **archives** the puzzles outside it, never deletes them, so their attempt history is kept. Widening restores them.
   - The same three choices are also a filter when training the My puzzles source (FR-3.15).
 - **FR-10.41** **Quality check:** a mistake becomes a puzzle only if it has a clear answer.
-  - The best move must be clearly better than the second best (default gap 150 cp, configurable), or be the only move that keeps the advantage.
+  - The rules are **ported from lichess-puzzler's generator** (`generator/generator.py`; Adam, v0.10 planning). The generator itself can't be reused, since it needs MongoDB, a tablebase server and 30-second searches. The best move must beat the second best by more than **0.7 in win chances** (Lichess's margin, configurable), or be the only move. Mate in one follows Lichess's mate-in-one rules.
   - The position must not already be decided (beyond ±500 cp before the move).
-  - The line extends while the solver's move stays the only good one, the way Lichess builds multi-move puzzles.
-  - Prefer reusing lichess-puzzler's generator logic (AGPL-3.0, already a dependency for tagging) over writing our own. Confirm this in the v0.10 plan.
+  - The line extends while the solver's move stays the only good one, the way Lichess builds multi-move puzzles: it's trimmed to end on the solver's move, and one-move advantage puzzles are dropped. Each extension position gets about 1 s on the background engine (configurable), not Lichess's 30 s.
   - Inaccuracies are kept only when they pass the same check, so the inaccuracy level may add few puzzles. The setting says so.
 - **FR-10.42** **Missed and Allowed:**
   - **Missed** (you had a tactic and didn't play it): you solve from your own position, as the side you played.
   - **Allowed** (your move let your opponent in): you solve **as your opponent**, from the position after your mistake, finding the punishment. The board is oriented for the side to move, and the puzzle is labelled *"Find what your opponent could have played."*
-  - Allowed positions can also feed Danger spotting (FR-4.4) once that mode exists.
+  - Danger spotting (FR-4.4) stays Lichess-only for My puzzles (FR-3.15), so Allowed positions don't feed it yet (v0.10 planning).
 - **FR-10.43** **Solving rules:** these come from engine analysis, not a verified single solution, so any move within 30 cp of the best (configurable, shared with Retry mode FR-11.15) counts. *(Built in v0.8 for puzzles saved from Game Review, FR-11.16; without Stockfish they fall back to the stored line.)* The interactive engine then continues the line from the move you played. Themes come from the lichess-puzzler tagger and stay hidden until the puzzle ends (FR-3.14). Any help before completion is a loss, as everywhere (§7.1).
 - **FR-10.44** **Training them:**
   - **My puzzles** works as a source on its own or mixed with Lichess puzzles, in every mode that supports it, including **Spaced repetition** (FR-4.6).
-  - The Suggested mix (§10.7) may include a share of your own-game puzzles (default 20%) linked to your top weaknesses, and "Why this mix" says so.
+  - The Suggested mix (§10.7) may include a share of your own-game puzzles (default 20%) linked to your top weaknesses, and "Why this mix" says so. *(v0.10: the share is the Coach's puzzles from your games, in the modes that take My puzzles: Standard and Commit the line.)*
   - Each puzzle links back to its game in Game Review. You can archive any puzzle you don't want.
 - **FR-10.45** **Progress:** accuracy on your own-game puzzles appears on each weakness card (FR-10.38) next to Lichess-puzzle accuracy. It's a secondary signal only. A weakness's status is still decided by its game rate (§10.8), never by puzzle accuracy.
 
@@ -521,6 +525,33 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
   - **The LLM only picks a topic** from the app's list. It never writes a URL, and any link the app didn't build itself is dropped.
   - **Links open in your default browser.** The app never fetches those sites, and the search terms go to the site you click (the User Guide's privacy section says so).
 - **FR-10.60** **Include my notes** (a per-run option, **off by default**): adds your mistake-reason notes (§7.3) for the games and puzzles in the run to the prompt. Before Confirm, you see exactly which notes will be sent.
+
+### 10.12 Training plan and training journal (v0.12; Adam, 2026-11-04)
+**Goal:** turn the Coach's diagnosis into a routine you can follow, and keep a record of what you did and what you learned, so the Coach (and you) can see what's working. Requested by Adam during the v0.10 manual test.
+
+**Training plan**
+- **FR-10.61** **Built from your weaknesses:** a plan of **1–4 weeks** (default 2) from your latest Coach report (with v0.11's whole-game weaknesses when present). You set **days per week** (default 5) and **minutes per day** (default 20). The top weaknesses get the most time; a weakness reported as fixed later (v1.0) keeps a small maintenance share.
+- **FR-10.62** **Daily sessions:** each training day has 2–4 **tasks** that fit the minutes you set. Task types (a closed list, so every task is something the app can open):
+  - a **puzzle session**: filters (themes, rating, source, own-game share), a mode and a count, e.g. *20 Danger-spotting puzzles: forks*
+  - **puzzles from your games** at a severity level (§10.9)
+  - **Retry your mistakes** in a named game (FR-11.15)
+  - **review a game** in Game Review, with Show best moves off (FR-11.35)
+  - a **lesson pointer** (FR-10.59, v0.11)
+  - a **journal reflection** (FR-10.66)
+- **FR-10.63** **Tasks open where they happen:** **Start** opens the task's screen ready to go. A puzzle task starts a session with the task's filters for that session only; it never changes your saved presets or your Mixer filters.
+- **FR-10.64** **Progress ticks itself off:** a puzzle task is done when its session reaches the count; Retry when every mistake was tried; a review when the game was stepped through; a reflection when the entry is saved. You can also tick, skip or swap a task by hand. A missed day's tasks are either carried over or dropped (setting, default carried over, at most one day's worth).
+- **FR-10.65** **Plan page and Today card:** a **Plan** page shows each week, its days, done / skipped / left and minutes spent; the main page shows **Today's plan** with Start on each task. A new plan replaces the current one only when you confirm; old plans stay in the history with their completion.
+- **FR-10.66** **AI coaching includes the plan** (Adam, 2026-11-04):
+  - With AI coaching (§10.6, §10.11), the LLM's answer includes a **proposed plan** in a strict schema: weeks → days → tasks of the FR-10.62 types only, with theme keys, modes, counts, game references and lesson topics validated like presets (FR-10.23). Invalid tasks are dropped and the **deterministic plan** fills the gaps, so there is always a complete plan. **Use this plan** (with a confirm) makes it current.
+  - The next AI coaching run is told how the current plan went, as **aggregates only**: tasks done and skipped per type and weakness, minutes, and puzzle accuracy per task theme. No journal text unless FR-10.71's option is on.
+  - Without an AI key the plan is still built deterministically; all §9.3 guardrails apply.
+
+**Training journal**
+- **FR-10.67** **Your notes:** dated entries you write (up to 5,000 characters), with optional tags: a weakness, a game (and ply), a plan day. You can edit and delete them.
+- **FR-10.68** **Automatic log:** for each day, the app adds a read-only summary from what's already stored (no extra tracking): puzzles by mode and source with first-try accuracy and the themes you missed most, games synced, analyzed and reviewed, Retry results, plan tasks done, Coach runs and their top weakness.
+- **FR-10.69** **Game reflections:** in Game Review, **Add a note** on a game or on one of its moves saves a journal entry linked to that game and ply. The game shows its notes (with a marker on the move), and the journal links back to the position.
+- **FR-10.70** **Journal page:** one timeline of your notes, reflections and the daily log, newest first, with filters (weakness, game, type, date range) and text search. Entries never leave the PC (privacy section updated).
+- **FR-10.71** **Feeds the AI coach (opt-in):** a per-run **Include my journal** option (off by default) adds your notes and reflections from the report's period to the AI coaching prompt, with a preview of exactly what is sent before Confirm. It extends v0.11's **Include my notes** (FR-10.60). Game references go as the report's own game labels, never as platform ids or URLs; names you typed yourself are sent only if you include them, and the preview warns that notes are sent as written.
 
 ## 11. Game Review: import a game, analyze it, explain better moves
 
@@ -642,7 +673,7 @@ The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.0, each a stop-a
 | M5 Modes + stats + reasons | v0.5, v0.6 |
 | M4 LLM Explain + guardrails | v0.7 (moved after the modes; guardrails still ship before the first LLM call) |
 | M6 Game Review | v0.8 (engine), v0.9 (AI) |
-| M7 Coach + fix tracking | v0.10 (Coach), v0.11 (whole-game coaching), v1.0 (checkpoints, release) |
+| M7 Coach + fix tracking | v0.10 (Coach), v0.11 (whole-game coaching), v0.12 (training plan and journal), v1.0 (checkpoints, release) |
 
 ---
 
@@ -650,6 +681,7 @@ The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.0, each a stop-a
 
 The project is open source under **AGPL-3.0-or-later** from the first commit (`LICENSE` in the repo root).
 - **Why AGPL:** chessground is GPL-3.0 and the lichess-puzzler tagger (v0.10) is AGPL-3.0, so the combined work must be AGPL. Starting there avoids relicensing at v0.10.
+- **lichess-puzzler** isn't on PyPI, so its tagger (`tagger/cook.py`, `util.py`, `model.py`) is **vendored** under `src/weaksquare/vendor/lichess_puzzler/` at a pinned commit, with its AGPL-3.0 licence and a README giving the commit and the patch (v0.10 planning). Its generator's rules are ported, not copied (FR-10.41).
 - **Stockfish (GPL-3.0)** is downloaded by the user's own setup from the official release and never redistributed by this project, so the repo carries no Stockfish binary.
 - **Lichess puzzle database:** public domain (CC0). It's downloaded at setup, never committed.
 - **The About screen** shows the license and a link to the source code (NFR-7).
@@ -676,7 +708,7 @@ The project is open source under **AGPL-3.0-or-later** from the first commit (`L
 | chess.com PubAPI: read-only; monthly game archives; serial access unlimited, parallel requests may get 429; descriptive User-Agent with contact recommended; no per-move review labels | https://support.chess.com/en/articles/9650547-published-data-api |
 | chess.com PubAPI: no authentication; profile `GET /pub/player/{username}` (404 for unknown users); archives list `/pub/player/{username}/games/archives`; archive game fields `white`, `black`, `accuracies` (only if previously calculated), `url`, `fen`, `pgn`, `start_time` (daily only), `end_time`, `time_control`, `rules`, `eco`, `tournament`, `match` | https://www.chess.com/news/view/published-data-api |
 | chess.com OAuth ("Sign in with Chess.com") exists but requires applying for access, so it isn't self-service. The internal "callback" game endpoints aren't for general use, and heavy use risks an IP ban | chess.com developer forum threads; chess-web-api issue #10 |
-| lichess-puzzler: Lichess's open-source puzzle generator and tagger (`tagger/cook.py`, python-chess), AGPL-3.0 | https://github.com/ornicar/lichess-puzzler |
+| lichess-puzzler: Lichess's open-source puzzle generator and tagger (`tagger/cook.py`, python-chess), AGPL-3.0. Not on PyPI. The tagger needs only python-chess; the generator needs MongoDB, a tablebase server and `zstandard`. Pinned for v0.10 at `8e24b6d5e2b9` (2026-10-23) | https://github.com/ornicar/lichess-puzzler |
 | Stockfish 19 (tag `sf_19`, released 2026-09-05) ships universal binaries that detect CPU features and run the optimal code, replacing the separate AVX2/AVX-512 builds | https://stockfishchess.org/blog/2026/stockfish-19/ and https://github.com/official-stockfish/Stockfish/releases/tag/sf_19 |
 | Windows asset: `stockfish-windows-x86-64-universal.zip`, about 81 MB | SourceForge mirror of the sf_19 release |
 | Since Stockfish 19, an invalid position or illegal move prints `info string CRITICAL ERROR` and terminates the process | https://official-stockfish.github.io/docs/stockfish-wiki/UCI-Protocol-and-Stockfish-Commands.html |

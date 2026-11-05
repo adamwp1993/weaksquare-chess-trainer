@@ -12,6 +12,10 @@ export interface MockPuzzle {
   source?: "my"; // v0.8: one of your own puzzles: moves[0] is "" (no opponent move first)
   origin?: string;
   set_label?: string | null;
+  solve_as?: "you" | "opponent"; // v0.10: an Allowed puzzle from your games (FR-10.42)
+  game_id?: number; // v0.10: the game it came from (FR-10.44)
+  ply?: number;
+  severity?: string; // v0.10: blunder / mistake / inaccuracy (FR-10.40)
 }
 
 export const MOCK_PUZZLES: MockPuzzle[] = [

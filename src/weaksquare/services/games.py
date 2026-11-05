@@ -77,7 +77,9 @@ class Account(Protocol):
 
 
 class GamesStore(Protocol):
-    def add(self, rec: GameRecord, moves_hash: str, user_color: str | None, fetched_at: str) -> tuple[int, bool]: ...
+    def add(
+        self, rec: GameRecord, moves_hash: str, user_color: str | None, fetched_at: str, subject: str = ...
+    ) -> tuple[int, bool]: ...
 
     def get(self, game_id: int) -> GameRow | None: ...
 
@@ -234,6 +236,10 @@ class GameLibraryService:
             self._sync.clear("chesscom")
         self._settings.set(CHESSCOM_KEY, username)
         return username
+
+    def players(self) -> list[tuple[str, int]]:
+        """The other players you ran the Coach on, with their game counts (v0.10)."""
+        return self._repo.players()  # type: ignore[attr-defined, no-any-return]
 
     def usernames(self) -> list[str]:
         return [u for u in (self._account.account_id(), self.settings().chesscom_username) if u]
@@ -397,6 +403,84 @@ class GameLibraryService:
         except Exception as e:
             raise self._fail(e, "chess.com") from None
         self._sync.put(SyncState("chesscom", username, self._now(), newest_month, etags))
+
+    # ------------------------------------------------------------ another player's games (v0.10, FR-10.3)
+
+    def fetch_player_games(
+        self,
+        platform: str,
+        username: str,
+        want: Callable[[GameRecord], bool],
+        count: int,
+        progress: ProgressFn,
+        cancel: CancelToken,
+    ) -> list[int]:
+        """Fetch another player's newest public games until `count` match `want`, and store them tagged
+        with that player (`<platform>:<username>`), kept out of My Games. Returns the matching game ids,
+        newest first. chess.com is fetched one request at a time, newest month first (FR-10.7)."""
+        if not valid_username(username):
+            raise ValidationError("That isn't a valid username.")
+        subject = f"{platform}:{username.lower()}"
+        found: list[int] = []
+
+        def store(rec: GameRecord) -> None:
+            try:
+                parsed = parse_single_pgn(rec.pgn)
+            except GameError:
+                return
+            if not want(rec):
+                return
+            color = detect_color(rec.white, rec.black, [username])
+            gid, _ = self._repo.add(rec, moves_hash(parsed.start_fen, parsed.moves), color, self._now(), subject)
+            if gid not in found:
+                found.append(gid)
+
+        label = "Lichess" if platform == "lichess" else "chess.com"
+        progress(None, f"Fetching {username}'s {label} games…")
+        try:
+            if platform == "lichess":
+                token = self._account.token()
+                for data in self._lichess.user_games(token, username, since_ms=None, max_games=min(5 * count, 1000)):
+                    cancel.raise_if_cancelled()
+                    try:
+                        store(parse_lichess_game(data))
+                    except Skip:
+                        continue
+                    progress(None, f"Fetching {username}'s Lichess games… {len(found)} of {count}")
+                    if len(found) >= count:
+                        break
+            elif platform == "chesscom":
+                for url in reversed(self._chesscom.archives(username)):
+                    cancel.raise_if_cancelled()
+                    try:
+                        archive = self._chesscom.archive(url, None)
+                    except Exception as e:
+                        if self._classify(e) == "gone":
+                            continue
+                        raise
+                    for data in sorted(archive.games, key=lambda g: -(g.get("end_time") or 0)):
+                        try:
+                            store(parse_archive_game(data))
+                        except Skip:
+                            continue
+                        if len(found) >= count:
+                            break
+                    progress(None, f"Fetching {username}'s chess.com games… {len(found)} of {count}")
+                    if len(found) >= count:
+                        break
+            else:
+                raise ValidationError("The platform must be lichess or chesscom.")
+        except (JobFailed, JobCancelled, ValidationError):
+            raise
+        except Exception as e:
+            kind = self._classify(e)
+            if kind == "not_found":
+                raise JobFailed("not_found", f"{username} wasn't found on {label}.", retryable=False) from None
+            if kind == "network":
+                raise JobFailed("offline", f"Couldn't reach {label}.") from None
+            log.exception("fetching another player's games failed")
+            raise JobFailed("fetch_failed", f"Fetching {username}'s games failed.") from None
+        return found
 
     # ------------------------------------------------------------ library
 

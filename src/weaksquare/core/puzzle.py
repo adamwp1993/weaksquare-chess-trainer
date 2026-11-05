@@ -42,6 +42,9 @@ class Puzzle:
     game_url: str
     opening_tags: tuple[str, ...]
     tolerance: bool = False  # v0.8: solved with the engine tolerance (FR-10.43), not only the stored line
+    solve_as_opponent: bool = False  # v0.10: an Allowed puzzle from your games, solved as your opponent (FR-10.42)
+    game_id: int | None = None  # v0.10: the game it came from, for the link to Game Review (FR-10.44)
+    game_ply: int | None = None
 
     @property
     def has_premove(self) -> bool:
@@ -59,7 +62,7 @@ class NewCustomPuzzle:
     fen: str  # the position you solve (you are to move)
     solution: tuple[str, ...]  # UCI, ending on your move
     player_color: str
-    origin: str  # manual / import
+    origin: str  # manual / import / coach (v0.10)
     strict: bool
     game_id: int | None = None
     ply: int | None = None
@@ -71,6 +74,8 @@ class NewCustomPuzzle:
     phase: str | None = None
     time_class: str | None = None
     game_date: str | None = None
+    themes: tuple[str, ...] = ()  # v0.10: lichess-puzzler themes (FR-10.12, 10.43)
+    solve_as: str = "you"  # v0.10: 'opponent' for an Allowed puzzle from your games (FR-10.42)
 
     @property
     def length(self) -> int:

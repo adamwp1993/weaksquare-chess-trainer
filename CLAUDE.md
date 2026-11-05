@@ -54,6 +54,7 @@ An open-source (AGPL-3.0-or-later), single-user Windows desktop app for chess ta
   - The Coach sends aggregates and a few example positions. From v0.11 it also sends per-game digests (FR-10.52).
   - The SAN move lists of a batch of games go only with **Advanced analysis**, which is off by default and confirmed per run (FR-10.56).
   - Notes go only with **Include my notes** (FR-10.60).
+  - From v0.12, journal entries go only with **Include my journal** (FR-10.71), after a preview; the training plan's progress goes as aggregates only (FR-10.66).
   - The LLM never writes a URL: lesson links are built by the app (FR-10.59).
 - **Fix tracking (§10.8):** a weakness's status is decided by its **game rate** over the rolling window against a frozen baseline, never by puzzle accuracy alone. Respect the sample-size guard. The Suggested preset never silently overwrites the user's manual filters.
 - **Stockfish (§9.1):** never commit, vendor or hard-code a download of the binary. Install it only through `services/engine_install.py` (pinned manifest, SHA-256 checked before extracting). Validate every position and move list with python-chess before sending it, because Stockfish 19 terminates on invalid input.

@@ -79,7 +79,8 @@ weaksquare-chess-trainer/
 │  │  ├─ tolerance.py          # the 30 cp engine tolerance (Retry, game puzzles) (v0.8)
 │  │  ├─ puzzle_files.py       # your own PGN / EPD / CSV puzzle files (v0.8)
 │  │  ├─ ladder.py             # depth-ladder levels from the attempts log (v0.5)
-│  │  ├─ tags.py               # habit tags from attack maps          (v0.10)
+│  │  ├─ tagging.py            # Lichess theme tags for a tactic line, via vendor/lichess_puzzler (v0.10)
+│  │  ├─ habits.py             # habit tags from attack maps          (v0.10)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
@@ -115,7 +116,9 @@ weaksquare-chess-trainer/
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)
-│  └─ jobs/runner.py           # background jobs: queue, progress, cancel
+│  ├─ jobs/runner.py           # background jobs: queue, progress, cancel
+│  └─ vendor/lichess_puzzler/  # Lichess's tagger (cook.py, util.py, model.py), AGPL-3.0, pinned; README.md
+│                              #   gives the commit and the patch (v0.10)
 ├─ web/
 │  ├─ index.html  vite.config.ts  package.json  package-lock.json
 │  ├─ public/sounds/           # bundled sound sets + CREDITS.md (v0.2)
@@ -229,6 +232,72 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-04, v0.10: QA fixes (v0.10-B1 to B8)
+- Context: QA round 1 (`qa/QA-v0.10.md`), PASS WITH ISSUES: two major and six minor bugs.
+- Decision:
+  - **B1:** "yours" means the `me` row in `game_subjects`, not `games.user_color` (which holds another player's color for their games). `stats.game_reason_rows` joins it, and Review offers Retry and reason chips only on your games (`ReviewService._mine`).
+  - **B2:** `missed_or_allowed`: a move that walks into a forced mate is **Allowed** even from a winning position. A missed win that only loses ground stays Missed (checked with the real engine both ways). REQUIREMENTS FR-10.11 notes it.
+  - **B3:** `App.tsx` reloads the filters and the suggestion when any `coach_run` job ends, whatever page is open.
+  - **B4:** with Show best moves off, Explain this move hides its step-by-step line (the better line), as FR-11.35 hides the AI's better lines.
+  - **B5:** the Coach page chooses all your games, Lichess only or chess.com only (`platforms`, FR-10.3).
+  - **B6:** "1 game" in Saved reports; the User Guide states Lichess's mate-in-one rule.
+  - **B7:** `get_theme_catalog` returns no themes before a puzzle database exists, instead of crashing.
+  - **B8:** the v0.9 smoke test reads the first two of the three AI features.
+  - **Round 2, B9:** while a puzzle session runs, a finished Coach run updates the filters but its mode waits for the session to end (App keeps it pending), so the Mixer and the session agree (§6). **B10:** the User Guide covers the account choice and the hidden explanation line; screenshots regenerated. Also from round 2: the one-time backfill regrades stored moves first (`AnalysisService.regrade_stored`), so games analyzed before v0.10 get the B2 rule.
+  - **Manual test M1 (Adam):** the Coach's model picker sits in the AI coaching box; **Ask <model> instead** when the saved answer is from another model. **Round 3, B11:** a held-back suggested mode also applies at the next **Start**, and a mode you pick yourself clears it. **B12:** screenshots regenerated.
+- Consequences: each fix has a regression test (QA's xfail tests now pass).
+
+### 2026-11-04, v0.10: AI coaching on a report: allow-listed prompt, the Coach feature, stored on the report
+- Context: FR-10.21–10.25 and FR-1.15 (the Coach gets its own model).
+- Decision:
+  - **`core/coach_llm.py`**: `build_prompt` copies only allow-listed report fields (rates, severities, reasons, the gap table) and up to 12 (Summary) or 20 (Detailed) example positions labelled E1…, rebuilt as SAN from the stored analysis. Game ids, dates, labels and usernames never enter the prompt, whoever the report is about. `validate` keeps weakness notes only for keys that were sent (3–5), and presets through `preset_suggestion.validate_coach_preset` (up to 6 motif or mate themes, a valid range, move counts 1–4, a known mode, 5–100 puzzles); with none left, the report's deterministic preset is offered (`fallback_preset`).
+  - **The `coach` feature** in `core/llm/defaults.py`, with kinds `coach_summary` (2,500 `max_tokens`) and `coach_detailed` (5,000), typical prompts of about 5k and 20k tokens; `llm.feature.coach.*` keys, "Same as Explain" by default. The usage log records `coach`.
+  - **Stored on the report** (`coach_reports.llm_json`) with its provider and model: the same report and model shows again for free (`quote_ai` returns `cached`). A new model asks again.
+- Alternatives: `llm_cache` (rejected: the answer belongs to one saved report, and the report row already exists).
+- Consequences: v1.0's auto AI summary can reuse `build_prompt` at the Summary level.
+
+### 2026-11-04, v0.10: The Coach run, the report and the Suggested mix
+- Context: §10.1–10.7 for v0.10, without checkpoints or statuses (v1.0).
+- Decision:
+  - **`services/coach.CoachService`** runs one `coach_run` job: your library after a sync (it waits on the `games_sync` job), or another player's games through `GameLibraryService.fetch_player_games` (stored under their subject; Lichess with your token when signed in, chess.com newest month first, one request at a time); then the analysis queue (it waits on the `game_analysis` job, with a time estimate from the queue's progress), `retag`, puzzles for your games, and the report. Jobs run on their own threads, so one job can wait on another; a cancelled Coach run cancels the job it's waiting on.
+  - **`core/coach.build_report`** aggregates the `game_errors` view by subject. Weakness keys are `missed:<theme>`, `allowed:<theme>`, `habit:<habit>` and `puzzle:<theme>` (puzzle history). Rates are per 10 games; severity is the average cp loss capped at 1000; the score is rate × severity / 100. Only themes in the Motifs, Advanced, Mates, Mate patterns and Special moves groups are weaknesses. Reports are stored as JSON in `coach_reports`, with the preset and notes; the trend compares with the subject's previous games report.
+  - **`core/suggested_mix.build_suggestion`**: ratio groups for the top 4 weaknesses by score, plus a `long`/`veryLong` group (10% exploration plus the share of multi-move Missed tactics, at most 50%). **FilterSpec** gains `my_severities` and `my_share`, and ratios are allowed with source Both (each group's slots go to My puzzles with probability `my_share`). Per-group move counts (`RatioBucket.lengths` in the plan) were dropped: they'd need a per-group length condition in the bucket-count SQL, and Lichess's length themes do the same job. The new fields default to "no restriction", so `SAVED_FILTERS_VERSION` stays 3.
+  - **Suggestion state** in `settings`: `mixer.suggested` (report id, run number, spec, mode, "why" lines, `pending`, the filters it would replace) and `mixer.suggested_applied`. A run replaces `mixer.filters` and `trainer.mode` only when the filters are the default or the last applied suggestion; otherwise `pending` shows the banner.
+- Alternatives: a `coach_suggestions` table (rejected: one current suggestion, a setting is enough); applying the LLM's preset to the mix (rejected for v0.10: Load preset is your click, FR-10.24).
+- Consequences: v1.0's checkpoints can reuse the run (minus the sync and the report UI) and replace the score ranking with statuses.
+
+### 2026-11-04, v0.10: Puzzles from your games: a hook on the analysis job, checks cached per move
+- Context: FR-10.39–10.43 with Adam's planning answers (puzzles after any analysis; Lichess's rules).
+- Decision:
+  - **`services/game_puzzles.GamePuzzlesService`** is registered with `AnalysisService.add_listener`, so it runs inside the `game_analysis` job right after each game is stored, on the same background engine. A failure there is logged and never fails the analysis (except a missing engine). Wired in `app.py`, the only place that knows both.
+  - **`core/puzzle_gen.check_position`** takes the stored MultiPV 3 lines for the first position and an `analyse(board, multipv)` callback for the rest (the background engine at `coach.puzzle_think_s`, default 1.0 s). It ports `analyze_position`, `cook_mate`, `cook_advantage`, `is_valid_attack` and `is_valid_mate_in_one`, with the differences listed in its docstring (no tiers, the ±500 cp "decided" rule, a cap of 8 solver moves).
+  - **Positions:** Missed is solved from `fen_before` as the mover, with the eval before the opponent's previous move as Lichess's `prev_score`; Allowed from the next row's `fen_before` as the opponent (`solve_as = 'opponent'`), using that row's stored lines. Inaccuracies use the Missed/Allowed rule as if they were mistakes. Moves before ply 12 are skipped.
+  - **The cache:** `coach_candidates` keeps each verdict with a `check_key` (generator version, the analysis think time and engine, the puzzle think time and margin). A level change archives and restores from the cache (`status` `archived`), then checks only uncached mistakes in a `game_puzzles` job. `hidden` is reserved for puzzles you archive yourself.
+  - **The backfill** (`coach.backfill_version`): retags all stored analysis, tags untagged custom puzzles (saved ones with the previous move from the game, imported ones with a null move and no goal themes), then makes puzzles for your analyzed games. Without Stockfish it stops after tagging and tries again at the next launch.
+  - **The session** gets `solve_as_opponent`, `game_id` and `game_ply` on `PuzzleView` (the label and the link to Game Review).
+- Alternatives: a separate job after each analysis (rejected: it would race the next game for the background engine); re-checking on every level change (rejected: FR-10.40 says no engine pass).
+- Consequences: Review, Analyze selected and Coach runs all make puzzles with no extra wiring. A changed generator needs `GEN_VERSION` bumped.
+
+### 2026-11-04, v0.10: The Coach schema (`user/0008_coach.sql`): whose games, tags, checks, reports
+- Context: the Coach can run on another player (FR-10.3, Adam), whose games must stay out of yours; the tagger and habits need storage; the puzzle quality check must not re-run on a level change (FR-10.40); reports are saved (FR-10.20).
+- Decision:
+  - **`game_subjects(game_id, subject, color)`**: `subject` is `me` or `<platform>:<lowercase username>`. A game is stored once (the v0.8 dedupe rules) and can count for both. All games before v0.10 are backfilled as `me` with their `user_color`. `games.user_color` stays "your color" for your games; for a game that's only another player's, it holds that player's color (the side Game Review shows). When a game becomes yours, your color wins. `LibraryFilter.player` (default `me`) filters the library through it.
+  - **`game_analysis.habits`** (JSON list) next to the v0.8 `themes`, written by `GameAnalysisRepo.replace` and `set_tags`; `MoveRow` gains `themes` and `habits`.
+  - **`coach_candidates`** caches each quality check per (game, ply) with a `check_key` of the analysis and generator settings.
+  - **`coach_reports`** with `subject` and `subject_label`; the AI coaching is stored on its report (`llm_json`).
+  - **The `game_errors` view** (planned at v0.8): the graded errors of each subject's own moves.
+- Alternatives: a `players` table (rejected: the subject string is the key, and the label lives on the report); a separate table for other players' games (rejected: a game you played against them would be stored twice, with two analyses).
+- Consequences: every query of "your games" must filter on `subject = 'me'` (the library does; the Coach reads `game_errors` by subject).
+
+### 2026-11-04, v0.10: The lichess-puzzler tagger is vendored; its generator's rules are ported
+- Context: FR-10.12 wants themes that match the puzzle DB exactly, and FR-10.41 wants Lichess-quality puzzles from your games. lichess-puzzler isn't on PyPI and isn't a package. Its tagger (`tagger/cook.py`, `util.py`, `model.py`) needs only python-chess; its generator needs MongoDB, a tablebase server, `zstandard` and 30-second searches.
+- Decision:
+  - **Vendor the tagger** at commit `8e24b6d5e2b9` under `src/weaksquare/vendor/lichess_puzzler/` with its AGPL-3.0 `LICENSE`, and record the commit and the patch in `vendor/README.md`. The patch makes the imports relative and drops the module-level `logging.basicConfig` and the `log()` helper. ruff skips `vendor/`, and mypy ignores its errors, so the files stay diffable against upstream. `tests/contract/test_vendored_tagger.py` keeps the imports to python-chess, typing and dataclasses, and checks that the pin is recorded.
+  - **`core/tagging.tag_line`** is the only caller. It builds the Lichess puzzle shape (the position before the opponent's move, that move, then the solver's line trimmed to end on a solver move), stops at the first illegal move, and keeps only the keys in `core/themes.py` (`themes.is_known`). The tagger's internal keys `coercion`, `collinearMove`, `overloading` and `simplification` aren't Lichess puzzle themes and are dropped. A puzzle with no previous move (an imported file) gets a null move in its place.
+  - **The generator's rules are ported** into `core/puzzle_gen.py` (Adam, v0.10 planning), not copied: they're small, and the code around them is the part we can't use.
+- Alternatives: a git dependency through uv (rejected: the repo has no package metadata); writing our own tagger (rejected: the themes must match the DB exactly); copying `generator.py` (rejected: its MongoDB, tablebase and server imports).
+- Consequences: an upstream tagger fix needs a manual re-vendor (Developer Guide, *Dependencies*). The combined work was already AGPL (REQUIREMENTS §15).
 
 ### 2026-11-04, v0.9: QA fixes (v0.9-B1 to B6)
 - Context: QA round 1 (`qa/QA-v0.9.md`), PASS WITH ISSUES: six minor bugs.

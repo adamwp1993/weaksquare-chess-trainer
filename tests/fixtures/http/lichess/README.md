@@ -8,4 +8,5 @@ Re-record with `uv run pytest -m live --record-lichess` (see docs/DEVELOPER_GUID
 scrubs and anonymizes (SR-12, SR-12a): the username becomes `player_a`, dates are fixed, and no
 headers or tokens are kept.
 
-Status: recorded from live responses (scrubbed and anonymized).
+Status: recorded from live responses (scrubbed and anonymized), except `dashboard.json` (v0.10), which is
+hand-written from the `PuzzleDashboard` schema with made-up numbers; it has no username, date or id.

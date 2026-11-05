@@ -64,12 +64,14 @@ def test_v08_puzzle_source_and_my_puzzles_filters() -> None:
     "data, words",
     [
         ({"source": "mine"}, "source must be"),
-        ({"my_origins": ["coach"]}, "my_origins"),  # v0.10
+        ({"my_origins": ["robot"]}, "my_origins"),
+        ({"my_severities": ["huge"]}, "my_severities"),  # v0.10
+        ({"source": "both", "my_share": 101}, "share of your own puzzles"),  # v0.10
         ({"my_kinds": ["missed", "missed"]}, "my_kinds"),
         ({"my_sets": ["x" * 61]}, "set label"),
         ({"source": "my", "order": "easy_to_hard"}, "order is random"),
         (
-            {"source": "both", "ratios": [{"themes": ["fork"], "weight": 50}, {"themes": ["pin"], "weight": 50}]},
+            {"source": "my", "ratios": [{"themes": ["fork"], "weight": 50}, {"themes": ["pin"], "weight": 50}]},
             "Ratios",
         ),
     ],
@@ -164,3 +166,17 @@ def test_v01_saved_filters_get_defaults_once() -> None:
     # Already at v0.2: your choices (thresholds off, solved included) are kept.
     assert upgrade_saved(v01, 2) == v01
     assert upgrade_saved({**v01, "min_plays": 500}, 1)["min_plays"] == 500
+
+
+def test_v010_coach_origin_severities_share_and_ratios_with_both() -> None:
+    spec = FilterSpec.from_json(
+        {
+            "source": "both",
+            "my_origins": ["coach"],
+            "my_severities": ["blunder", "mistake"],
+            "my_share": 20,
+            "ratios": [{"themes": ["fork"], "weight": 60}, {"themes": ["pin"], "weight": 40}],
+        }
+    )
+    assert spec.my_share == 20 and spec.bucket(0).source == "both" and spec.bucket(0).my_share == 20
+    assert FilterSpec.from_json(spec.to_json()) == spec

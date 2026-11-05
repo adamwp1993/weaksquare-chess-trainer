@@ -95,8 +95,10 @@ def game_reason_rows(db: Database) -> list[AttemptRow]:
         games = conn.execute(
             f"SELECT {_GAME_REASON}, COALESCE(g.played_at, g.fetched_at) FROM game_analysis ga"
             " JOIN games g ON g.id = ga.game_id"
+            # v0.10-B1: your games only (another player's games carry their color in user_color)
+            " JOIN game_subjects s ON s.game_id = ga.game_id AND s.subject = 'me'"
             " WHERE ga.classification IN ('inaccuracy', 'mistake', 'blunder')"
-            " AND (g.user_color = ga.mover OR g.user_color = 'both')"
+            " AND (s.color = ga.mover OR s.color = 'both')"
         ).fetchall()
         retries = conn.execute(
             f"SELECT {_RETRY_REASON}, t.created_at FROM retry_attempts t WHERE t.found = 0"

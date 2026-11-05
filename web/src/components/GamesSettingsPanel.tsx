@@ -1,5 +1,6 @@
 // v0.8 Settings → Games (FR-11.23–11.27, FR-11.8, 11.9, 11.15): linked accounts, sync, and the analysis.
-import { Alert, Button, Group, NumberInput, Stack, Switch, Text, TextInput } from "@mantine/core";
+// v0.10: which of your mistakes become puzzles (FR-10.40) and the think time for checking them (FR-10.41).
+import { Alert, Button, Group, NumberInput, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { GamesSettingsChange } from "../api/ApiClient";
@@ -113,6 +114,32 @@ export function GamesSettingsPanel() {
           />
         ))}
       </Group>
+      <Group gap="sm" align="flex-end">
+        <Select
+          label="Puzzles from your games"
+          w={280}
+          data={[
+            { value: "blunders", label: "Blunders only" },
+            { value: "mistakes", label: "Mistakes and blunders" },
+            { value: "inaccuracies", label: "Inaccuracies, mistakes and blunders" },
+          ]}
+          value={s.puzzle_level}
+          allowDeselect={false}
+          onChange={(v) =>
+            v &&
+            save(
+              { puzzle_level: v as GamesSettings["puzzle_level"] },
+              "Saved. Puzzles outside the level are archived, not deleted; nothing is analyzed again.",
+            )
+          }
+          data-testid="games-puzzle-level"
+        />
+        <NumberInput label="Checking a puzzle: seconds per position" min={0.2} max={5} step={0.1} decimalScale={2} w={250}
+          value={s.puzzle_think_s} onBlur={(e) => save({ puzzle_think_s: num(e.currentTarget.value) }, "Saved.")} />
+      </Group>
+      <Text size="xs" c="dimmed">
+        A mistake becomes a puzzle only if it has one clear answer (Lichess's rules), so inaccuracies add few puzzles.
+      </Text>
       {msg && (
         <Alert color={msg.ok ? "green" : "red"} p="xs" data-testid="games-settings-msg">
           {msg.text}

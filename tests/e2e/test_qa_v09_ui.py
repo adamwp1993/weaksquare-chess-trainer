@@ -36,7 +36,7 @@ def explain_game(page) -> None:  # type: ignore[no-untyped-def]
 
 
 def test_qa_user_guide_explain_my_game_steps_and_screens(page) -> None:  # type: ignore[no-untyped-def]
-    review(page)
+    review(page, "?ai=on&showbest=1")  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     shot(page, "review-ai-before")
     # Step 1: key moments 1–10, default from the setting.
     n = page.get_by_test_id("narrative-n")
@@ -132,7 +132,9 @@ def test_qa_over_budget_review_screen(page) -> None:  # type: ignore[no-untyped-
 
 
 def test_qa_dark_mode_narrative(page) -> None:  # type: ignore[no-untyped-def]
-    review(page, "?ai=on&scheme=dark")
+    review(
+        page, "?ai=on&scheme=dark&showbest=1"
+    )  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     explain_game(page)
     page.get_by_test_id("move-6").click()
     page.get_by_test_id("move-explain-button").click()

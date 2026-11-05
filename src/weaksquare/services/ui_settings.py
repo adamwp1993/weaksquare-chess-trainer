@@ -31,6 +31,7 @@ FILTERS_COLLAPSED_KEY = "ui.filters_collapsed"  # FR-1.14
 TIME_OFFSET_KEY = "debug.time_offset_days"  # FR-4.6 fast-forward, --dev runs only (written by the bridge)
 # v0.6
 REASONS_ASK_KEY = "reasons.ask"  # FR-5.8: when to ask why you missed: always / game_review (v0.8) / off
+SHOW_BEST_KEY = "review.show_best"  # FR-11.35 (v0.10): Game Review shows the better move, default off
 RUSHED_S_KEY = "reasons.rushed_s"  # FR-5.9: a deciding move faster than this suggests Rushed
 REASONS_ASK = ("always", "game_review", "off")
 TRAINING_MODES = ("standard", "commit_line", "name_idea", "danger_spotting", "spaced_repetition")
@@ -68,6 +69,7 @@ class UiSettings:
     filters_collapsed: bool = False
     reasons_ask: str = "always"
     rushed_s: int = DEFAULT_RUSHED_S
+    show_best: bool = False  # v0.10, FR-11.35
 
 
 def _bool(name: str) -> Callable[[Any], Any]:
@@ -128,6 +130,7 @@ VALIDATORS: dict[str, Callable[[Any], Any]] = {
     FILTERS_COLLAPSED_KEY: _bool("filters_collapsed"),
     REASONS_ASK_KEY: _reasons_ask,
     RUSHED_S_KEY: validate_rushed_s,
+    SHOW_BEST_KEY: _bool("show_best"),
 }
 
 
@@ -166,6 +169,7 @@ class UiSettingsService:
             filters_collapsed=self._valid(FILTERS_COLLAPSED_KEY, False),
             reasons_ask=self.reasons_ask(),
             rushed_s=self.rushed_s(),
+            show_best=self._valid(SHOW_BEST_KEY, False),
         )
 
     def _valid(self, key: str, default: Any) -> Any:

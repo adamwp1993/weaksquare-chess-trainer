@@ -15,11 +15,13 @@ from weaksquare.core.lichess import (
     Account,
     ActivityEntry,
     BatchResult,
+    Dashboard,
     Round,
     Solution,
     parse_account,
     parse_activity,
     parse_batch,
+    parse_dashboard,
 )
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "http" / "lichess"
@@ -37,6 +39,10 @@ def fixture_batch() -> BatchResult:
 def fixture_activity() -> list[ActivityEntry]:
     lines = (FIXTURES / "activity.ndjson").read_text(encoding="utf-8").splitlines()
     return [e for e in (parse_activity(json.loads(x)) for x in lines if x.strip()) if e is not None]
+
+
+def fixture_dashboard() -> Dashboard:
+    return parse_dashboard(json.loads((FIXTURES / "dashboard.json").read_text(encoding="utf-8")))
 
 
 @dataclass
@@ -70,6 +76,9 @@ class FakeLichess:
     activity_since: list[int | None] = field(default_factory=list)
     revoked: list[str] = field(default_factory=list)
     account_calls: int = 0
+    dashboard_value: Dashboard = field(default_factory=lambda: fixture_dashboard())
+    dashboard_error: Exception | None = None
+    dashboard_days: list[int] = field(default_factory=list)
 
     def exchange_code(self, form: dict[str, str]) -> str:
         self.exchange_forms.append(form)
@@ -112,6 +121,16 @@ class FakeLichess:
                 self.rating += diff
             rounds.append(Round(s.id, s.win, diff))
         return BatchResult(rounds, self.rating, self.provisional)
+
+    def dashboard(self, token: str, days: int) -> Dashboard:
+        self.dashboard_days.append(days)
+        if self.dashboard_error:
+            raise self.dashboard_error
+        if token != self.token:
+            raise Unauthorized(
+                "https://lichess.org/api/puzzle/dashboard returned HTTP 401", status=401, retryable=False
+            )
+        return self.dashboard_value
 
     def activity(self, token: str, since_ms: int | None) -> Iterator[ActivityEntry]:
         self.activity_since.append(since_ms)

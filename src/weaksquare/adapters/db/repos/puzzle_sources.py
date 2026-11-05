@@ -3,8 +3,9 @@
 Keys stay plain ints: Lichess puzzles keep their positive `puzzles.n` keys, and your own puzzles use the
 **negated** `custom_puzzles.id`, so one queue (and one "already served" set) holds both. Your own puzzles'
 keys never change, so they survive a puzzle-DB re-import. Spaced repetition names them `my:<id>`
-(`AttemptsRepo.srs_rows`). Ratios, the orders and the depth ladder are Lichess-only (FilterSpec rejects
-them with My puzzles), so those calls go straight to the Lichess source.
+(`AttemptsRepo.srs_rows`). The orders and the depth ladder are Lichess-only (FilterSpec rejects them
+with My puzzles), so those calls go straight to the Lichess source. From v0.10 ratios also work with
+Both: each ratio group is a Lichess pool, and My puzzles fill `my_share` of every group's slots.
 """
 
 from __future__ import annotations
@@ -64,7 +65,10 @@ class CombinedSource:
         lc, mc = self.counts(spec)
         if lc + mc == 0 or k <= 0:
             return []
-        slots = [rng.random() < mc / (lc + mc) for _ in range(k)]
+        share = mc / (lc + mc)
+        if spec.my_share is not None and lc and mc:  # v0.10: a fixed share (the Suggested mix, FR-10.44)
+            share = spec.my_share / 100
+        slots = [rng.random() < share for _ in range(k)]
         mine = self._mine_keys(spec, sum(slots), rng, exclude)
         theirs = self._lichess.sample_keys(spec, k - sum(slots), rng, {e for e in exclude if e > 0}, lc)
         out: list[int] = []

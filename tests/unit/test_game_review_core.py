@@ -199,3 +199,13 @@ def test_tolerance_validation() -> None:
 def test_score_json_round_trip() -> None:
     for s in (cp(12), mate(-3), mate(0)):
         assert Score.from_json(s.to_json()) == s
+
+
+def test_v010_b2_walking_into_mate_from_a_winning_position_is_allowed() -> None:
+    """v0.10-B2 regression: +1.5 or better before, mated after: the tactic that decided it was allowed."""
+    from weaksquare.core.game_review import Score, missed_or_allowed
+
+    assert missed_or_allowed(Score(200), Score(mate=-1), "blunder") == "allowed"
+    assert missed_or_allowed(Score(400), Score(-300), "blunder") == "missed"  # a missed win stays Missed
+    assert missed_or_allowed(Score(0), Score(-300), "blunder") == "allowed"
+    assert missed_or_allowed(Score(0), Score(-50), "mistake") == "other"

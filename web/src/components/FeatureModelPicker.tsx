@@ -34,7 +34,7 @@ export function FeatureModelPicker({
   compact = false,
   onError,
 }: {
-  feature?: "game_review";
+  feature?: "game_review" | "coach";
   reasoning?: boolean;
   compact?: boolean;
   onError?: (message: string | null) => void;
@@ -56,7 +56,7 @@ export function FeatureModelPicker({
     group: LABELS[p] + (settings.providers.find((x) => x.provider === p)?.key_stored ? "" : " (needs a key)"),
     items: f.options
       .filter((o) => o.provider === p)
-      .map((o) => ({ value: `${o.provider}|${o.model}`, label: `${o.model}  ·  about ${dollars(o.usd)} per game` })),
+      .map((o) => ({ value: `${o.provider}|${o.model}`, label: `${o.model}  ·  about ${dollars(o.usd)} per ${feature === "coach" ? "report" : "game"}` })),
   }));
   const own = f.choice !== SAME && f.choice !== "none" && !f.options.some((o) => `${o.provider}|${o.model}` === valueOf(f));
   const typed = (search ?? "").trim();
@@ -116,7 +116,13 @@ export function FeatureModelPicker({
       <Select
         label={compact ? undefined : `${f.label} model`}
         aria-label={`${f.label} model`}
-        description={compact ? undefined : "Explain this move and Explain my game use it. One game is a much bigger request than one puzzle."}
+        description={
+          compact
+            ? undefined
+            : feature === "coach"
+              ? "Get AI coaching on a Coach report uses it. A report is sent once, so a stronger model costs little."
+              : "Explain this move and Explain my game use it. One game is a much bigger request than one puzzle."
+        }
         data={data}
         value={current.choice === SAME ? SAME : `${current.choice}|${current.model}`}
         allowDeselect={false}

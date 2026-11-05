@@ -20,6 +20,7 @@ from weaksquare.adapters import instance_lock
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.coach import CoachRepo, CoachReportsRepo
 from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzleSource, CustomPuzzlesRepo, RetryRepo
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
@@ -75,11 +76,13 @@ from weaksquare.core.llm.provider import LLMProvider
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.analysis import AnalysisService
+from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
 from weaksquare.services.engine_install import EngineInstaller, InstallDeps
 from weaksquare.services.explain import ExplainService
 from weaksquare.services.game_explain import GameExplainService
+from weaksquare.services.game_puzzles import GamePuzzlesService
 from weaksquare.services.games import GameLibraryService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
@@ -211,6 +214,8 @@ class Services:
     review: ReviewService
     game_explain: GameExplainService
     puzzle_import: PuzzleImportService
+    game_puzzles: GamePuzzlesService
+    coach: CoachService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -372,6 +377,14 @@ def build_services(
     )  # fmt: skip
     game_explain = GameExplainService(games_repo, analysis_repo, analysis, llm_settings, llm_usage, llm_cache, runner,
                                       clock)  # fmt: skip
+    game_puzzles = GamePuzzlesService(
+        games_repo, analysis_repo, CoachRepo(db), custom_puzzles, engine, SettingsRepo(db), analysis, clock, runner
+    )
+    analysis.add_listener(game_puzzles.after_analysis)  # one pipeline: any analysis makes puzzles (FR-10.39)
+    coach = CoachService(
+        games, games_repo, analysis, game_puzzles, custom_puzzles, CoachReportsRepo(db), stats, StatsRepo(db),
+        account, lichess, SettingsRepo(db), clock, runner, analysis_repo, llm_settings, llm_usage,
+    )  # fmt: skip
     return Services(
         db=db,
         http=http,
@@ -396,6 +409,8 @@ def build_services(
         review=review,
         game_explain=game_explain,
         puzzle_import=puzzle_import,
+        game_puzzles=game_puzzles,
+        coach=coach,
     )
 
 
@@ -484,6 +499,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         review=services.review,
         puzzle_import=services.puzzle_import,
         game_explain=services.game_explain,
+        game_puzzles=services.game_puzzles,
+        coach=services.coach,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())
@@ -493,6 +510,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     services.account.check()  # FR-1.6: validate a stored sign-in in the background
     services.llm_settings.start_launch_check()  # FR-1.6: and a stored AI key, with the free model lookup
     services.games.sync_on_open()  # FR-11.27: new games from your linked accounts, in the background (v0.8)
+    services.game_puzzles.start_backfill()  # v0.10, once: tags and puzzles for games analyzed before v0.10
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's

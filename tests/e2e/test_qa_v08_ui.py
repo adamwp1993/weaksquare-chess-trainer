@@ -22,7 +22,9 @@ def shot(page, name: str) -> None:  # type: ignore[no-untyped-def]
 
 
 def test_qa_user_guide_my_games_and_review_steps(page) -> None:  # type: ignore[no-untyped-def]
-    page.goto(page.base_url + "/")
+    page.goto(
+        page.base_url + "/?showbest=1"
+    )  # v0.10: Show best moves on (FR-11.35), as these tests check the better moves
     page.get_by_role("button", name="My games").click()  # "Press My games at the top of the window"
     page.get_by_test_id("games-table").wait_for()
     shot(page, "my-games")

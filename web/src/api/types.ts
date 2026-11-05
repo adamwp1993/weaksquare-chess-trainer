@@ -66,6 +66,8 @@ export interface FilterSpec {
   my_kinds: string[];
   my_phases: string[];
   my_time_classes: string[];
+  my_severities: string[];
+  my_share: number | null;
 }
 
 export interface ThemeOption {
@@ -123,6 +125,7 @@ export interface UiSettings {
   time_offset_days: number | null;
   reasons_ask: "always" | "game_review" | "off";
   rushed_s: number;
+  show_best: boolean;
 }
 
 export interface SessionInfo {
@@ -148,6 +151,9 @@ export interface PuzzleView {
   candidate: string | null;
   source: "lichess" | "my";
   strict_without_engine: boolean;
+  solve_as_opponent: boolean;
+  game_id: number | null;
+  game_ply: number | null;
 }
 
 export interface ThemeLabel {
@@ -457,7 +463,7 @@ export interface LlmModelChoice {
 }
 
 export interface LlmFeature {
-  feature: "explain" | "game_review";
+  feature: "explain" | "game_review" | "coach";
   label: string;
   choice: "same" | "anthropic" | "openai" | "none";
   model: string;
@@ -596,6 +602,9 @@ export interface GamesSettings {
   thresholds: ReviewThresholds;
   tolerance_cp: number;
   key_moments: number;
+  puzzle_level: "blunders" | "mistakes" | "inaccuracies";
+  puzzle_think_s: number;
+  puzzle_job_id: string | null;
 }
 
 export interface ChesscomProfile {
@@ -767,4 +776,120 @@ export interface GameStats {
   retry_found: number;
   retry_tried: number;
   sources: SourceAccuracy[];
+}
+
+export interface CoachExample {
+  game_id: number;
+  ply: number;
+  cp_loss: number;
+}
+
+export interface CoachWeakness {
+  key: string;
+  kind: "missed" | "allowed" | "habit" | "puzzle";
+  name: string;
+  label: string;
+  count: number;
+  per10: number;
+  severity: number;
+  score: number;
+  themes: string[];
+  mode: string | null;
+  reasons: Record<string, number>;
+  examples: CoachExample[];
+  puzzle_accuracy: number | null;
+  trend: number | null;
+}
+
+export interface CoachGapRow {
+  theme: string;
+  label: string;
+  puzzle_accuracy: number | null;
+  puzzle_attempts: number;
+  missed_per10: number;
+  allowed_per10: number;
+}
+
+export interface CoachPresetView {
+  name: string;
+  spec: Record<string, unknown>;
+  mode: string;
+  why: string[];
+}
+
+export interface CoachReport {
+  id: number;
+  created_at: string;
+  subject_label: string;
+  is_me: boolean;
+  source: "puzzles" | "games" | "both";
+  params: Record<string, unknown>;
+  games: number;
+  first_played: string | null;
+  last_played: string | null;
+  per10: Record<string, number>;
+  results: Record<string, number>;
+  missed: CoachWeakness[];
+  allowed: CoachWeakness[];
+  habits: CoachWeakness[];
+  puzzles: CoachWeakness[];
+  gap: CoachGapRow[];
+  reasons: Record<string, number>;
+  low_clock_errors: number;
+  preset: CoachPresetView | null;
+  notes: string[];
+}
+
+export interface CoachReportSummary {
+  id: number;
+  created_at: string;
+  subject_label: string;
+  is_me: boolean;
+  source: "puzzles" | "games" | "both";
+  games: number;
+  top: string[];
+}
+
+export interface PlayerSubject {
+  subject: string;
+  label: string;
+  games: number;
+}
+
+export interface CoachDefaults {
+  params: Record<string, unknown>;
+  usernames: string[];
+  players: PlayerSubject[];
+  running_job: string | null;
+}
+
+export interface CoachAiNote {
+  key: string;
+  label: string;
+  explanation: string;
+  drill: string;
+}
+
+export interface CoachAi {
+  summary: string;
+  weaknesses: CoachAiNote[];
+  presets: CoachPresetView[];
+  fallback_preset: boolean;
+  discarded: number;
+  provider: string;
+  model: string;
+  cost_usd: number;
+}
+
+export interface SuggestionView {
+  report_id: number;
+  number: number;
+  created_at: string;
+  label: string;
+  spec: Record<string, unknown>;
+  mode: string;
+  why: string[];
+  pending: boolean;
+  previous: Record<string, unknown> | null;
+  active: boolean;
 }

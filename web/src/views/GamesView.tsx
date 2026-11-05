@@ -7,6 +7,7 @@ import {
   Checkbox,
   Group,
   MultiSelect,
+  Select,
   Paper,
   Progress,
   SegmentedControl,
@@ -35,10 +36,13 @@ const STATUS: Record<GameSummary["analysis_status"], { label: string; color: str
 export function GamesView({
   onReview,
   onImport,
+  onSendToCoach,
 }: {
   /** `explain`: Review + Explain my game (FR-11.29, v0.9). */
   onReview: (gameId: number, explain?: boolean) => void;
   onImport: () => void;
+  /** v0.10 Send to Coach (FR-11.30): run the Coach on exactly these games. */
+  onSendToCoach?: (ids: number[]) => void;
 }) {
   const aiReady = useLlmSettings()?.features.find((f) => f.feature === "game_review")?.ready ?? false;
   const [filters, setFilters] = useState<LibraryFilters>({});
@@ -51,6 +55,10 @@ export function GamesView({
   const sync = useJob(syncJob);
   const [queue, setQueue] = useState<AnalysisQueue | null>(null);
   const analysis = useJob(queue?.job_id ?? null);
+  const [players, setPlayers] = useState<{ subject: string; label: string }[]>([]); // v0.10: the Player filter
+  useEffect(() => {
+    api.getCoachDefaults().then((d) => setPlayers(d.players), () => undefined);
+  }, []);
 
   const load = useCallback(() => {
     api.listGames({ ...filters, limit, offset: 0 }).then(setPage, (e: Error) => setError(e.message));
@@ -151,6 +159,18 @@ export function GamesView({
 
       <Paper withBorder p="sm">
         <Group gap="sm" align="end" wrap="wrap">
+          {players.length > 0 && (
+            <Select
+              label="Player"
+              size="xs"
+              w={180}
+              data={[{ value: "me", label: "You" }, ...players.map((p) => ({ value: p.subject, label: p.label }))]}
+              value={filters.player ?? "me"}
+              onChange={(v) => set({ player: v ?? "me" })}
+              allowDeselect={false}
+              data-testid="filter-player"
+            />
+          )}
           <MultiSelect
             label="Platform"
             size="xs"
@@ -231,9 +251,16 @@ export function GamesView({
         <Text size="sm" c="dimmed" data-testid="games-count">
           {page ? `${page.total} game${page.total === 1 ? "" : "s"}` : "Loading…"}
         </Text>
-        <Button size="xs" disabled={selected.size === 0} onClick={() => analyze([...selected])} data-testid="analyze-selected">
-          Analyze selected ({selected.size})
-        </Button>
+        <Group gap="xs">
+          <Button size="xs" disabled={selected.size === 0} onClick={() => analyze([...selected])} data-testid="analyze-selected">
+            Analyze selected ({selected.size})
+          </Button>
+          {onSendToCoach && (filters.player ?? "me") === "me" && (
+            <Button size="xs" variant="light" disabled={selected.size === 0} onClick={() => onSendToCoach([...selected])} data-testid="send-to-coach">
+              Send to Coach ({selected.size})
+            </Button>
+          )}
+        </Group>
       </Group>
 
       {page && page.total === 0 ? (

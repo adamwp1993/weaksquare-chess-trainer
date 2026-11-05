@@ -176,3 +176,8 @@ IDEA_PAYOFF: tuple[str, ...] = tuple(k for g in IDEA_GROUPS for k, _ in _CATALOG
 def motif_themes(themes: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     """The puzzle's themes that idea tags are graded against (unknown "Other" themes don't count)."""
     return tuple(dict.fromkeys(t for t in themes if info(t).group in IDEA_GROUPS))
+
+
+def is_known(key: str) -> bool:
+    """True for a key in Lichess's public theme list (the catalog above)."""
+    return key in _INFO

@@ -30,6 +30,8 @@ export function defaultFilters(): FilterSpec {
     my_kinds: [],
     my_phases: [],
     my_time_classes: [],
+    my_severities: [],
+    my_share: null,
   };
 }
 

@@ -26,7 +26,7 @@ function jobError(job: ReturnType<typeof useJob>): string | null {
 
 // ---- Explain this move (FR-11.17) -------------------------------------------------------------------
 
-export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: number; onShowMe: (x: Explanation) => void }) {
+export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: number; onShowMe?: (x: Explanation) => void }) {
   const { settings, configured } = useGameReviewReady();
   const [quote, setQuote] = useState<GameAiQuote | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: nu
     if (!doneJob) return;
     api.getGameMoveExplanation(gameId, ply).then((r) => {
       setX(r);
-      if (r) showMeRef.current(r);
+      if (r) showMeRef.current?.(r);
     }, () => undefined);
   }, [doneJob, gameId, ply]);
 
@@ -93,7 +93,7 @@ export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: nu
           {error ?? jobError(job)}
         </Alert>
       )}
-      {x && <ExplanationView x={x} onShowMe={() => onShowMe(x)} />}
+      {x && <ExplanationView x={x} onShowMe={onShowMe ? () => onShowMe(x) : undefined} />}
     </Stack>
   );
 }
@@ -103,7 +103,7 @@ export function MoveExplain({ gameId, ply, onShowMe }: { gameId: number; ply: nu
 const N_OPTIONS = Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} key moment${i ? "s" : ""}` }));
 
 /** The Confirm dialog's numbers (FR-8.11): tokens, cost, the share of what's left of the budget, the cap. */
-export function EstimateLines({ q }: { q: GameAiQuote }) {
+export function EstimateLines({ q, sends }: { q: GameAiQuote; sends?: string }) {
   const left = Math.max(0, q.budget_usd - q.spent_usd);
   const share = left > 0 && q.typical_usd !== null ? Math.round((q.typical_usd / left) * 1000) / 10 : null;
   return (
@@ -117,8 +117,9 @@ export function EstimateLines({ q }: { q: GameAiQuote }) {
         {share !== null ? ` (${share}% of the ${dollars(left)} left in this month's budget)` : ""}.
       </Text>
       <Text size="xs" c="dimmed">
-        It fits under your per-run cap of {dollars(q.run_cap_usd)}. It sends this game's moves (SAN only) and Stockfish's
-        analysis of your key moments: no names, ratings, dates, links or clocks.
+        It fits under your per-run cap of {dollars(q.run_cap_usd)}.{" "}
+        {sends ??
+          "It sends this game's moves (SAN only) and Stockfish's analysis of your key moments: no names, ratings, dates, links or clocks."}
       </Text>
     </Stack>
   );
@@ -335,11 +336,11 @@ function NarrativeView({ x, onJump, onTrain }: { x: GameNarrative; onJump: (ply:
 }
 
 /** A key moment's note from Explain my game, under its entry in the key-moments list. */
-export function MomentNote({ m, onShow }: { m: GameMoment; onShow: () => void }) {
+export function MomentNote({ m, onShow }: { m: GameMoment; onShow?: () => void }) {
   return (
     <Stack gap={2} mt={4} data-testid={`moment-note-${m.ply}`}>
       <Text size="xs">{m.text}</Text>
-      {(m.annotations.length > 0 || m.better_uci.length > 0) && (
+      {onShow && (m.annotations.length > 0 || m.better_uci.length > 0) && (
         <Button size="compact-xs" variant="subtle" w="fit-content" onClick={onShow} data-testid={`moment-show-${m.ply}`}>
           Show on the board{m.better_line.length ? ` (${m.better_line.join(" ")})` : ""}
         </Button>

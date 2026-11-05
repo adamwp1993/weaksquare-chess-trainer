@@ -67,6 +67,8 @@ class LichessClient(Protocol):
 
     def activity(self, token: str, since_ms: int | None) -> Iterator[ActivityEntry]: ...
 
+    def dashboard(self, token: str, days: int) -> Dashboard: ...
+
 
 def valid_angle(angle: str) -> bool:
     return bool(_ANGLE.match(angle))
@@ -80,6 +82,53 @@ def batch_body(solutions: list[Solution]) -> dict[str, Any]:
     if not 0 < len(solutions) <= MAX_BATCH:
         raise ValueError(f"a batch holds 1 to {MAX_BATCH} solutions")
     return {"solutions": [{"id": s.id, "win": s.win, "rated": s.rated} for s in solutions]}
+
+
+@dataclass(frozen=True)
+class ThemeResults:
+    """One theme on the puzzle dashboard (FR-10.15): `GET /api/puzzle/dashboard/{days}`."""
+
+    nb: int
+    first_wins: int
+    replay_wins: int
+    performance: int | None
+    rating_avg: int | None
+
+
+@dataclass(frozen=True)
+class Dashboard:
+    days: int
+    overall: ThemeResults | None
+    themes: dict[str, ThemeResults]  # theme key -> results
+
+
+DASHBOARD_DAYS = (7, 30, 90)  # what the Coach offers; Lichess accepts 1 to 90 (v0.10)
+
+
+def _results(data: Any) -> ThemeResults | None:
+    if not isinstance(data, dict):
+        return None
+    nb = _int(data.get("nb"))
+    if nb is None or nb < 0:
+        return None
+    return ThemeResults(
+        nb, max(0, _int(data.get("firstWins")) or 0), max(0, _int(data.get("replayWins")) or 0),
+        _int(data.get("performance")), _int(data.get("puzzleRatingAvg")),
+    )  # fmt: skip
+
+
+def parse_dashboard(data: Any) -> Dashboard:
+    """The PuzzleDashboard schema: `days`, `global` and `themes.<key>.results`. Unknown or malformed
+    themes are skipped."""
+    if not isinstance(data, dict):
+        raise ValueError("unexpected dashboard response")
+    themes: dict[str, ThemeResults] = {}
+    raw = data.get("themes")
+    for key, entry in raw.items() if isinstance(raw, dict) else []:
+        res = _results(entry.get("results")) if isinstance(entry, dict) else None
+        if isinstance(key, str) and _ANGLE.match(key) and res is not None:
+            themes[key] = res
+    return Dashboard(_int(data.get("days")) or 0, _results(data.get("global")), themes)
 
 
 def _int(v: Any) -> int | None:
