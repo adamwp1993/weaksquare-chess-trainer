@@ -17,10 +17,12 @@ import threading
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any, Protocol
 
 import chess
 
+from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineLine, EngineNotInstalled
 from weaksquare.core.errors import ValidationError
 from weaksquare.core.game_review import MoveRow, Thresholds, grade_game, regrade
@@ -54,7 +56,10 @@ class Games(Protocol):
 
 
 class AnalysisStore(Protocol):
-    def replace(self, game_id: int, rows: Sequence[MoveRow], status: str, think_s: float, engine: str) -> None: ...
+    def replace(
+        self, game_id: int, rows: Sequence[MoveRow], status: str, think_s: float, engine: str,
+        analyzed_at: str | None = None,
+    ) -> None: ...  # fmt: skip
 
     def rows(self, game_id: int) -> list[MoveRow]: ...
 
@@ -92,8 +97,10 @@ def _num(v: Any) -> bool:
 
 class AnalysisService:
     def __init__(
-        self, games: Games, store: AnalysisStore, engine: BackgroundEngine, settings: Settings, runner: JobRunner
-    ) -> None:
+        self, games: Games, store: AnalysisStore, engine: BackgroundEngine, settings: Settings, runner: JobRunner,
+        clock: Clock | None = None,
+    ) -> None:  # fmt: skip
+        self._clock = clock  # v0.12 (FR-10.68): the daily log counts games analyzed per day
         self._games = games
         self._store = store
         self._engine = engine
@@ -320,6 +327,7 @@ class AnalysisService:
         if now != st.thresholds:  # v0.8-B10: the thresholds changed while this game was analyzed
             rows = [regrade(r, now) for r in rows]
         rows = tag_game(rows)  # v0.10: themes and habits (FR-10.12, 10.27), from the analysis only
-        self._store.replace(game.id, rows, "analyzed", st.think_s, engine)
+        at = self._clock.now().astimezone(UTC).isoformat(timespec="seconds") if self._clock is not None else None
+        self._store.replace(game.id, rows, "analyzed", st.think_s, engine, at)
         for fn in self._listeners:
             fn(game.id, lambda f, m: progress((done + 1) / total if f is None else f, m), cancel)

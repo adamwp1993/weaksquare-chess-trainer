@@ -38,7 +38,10 @@ class GameAnalysisRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    def replace(self, game_id: int, rows: Sequence[MoveRow], status: str, think_s: float, engine: str) -> None:
+    def replace(
+        self, game_id: int, rows: Sequence[MoveRow], status: str, think_s: float, engine: str,
+        analyzed_at: str | None = None,
+    ) -> None:  # fmt: skip
         """Store a game's analysis and mark the game analyzed, in one transaction: a cancelled or failed
         run leaves the previous analysis (or none) untouched."""
         with self._db.transaction() as conn:
@@ -59,8 +62,9 @@ class GameAnalysisRepo:
                 ],
             )  # fmt: skip
             conn.execute(
-                "UPDATE games SET analysis_status = ?, analysis_think_s = ?, analysis_engine = ? WHERE id = ?",
-                (status, think_s, engine, game_id),
+                "UPDATE games SET analysis_status = ?, analysis_think_s = ?, analysis_engine = ?,"
+                " analyzed_at = COALESCE(?, analyzed_at) WHERE id = ?",
+                (status, think_s, engine, analyzed_at, game_id),
             )
 
     def rows(self, game_id: int) -> list[MoveRow]:

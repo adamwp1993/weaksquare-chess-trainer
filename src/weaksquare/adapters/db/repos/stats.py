@@ -40,23 +40,50 @@ class StatsRepo:
         return source_accuracy(self._db)
 
     def attempt_rows(self) -> list[AttemptRow]:
+        return [row for row, _ in self._select("", ())]
+
+    def attempt_rows_between(self, since: str, until: str) -> list[tuple[AttemptRow, str]]:
+        """(row, puzzle source) for attempts finished in this range (v0.12, the daily log, FR-10.68)."""
+        return self._select(" WHERE a.finished_at >= ? AND a.finished_at < ?", (since, until))
+
+    def attempt_rows_for_tasks(self, task_ids: list[int]) -> list[AttemptRow]:
+        """Attempts in the sessions started from these plan tasks (v0.12, FR-10.66)."""
+        if not task_ids:
+            return []
+        marks = ",".join("?" * len(task_ids))
+        where = f" WHERE a.session_id IN (SELECT id FROM sessions WHERE plan_task_id IN ({marks}))"
+        return [row for row, _ in self._select(where, tuple(task_ids))]
+
+    def recent_solve_ms(self, sample: int) -> int | None:
+        """Your average solving time over your last `sample` attempts, when you have that many (v0.12)."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT time_ms FROM attempts WHERE mode != 'danger_spotting' ORDER BY id DESC LIMIT ?", (sample,)
+            ).fetchall()
+        return round(sum(int(r[0]) for r in rows) / len(rows)) if len(rows) >= sample else None
+
+    def _select(self, where: str, args: tuple[object, ...]) -> list[tuple[AttemptRow, str]]:
         with self._db.session() as conn:
             attached = conn.execute("SELECT 1 FROM pragma_database_list WHERE name = 'pz'").fetchone()
             if attached:
                 cols = _COLUMNS.format(themes="COALESCE(p.themes, c.themes)", length="COALESCE(p.length, c.length)")
                 rows = conn.execute(
-                    f"SELECT {cols} FROM attempts a LEFT JOIN pz.puzzles p"
+                    f"SELECT {cols}, a.puzzle_source FROM attempts a LEFT JOIN pz.puzzles p"
                     " ON a.puzzle_source = 'lichess' AND p.id = a.puzzle_id"
                     " LEFT JOIN custom_puzzles c ON a.puzzle_source = 'my' AND c.id = CAST(a.puzzle_id AS INTEGER)"
+                    + where,
+                    args,
                 ).fetchall()
             else:
                 cols = _COLUMNS.format(themes="c.themes", length="c.length")
                 rows = conn.execute(
-                    f"SELECT {cols} FROM attempts a"
+                    f"SELECT {cols}, a.puzzle_source FROM attempts a"
                     " LEFT JOIN custom_puzzles c ON a.puzzle_source = 'my' AND c.id = CAST(a.puzzle_id AS INTEGER)"
+                    + where,
+                    args,
                 ).fetchall()
         return [
-            AttemptRow(
+            (AttemptRow(
                 win=bool(r[0]),
                 first_move_correct=bool(r[1]),
                 line_correct=bool(r[2]),
@@ -72,9 +99,9 @@ class StatsRepo:
                 idea_total=r[12],
                 idea_extra=r[13],
                 danger_safe=None if r[14] is None else bool(r[14]),
-            )
+            ), str(r[15]))
             for r in rows
-        ]
+        ]  # fmt: skip
 
 
 # v0.8 (FR-9.7, puzzles vs games): your own game mistakes and Retry misses, each with its latest reason.
