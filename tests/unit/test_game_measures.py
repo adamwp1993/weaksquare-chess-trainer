@@ -163,3 +163,20 @@ def test_ranked_by_score() -> None:
     ws = game_weaknesses(games(*[bad] * 5), build_measures(games(*[bad] * 5)))
     assert [w.key for w in ws] == ["endgame:rook", "opening:Sicilian Defense"]
     assert ws[0].score > ws[1].score
+
+
+def test_the_suggested_mix_stays_tactical_and_flags_time() -> None:
+    from weaksquare.core.coach import ErrorRow, GameInfo, build_report
+    from weaksquare.core.suggested_mix import build_suggestion
+
+    info = [GameInfo(i, "2026-10-01", "rapid", "loss") for i in range(1, 6)]
+    errors = [ErrorRow(i, 20, "blunder", "missed", "middlegame", 400, ("fork",), (), None) for i in range(1, 6)]
+    report = build_report("games", info, errors, {})
+    hurried = dg(time=_clock(5, 1), endgame="rook", endgame_errors=1, moments=(m(70, swing=500, clock_pct=4),))
+    ds = games(*[hurried] * 5)
+    ms = build_measures(ds)
+    report = replace(report, whole_game=game_weaknesses(ds, ms), measures=ms.to_json())
+    assert {"endgame:rook", "time:low_clock"} <= {w.key for w in report.whole_game}
+    s = build_suggestion(report, puzzle_rating=1500, recent_accuracy=None, has_game_puzzles=False)
+    assert s is not None and s.weaknesses == ("missed:fork",)  # whole-game weaknesses aren't puzzle groups
+    assert any(line.startswith("Time: 10 mistakes per 10 games") for line in s.why)

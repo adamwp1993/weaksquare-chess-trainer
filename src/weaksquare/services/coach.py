@@ -39,10 +39,20 @@ from weaksquare.core.coach_llm import (
     fallback_preset,
     validate,
 )
+from weaksquare.core.digest import DIGEST_VERSION, Digest, build_digest
 from weaksquare.core.errors import AppError, NotFoundError, ValidationError
 from weaksquare.core.filters import MY_TIME_CLASSES, FilterSpec
+from weaksquare.core.game_measures import build_measures, game_weaknesses
 from weaksquare.core.game_review import MoveRow, saved_line
-from weaksquare.core.games import GameRecord, GameRow, LibraryFilter, detect_color, username_from, valid_username
+from weaksquare.core.games import (
+    GameRecord,
+    GameRow,
+    LibraryFilter,
+    base_seconds,
+    detect_color,
+    username_from,
+    valid_username,
+)
 from weaksquare.core.lichess import Dashboard
 from weaksquare.core.stats import AttemptRow
 from weaksquare.core.stats import Report as StatsReport
@@ -227,6 +237,12 @@ class AnalysisRows(Protocol):
     def rows(self, game_id: int) -> list[MoveRow]: ...
 
 
+class Digests(Protocol):
+    def get(self, game_ids: list[int]) -> dict[tuple[int, str], tuple[str, dict[str, Any]]]: ...
+
+    def put(self, game_id: int, color: str, key: str, digest: dict[str, Any], built_at: str) -> None: ...
+
+
 class GamePuzzleCount(Protocol):
     def coach_puzzles(self) -> list[tuple[int, int, int, str | None, str]]: ...
 
@@ -268,7 +284,13 @@ class CoachService:
         rows: AnalysisRows | None = None,
         llm_settings: Any = None,
         llm_usage: Any = None,
+        digests: Digests | None = None,
+        ai_runs: Any = None,
+        observations: Any = None,
     ) -> None:
+        self._digests = digests
+        self._ai_runs = ai_runs
+        self._observations = observations
         self._rows = rows
         self._llm_settings = llm_settings
         self._llm_usage = llm_usage
@@ -340,12 +362,16 @@ class CoachService:
                     progress(n / max(1, len(todo)), f"Making puzzles from your games: {n + 1} of {len(todo)}")
                     self._puzzles.process_game(gid, cancel)
         cancel.raise_if_cancelled()
+        reasons = self._reports.game_reasons() if subject == ME else {}
+        digests = self.digests(game_ids, subject, reasons, progress, cancel) if game_ids else []
         progress(None, "Writing the report…")
         history = self._puzzle_history(state) if params.source != "games" and subject == ME else []
         infos = [self._info(gid, subject) for gid in game_ids]
         errors = self._reports.errors(subject, game_ids)
-        reasons = self._reports.game_reasons() if subject == ME else {}
         report = build_report(params.source, [i for i in infos if i is not None], errors, reasons, history)
+        if digests:
+            ms = build_measures(digests)
+            report = replace(report, whole_game=game_weaknesses(digests, ms), measures=ms.to_json())
         rid = self._save(subject, label, params, report, game_ids, state)
         state.report_id = rid
         if subject == ME and params.source != "puzzles":
@@ -436,6 +462,54 @@ class CoachService:
             raise JobFailed(done.error_code or "analysis_failed", done.message, retryable=False)
         if done is not None and done.state == "cancelled":
             raise JobCancelled()
+
+    def _digest_key(self, g: GameRow) -> str:
+        th = getattr(self._analysis.settings(), "thresholds", None)
+        th_key = ",".join(str(v) for v in asdict(th).values()) if th is not None else ""
+        return f"d{DIGEST_VERSION}|{g.analysis_engine}|{g.analysis_think_s}|{th_key}"
+
+    def digests(
+        self, game_ids: Sequence[int], subject: str, reasons: dict[tuple[int, int], str] | None = None,
+        progress: ProgressFn | None = None, cancel: CancelToken | None = None,
+    ) -> list[tuple[int, Digest]]:  # fmt: skip
+        """FR-10.52: the subject's digest of each analyzed game, built from the stored analysis (no engine)
+        and reused while the analysis is the same. Your mistake reasons are added when read, so tagging a
+        reason never makes a digest stale."""
+        if self._digests is None or self._rows is None:
+            return []
+        ids = list(dict.fromkeys(game_ids))
+        stored = self._digests.get(ids)
+        out: list[tuple[int, Digest]] = []
+        for n, gid in enumerate(ids):
+            if cancel is not None:
+                cancel.raise_if_cancelled()
+            g = self._games.get(gid)
+            color = self._games.subjects(gid).get(subject) if g is not None else None
+            if g is None or color not in ("white", "black") or g.analysis_status == "none":
+                continue
+            key = self._digest_key(g)
+            have = stored.get((gid, color))
+            d: Digest | None = None
+            if have is not None and have[0] == key:
+                try:
+                    d = Digest.from_json(have[1])
+                except (TypeError, ValueError, KeyError):
+                    d = None
+            if d is None:
+                if progress is not None:
+                    progress(n / max(1, len(ids)), f"Summarising your games: {n + 1} of {len(ids)}")
+                rows = self._rows.rows(gid)
+                if not rows:
+                    continue
+                d = build_digest(
+                    rows=rows, color=color, result=g.result, eco=g.eco, opening=g.opening,
+                    base_seconds=base_seconds(g.time_control),
+                )  # fmt: skip
+                self._digests.put(gid, color, key, d.to_json(), self._clock.now().isoformat(timespec="seconds"))
+            if reasons:
+                d = replace(d, moments=tuple(replace(m, reason=reasons.get((gid, m.ply - 1))) for m in d.moments))
+            out.append((gid, d))
+        return out
 
     def _info(self, gid: int, subject: str) -> GameInfo | None:
         g = self._games.get(gid)
@@ -727,4 +801,5 @@ def build_report_from_json(data: dict[str, Any]) -> Report | None:
         str(data.get("source")), int(data.get("games") or 0), data.get("first_played"), data.get("last_played"),
         dict(data.get("per10") or {}), dict(data.get("results") or {}), ws(data.get("missed")),
         ws(data.get("allowed")), ws(data.get("habits")), ws(data.get("puzzles")), [], {}, 0,
+        whole_game=ws(data.get("whole_game")), measures=data.get("measures") if isinstance(data.get("measures"), dict) else None,
     )  # fmt: skip

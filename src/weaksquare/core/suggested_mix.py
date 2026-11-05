@@ -180,6 +180,12 @@ def build_suggestion(
     if use_mine:
         why.append(f"{MY_SHARE}% of the puzzles come from your own games' mistakes.")
     why.append(f"Rating {lo}–{hi}, aiming for about 75% first-try accuracy.")
+    low_clock = next((w for w in report.whole_game if w.key == "time:low_clock"), None)
+    if low_clock is not None:  # FR-10.58: time is flagged here, not drilled with puzzles
+        why.append(
+            f"Time: {low_clock.per10:g} mistakes per 10 games under 10% of your clock. That's a time-use issue"
+            " more than a pattern: keep more time for the end of the game."
+        )
     return Suggestion(spec, mode, tuple(why), tuple(w.key for w in picked))
 
 

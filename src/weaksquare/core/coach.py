@@ -125,6 +125,10 @@ class Report:
     reasons: dict[str, int]  # the reason mix over every tagged error (FR-10.36)
     low_clock_errors: int
     weaknesses: list[Weakness] = field(default_factory=list)  # all of them, best first (top 10)
+    # v0.11 (FR-10.53, 10.57): the whole-game measures and the weaknesses they make, kept apart from the
+    # tactical ones above so the Suggested mix stays tactical (core/game_measures.py)
+    whole_game: list[Weakness] = field(default_factory=list)
+    measures: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -289,17 +293,20 @@ def build_report(
     )
 
 
+TREND_GROUPS = ("missed", "allowed", "habits", "whole_game")
+
+
 def trend(current: Report, previous: Report | Mapping[str, Any] | None) -> dict[str, float]:
     """FR-10.20: each current weakness's rate change against the previous report (per 10 games)."""
     if previous is None:
         return {}
     prev = previous.to_json() if isinstance(previous, Report) else previous
     old: dict[str, float] = {}
-    for group in ("missed", "allowed", "habits"):
+    for group in TREND_GROUPS:
         for w in prev.get(group) or []:
             if isinstance(w, dict) and isinstance(w.get("key"), str):
                 old[w["key"]] = float(w.get("per10") or 0.0)
     out: dict[str, float] = {}
-    for w in current.missed + current.allowed + current.habits:
+    for w in current.missed + current.allowed + current.habits + current.whole_game:
         out[w.key] = round(w.per10 - old.get(w.key, 0.0), 2)
     return out
