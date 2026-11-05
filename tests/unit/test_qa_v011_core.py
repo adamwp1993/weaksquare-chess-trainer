@@ -272,3 +272,106 @@ def test_qa_the_diagnosis_still_sends_the_puzzles_vs_games_table() -> None:
     }  # fmt: skip
     user, _ = build_prompt(report, [("G1", digest(make_rows(ITALIAN)))], [], "summary", catalog())
     assert '"missed_per10":3.0' in user and '"puzzle_attempts":40' in user
+
+
+# ---- Round 2 (QA, 2026-11-04): try to break the B1, B2, B4 and B6 fixes ----
+
+R2_CAUGHT = [
+    "https://lichess.org/study/abc", "HTTP://LICHESS.ORG/X", "hxxp://evil.example/x", "www.evil.example",
+    "Lichess.Org", "t.me/channel", "discord.gg/abc", "amzn.to/x", "goo.gl/x", "xn--80ak6aa92e.com/x",
+    "sub.domain.example.co.uk/a?b=c#d", "chess.com/game/live/1000000001",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("url", R2_CAUGHT)
+def test_qa_r2_strip_urls_catches_other_shapes(url: str) -> None:
+    out = strip_urls(f"look at {url} now")
+    assert out == "look at [link removed] now"
+
+
+R2_CHESS = [
+    "1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6 5.O-O Be7 6.Re1 b5 7.Bb3 d6 8.c3 O-O 9.h3",
+    "1...c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6", "Bxf7+ Kxf7 Ng5+ Kg8 Qb3+ d5 exd5",
+    "e8=Q+ and Qe8#", "O-O-O was too slow.", "e.g. the fork on c7, i.e. Nc7+", "Q.E.D.", "mate in 2. Next time",
+    "Ruy Lopez: Berlin Defense, l'Hermet Variation", "a1-h8 diagonal", "+1.5 after 23.Rxe5",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("text", R2_CHESS)
+def test_qa_r2_strip_urls_keeps_well_spaced_chess_text(text: str) -> None:
+    assert strip_urls(text) == text
+
+
+# QA v0.11-B9 (strict xfail): an address with a path on a top-level domain missing from the list is kept
+R2_MISSED = [
+    "mychess.blog/post", "chess.club/join", "example.live/x", "chess.academy/course", "example.kr/x",
+    "example.nz/x", "evil.example/x", "192.168.0.1/admin",
+]  # fmt: skip
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B9: strip_urls only knows ~50 TLDs; a host with a path is kept")
+@pytest.mark.parametrize("url", R2_MISSED)
+def test_qa_r2_strip_urls_removes_any_host_with_a_path(url: str) -> None:
+    assert url not in strip_urls(f"see {url} later")
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B9: an LLM-written address on an unlisted TLD is shown")
+def test_qa_r2_an_llm_url_on_another_tld_is_never_shown() -> None:
+    w = _w()
+    w["advice"] = "Study the course at chess.academy/endgames"
+    d = validate(_answer(w), _sent(), None)
+    assert d is not None and d.findings
+    assert "chess.academy" not in d.findings[0].advice
+
+
+# QA v0.11-B10 (strict xfail): a missing space before a two-letter word turns a move and a word into a link
+R2_MISSING_SPACE = [
+    "Blundered.No time left", "Nf3.To be safe", "Castled O-O.It was late", "Played e4.At move 3",
+    "Kh1.Am I safe", "Lost.Be careful",
+]  # fmt: skip
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B10: 'word.It' / 'Nf3.To' match as a domain on .it/.to/...")
+@pytest.mark.parametrize("text", R2_MISSING_SPACE)
+def test_qa_r2_strip_urls_leaves_two_letter_words_after_a_missing_space(text: str) -> None:
+    assert strip_urls(text) == text
+
+
+def test_qa_r2_a_url_only_preset_name_still_has_a_name() -> None:
+    preset = {
+        "name": "https://evil.example/x", "themes": ["fork"], "rating_min": 1200, "rating_max": 1500,
+        "lengths": [], "mode": "standard", "queue_size": 20,
+    }  # fmt: skip
+    d = validate(_answer(_w(), presets=[preset]), _sent(), None)
+    assert d is not None and d.presets
+    assert d.presets[0].name.strip() and "evil" not in d.presets[0].name
+
+
+def test_qa_r2_a_url_in_every_shown_diagnosis_field_is_removed() -> None:
+    w = _w()
+    w.update(title="Forks www.evil.example", explanation="see youtu.be/abc", advice="go to bit.ly/x")
+    raw = json.loads(_answer(w))
+    raw["summary"] = "Summary: https://evil.example/s"
+    d = validate(json.dumps(raw), _sent(), None)
+    assert d is not None and d.findings
+    blob = json.dumps(d.to_json())
+    for bad in ("evil.example", "youtu.be", "bit.ly"):
+        assert bad not in blob, bad
+
+
+@pytest.mark.parametrize(("n", "enough"), [(4, False), (5, True)])
+def test_qa_r2_errors_per_phase_guard_boundary(n: int, enough: bool) -> None:
+    ds = games(*[dg(errors_by_phase={"opening": 1, "middlegame": 0, "endgame": 0}) for _ in range(n)])
+    assert build_measures(ds).phases_enough is enough
+
+
+def test_qa_r2_the_gap_table_sends_only_its_columns_and_at_most_ten_rows() -> None:
+    rows = [
+        {"theme": f"t{i}", "puzzle_accuracy": 0.5, "puzzle_attempts": 9, "missed_per10": 1.0, "allowed_per10": 0.5,
+         "puzzle_ids": ["QaPzl01"], "games": [123456789], "url": "https://evil.example/g"}
+        for i in range(14)
+    ]  # fmt: skip
+    report = {"source": "both", "gap": [*rows, "not a dict", None]}
+    user, _ = build_prompt(report, [("G1", digest(make_rows(ITALIAN)))], [], "summary", catalog())
+    assert "QaPzl01" not in user and "123456789" not in user and "evil.example" not in user
+    assert '"theme":"t9"' in user and '"theme":"t10"' not in user

@@ -65,6 +65,12 @@ def test_qa_v011_whole_game_report_and_per_run_options(pw, tmp_path: Path, fixtu
             measures = page.get_by_test_id("coach-measures")
             measures.wait_for()
             assert measures.get_by_test_id("not-enough").count() >= 3
+            # Round 2: B4 (mistakes per phase guarded) and B7 ("1 game") in the real window
+            assert m["phases_enough"] is False
+            assert (
+                page.get_by_test_id("measures-phases").get_by_test_id("not-enough").count() == 3
+            )  # phases, conversion, saves
+            assert "1 games" not in measures.inner_text() and "From 1 game," in measures.inner_text()
 
             # A note on the missed mate (ply 14), with a web address in it.
             _ok(_call(page, "set_game_reason", gid, 14, "didntLook", "missed Rd8#, see https://example.org/x"))

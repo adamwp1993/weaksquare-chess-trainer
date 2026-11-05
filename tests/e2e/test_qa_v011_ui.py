@@ -141,3 +141,24 @@ def test_qa_retry_explain_is_never_there_before_each_attempt(page) -> None:  # t
         page.wait_for_timeout(300)
         if page.get_by_test_id("retry-result").count() == 0:  # the next mistake: no Explain until you try
             assert retry.get_by_test_id("move-explain").count() == 0
+
+
+# ---- Round 2 (QA, 2026-11-04): the B5 guard is released when the run ends ----
+
+
+def test_qa_r2_after_a_run_the_next_one_can_start_and_a_double_click_still_sends_one(page) -> None:  # type: ignore[no-untyped-def]
+    coach(page, "?ai=on&coach=report")
+    page.get_by_test_id("coach-ai-start").click()
+    page.get_by_test_id("coach-ai-confirm-button").dblclick()
+    page.get_by_test_id("coach-ai-result").wait_for(timeout=5000)
+    start = page.get_by_test_id("coach-ai-start")
+    start.filter(has_text="Show the saved answer").wait_for(timeout=5000)
+    assert start.is_enabled()  # the guard is gone once the job is done
+    page.get_by_test_id("coach-ai-advanced").check()
+    start.filter(has_text="with these options").wait_for(timeout=5000)
+    start.click()
+    page.get_by_test_id("coach-ai-confirm-button").dblclick()
+    page.get_by_test_id("coach-ai-runs").wait_for(timeout=5000)
+    page.wait_for_timeout(800)
+    sent = [c for c in calls(page) if c.startswith("coachAi:")]
+    assert len(sent) == 2 and ":standard:" in sent[0] and ":advanced:" in sent[1], sent

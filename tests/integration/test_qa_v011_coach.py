@@ -232,3 +232,135 @@ def test_qa_two_quick_starts_send_one_request(services, paths) -> None:  # type:
     for job in (first, second):
         services.coach._runner.wait(job, 20)
     assert len(fake(services).requests) == 1
+
+
+# ---- Round 2 (QA, 2026-11-04): try to break the B3 and B5 fixes ----
+
+
+def _hold(services: Any) -> Any:
+    """Make the fake provider wait until released, so a run is still going when the next start comes."""
+    import threading
+
+    gate = threading.Event()
+    prov = fake(services)
+    real = prov.generate
+
+    def slow(key: str, request: Any) -> Any:
+        gate.wait(10)
+        return real(key, request)
+
+    prov.generate = slow  # type: ignore[method-assign]
+    return gate
+
+
+def test_qa_r2_starts_from_many_threads_send_one_request(services, paths) -> None:  # type: ignore[no-untyped-def]
+    from concurrent.futures import ThreadPoolExecutor
+
+    rid, _ = _report(services, paths, 2)
+    configure(services)
+    gate = _hold(services)
+    with ThreadPoolExecutor(8) as pool:
+        jobs = set(pool.map(lambda _: services.coach.start_ai(rid), range(8)))
+    gate.set()
+    assert len(jobs) == 1
+    _wait(services, jobs.pop())
+    assert len(fake(services).requests) == 1
+
+
+def test_qa_r2_the_same_options_written_differently_join_the_run(services, paths) -> None:  # type: ignore[no-untyped-def]
+    rid, _ = _report(services, paths, 2)
+    configure(services)
+    gate = _hold(services)
+    a = services.coach.start_ai(rid, None)
+    b = services.coach.start_ai(rid, {"advanced": False, "include_notes": False})
+    c = services.coach.start_ai(rid, {"include_notes": False, "game_cap": 30, "advanced": False})
+    gate.set()
+    assert a == b == c
+    _wait(services, a)
+    assert len(fake(services).requests) == 1
+
+
+def test_qa_r2_other_options_while_one_is_going_are_their_own_run(services, paths) -> None:  # type: ignore[no-untyped-def]
+    """By design: Advanced is another estimate and another Confirm, so it isn't merged with the standard run."""
+    rid, _ = _report(services, paths, 2)
+    configure(services)
+    gate = _hold(services)
+    a = services.coach.start_ai(rid)
+    b = services.coach.start_ai(rid, {"include_notes": True})
+    gate.set()
+    assert a != b
+    _wait(services, a)
+    _wait(services, b)
+    assert len(fake(services).requests) == 2
+
+
+def test_qa_r2_after_a_run_ends_the_same_options_reuse_it_or_retry(services, paths) -> None:  # type: ignore[no-untyped-def]
+    from weaksquare.core.llm.provider import LLMError
+
+    rid, _ = _report(services, paths, 2)
+    configure(services)
+    fake(services).queue(LLMError("server", 500))
+    first = services.coach.start_ai(rid)
+    st = services.coach._runner.wait(first, 20)
+    assert st is not None and st.state == "failed"
+    n = len(fake(services).requests)
+    second = services.coach.start_ai(rid)  # a failed run doesn't block a retry
+    assert second != first
+    _wait(services, second)
+    assert len(fake(services).requests) == n + 1
+    third = services.coach.start_ai(rid)  # done: the saved answer, nothing sent
+    _wait(services, third)
+    assert len(fake(services).requests) == n + 1
+
+
+def test_qa_r2_migration_0010_backfills_every_shape(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import shutil
+    import sqlite3
+
+    from tests.integration.test_migration_0009 import CLOCK
+    from weaksquare.adapters.db.connection import Database
+    from weaksquare.adapters.db.migrate import migrate
+    from weaksquare.config import MIGRATIONS_DIR
+
+    old = tmp_path / "v9"
+    old.mkdir()
+    for f in sorted((MIGRATIONS_DIR / "user").glob("000[1-9]_*.sql")):
+        shutil.copy(f, old / f.name)
+    db_path = tmp_path / "user.db"
+    migrate(db_path, old, CLOCK)
+    conn = sqlite3.connect(db_path)
+    rows = [("a", None, None, 1), ("b", 4, 4, 1), ("c", 1, 2, 2), ("d", 2, 1, 2)]
+    for key, first, last, seen in rows:
+        conn.execute(
+            "INSERT INTO coach_observations (subject, topic_key, category, title_key, title, first_report_id,"
+            " last_report_id, times_seen) VALUES ('me', ?, '', '', 'T', ?, ?, ?)",
+            (f"concept:{key}", first, last, seen),
+        )
+    conn.commit()
+    conn.close()
+    migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)
+    conn = sqlite3.connect(db_path)
+    got = dict(conn.execute("SELECT topic_key, report_ids FROM coach_observations").fetchall())
+    assert max(r[0] for r in conn.execute("SELECT version FROM schema_version")) == 10
+    conn.close()
+    assert {k: json.loads(v) for k, v in got.items()} == {
+        "concept:a": [], "concept:b": [4], "concept:c": [1, 2], "concept:d": [2, 1],
+    }  # fmt: skip
+    repo = ObservationsRepo(Database(db_path, tmp_path / "puzzles.db"))
+    assert repo.note("me", "concept:b", "", "", "T", 4) == 1
+    assert repo.note("me", "concept:c", "", "", "T", 2) == 2
+    assert repo.note("me", "concept:d", "", "", "T", 3) == 3
+    assert repo.note("me", "concept:new", "", "", "T", 9) == 1
+    # Migrating again is a no-op
+    migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)
+    assert repo.note("me", "concept:c", "", "", "T", 1) == 2
+
+
+@pytest.mark.xfail(strict=True, reason="QA v0.11-B9: a note's address on an unlisted TLD reaches the LLM")
+def test_qa_r2_a_note_with_an_address_on_another_tld_is_not_sent(services, paths) -> None:  # type: ignore[no-untyped-def]
+    rid, ids = _report(services, paths, 3)
+    services.review.set_game_reason(ids[1], 8, "miscalculated", "course: chess.academy/rook-endings")
+    configure(services)
+    fake(services).queue(_answer(_finding(ply=1)))
+    _wait(services, services.coach.start_ai(rid, {"include_notes": True}))
+    assert "chess.academy" not in fake(services).requests[-1].user

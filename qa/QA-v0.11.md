@@ -189,3 +189,98 @@ No clipped text or broken layout. The badges wrap cleanly at 900 px. The real-ap
 - **Real LLM runs:** standard, then Advanced on 30 games. Compare the cost with the estimate and the "N×" ratio. Check that the citations open the right moves, and that the minutes estimate is plausible with your model.
 - **Include my notes** on your real notes: check the preview, especially any short links (B2).
 - **Double-click Confirm** only after B5 is fixed.
+
+---
+
+# Round 2 (2026-11-05): re-verification of B1–B8
+
+Branch `v0.11` at `f860532`. I changed no product code, migrations, config or docs. I added tests under `tests/` only, and committed nothing. `-m live` was not run.
+
+## Verdict: **FAIL** (1 major, 1 minor; both new, both in `core/urls.strip_urls`)
+
+B3–B8 are fixed and held up when I tried to break them. B1 is fixed for every text field the AI writes. **B2 is only partly fixed.** The new `strip_urls` matches bare domains against a fixed list of about 50 top-level domains, so:
+- **B9 (major):** any address on a TLD outside the list is still kept, even with a path (`chess.academy/course`, `mychess.blog/post`, `chess.club/join`, `example.live/x`, `example.kr/x`, `192.168.0.1/admin`). These addresses are sent from **Include my notes** and shown from AI text.
+- **B10 (minor):** a missing space before a two-letter word that is also a TLD turns ordinary text into `[link removed]`. For example, `Nf3.To be safe` becomes `[link removed] be safe`.
+
+Every automated suite is green.
+
+## Re-verification
+
+| Bug | Result | Evidence |
+|---|---|---|
+| B1 URL in AI preset names / keyed coaching | **Fixed** | builder regressions pass. QA r2 `test_qa_r2_a_url_in_every_shown_diagnosis_field_is_removed` (title, explanation, advice, summary), `test_qa_r2_a_url_only_preset_name_still_has_a_name` (a name that is only a URL becomes `[link removed]` and is never empty) |
+| B2 strip_urls misses / over-matches | **Partly fixed: B9, B10** | All round-1 shapes are caught (`youtu.be`, `bit.ly`, `.co.uk`, `.de`, `ftp://`), and so are `hxxp://`, upper case, `t.me`, `discord.gg`, `amzn.to`, punycode, and sub-domains with `?` and `#` (`test_qa_r2_strip_urls_catches_other_shapes[12]`). Well-spaced chess text is left alone, including full SAN lines, `O-O-O.`, `e.g.`/`i.e.`, `Q.E.D.` and `23.Rxe5` (`test_qa_r2_strip_urls_keeps_well_spaced_chess_text[11]`). Misses: B9. Over-match: B10 |
+| B3 observation counted twice (A, B, A) | **Fixed** | `test_qa_an_observation_counts_each_report_once_in_any_order`. QA r2 `test_qa_r2_migration_0010_backfills_every_shape`: on a real v9 DB (migrations 0001–0009), rows with no report, first = last, and first ≠ last in either order backfill to `[]`, `[4]`, `[1,2]`, `[2,1]`; `schema_version` is 10; later `note()` calls count distinct reports; re-running `migrate` is a no-op |
+| B4 mistakes per phase unguarded | **Fixed** | QA r2 `test_qa_r2_errors_per_phase_guard_boundary` (4 games: False, 5 games: True). Real app (QA smoke, extended): one game gives `phases_enough: false`, and the Phases card shows its *not enough data yet* badge (3 badges on the card: phases, conversion, saves) |
+| B5 double Confirm bills twice | **Fixed** | Backend (QA r2, with a provider held open so the first run is still going): `…starts_from_many_threads_send_one_request` (8 threads: 1 job, 1 request); `…same_options_written_differently_join_the_run` (`None`, `{advanced: false, …}` and an explicit default cap: same job); `…other_options_while_one_is_going_are_their_own_run` (standard + notes: 2 runs, as designed); `…after_a_run_ends_the_same_options_reuse_it_or_retry` (after a failed run a retry is sent; after a done run the saved answer is used and nothing is sent). UI (e2e r2): `test_qa_r2_after_a_run_the_next_one_can_start_and_a_double_click_still_sends_one`: the guard is released once the job ends, and a second double-clicked run (Advanced) sends exactly one more request (2 in total) |
+| B6 gap table dropped; privacy text | **Fixed** | builder regression passes. QA r2 `test_qa_r2_the_gap_table_sends_only_its_columns_and_at_most_ten_rows` (14 rows with extra `puzzle_ids`, `games` and `url` fields, plus non-dict rows: only the 5 columns go, at most 10 rows). The User Guide privacy bullet now lists Missed/Allowed, themes, the reason label and the gap table |
+| B7 "1 games" | **Fixed** | QA smoke (real app): the measures read "From 1 game," and never "1 games" |
+| B8 plan tick | **Fixed** | `plans/v0.11.md` item 8 is `[x]` |
+
+## New bugs
+
+### v0.11-B9 (major): `strip_urls` keeps any address whose top-level domain isn't on its list
+- **Requirement:** FR-8.16 (no URLs to the LLM), FR-10.60 (web addresses removed from notes before the preview and before sending), the Done-when item "a URL written by the LLM is never shown", and the User Guide ("Web addresses in your notes … are removed").
+- **Steps:** add a mistake-reason note `course: chess.academy/rook-endings` on one of your moves in a report's game, tick **Include my notes**, then Confirm. Or have the AI write advice `Study the course at chess.academy/endgames`.
+- **Expected:** `[link removed]` in the preview, in the prompt and on screen.
+- **Actual:** the address is sent, and it's shown. `core/urls.py` only matches a bare domain if its TLD is in `TLDS`. Also kept: `.blog`, `.club`, `.live`, `.academy`, `.kr`, `.nz`, `.example`, and IPv4 hosts with a path. A rule that treats any `host.tld/…` (a dotted host followed by `/`) as an address, whatever the TLD, would catch all of these. The TLD list would still be needed for bare domains without a path.
+- **Evidence:** strict xfails `test_qa_r2_strip_urls_removes_any_host_with_a_path[8]`, `test_qa_r2_an_llm_url_on_another_tld_is_never_shown` (unit), and `test_qa_r2_a_note_with_an_address_on_another_tld_is_not_sent` (integration: the address appears in the fake provider's request). Each fails on its own assertion with `--runxfail`.
+
+### v0.11-B10 (minor): a missing space before a two-letter word is removed as a link
+- **Requirement:** FR-10.60 (the notes are sent as written, minus web addresses). `core/urls.py`'s docstring claims "missing spaces … are left alone".
+- **Steps:** add the note `Blundered.No time left` (or `Nf3.To be safe`, `Castled O-O.It was late`, `Played e4.At move 3`, `Kh1.Am I safe`, `Lost.Be careful`), then tick **Include my notes**.
+- **Expected:** the note unchanged. **Actual:** `[link removed] time left`, `[link removed] be safe`, and so on. `no`, `to`, `it`, `at`, `am`, `be`, `me`, `us` and `in` are all in `TLDS`. The preview shows the damage, so nothing is hidden; the AI just loses the words. AI text with normal spacing isn't affected.
+- **Evidence:** strict xfail `test_qa_r2_strip_urls_leaves_two_letter_words_after_a_missing_space[6]`.
+
+## Evidence: commands run (Git Bash; `npm.cmd` as written)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **1914 passed, 1 skipped, 16 xfailed** (326 s), rc 0. The 16 xfails are the round-2 B9 and B10 tests |
+| `uv run pytest -m e2e` | **312 passed** (733 s), rc 0, including the QA r2 e2e test |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0. **35 passed, 1 skipped, 1 failed**: the failure was my own new assertion (I expected 1 badge on the Phases card, and it has 3: phases, conversion, saves). After I corrected the test, `test_qa_v011_real_app.py` passed on its own (20 s). No product failure |
+| `uv run pytest -m engine` | **19 passed** (71 s) |
+| `uv run pytest -m fulldb` | dev `puzzles.db` imported: **73 passed, 3 xfailed** (557 s) |
+| `uv run ruff check .` / `uv run ruff format --check .` | All checks passed / 394 files already formatted |
+| `uv run mypy src` | Success: no issues found in 124 source files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | Detect hardcoded secrets Passed; keyring only in secret_store.py Passed |
+| `python scripts/check_docs.py` / `--strict` | `check_docs: 0 error(s), 0 warning(s) [version v0.11]`, both rc 0 |
+| `uv run python scripts/gen_types.py` | `web/src` unchanged (the `phases_enough` field in `types.ts` matches `dto.py`) |
+| `uv run python scripts/make_icon.py --check` | icon is up to date |
+| Other Developer Guide rows | unchanged since round 1 (no command, path or workflow changed in `f860532`). Not re-run: setup, the fetch scripts, and the live and credential rows (same reasons as round 1) |
+
+## Regression check (Done-when list)
+The builder's v0.11 tests and the round-1 QA tests all pass:
+- digests, the measures and their guard
+- the standard prompt has no move lists
+- Advanced: SAN only, the cap, the newest games, blocked by the cap and the budget
+- notes go only when ticked, and the preview matches what's sent
+- invented labels and plies are dropped, and fewer than 3 games is tentative
+- curated links are on the allowlist, and links are built by the backend
+- nothing is remembered between runs
+- Retry offers Explain only after you try
+- preset management
+
+Because of B9, the item "a URL written by the LLM is never shown" is still **not met**.
+
+## Scope, architecture, security (fix commit)
+- Only one new migration (`0010_observation_reports.sql`); no applied migration was edited. No dependency or lockfile changes.
+- `core/urls.py` is pure (regex only). `services/coach.py` adds a `threading.Lock` around job bookkeeping only; no SQLite connection is shared. No `datetime.now`, `time.time` or `random`.
+- No `localStorage`, `sessionStorage`, IndexedDB, cookies or `innerHTML` in `web/src`.
+- New QA fixtures use only `evil.example`, `example.*`, `QaPzl01` and `123456789` placeholders. No token patterns.
+
+## Observations (not bugs)
+- **The 0010 backfill can lower `times_seen`:** a v9 row with `times_seen = 3` keeps only `[first, last]`, so the next `note()` for the last report returns 2 (scratch run). Only DBs that ran a dev build with 0009 have such rows, because 0009 and 0010 both ship in v0.11. In practice that means Adam's dev `user.db`.
+- **The single-flight key** includes `game_cap` even when Advanced is off, so two standard starts with different caps would both send. The UI can't do this (the button is disabled while a run is going), and the builder may decide it isn't worth changing.
+- **The same double-click pattern outside v0.11 (code reading, not executed):** `GameAiPanel` (Explain my game's Confirm, Explain this move) and `ExplainPanel` have no click guard, and those backends have no single-flight. These are v0.7/v0.9 features, so it isn't a v0.11 regression. Adam can decide whether to carry the B5 fix over.
+
+## Tests added in round 2 (uncommitted)
+- `tests/unit/test_qa_v011_core.py`: `test_qa_r2_strip_urls_catches_other_shapes[12]`, `test_qa_r2_strip_urls_keeps_well_spaced_chess_text[11]`, `test_qa_r2_strip_urls_removes_any_host_with_a_path[8]` (xfail B9), `test_qa_r2_an_llm_url_on_another_tld_is_never_shown` (xfail B9), `test_qa_r2_strip_urls_leaves_two_letter_words_after_a_missing_space[6]` (xfail B10), `test_qa_r2_a_url_only_preset_name_still_has_a_name`, `test_qa_r2_a_url_in_every_shown_diagnosis_field_is_removed`, `test_qa_r2_errors_per_phase_guard_boundary[2]`, `test_qa_r2_the_gap_table_sends_only_its_columns_and_at_most_ten_rows`.
+- `tests/integration/test_qa_v011_coach.py`: `test_qa_r2_starts_from_many_threads_send_one_request`, `test_qa_r2_the_same_options_written_differently_join_the_run`, `test_qa_r2_other_options_while_one_is_going_are_their_own_run`, `test_qa_r2_after_a_run_ends_the_same_options_reuse_it_or_retry`, `test_qa_r2_migration_0010_backfills_every_shape`, `test_qa_r2_a_note_with_an_address_on_another_tld_is_not_sent` (xfail B9).
+- `tests/e2e/test_qa_v011_ui.py`: `test_qa_r2_after_a_run_the_next_one_can_start_and_a_double_click_still_sends_one`.
+- `tests/smoke/test_qa_v011_real_app.py`: extended with the B4 badge and B7 wording checks in the real window.
+
+## For Adam's manual test (in addition to round 1)
+- Once B9 is fixed: put a note with a short link on an unusual TLD (for example `.blog` or `.club`) and check the notes preview.
+- Double-click **Confirm** with a real key and a low cap: check that only one `llm_usage` row is added.
