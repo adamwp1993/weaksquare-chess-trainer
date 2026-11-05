@@ -288,7 +288,7 @@ def test_qa_a_metadata_heavy_game_leaves_no_trace_in_the_coach_prompt(services, 
     for m in MARKERS:
         assert m not in text, m
     assert "game_id" not in text  # examples are labels, never game ids (v0.11: plies are cited on purpose, FR-10.54)
-    assert req.max_tokens == 5000  # FR-8.14: Coach Detailed
+    assert req.max_tokens == 10000  # FR-8.14: Coach Detailed
 
 
 # ---- rapid repeated clicks ------------------------------------------------------------------------------

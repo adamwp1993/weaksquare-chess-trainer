@@ -257,6 +257,20 @@ class PlanService:
         days = tuple(replace(d, tasks=tuple(self.fit_task(t, ctx, memo) for t in d.tasks)) for d in draft.days)
         return replace(draft, days=days)
 
+    def fit(self, draft: PlanDraft, ctx: Context) -> PlanDraft:
+        """An AI plan's puzzle tasks need enough puzzles too."""
+        return self._fit(draft, ctx)
+
+    def game_for_task(self, game_id: int, kind: str) -> tuple[int, str] | None:
+        """(id, short name) when this game can have this task type (FR-10.66): analyzed, and for Retry, with
+        mistakes of yours."""
+        g = self._games.get(game_id)
+        if g is None or g.analysis_status == "none" or "me" not in self._games.subjects(game_id):
+            return None
+        if kind == RETRY and not self._review.retry_plies(game_id):
+            return None
+        return game_id, self._label(g)
+
     def build(self, report: Any, params: PlanParams) -> PlanDraft:
         data = report.report if report is not None else {}
         ctx = self.context(report)

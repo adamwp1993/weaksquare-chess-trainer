@@ -128,6 +128,18 @@ class CoachReportsRepo:
             ).fetchone()
         return _report(r) if r else None
 
+    def history(self, subject: str, puzzles_only: bool, before_id: int, limit: int) -> list[ReportRow]:
+        """FR-10.73: the subject's reports of the same kind before this one, oldest first. Reports on your
+        puzzle history compare only with each other; reports on games (games or both) likewise."""
+        kind = "source_kind = 'puzzles'" if puzzles_only else "source_kind <> 'puzzles'"
+        with self._db.session() as conn:
+            rows = conn.execute(
+                f"SELECT {_REPORT_COLS} FROM coach_reports WHERE subject = ? AND id < ? AND {kind}"
+                " ORDER BY id DESC LIMIT ?",
+                (subject, before_id, limit),
+            ).fetchall()
+        return [_report(r) for r in reversed(rows)]
+
     def count(self, subject: str) -> int:
         with self._db.session() as conn:
             return int(conn.execute("SELECT COUNT(*) FROM coach_reports WHERE subject = ?", (subject,)).fetchone()[0])
@@ -282,17 +294,20 @@ class AiRunRow:
     model: str
     cost_usd: float
     result: dict[str, Any]
+    include_journal: bool = False  # v0.12, FR-10.71
+    journal_hash: str | None = None
 
 
 _RUN_COLS = (
-    "id, report_id, created_at, format, advanced, include_notes, game_cap, provider, model, cost_usd, result_json"
+    "id, report_id, created_at, format, advanced, include_notes, game_cap, provider, model, cost_usd, result_json,"
+    " include_journal, journal_hash"
 )
 
 
 def _run(r: Any) -> AiRunRow:
     return AiRunRow(
         int(r[0]), int(r[1]), str(r[2]), str(r[3]), bool(r[4]), bool(r[5]), None if r[6] is None else int(r[6]),
-        str(r[7]), str(r[8]), float(r[9] or 0), json.loads(r[10]),
+        str(r[7]), str(r[8]), float(r[9] or 0), json.loads(r[10]), bool(r[11]), r[12],
     )  # fmt: skip
 
 
@@ -305,13 +320,14 @@ class AiRunsRepo:
     def add(
         self, report_id: int, created_at: str, fmt: str, *, advanced: bool, include_notes: bool,
         game_cap: int | None, provider: str, model: str, cost_usd: float, result: dict[str, Any],
+        include_journal: bool = False, journal_hash: str | None = None,
     ) -> int:  # fmt: skip
         with self._db.transaction() as conn:
             cur = conn.execute(
-                f"INSERT INTO coach_ai_runs ({_RUN_COLS.split(', ', 1)[1]}) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                f"INSERT INTO coach_ai_runs ({_RUN_COLS.split(', ', 1)[1]}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     report_id, created_at, fmt, int(advanced), int(include_notes), game_cap, provider, model,
-                    cost_usd, json.dumps(result),
+                    cost_usd, json.dumps(result), int(include_journal), journal_hash,
                 ),
             )  # fmt: skip
             return int(cur.lastrowid or 0)
