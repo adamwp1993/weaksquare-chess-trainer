@@ -185,6 +185,8 @@ Scope:
 - **Lesson pointers:** the in-app drill first, then a curated map of stable free pages plus search links for YouTube, chess.com and a site of your choice. The LLM picks topics only and never writes URLs (FR-10.59).
 - **Include my notes**, opt-in, with a preview (FR-10.60).
 - **Docs:** a User Guide section on whole-game coaching, and the privacy section updated with exactly what a standard run, an Advanced run and Include my notes send.
+- **Retry your mistakes gets Explain this move** after each attempt (Adam, 2026-11-04, during the build; FR-11.15).
+- **Preset management** (Adam, 2026-11-04, during the build; FR-3.13): Update the loaded preset, a Manage presets list (overwrite, rename, delete any preset), and Replace / another name when a Coach preset's name is taken.
 
 **Done when:**
 - Each digest field and whole-game measure has unit tests on fixture games: castling move, moves before castling, endgame-type classification, conversion from +2 and saves from −2, low-clock blunders.

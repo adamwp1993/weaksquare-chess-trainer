@@ -71,6 +71,7 @@ export function ReviewView({
   const [color, setColor] = useState<"white" | "black" | "both">("white");
   const [retry, setRetry] = useState<number | null>(null); // index into retry_plies
   const [result, setResult] = useState<RetryResult | null>(null);
+  const [retryShapes, setRetryShapes] = useState<BoardShape[] | null>(null); // Explain's "Show me" in Retry
   const [shownAt, setShownAt] = useState(0);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -169,11 +170,12 @@ export function ReviewView({
     };
     const goRetry = (i: number | null) => {
       setResult(null);
+      setRetryShapes(null);
       setNote("");
       setShownAt(Date.now());
       setRetry(i);
     };
-    const shapes: BoardShape[] = result ? result.best_line.slice(0, 1).map((u) => ({ orig: u.slice(0, 2), dest: u.slice(2, 4), color: "green" })) : [];
+    const shapes: BoardShape[] = retryShapes ?? (result ? result.best_line.slice(0, 1).map((u) => ({ orig: u.slice(0, 2), dest: u.slice(2, 4), color: "green" })) : []);
     return (
       <Stack data-testid="retry-mode">
         <Group justify="space-between">
@@ -210,6 +212,9 @@ export function ReviewView({
                   {!result.engine_checked && <Text size="xs">Install Stockfish to have moves like this checked.</Text>}
                 </Alert>
               )}
+              {/* Adam, 2026-11-04 (v0.11 build): Explain this move in Retry, once you've tried, so it never helps
+                  before your attempt (FR-11.15). Its "Show me" draws on this board. */}
+              {result && <MoveExplain key={ply} gameId={gameId} ply={ply} onShowMe={(x) => setRetryShapes(showMeFor(x).shapes[0] ?? [])} />}
               {result && !result.found && result.engine_checked && review.ask_reasons && (
                 <ReasonChips
                   prompt={gamePrompt(result.suggested_reason as ReasonKey | null)}

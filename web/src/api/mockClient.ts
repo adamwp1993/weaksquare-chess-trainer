@@ -37,7 +37,7 @@ import type {
   SettingValues,
   TrainingMode,
 } from "./ApiClient";
-import { ApiCallError, type CoachParams } from "./ApiClient";
+import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
 import { MockCoach } from "./mockCoach";
 import { gameNarrative, moveExplanation } from "./mockGameAi";
@@ -45,7 +45,6 @@ import { MockGames } from "./mockGames";
 import { type ExplainTarget, MockLlm } from "./mockLlm";
 import { MOCK_PUZZLES, type MockPuzzle } from "./mockPuzzles";
 import type {
-  CoachAi,
   AccountStatus,
   Analysis,
   EngineSettings,
@@ -303,6 +302,8 @@ export class MockClient implements ApiClient {
     reasons_ask: "always",
     rushed_s: 3,
     show_best: false,
+    lesson_sites: ["youtube", "chesscom"],
+    lesson_custom_url: "",
   };
   private reasons = new Map<number, ReasonKey>(); // attempt id -> its latest reason (§7.3)
   private attemptSession = new Map<number, { session: number; win: boolean; mode: TrainingMode }>();
@@ -357,7 +358,6 @@ export class MockClient implements ApiClient {
       },
       quote: (kind, what) => this.llm.gameQuote(kind, what),
       startAi: (kind, what, make) => this.llm.startGame(kind, what, make),
-      aiResult: (what) => this.llm.gameResult(what, "coach") as CoachAi | null,
     });
     if (params.get("showbest") === "1") this.settings.show_best = true;
     const scenario = params.get("scenario");
@@ -1028,16 +1028,32 @@ export class MockClient implements ApiClient {
     return this.coach.get(reportId);
   }
 
-  async getCoachAiQuote(reportId: number) {
-    return this.coach.aiQuote(reportId);
+  async getCoachAiQuote(reportId: number, options: CoachAiOptions) {
+    return this.coach.aiQuote(reportId, options);
   }
 
-  async startCoachAi(reportId: number) {
-    return this.coach.startAi(reportId);
+  async startCoachAi(reportId: number, options: CoachAiOptions) {
+    return this.coach.startAi(reportId, options);
   }
 
-  async getCoachAi(reportId: number) {
-    return this.coach.ai(reportId);
+  async getCoachAiJobRun(jobId: string) {
+    return this.coach.jobRun(jobId);
+  }
+
+  async listCoachAiRuns(reportId: number) {
+    return this.coach.listRuns(reportId);
+  }
+
+  async getCoachAiRun(reportId: number, runId: number) {
+    return this.coach.getRun(reportId, runId);
+  }
+
+  async getCoachNotesPreview(reportId: number) {
+    return this.coach.notesPreview(reportId);
+  }
+
+  async openLesson(reportId: number, topic: string, target: string) {
+    this.coach.openLesson(reportId, topic, target);
   }
 
   async getSuggestion() {
@@ -1177,6 +1193,14 @@ export class MockClient implements ApiClient {
       this.settings = { ...this.settings, reasons_ask: value as "always" | "off" };
     }
     if (key === "review.show_best") this.settings = { ...this.settings, show_best: value as boolean };
+    if (key === "coach.lesson_sites") this.settings = { ...this.settings, lesson_sites: value as UiSettings["lesson_sites"] };
+    if (key === "coach.lesson_custom_url") {
+      const t = (value as string).trim();
+      if (t && (!t.startsWith("https://") || t.split("{q}").length !== 2 || /\s/.test(t))) {
+        throw new ApiCallError({ code: "invalid_argument", message: "Put {q} once in the search address, where the search words go.", retryable: false });
+      }
+      this.settings = { ...this.settings, lesson_custom_url: t };
+    }
     if (key === "reasons.rushed_s") {
       const n = value as number;
       if (!Number.isInteger(n) || n < 1 || n > 30) {

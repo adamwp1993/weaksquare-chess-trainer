@@ -15,6 +15,7 @@ import {
 import type { AccountStatus, SoundSettings } from "../api/types";
 import { AccountPanel } from "../components/AccountPanel";
 import { AiSettingsPanel } from "../components/AiSettingsPanel";
+import { CoachSettingsPanel } from "../components/CoachSettingsPanel";
 import { GamesSettingsPanel } from "../components/GamesSettingsPanel";
 import { EngineSettingsPanel } from "../components/EngineSettingsPanel";
 import { DebugPanel, TrainingSettingsPanel } from "../components/TrainingSettingsPanel";
@@ -152,6 +153,11 @@ export function SettingsModal({
         <Stack gap="xs" data-testid="settings-games">
           <Title order={5}>Games</Title>
           {opened && <GamesSettingsPanel />}
+        </Stack>
+
+        <Stack gap="xs" data-testid="settings-coach">
+          <Title order={5}>Coach</Title>
+          {opened && <CoachSettingsPanel />}
         </Stack>
 
         <Stack gap="xs" data-testid="settings-ai" ref={aiRef}>

@@ -52,7 +52,10 @@ import type {
   RetryResult,
   SavedPuzzle,
   UiSettings,
-  CoachAi,
+  CoachAiQuote,
+  CoachAiRun,
+  CoachAiRunSummary,
+  CoachNote,
   CoachDefaults,
   CoachReport,
   CoachReportSummary,
@@ -164,6 +167,16 @@ export interface SettingValues {
   "reasons.rushed_s": number;
   // v0.10
   "review.show_best": boolean;
+  // v0.11 (FR-10.59)
+  "coach.lesson_sites": ("youtube" | "chesscom" | "custom")[];
+  "coach.lesson_custom_url": string;
+}
+
+/** One AI coaching run's options (FR-10.56, 10.60): chosen each time, off by default, never saved. */
+export interface CoachAiOptions {
+  advanced: boolean;
+  game_cap: number;
+  include_notes: boolean;
 }
 
 /** Why you missed it (§7.3, FR-5.6). */
@@ -347,10 +360,20 @@ export interface ApiClient {
   getCoachRunResult(jobId: string): Promise<number | null>;
   listCoachReports(): Promise<CoachReportSummary[]>;
   getCoachReport(reportId: number): Promise<CoachReport>;
-  getCoachAiQuote(reportId: number): Promise<GameAiQuote>;
-  /** Get AI coaching (FR-10.21–10.25), only after you confirm the estimate. */
-  startCoachAi(reportId: number): Promise<string>;
-  getCoachAi(reportId: number): Promise<CoachAi | null>;
+  // ---- v0.11: whole-game coaching (§10.11) ------------------------------------------------------
+  /** The estimate for this run's options; with Advanced, how it compares with a standard run (FR-10.56). */
+  getCoachAiQuote(reportId: number, options: CoachAiOptions): Promise<CoachAiQuote>;
+  /** Get AI coaching (FR-10.21–10.25, 10.54), only after you confirm the estimate. Options are never saved. */
+  startCoachAi(reportId: number, options: CoachAiOptions): Promise<string>;
+  /** The AI run a finished Get AI coaching job made (or showed again). */
+  getCoachAiJobRun(jobId: string): Promise<number | null>;
+  /** Every AI answer kept for this report, oldest first (v0.11 planning). */
+  listCoachAiRuns(reportId: number): Promise<CoachAiRunSummary[]>;
+  getCoachAiRun(reportId: number, runId: number): Promise<CoachAiRun | null>;
+  /** FR-10.60: exactly the notes Include my notes would send. */
+  getCoachNotesPreview(reportId: number): Promise<CoachNote[]>;
+  /** FR-10.59: open a lesson pointer in your browser. Only the topic and target go; the backend builds the URL. */
+  openLesson(reportId: number, topic: string, target: string): Promise<void>;
   getSuggestion(): Promise<SuggestionView | null>;
   applySuggestion(): Promise<SuggestionView>;
   dismissSuggestion(): Promise<SuggestionView | null>;

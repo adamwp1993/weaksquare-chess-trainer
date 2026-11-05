@@ -4,6 +4,7 @@ import {
   type AnalysisPurpose,
   type ApiClient,
   type BackendEvent,
+  type CoachAiOptions,
   type CoachParams,
   type EngineSettingsChange,
   type LlmPriceChange,
@@ -17,7 +18,10 @@ import {
   type TrainingMode,
 } from "./ApiClient";
 import type {
-  CoachAi,
+  CoachAiQuote,
+  CoachAiRun,
+  CoachAiRunSummary,
+  CoachNote,
   CoachDefaults,
   CoachReport,
   CoachReportSummary,
@@ -548,16 +552,32 @@ export class PywebviewClient implements ApiClient {
     return this.call<CoachReport>("get_coach_report", reportId);
   }
 
-  getCoachAiQuote(reportId: number) {
-    return this.call<GameAiQuote>("get_coach_ai_quote", reportId);
+  getCoachAiQuote(reportId: number, options: CoachAiOptions) {
+    return this.call<CoachAiQuote>("get_coach_ai_quote", reportId, options);
   }
 
-  startCoachAi(reportId: number) {
-    return this.call<string>("start_coach_ai", reportId);
+  startCoachAi(reportId: number, options: CoachAiOptions) {
+    return this.call<string>("start_coach_ai", reportId, options);
   }
 
-  getCoachAi(reportId: number) {
-    return this.call<CoachAi | null>("get_coach_ai", reportId);
+  getCoachAiJobRun(jobId: string) {
+    return this.call<number | null>("get_coach_ai_job_run", jobId);
+  }
+
+  listCoachAiRuns(reportId: number) {
+    return this.call<CoachAiRunSummary[]>("list_coach_ai_runs", reportId);
+  }
+
+  getCoachAiRun(reportId: number, runId: number) {
+    return this.call<CoachAiRun | null>("get_coach_ai_run", reportId, runId);
+  }
+
+  getCoachNotesPreview(reportId: number) {
+    return this.call<CoachNote[]>("get_coach_notes_preview", reportId);
+  }
+
+  openLesson(reportId: number, topic: string, target: string) {
+    return this.call<void>("open_lesson", reportId, topic, target);
   }
 
   getSuggestion() {
