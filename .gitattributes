@@ -1,0 +1,2 @@
+# The opening book is pinned by SHA-256 (FR-12.1): keep its bytes exact on every OS.
+src/weaksquare/opening_book/*.tsv -text

@@ -230,3 +230,13 @@ def test_the_bundled_files_are_not_git_ignored() -> None:
     for name in PIN:
         done = subprocess.run(["git", "check-ignore", "-q", str(folder / name)], cwd=folder, check=False)
         assert done.returncode == 1, f"{name} is ignored"
+
+
+def test_the_bundled_files_keep_their_bytes_on_checkout() -> None:
+    """Git on Windows would otherwise rewrite them with CRLF, and the SHA-256 pin would fail on a fresh clone."""
+    folder = Path(config.OPENING_BOOK_DIR)
+    for name in PIN:
+        out = subprocess.run(
+            ["git", "check-attr", "text", "--", name], cwd=folder, check=True, capture_output=True, text=True
+        ).stdout
+        assert out.strip().endswith("unset"), out
