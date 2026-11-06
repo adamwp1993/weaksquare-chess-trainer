@@ -55,6 +55,13 @@ import type {
   Job,
   JournalEntry,
   JournalTimeline,
+  BookFamily,
+  OpeningBookStatus,
+  OpeningLines,
+  OpeningScope,
+  OpeningSettings,
+  Repertoire,
+  RepertoireAdded,
   LadderPreview,
   LlmPrice,
   LlmSettings,
@@ -532,6 +539,63 @@ export class PywebviewClient implements ApiClient {
 
   listPuzzleSets() {
     return this.call<PuzzleSet[]>("list_puzzle_sets");
+  }
+
+  // ---- v0.13: the opening trainer (REQUIREMENTS §18) ----
+  getOpeningBookStatus() {
+    return this.call<OpeningBookStatus>("get_opening_book_status");
+  }
+
+  startOpeningBookImport() {
+    return this.call<string>("start_opening_book_import");
+  }
+
+  getOpeningFamilies(query: string) {
+    return this.call<BookFamily[]>("get_opening_families", query);
+  }
+
+  getOpeningSettings() {
+    return this.call<OpeningSettings>("get_opening_settings");
+  }
+
+  setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null) {
+    return this.call<OpeningSettings>("set_opening_settings", preset, subLines, maxMoves, extend);
+  }
+
+  getOpeningLines(family: string) {
+    return this.call<OpeningLines>("get_opening_lines", family);
+  }
+
+  startOpeningExtend(family: string) {
+    return this.call<string | null>("start_opening_extend", family);
+  }
+
+  analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black") {
+    return this.call<Analysis>("analyze_opening_position", fen, purpose, player);
+  }
+
+  getRepertoire(color: "white" | "black") {
+    return this.call<Repertoire>("get_repertoire", color);
+  }
+
+  addRepertoireLines(color: "white" | "black", family: string, lineIndices: number[]) {
+    return this.call<RepertoireAdded>("add_repertoire_lines", color, family, lineIndices);
+  }
+
+  previewRepertoireRemoval(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.call<string[]>("preview_repertoire_removal", color, positionKey, moveUci);
+  }
+
+  removeRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.call<Repertoire>("remove_repertoire_move", color, positionKey, moveUci);
+  }
+
+  setRepertoireMain(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.call<Repertoire>("set_repertoire_main", color, positionKey, moveUci);
+  }
+
+  moveRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string, direction: "up" | "down") {
+    return this.call<Repertoire>("move_repertoire_move", color, positionKey, moveUci, direction);
   }
 
   // ---- v0.10 ---------------------------------------------------------------------------------------

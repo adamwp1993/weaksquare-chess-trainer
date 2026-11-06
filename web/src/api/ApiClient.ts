@@ -35,6 +35,13 @@ import type {
   Job,
   JournalEntry,
   JournalTimeline,
+  BookFamily,
+  OpeningBookStatus,
+  OpeningLines,
+  OpeningScope,
+  OpeningSettings,
+  Repertoire,
+  RepertoireAdded,
   LadderPreview,
   LlmPrice,
   LlmSettings,
@@ -439,6 +446,24 @@ export interface ApiClient {
   openPlanLesson(taskId: number, target: string): Promise<void>;
   /** You looked at this move in Game Review (FR-10.64, 10.68). */
   markReviewPly(gameId: number, ply: number): Promise<boolean>;
+  // ---- v0.13: the opening trainer (REQUIREMENTS §18) ----
+  getOpeningBookStatus(): Promise<OpeningBookStatus>;
+  startOpeningBookImport(): Promise<string>;
+  getOpeningFamilies(query: string): Promise<BookFamily[]>;
+  getOpeningSettings(): Promise<OpeningSettings>;
+  setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null): Promise<OpeningSettings>;
+  /** FR-12.13: lines grow past the book only from stored results; this never runs the engine. */
+  getOpeningLines(family: string): Promise<OpeningLines>;
+  /** Continue the lines with Stockfish in the background; null when there's nothing to do. */
+  startOpeningExtend(family: string): Promise<string | null>;
+  analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black"): Promise<Analysis>;
+  getRepertoire(color: "white" | "black"): Promise<Repertoire>;
+  addRepertoireLines(color: "white" | "black", family: string, lineIndices: number[]): Promise<RepertoireAdded>;
+  previewRepertoireRemoval(color: "white" | "black", positionKey: string, moveUci: string): Promise<string[]>;
+  removeRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string): Promise<Repertoire>;
+  setRepertoireMain(color: "white" | "black", positionKey: string, moveUci: string): Promise<Repertoire>;
+  moveRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string, direction: "up" | "down"): Promise<Repertoire>;
+
   getJournal(filters: JournalFilters): Promise<JournalTimeline>;
   addJournalEntry(entry: JournalEntryInput): Promise<JournalEntry>;
   editJournalEntry(entryId: number, text: string, weaknessKey: string | null): Promise<JournalEntry>;

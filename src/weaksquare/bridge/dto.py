@@ -929,6 +929,91 @@ class GameStats:
     sources: list[SourceAccuracy]
 
 
+# ---- v0.13: the opening trainer (REQUIREMENTS §18) --------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OpeningBookStatus:
+    ready: bool
+    lines: int
+
+
+@dataclass(frozen=True)
+class BookFamily:
+    name: str
+    eco: str
+    lines: int
+
+
+@dataclass(frozen=True)
+class OpeningLineMove:
+    uci: str
+    san: str
+    source: str  # book / explorer / engine (FR-12.13)
+
+
+@dataclass(frozen=True)
+class OpeningLine:
+    name: str
+    eco: str
+    moves: list[OpeningLineMove]
+
+
+@dataclass(frozen=True)
+class OpeningScope:
+    preset: Literal["light", "standard", "deep", "custom"]
+    sub_lines: int
+    max_moves: int
+
+
+@dataclass(frozen=True)
+class OpeningLines:
+    family: str
+    lines: list[OpeningLine]
+    extend: bool
+    pending: int  # lines that could still grow if Stockfish continued them
+    engine_ready: bool
+    scope: OpeningScope
+
+
+@dataclass(frozen=True)
+class OpeningSettings:
+    scope: OpeningScope
+    extend: bool
+
+
+@dataclass(frozen=True)
+class RepertoireRow:
+    depth: int
+    position_key: str
+    move_uci: str
+    san: str
+    source: str
+    is_main: bool
+    yours: bool  # your move, not the opponent's
+    transposes: bool  # reaches a position already listed through another move order
+
+
+@dataclass(frozen=True)
+class RepertoireOpeningRow:
+    id: int
+    name: str
+    eco: str
+
+
+@dataclass(frozen=True)
+class Repertoire:
+    color: Literal["white", "black"]
+    rows: list[RepertoireRow]
+    openings: list[RepertoireOpeningRow]
+
+
+@dataclass(frozen=True)
+class RepertoireAdded:
+    added: int
+    kept: int
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -1618,4 +1703,15 @@ EXPORTED += [
     JournalGame,
     JournalTimeline,
     SuggestionView,
+    OpeningBookStatus,
+    BookFamily,
+    OpeningLineMove,
+    OpeningLine,
+    OpeningScope,
+    OpeningLines,
+    OpeningSettings,
+    RepertoireRow,
+    RepertoireOpeningRow,
+    Repertoire,
+    RepertoireAdded,
 ]

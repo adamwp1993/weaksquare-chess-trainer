@@ -33,6 +33,7 @@ from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
 from weaksquare.adapters.db.repos.journal import DailyLogRepo, JournalRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
+from weaksquare.adapters.db.repos.openings import OpeningBookRepo, OpeningEngineCacheRepo, RepertoireRepo
 from weaksquare.adapters.db.repos.plans import PlansRepo, ReviewPassesRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
@@ -97,11 +98,13 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.puzzle_import import PuzzleImportService
 from weaksquare.services.reasons import ReasonsService
+from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
@@ -228,6 +231,8 @@ class Services:
     coach: CoachService
     plan: PlanService
     journal: JournalService
+    openings: OpeningsService
+    repertoire: RepertoireService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -404,9 +409,16 @@ def build_services(
     )  # fmt: skip
     journal = JournalService(JournalRepo(db), DailyLogRepo(db), games_repo, StatsRepo(db), clock)
     coach.attach_plan(plan, journal)
+    openings = OpeningsService(
+        OpeningBookRepo(db), OpeningEngineCacheRepo(db), SettingsRepo(db), engine, runner, clock,
+        config.OPENING_BOOK_DIR,
+    )  # fmt: skip
+    repertoire = RepertoireService(RepertoireRepo(db), openings, clock)
     return Services(
         plan=plan,
         journal=journal,
+        openings=openings,
+        repertoire=repertoire,
         db=db,
         http=http,
         puzzle_db=puzzle_db,
@@ -524,6 +536,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         coach=services.coach,
         plan=services.plan,
         journal=services.journal,
+        openings=services.openings,
+        repertoire=services.repertoire,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

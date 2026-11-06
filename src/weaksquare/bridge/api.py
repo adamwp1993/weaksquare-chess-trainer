@@ -54,11 +54,13 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.puzzle_import import PuzzleImportService
 from weaksquare.services.reasons import ReasonsService
+from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
@@ -115,7 +117,11 @@ class Api:
         coach: CoachService,
         plan: PlanService,
         journal: JournalService,
+        openings: OpeningsService,
+        repertoire: RepertoireService,
     ) -> None:
+        self._openings = openings
+        self._repertoire = repertoire
         self._plan = plan
         self._journal = journal
         self._game_puzzles = game_puzzles
@@ -1132,6 +1138,104 @@ class Api:
         return dto.PlanTaskAction(
             a.kind, a.task_id, session, a.remaining, a.mode, a.game_id, lesson, a.prompt, a.weakness_key, a.plan_day_id
         )
+
+    # ---- v0.13: the opening trainer (REQUIREMENTS §18) ---------------------------------------------------
+    @bridge_call
+    def get_opening_book_status(self) -> dto.OpeningBookStatus:
+        s = self._openings.status()
+        return dto.OpeningBookStatus(s.ready, s.lines)
+
+    @bridge_call
+    def start_opening_book_import(self) -> str:
+        return self._openings.start_import()
+
+    @bridge_call
+    def get_opening_families(self, query: str = "") -> list[dto.BookFamily]:
+        return [dto.BookFamily(f.name, f.eco, f.lines) for f in self._openings.families(query)]
+
+    def _opening_scope_dto(self, s: Any) -> dto.OpeningScope:
+        return dto.OpeningScope(s.preset, s.sub_lines, s.max_moves)
+
+    @bridge_call
+    def get_opening_settings(self) -> dto.OpeningSettings:
+        return dto.OpeningSettings(self._opening_scope_dto(self._openings.scope()), self._openings.extend_setting())
+
+    @bridge_call
+    def set_opening_settings(
+        self, preset: str, sub_lines: int | None = None, max_moves: int | None = None, extend: bool | None = None
+    ) -> dto.OpeningSettings:
+        self._openings.set_scope(preset, sub_lines, max_moves)
+        if extend is not None:
+            self._openings.set_extend(extend)
+        return dto.OpeningSettings(self._opening_scope_dto(self._openings.scope()), self._openings.extend_setting())
+
+    @bridge_call
+    def get_opening_lines(self, family: str) -> dto.OpeningLines:
+        """FR-12.2, 12.13. Never runs the engine: lines grow past the book from stored results only."""
+        v = self._openings.lines(family)
+        lines = [
+            dto.OpeningLine(ln.name, ln.eco, [dto.OpeningLineMove(m.uci, m.san, m.source) for m in ln.moves])
+            for ln in v.lines
+        ]
+        return dto.OpeningLines(
+            family, lines, v.extend, v.pending, v.engine_ready, self._opening_scope_dto(self._openings.scope())
+        )
+
+    @bridge_call
+    def start_opening_extend(self, family: str) -> str | None:
+        """Continue the lines past the book with Stockfish (FR-12.13). None when there's nothing to do."""
+        return self._openings.start_extend(family)
+
+    @bridge_call
+    def analyze_opening_position(
+        self, fen: str, purpose: Literal["start", "panel", "board"], player: Literal["white", "black"]
+    ) -> dto.Analysis:
+        return analysis_dto(self._openings.analyze(fen, purpose, player))
+
+    def _repertoire_dto(self, color: str) -> dto.Repertoire:
+        v = self._repertoire.view(color)
+        rows = [
+            dto.RepertoireRow(r.depth, r.edge.position_key, r.edge.move_uci, r.edge.san, r.edge.source, r.edge.is_main, r.yours, r.transposes)
+            for r in v.rows
+        ]  # fmt: skip
+        return dto.Repertoire(v.color, rows, [dto.RepertoireOpeningRow(o.id, o.name, o.eco) for o in v.openings])  # type: ignore[arg-type]
+
+    @bridge_call
+    def get_repertoire(self, color: Literal["white", "black"]) -> dto.Repertoire:
+        return self._repertoire_dto(color)
+
+    @bridge_call
+    def add_repertoire_lines(
+        self, color: Literal["white", "black"], family: str, line_indices: list[int]
+    ) -> dto.RepertoireAdded:
+        r = self._repertoire.add_lines(color, family, line_indices)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    @bridge_call
+    def preview_repertoire_removal(
+        self, color: Literal["white", "black"], position_key: str, move_uci: str
+    ) -> list[str]:
+        """FR-12.4: the moves removing this one would delete, as SAN."""
+        return [e.san for e in self._repertoire.removal_preview(color, position_key, move_uci)]
+
+    @bridge_call
+    def remove_repertoire_move(
+        self, color: Literal["white", "black"], position_key: str, move_uci: str
+    ) -> dto.Repertoire:
+        self._repertoire.remove(color, position_key, move_uci)
+        return self._repertoire_dto(color)
+
+    @bridge_call
+    def set_repertoire_main(self, color: Literal["white", "black"], position_key: str, move_uci: str) -> dto.Repertoire:
+        self._repertoire.set_main(color, position_key, move_uci)
+        return self._repertoire_dto(color)
+
+    @bridge_call
+    def move_repertoire_move(
+        self, color: Literal["white", "black"], position_key: str, move_uci: str, direction: Literal["up", "down"]
+    ) -> dto.Repertoire:
+        self._repertoire.move(color, position_key, move_uci, direction)
+        return self._repertoire_dto(color)
 
     # ---- v0.12: the journal (FR-10.67-10.70) ------------------------------------------------------
     @bridge_call

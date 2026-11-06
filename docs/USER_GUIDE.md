@@ -994,6 +994,40 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 - Games analyzed before v0.12 aren't counted as analyzed on any day, because that wasn't recorded then. Games reviewed before v0.12 aren't counted either.
 - The notes you write when you say why you missed something ([mistake reasons](#mistake-reasons)) aren't part of the journal. **Include my notes** sends those.
 
+## The opening trainer
+*Added in v0.13.*
+
+Learn an opening line by line, and keep the lines you want in your own repertoire. **Openings** in the top bar opens it. The first time you open it, the app reads its opening book, which takes a few seconds and needs no internet.
+
+The moves always come from the opening book or from Stockfish, and each one is labelled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
+
+### Choosing an opening
+1. In the **Book** tab, search by name or ECO code, and pick an opening.
+2. Choose **As White** or **As Black**. The board turns to your side.
+3. Pick a line from the list. The first is the main line.
+
+The book doesn't say which lines matter most, so the app ranks them by how many book lines pass through each move. *Main line* means the line that follows the top-ranked move at each step.
+
+| Option | What it does |
+|---|---|
+| **Lines: Light / Standard / Deep / Custom** | How many lines to show. Light is the main line and 1 sub-line, up to 8 moves. Standard is the main line and 3, up to 12. Deep is the main line and 6, up to 16. Custom is your own numbers: 0 to 10 sub-lines and 4 to 20 moves. |
+| **After the book: Extend past the book / Stop at the book's end** | The book's lines are short, most around 5 moves. **Extend** lets Stockfish continue them up to your moves per line. **Stop** uses only book moves, so lines stay short, and moves per line is just an upper limit. |
+
+With **Extend**, **Continue with Stockfish** runs in the background, and you can keep using the app. What it works out is saved, so a line reads the same next time. Moves it added show a **Stockfish** label. Without Stockfish installed, lines stop at the book's end.
+
+### Learning a line
+- **Step through:** move forward and back with the buttons, or click a move in the list. The Stockfish panel shows the eval and top lines of the position on the board. If you've already looked at a position, its result is saved and appears straight away.
+- **Play along:** the app plays the other side and you make your side's moves. The moves still to come are hidden. If you play something else, the piece goes back and you get a nudge to try again. **Start again** returns to the first move. Nothing is scored.
+
+### Your repertoire
+**Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.
+
+In the **My repertoire** tab:
+- **Bold** moves are yours; the others are the opponent's replies.
+- **Make main** marks the move to prefer at that position. The arrows change the order.
+- **Remove** first lists what it would delete. A position another line still reaches stays.
+- **transposes** marks a move that reaches a position already listed through another move order. It's the same position, so it's stored once.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 

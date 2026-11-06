@@ -13,6 +13,12 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **The opening trainer**: a new **Openings** page with the Lichess opening book. Search for an opening, choose your side and how many lines to show, and pick a line. [FR-12.1, FR-12.2, FR-12.7a]
+- **Learn a line** by stepping through it with Stockfish's evals, or switch to **Play along**: the app plays the other side and nudges you if you go wrong. Unscored. [FR-12.3, FR-12.6, FR-12.16]
+- **Extend past the book or stop at its end:** the book's lines are short, so you choose whether Stockfish continues them, in the background. Every move shows where it came from. [FR-12.13]
+- **Your repertoire:** add lines for White or Black, mark main moves and reorder them. Removing a move keeps any position another line still reaches. [FR-12.4]
+
 ### Fixed
 - **Board letters and numbers are readable on every board.** They were so small and faint that they looked missing, especially in My games, where some numbers blended into their squares.
 

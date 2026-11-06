@@ -146,6 +146,20 @@ ALLOWLIST = {
     "start_plan_lesson_drill",  # v0.12
     "open_plan_lesson",  # v0.12
     "mark_review_ply",  # v0.12: FR-10.64, 10.68
+    "get_opening_book_status",  # v0.13: the opening trainer (§18)
+    "start_opening_book_import",  # v0.13
+    "get_opening_families",  # v0.13
+    "get_opening_settings",  # v0.13
+    "set_opening_settings",  # v0.13
+    "get_opening_lines",  # v0.13
+    "start_opening_extend",  # v0.13: FR-12.13
+    "analyze_opening_position",  # v0.13
+    "get_repertoire",  # v0.13: FR-12.4
+    "add_repertoire_lines",  # v0.13
+    "preview_repertoire_removal",  # v0.13
+    "remove_repertoire_move",  # v0.13
+    "set_repertoire_main",  # v0.13
+    "move_repertoire_move",  # v0.13
     "get_journal",  # v0.12: the journal (FR-10.67-10.70)
     "add_journal_entry",  # v0.12
     "edit_journal_entry",  # v0.12

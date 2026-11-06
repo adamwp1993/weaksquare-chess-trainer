@@ -49,6 +49,7 @@ import { ImportPuzzlesDialog } from "./views/ImportPuzzlesDialog";
 import { ReviewView } from "./views/ReviewView";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
+import { OpeningsView } from "./views/OpeningsView";
 import { sounds as soundPlayer } from "./sound/player";
 import { SettingsModal } from "./views/SettingsModal";
 import { StartupView } from "./views/StartupView";
@@ -74,6 +75,7 @@ export function App() {
     | { kind: "trainer" }
     | { kind: "games" }
     | { kind: "coach" }
+    | { kind: "openings"; family?: string }
     | {
         kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" | "trainer";
         retry?: boolean; hideBest?: boolean;
@@ -402,6 +404,7 @@ export function App() {
             }}
           />
         )}
+        {page.kind === "openings" && <OpeningsView initialFamily={page.family ?? null} coordinates={coordinates} />}
         {page.kind === "coach" && (
           <CoachView
             sendIds={sendIds}
@@ -639,6 +642,14 @@ export function App() {
                   data-testid="nav-coach"
                 >
                   Coach
+                </Button>
+                <Button
+                  size="xs"
+                  variant={page.kind === "openings" ? "light" : "subtle"}
+                  onClick={() => setPage({ kind: "openings" })}
+                  data-testid="nav-openings"
+                >
+                  Openings
                 </Button>
                 <Button
                   size="xs"

@@ -1253,3 +1253,74 @@ export interface SuggestionView {
   previous: Record<string, unknown> | null;
   active: boolean;
 }
+
+export interface OpeningBookStatus {
+  ready: boolean;
+  lines: number;
+}
+
+export interface BookFamily {
+  name: string;
+  eco: string;
+  lines: number;
+}
+
+export interface OpeningLineMove {
+  uci: string;
+  san: string;
+  source: string;
+}
+
+export interface OpeningLine {
+  name: string;
+  eco: string;
+  moves: OpeningLineMove[];
+}
+
+export interface OpeningScope {
+  preset: "light" | "standard" | "deep" | "custom";
+  sub_lines: number;
+  max_moves: number;
+}
+
+export interface OpeningLines {
+  family: string;
+  lines: OpeningLine[];
+  extend: boolean;
+  pending: number;
+  engine_ready: boolean;
+  scope: OpeningScope;
+}
+
+export interface OpeningSettings {
+  scope: OpeningScope;
+  extend: boolean;
+}
+
+export interface RepertoireRow {
+  depth: number;
+  position_key: string;
+  move_uci: string;
+  san: string;
+  source: string;
+  is_main: boolean;
+  yours: boolean;
+  transposes: boolean;
+}
+
+export interface RepertoireOpeningRow {
+  id: number;
+  name: string;
+  eco: string;
+}
+
+export interface Repertoire {
+  color: "white" | "black";
+  rows: RepertoireRow[];
+  openings: RepertoireOpeningRow[];
+}
+
+export interface RepertoireAdded {
+  added: number;
+  kept: number;
+}

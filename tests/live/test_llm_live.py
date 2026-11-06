@@ -90,7 +90,7 @@ def run(tmp_path_factory, fixture_puzzles_db):  # type: ignore[no-untyped-def]
               reasons=s.reasons, llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain,
               games=s.games, analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import,
               game_explain=s.game_explain, game_puzzles=s.game_puzzles, coach=s.coach, plan=s.plan,
-              journal=s.journal)  # fmt: skip
+              journal=s.journal, openings=s.openings, repertoire=s.repertoire)  # fmt: skip
     plant_managed_install(paths)
     model = LIVE_TEST_MODEL[provider]
     assert api.set_llm_settings(provider, model, "low", RUN_CAP, 0.05)["ok"]

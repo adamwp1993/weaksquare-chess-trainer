@@ -20,11 +20,44 @@ from dataclasses import dataclass, field
 
 import chess
 
+from weaksquare.core.errors import ValidationError
+
 STARTING_KEY = chess.Board().epd(en_passant="legal")
 
 SOURCE_BOOK, SOURCE_ENGINE, SOURCE_EXPLORER, SOURCE_YOU = "book", "engine", "explorer", "you"
 MOVE_NUMBER = re.compile(r"^\d+\.+$")
 MAX_LINE_PLIES = 40  # 20 moves, the highest Custom scope (FR-12.7a)
+
+
+# FR-12.7a: sub-lines besides the main line, and moves per line (an upper limit, FR-12.13).
+PRESETS: dict[str, tuple[int, int]] = {"light": (1, 8), "standard": (3, 12), "deep": (6, 16)}
+CUSTOM_SUB_LINES = (0, 10)
+CUSTOM_MOVES = (4, 20)
+
+
+@dataclass(frozen=True)
+class OpeningScope:
+    preset: str
+    sub_lines: int
+    max_moves: int
+
+
+def validate_scope(preset: object, sub_lines: object = None, max_moves: object = None) -> OpeningScope:
+    """A preset gives its numbers; Custom's are clamped to their limits (FR-12.7a)."""
+    if preset in PRESETS:
+        subs, moves = PRESETS[str(preset)]
+        return OpeningScope(str(preset), subs, moves)
+    if preset != "custom":
+        raise ValidationError("Choose Light, Standard, Deep or Custom.")
+    for value in (sub_lines, max_moves):
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValidationError("Custom needs whole numbers for sub-lines and moves per line.")
+    assert isinstance(sub_lines, int) and isinstance(max_moves, int)
+    return OpeningScope(
+        "custom",
+        min(CUSTOM_SUB_LINES[1], max(CUSTOM_SUB_LINES[0], sub_lines)),
+        min(CUSTOM_MOVES[1], max(CUSTOM_MOVES[0], max_moves)),
+    )
 
 
 class OpeningDataError(ValueError):

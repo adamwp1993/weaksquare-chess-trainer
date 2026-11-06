@@ -49,6 +49,7 @@ def test_v5_database_gains_empty_llm_tables_and_keeps_its_data(tmp_path: Path, c
         "output_tokens",
         "cost_usd",
         "status",
+        "duration_ms",  # v0.13, FR-12.7b
     ]
     assert cols["llm_cache"] == [
         "key",
