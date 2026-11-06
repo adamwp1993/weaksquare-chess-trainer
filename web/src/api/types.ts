@@ -1269,6 +1269,7 @@ export interface OpeningLineMove {
   uci: string;
   san: string;
   source: string;
+  position_key: string;
 }
 
 export interface OpeningLine {
@@ -1308,6 +1309,63 @@ export interface OpeningPage {
   url: string;
   licence: string;
   licence_url: string;
+}
+
+export interface OpeningNoteSection {
+  heading: string;
+  text: string;
+}
+
+export interface OpeningNoteSource {
+  label: string;
+  url: string;
+}
+
+export interface OpeningNote {
+  position_key: string;
+  move_uci: string;
+  kind: "overview" | "move";
+  sections: OpeningNoteSection[];
+  annotations: ExplainAnnotation[];
+  provider: string;
+  model: string;
+  other_model: boolean;
+  sources: OpeningNoteSource[];
+  licence: string;
+  licence_url: string;
+}
+
+export interface OpeningNoteQuote {
+  state: string;
+  message: string | null;
+  typical_usd: number | null;
+  worst_usd: number | null;
+  provider: string;
+  model: string;
+}
+
+export interface OpeningPrefetchPlan {
+  lines: number;
+  positions: number;
+  requests: number;
+  stored: number;
+  llm: boolean;
+  state: string;
+  message: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  typical_usd: number;
+  worst_usd: number;
+  run_cap_usd: number;
+  budget_share: number;
+  this_run_requests: number;
+  runs: number;
+  llm_seconds: number;
+  engine_seconds: number;
+  warnings: string[];
+  blurb: string;
+  scope: OpeningScope;
+  extend: boolean;
 }
 
 export interface RepertoireRow {

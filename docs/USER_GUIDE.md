@@ -70,7 +70,8 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
   - **The opening trainer** (v0.13). The book ships with the app, and your repertoire stays in `user.db`:
     - **Popular moves**, only while you're signed in: when you ask for lines to be continued, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
-    - **Wikibooks**: opening **Read about this position** requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
+    - **AI notes** go to your AI provider, as described under AI explanations below. They hold only opening data: the opening's name and ECO code, the line's moves in SAN, positions (FEN), Stockfish's evals and lines, and Wikibooks text. Nothing about you or your games.
+    - **Wikibooks**: opening **Read about this position**, or asking for an AI note, requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -1028,6 +1029,25 @@ With **Extend**, **Continue with Stockfish** runs in the background, and you can
 **Read about this position** opens the page for your line's moves so far from *Chess Opening Theory* on English Wikibooks. It's fetched only when you open it, then saved on your PC, so it works offline next time. The credit and links under the text go to the page and its licence, CC BY-SA 4.0. Volunteers write these pages, so they vary: main openings have good explanations, and deeper lines may have a sentence or nothing. If Stockfish and the page disagree, trust Stockfish.
 
 A page is found by its exact moves, so a position you reached through another move order may have none, even if it has a page under the usual order.
+
+### AI notes
+With an AI provider set up (see [AI explanations and what they cost](#ai-explanations-and-what-they-cost)) and Stockfish installed:
+- **Get an overview** covers the opening's key ideas, plans for both sides, pawn structures, common traps and what to aim for.
+- **Explain this move** says why the next move is played, what it prepares and what happens if it isn't.
+- Each button shows about what it costs. A saved note is free from then on, works offline, and is reused wherever the same position and move come up, including through another move order.
+- **Regenerate** replaces a note, after showing the cost. A note saved under a model you've since changed from still shows, labelled, for free.
+
+The AI only explains moves that already exist. Nothing it writes can add a move to a line or to your repertoire. It's given the moves, Stockfish's figures and, when available, Wikibooks text, and it's told to go with Stockfish where they disagree.
+
+When a note used a Wikibooks page, it says so under the note, with links to the page and to its CC BY-SA 4.0 licence.
+
+**Save notes for this opening…** gets everything in one go. Choose how much, and before anything is sent you see the number of lines, positions and requests, how many are already saved, the tokens and cost, its share of your remaining budget, and the time. A yellow warning appears above 25% of your remaining budget or 10 minutes. If it's over your per-run cap, it goes in several runs, each under the cap: open the dialog again for the next one. The cap itself never changes.
+
+**Confirm** starts it in the background, and you can keep using the app. Cancel at any time: what's finished stays saved. Without an AI provider, the dialog offers Stockfish's evals only. Estimates assume full Wikibooks pages, since none are fetched until you Confirm, so the cost usually comes in lower.
+
+**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes.
+
+Openings has its own model in **Settings → AI**.
 
 ### Your repertoire
 **Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.

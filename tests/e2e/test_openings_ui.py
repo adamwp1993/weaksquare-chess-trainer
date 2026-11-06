@@ -185,7 +185,7 @@ def test_wikibooks_can_be_turned_off(page: Any) -> None:
     pick(page, "Italian Game")
     page.get_by_test_id("wikibooks-toggle").click()
     page.get_by_test_id("wikibooks-text").wait_for()
-    page.get_by_test_id("opening-wikibooks").uncheck(force=True)
+    page.get_by_test_id("opening-wikibooks").click(force=True)
     page.get_by_test_id("learn-forward").click()
     page.get_by_test_id("wikibooks-off").wait_for()
 
@@ -213,3 +213,122 @@ def test_masters_hides_the_rating_bands(page: Any) -> None:
     page.get_by_test_id("opening-explorer-ratings").wait_for()
     page.get_by_test_id("opening-explorer-source").get_by_text("Masters").click()
     page.get_by_test_id("opening-explorer-ratings").wait_for(state="detached")
+
+
+# ---- notes and prefetch (FR-12.5-12.7, 12.7a, 12.7b) ----------------------------------------------------
+
+
+AI = "?openings=ready&engine=ready&ai=on"
+
+
+def test_an_overview_and_a_move_note_are_saved_and_credited(page: Any) -> None:
+    openings(page, AI)
+    pick(page, "Italian Game")
+    page.get_by_test_id("overview-note-button").click()
+    page.get_by_test_id("overview-note").get_by_test_id("opening-note").wait_for()
+    page.get_by_test_id("overview-note").get_by_test_id("opening-note-credit").wait_for()
+    assert "CC BY-SA 4.0" in page.get_by_test_id("overview-note").inner_text()
+    page.get_by_test_id("move-note-button").click()
+    page.get_by_test_id("move-note").get_by_test_id("opening-note").wait_for()
+    assert page.get_by_test_id("move-note-button").count() == 0
+
+
+def test_explain_says_why_without_an_ai_and_the_board_still_works(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("move-note-why").filter(has_text="Settings").wait_for()
+    assert page.get_by_test_id("move-note-button").is_disabled()
+    page.get_by_test_id("learn-forward").click()
+    page.get_by_test_id("engine-panel").wait_for()
+
+
+def test_regenerate_shows_the_cost_before_replacing(page: Any) -> None:
+    openings(page, AI)
+    pick(page, "Italian Game")
+    page.get_by_test_id("overview-note-button").click()
+    page.get_by_test_id("overview-note-regenerate").click()
+    confirm = page.get_by_test_id("overview-note-regen-confirm")
+    confirm.filter(has_text="$").wait_for()
+    before = [c for c in calls(page) if c.startswith("openingNote")]
+    assert before == ["openingNote:null:false"]
+    page.get_by_test_id("overview-note-regen-yes").click()
+    page.wait_for_function("() => window.__mockApi.calls.includes('openingNote:null:true')")
+
+
+def test_a_move_note_is_hidden_in_play_along(page: Any) -> None:
+    openings(page, AI)
+    pick(page, "Italian Game")
+    page.get_by_test_id("move-note-panel").wait_for()
+    page.get_by_test_id("learn-mode").get_by_text("Play along").click()
+    page.get_by_test_id("move-note-panel").wait_for(state="detached")
+
+
+def open_prefetch(page: Any, query: str = AI) -> None:
+    openings(page, query)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-prefetch").click()
+    page.get_by_test_id("prefetch-plan").wait_for()
+
+
+def test_the_prefetch_dialog_updates_with_the_scope(page: Any) -> None:
+    open_prefetch(page)
+    counts = page.get_by_test_id("prefetch-counts")
+    assert counts.inner_text().startswith("4 lines")
+    page.get_by_test_id("prefetch-preset").get_by_text("Light").click()
+    counts.filter(has_text="2 lines").wait_for()
+    assert "$" in page.get_by_test_id("prefetch-usage").inner_text()
+    assert "Stockfish" in page.get_by_test_id("prefetch-time").inner_text()
+    page.get_by_test_id("prefetch-preset").get_by_text("Custom").click()
+    page.get_by_test_id("prefetch-sub-lines").wait_for()
+
+
+def test_nothing_is_sent_before_confirm_and_a_second_run_is_free(page: Any) -> None:
+    open_prefetch(page)
+    assert not [c for c in calls(page) if c.startswith("openingPrefetch")]
+    page.get_by_test_id("prefetch-confirm").click()
+    page.get_by_test_id("prefetch-done").filter(has_text="Saved").wait_for()
+    page.get_by_test_id("prefetch-counts").filter(has_text="0 requests").wait_for()
+    assert page.get_by_test_id("prefetch-confirm").is_disabled()
+
+
+def test_cancel_says_what_stays(page: Any) -> None:
+    open_prefetch(page, AI + "&prefetch=slow")
+    page.get_by_test_id("prefetch-confirm").click()
+    page.get_by_test_id("prefetch-cancel").click()
+    page.get_by_test_id("prefetch-cancelled").wait_for()
+
+
+def test_warnings_split_and_blocked_show_plainly(page: Any) -> None:
+    open_prefetch(page, AI + "&prefetch=warn")
+    page.get_by_test_id("prefetch-warning").filter(has_text="40%").wait_for()
+    open_prefetch(page, AI + "&prefetch=split")
+    page.get_by_test_id("prefetch-split").filter(has_text="doesn't change").wait_for()
+    open_prefetch(page, AI + "&prefetch=over_budget")
+    page.get_by_test_id("prefetch-blocked").wait_for()
+    assert page.get_by_test_id("prefetch-confirm").is_disabled()
+
+
+def test_without_an_ai_the_dialog_shows_engine_time_only(page: Any) -> None:
+    open_prefetch(page, "?openings=ready&engine=ready")
+    assert page.get_by_test_id("prefetch-usage").count() == 0
+    assert "of AI" not in page.get_by_test_id("prefetch-time").inner_text()
+
+
+def test_export_and_delete(page: Any) -> None:
+    openings(page, AI)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-export").click()
+    page.get_by_test_id("opening-notes-message").filter(has_text="no notes").wait_for()
+    page.get_by_test_id("overview-note-button").click()
+    page.get_by_test_id("overview-note").get_by_test_id("opening-note").wait_for()
+    page.get_by_test_id("opening-export").click()
+    page.get_by_test_id("opening-notes-message").filter(has_text="notes.md").wait_for()
+    page.get_by_test_id("opening-delete-notes").click()
+    page.get_by_test_id("overview-note-button").wait_for()
+
+
+def test_the_dialogs_options_have_tooltips(page: Any) -> None:
+    open_prefetch(page)
+    page.get_by_test_id("prefetch-preset").get_by_text("Custom").click()
+    page.get_by_test_id("prefetch-sub-lines").wait_for()
+    _assert_all_have_tips(page, "Prefetch dialog")

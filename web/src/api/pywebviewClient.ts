@@ -58,6 +58,9 @@ import type {
   BookFamily,
   OpeningBookStatus,
   OpeningLines,
+  OpeningNote,
+  OpeningNoteQuote,
+  OpeningPrefetchPlan,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -573,6 +576,38 @@ export class PywebviewClient implements ApiClient {
 
   getOpeningLines(family: string) {
     return this.call<OpeningLines>("get_opening_lines", family);
+  }
+
+  getOpeningNote(positionKey: string, moveUci: string, kind: "overview" | "move") {
+    return this.call<OpeningNote | null>("get_opening_note", positionKey, moveUci, kind);
+  }
+
+  getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    return this.call<OpeningNoteQuote>("get_opening_note_quote", family, lineIndex, ply, regenerate);
+  }
+
+  startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    return this.call<string | null>("start_opening_note", family, lineIndex, ply, regenerate);
+  }
+
+  getOpeningOverviewKey(family: string) {
+    return this.call<string>("get_opening_overview_key", family);
+  }
+
+  getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    return this.call<OpeningPrefetchPlan>("get_opening_prefetch_plan", family, preset, subLines, maxMoves, extend);
+  }
+
+  startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    return this.call<string>("start_opening_prefetch", family, preset, subLines, maxMoves, extend);
+  }
+
+  exportOpeningNotes(family: string) {
+    return this.call<string | null>("export_opening_notes", family);
+  }
+
+  deleteOpeningNotes(family: string) {
+    return this.call<number>("delete_opening_notes", family);
   }
 
   startOpeningExtend(family: string) {

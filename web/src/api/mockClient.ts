@@ -1183,6 +1183,64 @@ export class MockClient implements ApiClient {
     return this.openings.lines(family, this.engine.state === "ready");
   }
 
+  async getOpeningNote(positionKey: string, moveUci: string, kind: "overview" | "move") {
+    return this.openings.note(positionKey, moveUci, kind);
+  }
+
+  async getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    return this.openings.noteQuote(family, lineIndex, ply, regenerate, this.openingAi());
+  }
+
+  async startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    const quote = this.openings.noteQuote(family, lineIndex, ply, regenerate, this.openingAi());
+    if (quote.state === "cached") return null;
+    if (quote.state !== "ok") throw new ApiCallError({ code: quote.state, message: quote.message ?? "", retryable: false });
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingNote:${ply}:${regenerate}`);
+    const kind = "opening_note";
+    this.emit({ id, kind, state: "running", progress: null, message: "Asking the AI…", error_code: null });
+    setTimeout(() => {
+      this.openings.saveNote(family, lineIndex, ply);
+      this.emit({ id, kind, state: "done", progress: 1, message: "Saved.", error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async getOpeningOverviewKey(family: string) {
+    return this.openings.overviewKey(family);
+  }
+
+  private openingAi(): boolean {
+    return this.llm.settings().features.some((f) => f.feature === "explain" && f.model !== "");
+  }
+
+  async getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    return this.openings.prefetchPlan(family, preset, subLines, maxMoves, extend, this.openingAi());
+  }
+
+  async startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingPrefetch:${preset}:${extend}`);
+    const kind = "opening_prefetch";
+    this.emit({ id, kind, state: "running", progress: 0.2, message: "Asking the AI (1 of 5)…", error_code: null });
+    setTimeout(() => {
+      if (this.jobs.get(id)?.state !== "running") return;
+      const saved = this.openings.savePrefetch(family, preset, subLines, maxMoves, extend);
+      this.emit({ id, kind, state: "done", progress: 1, message: `Saved ${saved} notes for $0.0312.`, error_code: null });
+    }, new URLSearchParams(window.location.search).get("prefetch") === "slow" ? 5000 : 300);
+    return id;
+  }
+
+  async exportOpeningNotes(family: string) {
+    this.calls.push(`openingExport:${family}`);
+    return this.openings.hasNotes() ? `C:\\mock\\exports\\${family.replace(/ /g, "-")}-notes.md` : null;
+  }
+
+  async deleteOpeningNotes(family: string) {
+    this.calls.push(`openingDelete:${family}`);
+    return this.openings.deleteNotes();
+  }
+
   async startOpeningExtend(family: string) {
     if (this.engine.state !== "ready") {
       throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to continue lines past the book.", retryable: false });

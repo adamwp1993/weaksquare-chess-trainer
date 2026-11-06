@@ -376,3 +376,40 @@ class OpeningsService:
                 key, self._think_ms(), MULTIPV, self._engine.engine_id(), lines, self._clock.now().isoformat()
             )
         return self._engine.analysis_of(board, lines, player)
+
+    # ---- for notes (FR-12.5–12.7) ----------------------------------------------------------------------------
+
+    def engine_status_state(self) -> str:
+        return str(self._engine.status().state)
+
+    def engine_lines(self, key: str, compute: bool) -> list[EngineLine] | None:
+        """Stored lines for a position, or with `compute` worked out on the background engine (FR-12.3)."""
+        if not self._engine_ready():
+            return None
+        stored = self._stored(key)
+        if stored is not None or not compute:
+            return stored
+        lines = self._engine.analyse_background(board_of(key), float(self._engine.settings().think_s), MULTIPV)
+        self._cache.put(key, self._think_ms(), MULTIPV, self._engine.engine_id(), lines, self._clock.now().isoformat())
+        return lines
+
+    def engine_seconds(self, lines: Iterable[Line], max_moves: int, extend: bool) -> float:
+        """FR-12.7b: positions still to analyse × the think time. With Extend, lines may grow to the limit first."""
+        if not self._engine_ready():
+            return 0.0
+        missing: set[str] = set()
+        grow = 0
+        for line in lines:
+            missing.update(m.key_before for m in line.moves if self._stored(m.key_before) is None)
+            if extend:
+                grow += max(0, max_moves * 2 - len(line.moves))
+        return (len(missing) + grow) * float(self._engine.settings().think_s)
+
+    def family_keys(self, family: object) -> list[str]:
+        """Every position of an opening's book lines, for its notes (FR-12.7)."""
+        root = self.root(family)
+        keys: set[str] = {root.final_key}
+        for ln in self._data()[0]:
+            if ln.family == root.family:
+                keys.update(ln.keys)
+        return sorted(keys)

@@ -232,3 +232,80 @@ class WikibooksPagesRepo:
                 "INSERT OR REPLACE INTO wikibooks_pages (title, revision_id, body, status, fetched_at) VALUES (?,?,?,?,?)",
                 (page.title, page.revision_id, page.text, page.status, fetched_at),
             )
+
+
+_NOTE_COLS = (
+    "position_key, move_uci, kind, provider, model, prompt_version, body_json, sources_json, input_tokens,"
+    " output_tokens, cost_usd, created_at"
+)
+
+
+class OpeningNotesRepo:
+    """Overviews and explanations (FR-12.7). `replace` is also Regenerate: other models' copies of a note go too."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    @staticmethod
+    def _row(r: Any) -> Any:
+        from weaksquare.services.opening_notes import NoteRow
+
+        return NoteRow(
+            str(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), int(r[5]), str(r[6]), str(r[7]), int(r[8]), int(r[9]),
+            float(r[10]), str(r[11]),
+        )  # fmt: skip
+
+    def get(self, key: str, move: str, kind: str, provider: str, model: str, version: int) -> Any | None:
+        with self._db.session() as conn:
+            row = conn.execute(
+                f"SELECT {_NOTE_COLS} FROM opening_notes WHERE position_key = ? AND move_uci = ? AND kind = ?"
+                " AND provider = ? AND model = ? AND prompt_version = ?",
+                (key, move, kind, provider, model, version),
+            ).fetchone()
+        return self._row(row) if row is not None else None
+
+    def latest(self, key: str, move: str, kind: str) -> Any | None:
+        with self._db.session() as conn:
+            row = conn.execute(
+                f"SELECT {_NOTE_COLS} FROM opening_notes WHERE position_key = ? AND move_uci = ? AND kind = ?"
+                " ORDER BY id DESC LIMIT 1",
+                (key, move, kind),
+            ).fetchone()
+        return self._row(row) if row is not None else None
+
+    def replace(self, row: Any) -> None:
+        with self._db.transaction() as conn:
+            conn.execute(
+                "DELETE FROM opening_notes WHERE position_key = ? AND move_uci = ? AND kind = ?",
+                (row.position_key, row.move_uci, row.kind),
+            )
+            conn.execute(
+                f"INSERT INTO opening_notes ({_NOTE_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    row.position_key, row.move_uci, row.kind, row.provider, row.model, row.prompt_version, row.body_json,
+                    row.sources_json, row.input_tokens, row.output_tokens, row.cost_usd, row.created_at,
+                ),
+            )  # fmt: skip
+
+    def for_positions(self, keys: Sequence[str]) -> list[Any]:
+        out: list[Any] = []
+        with self._db.session() as conn:
+            for i in range(0, len(keys), 500):
+                part = keys[i : i + 500]
+                marks = ",".join("?" * len(part))
+                out.extend(
+                    self._row(r)
+                    for r in conn.execute(
+                        f"SELECT {_NOTE_COLS} FROM opening_notes WHERE position_key IN ({marks}) ORDER BY id", part
+                    )
+                )
+        return out
+
+    def delete_positions(self, keys: Sequence[str]) -> int:
+        gone = 0
+        with self._db.transaction() as conn:
+            for i in range(0, len(keys), 500):
+                part = keys[i : i + 500]
+                marks = ",".join("?" * len(part))
+                gone += conn.execute(f"DELETE FROM opening_notes WHERE position_key IN ({marks})", part).rowcount
+        return gone

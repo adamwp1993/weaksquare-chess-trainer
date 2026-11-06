@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import NotFoundError, ValidationError
-from weaksquare.core.openings import Line, position_key
+from weaksquare.core.openings import Line
 from weaksquare.core.repertoire import (
     Edge,
     NewMove,
@@ -132,6 +132,3 @@ class RepertoireService:
         if 0 <= j < len(here):
             here[i], here[j] = here[j], here[i]
             self._repo.set_order(c, k, here)
-
-
-__all__ = ["AddResult", "RepertoireService", "RepertoireView", "position_key"]

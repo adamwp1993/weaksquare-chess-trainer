@@ -38,6 +38,9 @@ import type {
   BookFamily,
   OpeningBookStatus,
   OpeningLines,
+  OpeningNote,
+  OpeningNoteQuote,
+  OpeningPrefetchPlan,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -458,6 +461,16 @@ export interface ApiClient {
   setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null): Promise<OpeningSettings>;
   /** FR-12.13: lines grow past the book only from stored results; this never runs the engine. */
   getOpeningLines(family: string): Promise<OpeningLines>;
+  getOpeningNote(positionKey: string, moveUci: string, kind: "overview" | "move"): Promise<OpeningNote | null>;
+  /** `ply` null is the opening's overview. A saved note is free unless you're regenerating it. */
+  getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean): Promise<OpeningNoteQuote>;
+  startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean): Promise<string | null>;
+  getOpeningOverviewKey(family: string): Promise<string>;
+  getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): Promise<OpeningPrefetchPlan>;
+  /** Only after you Confirm the estimate (FR-8.11, 12.7b). */
+  startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): Promise<string>;
+  exportOpeningNotes(family: string): Promise<string | null>;
+  deleteOpeningNotes(family: string): Promise<number>;
   /** Continue the lines with Stockfish in the background; null when there's nothing to do. */
   startOpeningExtend(family: string): Promise<string | null>;
   analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black"): Promise<Analysis>;

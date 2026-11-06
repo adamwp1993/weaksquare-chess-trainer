@@ -37,6 +37,7 @@ from weaksquare.adapters.db.repos.openings import (
     ExplorerCacheRepo,
     OpeningBookRepo,
     OpeningEngineCacheRepo,
+    OpeningNotesRepo,
     RepertoireRepo,
     WikibooksPagesRepo,
 )
@@ -105,6 +106,7 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.opening_notes import OpeningNotesService
 from weaksquare.services.opening_sources import OpeningSources
 from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
@@ -241,6 +243,7 @@ class Services:
     journal: JournalService
     openings: OpeningsService
     opening_sources: OpeningSources
+    opening_notes: OpeningNotesService
     repertoire: RepertoireService
 
     def close(self) -> None:
@@ -427,11 +430,16 @@ def build_services(
         config.OPENING_BOOK_DIR, opening_sources,
     )  # fmt: skip
     repertoire = RepertoireService(RepertoireRepo(db), openings, clock)
+    opening_notes = OpeningNotesService(
+        OpeningNotesRepo(db), openings, opening_sources, llm_settings, llm_usage, runner, clock,
+        paths.data_dir / "exports",
+    )  # fmt: skip
     return Services(
         plan=plan,
         journal=journal,
         openings=openings,
         opening_sources=opening_sources,
+        opening_notes=opening_notes,
         repertoire=repertoire,
         db=db,
         http=http,
@@ -552,6 +560,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         journal=services.journal,
         openings=services.openings,
         opening_sources=services.opening_sources,
+        opening_notes=services.opening_notes,
         repertoire=services.repertoire,
     )
     if isinstance(clock, OffsetClock):

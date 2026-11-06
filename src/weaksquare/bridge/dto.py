@@ -950,6 +950,7 @@ class OpeningLineMove:
     uci: str
     san: str
     source: str  # book / explorer / engine (FR-12.13)
+    position_key: str  # the position before it
 
 
 @dataclass(frozen=True)
@@ -996,6 +997,71 @@ class OpeningPage:
     url: str
     licence: str
     licence_url: str
+
+
+@dataclass(frozen=True)
+class OpeningNoteSection:
+    heading: str
+    text: str
+
+
+@dataclass(frozen=True)
+class OpeningNoteSource:
+    label: str
+    url: str  # built by the app from the page title (FR-12.15)
+
+
+@dataclass(frozen=True)
+class OpeningNote:
+    position_key: str
+    move_uci: str  # empty for an overview
+    kind: Literal["overview", "move"]
+    sections: list[OpeningNoteSection]
+    annotations: list[ExplainAnnotation]
+    provider: str
+    model: str
+    other_model: bool  # saved under a model you've since changed from
+    sources: list[OpeningNoteSource]
+    licence: str
+    licence_url: str
+
+
+@dataclass(frozen=True)
+class OpeningNoteQuote:
+    # 'ok', 'cached' (free), or why not: 'not_configured', 'no_model', 'no_price', 'over_budget', 'over_cap'
+    state: str
+    message: str | None
+    typical_usd: float | None
+    worst_usd: float | None
+    provider: str
+    model: str
+
+
+@dataclass(frozen=True)
+class OpeningPrefetchPlan:
+    """FR-12.7b: what the prefetch dialog shows, for the scope it asked about."""
+
+    lines: int
+    positions: int
+    requests: int
+    stored: int  # notes already saved, and so free
+    llm: bool  # false: engine time only
+    state: str  # 'ok', 'split' (over the cap, runs can take it in parts), or why not
+    message: str | None
+    input_tokens: int
+    output_tokens: int
+    typical_usd: float
+    worst_usd: float
+    run_cap_usd: float
+    budget_share: float
+    this_run_requests: int
+    runs: int
+    llm_seconds: float
+    engine_seconds: float
+    warnings: list[str]
+    blurb: str
+    scope: OpeningScope
+    extend: bool
 
 
 @dataclass(frozen=True)
@@ -1727,6 +1793,11 @@ EXPORTED += [
     OpeningLines,
     OpeningSettings,
     OpeningPage,
+    OpeningNoteSection,
+    OpeningNoteSource,
+    OpeningNote,
+    OpeningNoteQuote,
+    OpeningPrefetchPlan,
     RepertoireRow,
     RepertoireOpeningRow,
     Repertoire,

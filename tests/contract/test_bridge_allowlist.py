@@ -152,6 +152,14 @@ ALLOWLIST = {
     "get_opening_settings",  # v0.13
     "set_opening_sources",  # v0.13: FR-12.2, 12.15
     "get_opening_page",  # v0.13: FR-12.15
+    "get_opening_note",  # v0.13: FR-12.5-12.7
+    "get_opening_note_quote",  # v0.13
+    "start_opening_note",  # v0.13
+    "get_opening_overview_key",  # v0.13
+    "get_opening_prefetch_plan",  # v0.13: FR-12.7b
+    "start_opening_prefetch",  # v0.13
+    "export_opening_notes",  # v0.13
+    "delete_opening_notes",  # v0.13
     "set_opening_settings",  # v0.13
     "get_opening_lines",  # v0.13
     "start_opening_extend",  # v0.13: FR-12.13

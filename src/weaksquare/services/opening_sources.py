@@ -8,7 +8,6 @@ after that only if a new one can't be had.
 
 from __future__ import annotations
 
-import json
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -189,6 +188,3 @@ class OpeningSources:
         if page.status == "ok" or hit is None or hit[0].status != "ok":
             self._wiki_store.put(page, self._clock.now().isoformat())
         return page
-
-
-__all__ = ["ExplorerSettings", "OpeningSources", "json"]

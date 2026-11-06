@@ -28,6 +28,7 @@ import type {
   BookFamily,
   OpeningLine,
   OpeningLines,
+  OpeningNote,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -37,6 +38,7 @@ import type {
 import { Board } from "../components/Board";
 import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { EnginePanel } from "../components/EnginePanel";
+import { NoteBlock, PrefetchDialog } from "../components/OpeningNotes";
 import { OptionInfo } from "../components/OptionInfo";
 import { checkMove, linePositions, moveLabel, sideToMove, sourceLabel, START_FEN } from "../state/openingLine";
 import { useJob } from "../state/useJob";
@@ -53,12 +55,20 @@ function message(e: unknown): string {
 // ---- Learn: step through or play along (FR-12.6, 12.16) ----------------------------------------------------------
 
 function LearnBoard({
+  family,
+  lineIndex,
+  overviewKey,
+  notesVersion,
   line,
   color,
   coordinates,
   engine,
   onEngineChanged,
 }: {
+  family: string;
+  lineIndex: number;
+  overviewKey: string | null;
+  notesVersion: number;
   line: OpeningLine;
   color: Color;
   coordinates: boolean;
@@ -70,6 +80,7 @@ function LearnBoard({
   const [mode, setMode] = useState<LearnMode>("step");
   const [nudge, setNudge] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
+  const [note, setNote] = useState<OpeningNote | null>(null);
   const last = line.moves.length;
   const pos = positions[Math.min(step, last)];
   const analyze = useCallback(
@@ -112,6 +123,7 @@ function LearnBoard({
           onMove={onMove}
           coordinates={coordinates}
           maxWidth={560}
+          shapes={mode === "step" && note ? note.annotations.map((a) => ({ orig: a.orig, dest: a.dest, color: a.color as "green" })) : undefined}
         />
       </div>
       <Stack gap="sm" style={{ flex: "1 1 300px", minWidth: 280 }}>
@@ -197,6 +209,30 @@ function LearnBoard({
             );
           })}
         </Group>
+        <Paper withBorder p="sm" radius="md" data-testid="opening-overview">
+          <Text fw={700} size="sm" mb={4}>
+            Overview
+          </Text>
+          <NoteBlock key={`o${notesVersion}`} family={family} lineIndex={lineIndex} ply={null} positionKey={overviewKey} moveUci="" label="Get an overview" testId="overview-note" />
+        </Paper>
+        {mode === "step" && step < last && (
+          <Paper withBorder p="sm" radius="md" data-testid="move-note-panel">
+            <Text fw={700} size="sm" mb={4}>
+              {moveLabel(step)} {line.moves[step].san}
+            </Text>
+            <NoteBlock
+              key={`m${notesVersion}:${step}`}
+              family={family}
+              lineIndex={lineIndex}
+              ply={step}
+              positionKey={line.moves[step].position_key}
+              moveUci={line.moves[step].uci}
+              label="Explain this move"
+              onNote={setNote}
+              testId="move-note"
+            />
+          </Paper>
+        )}
         <EnginePanel
           analyze={analyze}
           startLabel="Start of the game:"
@@ -443,6 +479,10 @@ function OpeningDetail({
   const [extendJob, setExtendJob] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
+  const [overviewKey, setOverviewKey] = useState<string | null>(null);
+  const [prefetching, setPrefetching] = useState(false);
+  const [notesVersion, setNotesVersion] = useState(0);
+  const [notesMessage, setNotesMessage] = useState<string | null>(null);
   const job = useJob(extendJob);
 
   const reload = useCallback(() => {
@@ -451,8 +491,9 @@ function OpeningDetail({
 
   useEffect(() => {
     api.getOpeningSettings().then(setSettings, (e: unknown) => setError(message(e)));
+    api.getOpeningOverviewKey(family).then(setOverviewKey, (e: unknown) => setError(message(e)));
     reload();
-  }, [reload]);
+  }, [reload, family]);
 
   const jobState = job?.state;
   useEffect(() => {
@@ -570,9 +611,65 @@ function OpeningDetail({
           )}
         </Stack>
       )}
+      <Group gap="xs" data-testid="opening-notes-actions">
+        <Button size="xs" variant="light" color="indigo" onClick={() => setPrefetching(true)} disabled={!settings} data-testid="opening-prefetch">
+          Save notes for this opening…
+        </Button>
+        <Button
+          size="xs"
+          variant="subtle"
+          data-testid="opening-export"
+          onClick={() =>
+            api.exportOpeningNotes(family).then(
+              (path) => setNotesMessage(path ? `Saved to ${path}` : "There are no notes to export yet."),
+              (e: unknown) => setError(message(e)),
+            )
+          }
+        >
+          Export notes
+        </Button>
+        <Button
+          size="xs"
+          variant="subtle"
+          color="red"
+          data-testid="opening-delete-notes"
+          onClick={() =>
+            api.deleteOpeningNotes(family).then(
+              (n) => {
+                setNotesMessage(`Deleted ${n} ${n === 1 ? "note" : "notes"}.`);
+                setNotesVersion((v) => v + 1);
+              },
+              (e: unknown) => setError(message(e)),
+            )
+          }
+        >
+          Delete notes
+        </Button>
+        {notesMessage && (
+          <Text size="xs" c="dimmed" data-testid="opening-notes-message">
+            {notesMessage}
+          </Text>
+        )}
+      </Group>
+      {prefetching && settings && (
+        <PrefetchDialog
+          family={family}
+          scope={settings.scope}
+          extend={settings.extend}
+          onClose={() => setPrefetching(false)}
+          onFinished={() => {
+            setNotesVersion((v) => v + 1);
+            reload();
+          }}
+        />
+      )}
       {line && (
         <LearnBoard
           key={`${line.name}:${line.moves.length}:${color}`}
+          family={family}
+          lineIndex={Math.min(selected, (view?.lines.length ?? 1) - 1)}
+          overviewKey={overviewKey}
+          notesVersion={notesVersion}
           line={line}
           color={color}
           coordinates={coordinates}

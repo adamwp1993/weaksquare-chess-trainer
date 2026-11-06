@@ -57,6 +57,7 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.opening_notes import NoteView, OpeningNotesService
 from weaksquare.services.opening_sources import OpeningSources
 from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
@@ -123,8 +124,10 @@ class Api:
         journal: JournalService,
         openings: OpeningsService,
         opening_sources: OpeningSources,
+        opening_notes: OpeningNotesService,
         repertoire: RepertoireService,
     ) -> None:
+        self._opening_notes = opening_notes
         self._opening_sources = opening_sources
         self._openings = openings
         self._repertoire = repertoire
@@ -1211,7 +1214,9 @@ class Api:
         """FR-12.2, 12.13. Never runs the engine: lines grow past the book from stored results only."""
         v = self._openings.lines(family)
         lines = [
-            dto.OpeningLine(ln.name, ln.eco, [dto.OpeningLineMove(m.uci, m.san, m.source) for m in ln.moves])
+            dto.OpeningLine(
+                ln.name, ln.eco, [dto.OpeningLineMove(m.uci, m.san, m.source, m.key_before) for m in ln.moves]
+            )
             for ln in v.lines
         ]
         return dto.OpeningLines(
@@ -1228,6 +1233,60 @@ class Api:
         self, fen: str, purpose: Literal["start", "panel", "board"], player: Literal["white", "black"]
     ) -> dto.Analysis:
         return analysis_dto(self._openings.analyze(fen, purpose, player))
+
+    # FR-12.5-12.7: notes. Validated before they're stored, and they hold text and shapes, never a move to play.
+    @bridge_call
+    def get_opening_note(
+        self, position_key: str, move_uci: str, kind: Literal["overview", "move"]
+    ) -> dto.OpeningNote | None:
+        view = self._opening_notes.note(position_key, move_uci, kind)
+        return _opening_note_dto(view) if view is not None else None
+
+    @bridge_call
+    def get_opening_note_quote(
+        self, family: str, line_index: int, ply: int | None, regenerate: bool = False
+    ) -> dto.OpeningNoteQuote:
+        q = self._opening_notes.quote_note(family, line_index, ply, regenerate)
+        return dto.OpeningNoteQuote(q.state, q.message, q.typical_usd, q.worst_usd, q.provider, q.model)
+
+    @bridge_call
+    def start_opening_note(self, family: str, line_index: int, ply: int | None, regenerate: bool = False) -> str | None:
+        return self._opening_notes.start_note(family, line_index, ply, regenerate)
+
+    @bridge_call
+    def get_opening_overview_key(self, family: str) -> str:
+        return self._openings.root(family).final_key
+
+    @bridge_call
+    def get_opening_prefetch_plan(
+        self, family: str, preset: str, sub_lines: int | None, max_moves: int | None, extend: bool
+    ) -> dto.OpeningPrefetchPlan:
+        p = self._opening_notes.plan(family, preset, sub_lines, max_moves, extend)
+        return dto.OpeningPrefetchPlan(
+            p.lines, p.positions, p.requests, p.stored, p.llm, p.state, p.message, p.input_tokens, p.output_tokens,
+            round(p.typical_usd, 6), round(p.worst_usd, 6), p.run_cap_usd, p.budget_share, p.this_run_requests, p.runs,
+            p.llm_seconds, p.engine_seconds, list(p.warn), p.blurb, self._opening_scope_dto(p.scope), p.extend,
+        )  # fmt: skip
+
+    @bridge_call
+    def start_opening_prefetch(
+        self, family: str, preset: str, sub_lines: int | None, max_moves: int | None, extend: bool
+    ) -> str:
+        """Called only after you Confirm the estimate (FR-8.11, 12.7b)."""
+        return self._opening_notes.start_prefetch(family, preset, sub_lines, max_moves, extend)
+
+    @bridge_call
+    def export_opening_notes(self, family: str) -> str | None:
+        """FR-12.7: a Markdown file in the data folder, which then opens. None when there are no notes."""
+        path = self._opening_notes.export(family)
+        if path is None:
+            return None
+        self._desktop.open_folder(path.parent)
+        return str(path)
+
+    @bridge_call
+    def delete_opening_notes(self, family: str) -> int:
+        return self._opening_notes.delete(family)
 
     def _repertoire_dto(self, color: str) -> dto.Repertoire:
         v = self._repertoire.view(color)
@@ -1661,6 +1720,16 @@ def idea_result(i: Any) -> dto.IdeaResult:
 
 def danger_reveal(d: Any) -> dto.DangerReveal:
     return dto.DangerReveal(d.candidate, d.is_safe, d.call, d.best_score, d.candidate_score, list(d.line))
+
+
+def _opening_note_dto(v: NoteView) -> dto.OpeningNote:
+    return dto.OpeningNote(
+        v.position_key, v.move_uci, v.kind,  # type: ignore[arg-type]
+        [dto.OpeningNoteSection(h, t) for h, t in v.note.sections],
+        [dto.ExplainAnnotation(a["kind"], a["orig"], a["dest"], a["color"]) for a in v.note.annotations],
+        v.provider, v.model, v.other_model, [dto.OpeningNoteSource(s.label, s.url) for s in v.sources], v.licence,
+        v.licence_url,
+    )  # fmt: skip
 
 
 def validated_sans(sans: Any) -> list[str]:

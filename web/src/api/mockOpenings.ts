@@ -7,6 +7,9 @@ import type {
   BookFamily,
   OpeningLine,
   OpeningLines,
+  OpeningNote,
+  OpeningNoteQuote,
+  OpeningPrefetchPlan,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -159,7 +162,7 @@ export class MockOpenings {
     const moves = play(sans, "book", chess);
     const limit = this.scope.max_moves * 2;
     if (withExtension) moves.push(...play(EXTENSION[family], "engine", chess));
-    return { name, eco, moves: moves.slice(0, limit).map(({ uci, san, source }) => ({ uci, san, source })) };
+    return { name, eco, moves: moves.slice(0, limit).map(({ uci, san, source, key }) => ({ uci, san, source, position_key: key })) };
   }
 
   lines(family: string, engineReady: boolean): OpeningLines {
@@ -173,6 +176,134 @@ export class MockOpenings {
 
   extendLines(family: string) {
     this.extended.add(family);
+  }
+
+  // ---- notes ----------------------------------------------------------------------------------------------------
+
+  private notes = new Map<string, OpeningNote>();
+
+  overviewKey(family: string): string {
+    const chess = new Chess();
+    play(this.bookFor(family).lines[0].sans.split(" ").slice(0, family === "Italian Game" ? 5 : 2).join(" "), "book", chess);
+    return keyOf(chess);
+  }
+
+  note(key: string, uci: string, kind: "overview" | "move"): OpeningNote | null {
+    return this.notes.get(`${key}|${uci}|${kind}`) ?? null;
+  }
+
+  private target(family: string, lineIndex: number, ply: number | null): { key: string; uci: string; kind: "overview" | "move" } {
+    if (ply === null) return { key: this.overviewKey(family), uci: "", kind: "overview" };
+    const move = this.lines(family, true).lines[lineIndex].moves[ply];
+    return { key: move.position_key, uci: move.uci, kind: "move" };
+  }
+
+  noteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean, ai: boolean): OpeningNoteQuote {
+    const base = { provider: "anthropic", model: "claude-haiku-5-5" };
+    if (!ai) return { state: "not_configured", message: "Choose an AI provider and save its key in Settings → AI.", typical_usd: null, worst_usd: null, ...base };
+    const t = this.target(family, lineIndex, ply);
+    if (!regenerate && this.note(t.key, t.uci, t.kind)) return { state: "cached", message: null, typical_usd: 0, worst_usd: 0, ...base };
+    return { state: "ok", message: null, typical_usd: 0.0021, worst_usd: 0.004, ...base };
+  }
+
+  saveNote(family: string, lineIndex: number, ply: number | null) {
+    const t = this.target(family, lineIndex, ply);
+    const sections =
+      t.kind === "overview"
+        ? [
+            { heading: "Key ideas", text: "Pressure on f7, and a quick development." },
+            { heading: "White's plans", text: "Build a center with c3 and d4." },
+          ]
+        : [
+            { heading: "Why this move", text: "It develops and controls the center." },
+            { heading: "If you don't play it", text: "Black gets an easy game." },
+          ];
+    this.notes.set(`${t.key}|${t.uci}|${t.kind}`, {
+      position_key: t.key,
+      move_uci: t.uci,
+      kind: t.kind,
+      sections,
+      annotations: t.kind === "overview" ? [{ kind: "arrow", orig: "c4", dest: "f7", color: "green" }] : [],
+      provider: "anthropic",
+      model: "claude-haiku-5-5",
+      other_model: false,
+      sources: this.useWikibooks ? [{ label: "1. e4 1...e5", url: "https://en.wikibooks.org/wiki/Chess_Opening_Theory/1._e4/1...e5" }] : [],
+      licence: "CC BY-SA 4.0",
+      licence_url: "https://creativecommons.org/licenses/by-sa/4.0/",
+    });
+  }
+
+  private withScope<T>(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean, fn: () => T): T {
+    const saved = [this.scope, this.extend] as const;
+    this.setSettings(preset, subLines, maxMoves, extend);
+    try {
+      return fn();
+    } finally {
+      [this.scope, this.extend] = saved;
+    }
+  }
+
+  prefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean, ai: boolean): OpeningPrefetchPlan {
+    return this.withScope(preset, subLines, maxMoves, extend, () => {
+      const { lines } = this.lines(family, true);
+      const params = new URLSearchParams(window.location.search).get("prefetch");
+      let stored = 0;
+      const missingLines = lines.filter((ln) => {
+        const left = ln.moves.filter((m) => !this.note(m.position_key, m.uci, "move"));
+        stored += ln.moves.length - left.length;
+        return left.length > 0;
+      }).length;
+      const hasOverview = this.note(this.overviewKey(family), "", "overview") !== null;
+      if (hasOverview) stored += 1;
+      const requests = missingLines + (hasOverview ? 0 : 1);
+      const usd = requests * 0.006;
+      const split = params === "split" && requests > 1;
+      const moves = lines.reduce((n, ln) => n + ln.moves.length, 0);
+      return {
+        lines: lines.length,
+        positions: moves,
+        requests,
+        stored,
+        llm: ai,
+        state: !ai ? "not_configured" : params === "over_budget" ? "over_budget" : split ? "split" : "ok",
+        message: params === "over_budget" ? "You've used this month's AI budget ($5.00 of $5.00). Raise it in Settings → AI, or wait until next month." : null,
+        input_tokens: requests * 4000,
+        output_tokens: requests * 2500,
+        typical_usd: usd,
+        worst_usd: usd * 2,
+        run_cap_usd: 0.5,
+        budget_share: params === "warn" ? 0.4 : 0.01,
+        this_run_requests: split ? Math.ceil(requests / 2) : requests,
+        runs: split ? 2 : 1,
+        llm_seconds: requests * 20,
+        engine_seconds: moves * 0.5,
+        warnings: params === "warn" ? ["That's 40% of what's left of this month's AI budget."] : [],
+        blurb: ai
+          ? `About ${moves} moves across ${lines.length} lines: ~${requests} requests, ~$${usd.toFixed(2)} (≈1% of this month's budget), about 2 minutes. Already-saved notes are free. You can keep using the app while it runs, and cancel at any time; whatever is finished stays saved.`
+          : `About ${moves} moves across ${lines.length} lines: about 1 minute of Stockfish time. With no AI set up, this saves engine evals only.`,
+        scope: { ...this.scope },
+        extend: this.extend,
+      };
+    });
+  }
+
+  savePrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): number {
+    return this.withScope(preset, subLines, maxMoves, extend, () => {
+      const before = this.notes.size;
+      this.saveNote(family, 0, null);
+      this.lines(family, true).lines.forEach((ln, i) => ln.moves.forEach((_, ply) => this.saveNote(family, i, ply)));
+      return this.notes.size - before;
+    });
+  }
+
+  hasNotes(): boolean {
+    return this.notes.size > 0;
+  }
+
+  deleteNotes(): number {
+    const n = this.notes.size;
+    this.notes.clear();
+    return n;
   }
 
   // ---- the repertoire --------------------------------------------------------------------------------------
