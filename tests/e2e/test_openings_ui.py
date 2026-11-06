@@ -344,3 +344,174 @@ def test_finishing_a_prefetch_settles(page: Any) -> None:
     page.wait_for_timeout(500)
     assert page.evaluate("window.__mockApi.calls.length") == plans
     page.get_by_test_id("prefetch-counts").filter(has_text="0 requests").wait_for()
+
+
+# ---- what if, build, practice, stats, coach (FR-10.58, 12.8-12.11, 12.14) ----------------------------------------
+
+
+def add_line(page: Any, name: str = "Italian Game") -> None:
+    pick(page, name)
+    page.get_by_test_id("opening-add-0").click()
+    page.get_by_test_id("opening-added").wait_for()
+
+
+def test_what_if_by_san_gets_replies_and_adds_a_branch(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("learn-forward").click()  # 1.e4: Black's move, and you're White
+    page.get_by_test_id("what-if-move").fill("a6")
+    page.get_by_test_id("what-if-go").click()
+    page.get_by_test_id("what-if-replies").wait_for()
+    assert page.get_by_test_id("what-if-reply").count() == 3
+    assert "a6" in (page.get_by_test_id("what-if-replies").inner_text())
+    page.get_by_test_id("what-if-add").click()
+    page.get_by_test_id("what-if-saved").wait_for()
+    page.get_by_test_id("openings-tab-repertoire").click()
+    page.locator("[data-testid=repertoire-row][data-san=a6]").wait_for()
+
+
+def test_what_if_by_playing_on_the_board(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("learn-forward").click()
+    play(page, "a7a6", "white")
+    page.get_by_test_id("what-if-replies").filter(has_text="a6").wait_for()
+    assert "/p" in (page.get_by_test_id("board").get_attribute("data-fen") or "")
+
+
+def test_an_illegal_what_if_says_so(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("learn-forward").click()
+    page.get_by_test_id("what-if-move").fill("Ke5")
+    page.get_by_test_id("what-if-go").click()
+    page.get_by_test_id("what-if-error").filter(has_text="isn't legal").wait_for()
+
+
+def test_what_if_only_offers_itself_on_their_turn(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    assert page.get_by_test_id("what-if").count() == 0
+
+
+def test_build_shows_gaps_and_saves_only_when_you_say(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-build").click()
+    page.get_by_test_id("build-start").click()
+    page.get_by_test_id("build-summary").wait_for()
+    assert page.get_by_test_id("build-flag").count() >= 1
+    assert not [c for c in calls(page) if c == "repertoireProposalSaved"]
+    page.get_by_test_id("build-save").click()
+    page.get_by_test_id("build-saved").wait_for()
+    assert "repertoireProposalSaved" in calls(page)
+
+
+def test_discarding_a_build_saves_nothing(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-build").click()
+    page.get_by_test_id("build-start").click()
+    page.get_by_test_id("build-discard").click()
+    page.get_by_test_id("build-start").wait_for()
+    assert "repertoireProposalSaved" not in calls(page)
+
+
+def test_signed_out_build_says_it_uses_the_book(page: Any) -> None:
+    openings(page, "?openings=ready&engine=ready&account=signed_out")
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-build").click()
+    page.get_by_text("replies come from the opening book").wait_for()
+
+
+def test_practice_needs_a_repertoire(page: Any) -> None:
+    openings(page)
+    page.get_by_test_id("openings-tab-practice").click()
+    page.get_by_test_id("practice-empty").wait_for()
+    assert page.get_by_test_id("practice-begin").is_disabled()
+
+
+def start_practice(page: Any) -> None:
+    openings(page)
+    add_line(page)
+    page.get_by_test_id("openings-tab-practice").click()
+    page.get_by_test_id("practice-begin").click()
+    page.get_by_test_id("practice-your-move").wait_for()
+
+
+def test_practice_plays_their_reply_after_yours(page: Any) -> None:
+    start_practice(page)
+    play(page, "e2e4", "white")
+    page.locator("[data-testid=practice-tally]").filter(has_text="1 right").wait_for()
+    page.wait_for_function("() => document.querySelector('[data-testid=board]').dataset.fen.includes('/4p3/4P3/')")
+
+
+def test_a_wrong_move_shows_your_line_reasons_and_goes_on(page: Any) -> None:
+    start_practice(page)
+    play(page, "d2d4", "white")
+    page.get_by_test_id("practice-correct").filter(has_text="e4").wait_for()
+    page.get_by_test_id("practice-refutation").wait_for()
+    page.get_by_test_id("reason-chips").wait_for()
+    page.get_by_test_id("reason-rushed").click()
+    page.wait_for_function("() => window.__mockApi.calls.some((c) => c.startsWith('practiceReason:'))")
+    page.get_by_test_id("practice-continue").click()
+    page.get_by_test_id("practice-your-move").wait_for()
+    assert "/4P3/" in (page.get_by_test_id("board").get_attribute("data-fen") or "")
+
+
+def test_help_counts_as_missed(page: Any) -> None:
+    start_practice(page)
+    page.get_by_test_id("practice-show").click()
+    page.locator("[data-testid=practice-session][data-state=helped]").wait_for()
+    page.get_by_test_id("practice-tally").filter(has_text="1 missed").wait_for()
+
+
+def test_stats_show_your_practice(page: Any) -> None:
+    start_practice(page)
+    play(page, "d2d4", "white")
+    page.get_by_test_id("practice-correct").wait_for()
+    page.get_by_test_id("openings-tab-stats").click()
+    stat = page.get_by_test_id("opening-stat")
+    stat.filter(has_text="Italian Game (C50)").wait_for()
+    assert "0% of 1" in stat.inner_text()
+    page.get_by_test_id("opening-stat-weakest").wait_for()
+
+
+def test_the_new_screens_options_have_tooltips(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-build").click()
+    page.get_by_test_id("build-start").wait_for()
+    _assert_all_have_tips(page, "Build dialog")
+    page.keyboard.press("Escape")
+    page.get_by_test_id("build-start").wait_for(state="detached")
+    page.get_by_test_id("learn-forward").click()
+    page.get_by_test_id("what-if").wait_for()
+    _assert_all_have_tips(page, "What if")
+    page.get_by_test_id("opening-add-0").click()
+    page.get_by_test_id("openings-tab-practice").click()
+    page.get_by_test_id("practice-begin").wait_for()
+    _assert_all_have_tips(page, "Practice")
+    page.get_by_test_id("openings-tab-stats").click()
+    page.get_by_test_id("opening-stats").wait_for()
+    _assert_all_have_tips(page, "Stats")
+
+
+def _coach_report(page: Any) -> None:
+    page.goto(page.base_url + "/?coach=report&coachopening=1&openings=ready")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-whole-game").wait_for()
+
+
+def test_an_opening_weakness_opens_the_trainer_at_its_opening(page: Any) -> None:
+    _coach_report(page)
+    page.get_by_test_id("weakness-opening-opening:Italian Game").click()
+    page.get_by_test_id("opening-detail").filter(has_text="Italian Game").wait_for()
+
+
+def test_an_opening_the_book_doesnt_name_opens_a_search(page: Any) -> None:
+    _coach_report(page)
+    page.get_by_test_id("weakness-opening-opening:Rare Line").click()
+    page.get_by_test_id("openings-view").wait_for()
+    assert page.get_by_test_id("openings-search").input_value() == "Rare Line"
+    assert page.get_by_test_id("opening-detail").count() == 0

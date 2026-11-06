@@ -39,6 +39,7 @@ import { Board } from "../components/Board";
 import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { EnginePanel } from "../components/EnginePanel";
 import { NoteBlock, PrefetchDialog } from "../components/OpeningNotes";
+import { BuildDialog, OpeningStatsTab, PracticeTab, WhatIfPanel } from "../components/OpeningPractice";
 import { OptionInfo } from "../components/OptionInfo";
 import { checkMove, linePositions, moveLabel, sideToMove, sourceLabel, START_FEN } from "../state/openingLine";
 import { useJob } from "../state/useJob";
@@ -64,6 +65,7 @@ function LearnBoard({
   coordinates,
   engine,
   onEngineChanged,
+  onRepertoireChanged,
 }: {
   family: string;
   lineIndex: number;
@@ -74,6 +76,7 @@ function LearnBoard({
   coordinates: boolean;
   engine: EngineStatus | null;
   onEngineChanged: () => void;
+  onRepertoireChanged: () => void;
 }) {
   const positions = useMemo(() => linePositions(line.moves), [line]);
   const [step, setStep] = useState(0);
@@ -81,6 +84,8 @@ function LearnBoard({
   const [nudge, setNudge] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
   const [note, setNote] = useState<OpeningNote | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [boardMove, setBoardMove] = useState<string | null>(null);
   const last = line.moves.length;
   const pos = positions[Math.min(step, last)];
   const analyze = useCallback(
@@ -110,17 +115,25 @@ function LearnBoard({
   );
 
   const yourTurn = mode === "play" && step < last && sideToMove(pos.fen) === color;
+  // FR-12.8: on their turn, in step-through, playing their move on the board asks "What if…?".
+  const theirTurn = mode === "step" && sideToMove(pos.fen) !== color && preview === null;
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setPreview(null);
+    setBoardMove(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [step, mode]);
   return (
     <Group align="flex-start" gap="lg" wrap="wrap" data-testid="learn-board" data-tries={tries}>
       <div style={{ flex: "1 1 360px", maxWidth: 560 }}>
         {/* A wrong move snaps back: the key changes with each try, so the board redraws at the line's position. */}
         <Board
           key={tries}
-          fen={pos.fen}
+          fen={preview ?? pos.fen}
           orientation={color}
-          movable={yourTurn ? color : null}
-          lastMove={pos.lastMove}
-          onMove={onMove}
+          movable={yourTurn ? color : theirTurn ? (color === "white" ? "black" : "white") : null}
+          lastMove={preview ? null : pos.lastMove}
+          onMove={theirTurn ? setBoardMove : onMove}
           coordinates={coordinates}
           maxWidth={560}
           shapes={mode === "step" && note ? note.annotations.map((a) => ({ orig: a.orig, dest: a.dest, color: a.color as "green" })) : undefined}
@@ -232,6 +245,15 @@ function LearnBoard({
               testId="move-note"
             />
           </Paper>
+        )}
+        {mode === "step" && sideToMove(pos.fen) !== color && (
+          <WhatIfPanel
+            color={color}
+            moves={line.moves.slice(0, step).map((m) => m.uci)}
+            boardMove={boardMove}
+            onPreview={setPreview}
+            onAdded={onRepertoireChanged}
+          />
         )}
         <EnginePanel
           analyze={analyze}
@@ -483,6 +505,7 @@ function OpeningDetail({
   const [prefetching, setPrefetching] = useState(false);
   const [notesVersion, setNotesVersion] = useState(0);
   const [notesMessage, setNotesMessage] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
   const job = useJob(extendJob);
 
   const reload = useCallback(() => {
@@ -612,6 +635,9 @@ function OpeningDetail({
         </Stack>
       )}
       <Group gap="xs" data-testid="opening-notes-actions">
+        <Button size="xs" variant="light" onClick={() => setBuilding(true)} disabled={!settings} data-testid="opening-build">
+          Build my repertoire…
+        </Button>
         <Button size="xs" variant="light" color="indigo" onClick={() => setPrefetching(true)} disabled={!settings} data-testid="opening-prefetch">
           Save notes for this opening…
         </Button>
@@ -651,6 +677,9 @@ function OpeningDetail({
           </Text>
         )}
       </Group>
+      {building && settings && (
+        <BuildDialog family={family} color={color} signedIn={settings.signed_in} onClose={() => setBuilding(false)} onSaved={onRepertoireChanged} />
+      )}
       {prefetching && settings && (
         <PrefetchDialog
           family={family}
@@ -675,6 +704,7 @@ function OpeningDetail({
           coordinates={coordinates}
           engine={engine}
           onEngineChanged={onEngineChanged}
+          onRepertoireChanged={onRepertoireChanged}
         />
       )}
     </Stack>
@@ -810,10 +840,18 @@ function RepertoireTab({ version }: { version: number }) {
 
 // ---- the page ---------------------------------------------------------------------------------------------------------------
 
-export function OpeningsView({ initialFamily, coordinates }: { initialFamily: string | null; coordinates: boolean }) {
+export function OpeningsView({
+  initialFamily,
+  initialQuery,
+  coordinates,
+}: {
+  initialFamily: string | null;
+  initialQuery: string;
+  coordinates: boolean;
+}) {
   const [ready, setReady] = useState<boolean | null>(null);
   const [importJob, setImportJob] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [found, setFound] = useState<BookFamily[]>([]);
   const [family, setFamily] = useState<string | null>(initialFamily);
   const [engine, setEngine] = useState<EngineStatus | null>(null);
@@ -877,6 +915,12 @@ export function OpeningsView({ initialFamily, coordinates }: { initialFamily: st
           <Tabs.Tab value="repertoire" data-testid="openings-tab-repertoire">
             My repertoire
           </Tabs.Tab>
+          <Tabs.Tab value="practice" data-testid="openings-tab-practice">
+            Practice
+          </Tabs.Tab>
+          <Tabs.Tab value="stats" data-testid="openings-tab-stats">
+            Stats
+          </Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="book" pt="md">
           <Group align="flex-start" gap="lg" wrap="wrap">
@@ -935,6 +979,12 @@ export function OpeningsView({ initialFamily, coordinates }: { initialFamily: st
         </Tabs.Panel>
         <Tabs.Panel value="repertoire" pt="md">
           <RepertoireTab version={repVersion} />
+        </Tabs.Panel>
+        <Tabs.Panel value="practice" pt="md">
+          <PracticeTab coordinates={coordinates} version={repVersion} />
+        </Tabs.Panel>
+        <Tabs.Panel value="stats" pt="md">
+          <OpeningStatsTab version={repVersion} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

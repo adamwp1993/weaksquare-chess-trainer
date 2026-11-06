@@ -58,6 +58,8 @@ from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.opening_notes import NoteView, OpeningNotesService
+from weaksquare.services.opening_practice import OpeningPracticeService
+from weaksquare.services.opening_practice import PracticeState as PracticeStateResult
 from weaksquare.services.opening_sources import OpeningSources
 from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
@@ -125,8 +127,10 @@ class Api:
         openings: OpeningsService,
         opening_sources: OpeningSources,
         opening_notes: OpeningNotesService,
+        opening_practice: OpeningPracticeService,
         repertoire: RepertoireService,
     ) -> None:
+        self._opening_practice = opening_practice
         self._opening_notes = opening_notes
         self._opening_sources = opening_sources
         self._openings = openings
@@ -1288,6 +1292,100 @@ class Api:
     def delete_opening_notes(self, family: str) -> int:
         return self._opening_notes.delete(family)
 
+    # FR-12.8: "What if they play…?"
+    @bridge_call
+    def get_opening_deviation(
+        self, color: Literal["white", "black"], moves: list[str], their_move: str
+    ) -> dto.OpeningDeviation:
+        d = self._repertoire.what_if(color, moves, their_move)
+        replies = [dto.OpeningDeviationReply(r.uci, r.san, r.score) for r in d.replies]
+        return dto.OpeningDeviation(d.their_uci, d.their_san, d.fen_after, replies, d.game_over)
+
+    @bridge_call
+    def add_opening_deviation(
+        self, color: Literal["white", "black"], moves: list[str], their_move: str, reply: str
+    ) -> dto.RepertoireAdded:
+        r = self._repertoire.add_deviation(color, moves, their_move, reply)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    # FR-12.14: Build my repertoire. The job's message is the proposal's id; nothing is saved before you add it.
+    @bridge_call
+    def start_repertoire_build(self, color: Literal["white", "black"], family: str, limits: dict) -> str:  # type: ignore[type-arg]
+        return self._repertoire.start_build(color, family, limits)
+
+    @bridge_call
+    def get_repertoire_proposal(self, proposal_id: str) -> dto.RepertoireProposal:
+        p = self._repertoire.proposal(proposal_id)
+        moves = [
+            dto.ProposedMove(m.position_key, m.move_uci, m.san, m.source, m.yours, m.depth, m.share, m.already_yours, list(m.flags))
+            for m in p.moves
+        ]  # fmt: skip
+        return dto.RepertoireProposal(p.id, p.color, p.family, moves)  # type: ignore[arg-type]
+
+    @bridge_call
+    def save_repertoire_proposal(self, proposal_id: str) -> dto.RepertoireAdded:
+        r = self._repertoire.save_proposal(proposal_id)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    @bridge_call
+    def discard_repertoire_proposal(self, proposal_id: str) -> None:
+        self._repertoire.discard_proposal(proposal_id)
+
+    # FR-12.9-12.11: Practice and stats. Their own table: nothing reaches a rating, sync or the Coach.
+    @bridge_call
+    def get_practice_summary(self, color: Literal["white", "black"]) -> dto.PracticeSummary:
+        return dto.PracticeSummary(**self._opening_practice.summary(color))
+
+    @bridge_call
+    def get_practice_tolerance(self) -> bool:
+        return self._opening_practice.tolerance_on()
+
+    @bridge_call
+    def set_practice_tolerance(self, on: bool) -> bool:
+        return self._opening_practice.set_tolerance(on)
+
+    @bridge_call
+    def start_practice(
+        self, color: Literal["white", "black"], mode: Literal["due", "new", "all"], opening_id: int | None = None
+    ) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.start(color, opening_id=opening_id, mode=mode))
+
+    @bridge_call
+    def play_practice_move(self, session_id: str, uci: str) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.play(session_id, uci))
+
+    @bridge_call
+    def show_practice_answer(self, session_id: str) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.show_answer(session_id))
+
+    @bridge_call
+    def continue_practice(self, session_id: str) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.proceed(session_id))
+
+    @bridge_call
+    def end_practice(self, session_id: str) -> None:
+        self._opening_practice.end(session_id)
+
+    @bridge_call
+    def set_practice_reason(self, attempt_id: int, reason: str, note: str | None = None) -> None:
+        self._opening_practice.set_reason(attempt_id, reason, note)
+
+    @bridge_call
+    def get_opening_stats(self, color: Literal["white", "black"]) -> list[dto.OpeningStat]:
+        return [
+            dto.OpeningStat(
+                o.id, o.name, o.eco, o.positions, o.attempts, o.correct, o.due,
+                [dto.OpeningPositionStat(p.position_key, p.label, p.attempts, p.correct, p.due) for p in o.weakest],
+                [dto.OpeningLineStat(ln.name, ln.positions, ln.attempts, ln.correct, ln.due) for ln in o.lines],
+            )
+            for o in self._opening_practice.stats(color)
+        ]  # fmt: skip
+
+    @bridge_call
+    def match_opening_family(self, name: str) -> str | None:
+        """FR-10.58: the opening in the book for a name from one of your games, if there is one."""
+        return self._openings.match_family(name)
+
     def _repertoire_dto(self, color: str) -> dto.Repertoire:
         v = self._repertoire.view(color)
         rows = [
@@ -1729,6 +1827,17 @@ def _opening_note_dto(v: NoteView) -> dto.OpeningNote:
         [dto.ExplainAnnotation(a["kind"], a["orig"], a["dest"], a["color"]) for a in v.note.annotations],
         v.provider, v.model, v.other_model, [dto.OpeningNoteSource(s.label, s.url) for s in v.sources], v.licence,
         v.licence_url,
+    )  # fmt: skip
+
+
+def _practice_dto(s: PracticeStateResult) -> dto.PracticeState:
+    return dto.PracticeState(
+        s.session_id, s.state, s.fen, s.color, s.decisions, s.correct, s.wrong, s.lines_clean, s.lines_lost,  # type: ignore[arg-type]
+        s.remaining, s.target_reason, [list(m) for m in s.replies], [list(m) for m in s.correct_moves], s.attempt_id,
+        s.message, s.wrong_fen,
+        dto.ReasonPrompt(s.attempt_id, "opening", None, [dto.ReasonOption(r.key, r.label, r.gap) for r in REASONS])
+        if s.state == "wrong" and s.attempt_id is not None
+        else None,
     )  # fmt: skip
 
 

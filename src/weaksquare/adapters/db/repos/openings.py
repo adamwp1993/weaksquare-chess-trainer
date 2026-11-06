@@ -309,3 +309,47 @@ class OpeningNotesRepo:
                 marks = ",".join("?" * len(part))
                 gone += conn.execute(f"DELETE FROM opening_notes WHERE position_key IN ({marks})", part).rowcount
         return gone
+
+
+@dataclass(frozen=True)
+class OpeningAttempt:
+    id: int
+    color: str
+    position_key: str
+    outcome: str
+    finished_at: str
+
+
+class OpeningAttemptsRepo:
+    """Practice attempts (FR-12.9). Their own table: puzzle stats, ratings, sync and the Coach never read it."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def add(
+        self, session_id: str, color: str, opening_id: int | None, position_key: str, played_uci: str | None,
+        played_san: str | None, outcome: str, time_ms: int | None, finished_at: str,
+    ) -> int:  # fmt: skip
+        with self._db.session() as conn:
+            cur = conn.execute(
+                "INSERT INTO opening_attempts (session_id, color, opening_id, position_key, played_uci, played_san,"
+                " outcome, time_ms, finished_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (session_id, color, opening_id, position_key, played_uci, played_san, outcome, time_ms, finished_at),
+            )
+            return int(cur.lastrowid or 0)
+
+    def for_color(self, color: str) -> list[OpeningAttempt]:
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT id, color, position_key, outcome, finished_at FROM opening_attempts WHERE color = ?"
+                " ORDER BY finished_at, id",
+                (color,),
+            ).fetchall()
+        return [OpeningAttempt(int(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4])) for r in rows]
+
+    def get(self, attempt_id: int) -> OpeningAttempt | None:
+        with self._db.session() as conn:
+            r = conn.execute(
+                "SELECT id, color, position_key, outcome, finished_at FROM opening_attempts WHERE id = ?", (attempt_id,)
+            ).fetchone()
+        return OpeningAttempt(int(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4])) if r is not None else None

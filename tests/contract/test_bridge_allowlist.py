@@ -164,6 +164,23 @@ ALLOWLIST = {
     "get_opening_lines",  # v0.13
     "start_opening_extend",  # v0.13: FR-12.13
     "analyze_opening_position",  # v0.13
+    "get_opening_deviation",  # v0.13: FR-12.8
+    "add_opening_deviation",  # v0.13
+    "start_repertoire_build",  # v0.13: FR-12.14
+    "get_repertoire_proposal",  # v0.13
+    "save_repertoire_proposal",  # v0.13
+    "discard_repertoire_proposal",  # v0.13
+    "get_practice_summary",  # v0.13: FR-12.9, 12.10
+    "get_practice_tolerance",  # v0.13
+    "set_practice_tolerance",  # v0.13
+    "start_practice",  # v0.13
+    "play_practice_move",  # v0.13
+    "show_practice_answer",  # v0.13
+    "continue_practice",  # v0.13
+    "end_practice",  # v0.13
+    "set_practice_reason",  # v0.13
+    "get_opening_stats",  # v0.13: FR-12.11
+    "match_opening_family",  # v0.13: FR-10.58
     "get_repertoire",  # v0.13: FR-12.4
     "add_repertoire_lines",  # v0.13
     "preview_repertoire_removal",  # v0.13

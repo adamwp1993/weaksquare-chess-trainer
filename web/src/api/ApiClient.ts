@@ -40,7 +40,12 @@ import type {
   OpeningLines,
   OpeningNote,
   OpeningNoteQuote,
+  OpeningDeviation,
   OpeningPrefetchPlan,
+  OpeningStat,
+  PracticeState,
+  PracticeSummary,
+  RepertoireProposal,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -474,6 +479,24 @@ export interface ApiClient {
   /** Continue the lines with Stockfish in the background; null when there's nothing to do. */
   startOpeningExtend(family: string): Promise<string | null>;
   analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black"): Promise<Analysis>;
+  getOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string): Promise<OpeningDeviation>;
+  addOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string, reply: string): Promise<RepertoireAdded>;
+  /** FR-12.14: the job's message is the proposal's id. Nothing is saved until saveRepertoireProposal. */
+  startRepertoireBuild(color: "white" | "black", family: string, limits: { max_moves: number; min_share: number; max_replies: number; max_positions: number }): Promise<string>;
+  getRepertoireProposal(proposalId: string): Promise<RepertoireProposal>;
+  saveRepertoireProposal(proposalId: string): Promise<RepertoireAdded>;
+  discardRepertoireProposal(proposalId: string): Promise<void>;
+  getPracticeSummary(color: "white" | "black"): Promise<PracticeSummary>;
+  getPracticeTolerance(): Promise<boolean>;
+  setPracticeTolerance(on: boolean): Promise<boolean>;
+  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null): Promise<PracticeState>;
+  playPracticeMove(sessionId: string, uci: string): Promise<PracticeState>;
+  showPracticeAnswer(sessionId: string): Promise<PracticeState>;
+  continuePractice(sessionId: string): Promise<PracticeState>;
+  endPractice(sessionId: string): Promise<void>;
+  setPracticeReason(attemptId: number, reason: ReasonKey, note: string | null): Promise<void>;
+  getOpeningStats(color: "white" | "black"): Promise<OpeningStat[]>;
+  matchOpeningFamily(name: string): Promise<string | null>;
   getRepertoire(color: "white" | "black"): Promise<Repertoire>;
   addRepertoireLines(color: "white" | "black", family: string, lineIndices: number[]): Promise<RepertoireAdded>;
   previewRepertoireRemoval(color: "white" | "black", positionKey: string, moveUci: string): Promise<string[]>;

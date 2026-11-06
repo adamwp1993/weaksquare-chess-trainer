@@ -1049,6 +1049,9 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 
 Openings has its own model in **Settings → AI**.
 
+### What if they play…?
+On the other side's turn in **Step through**, play their move on the board or type it (`a6` or `a7a6`). The app checks it, and Stockfish gives your best replies with their evals, the best one selected. **Add to my repertoire** stores their move and your reply, along with the moves leading to them, and Practice drills it like any other line. Your move is labelled **You** and Stockfish's choice **Stockfish**. To explain a reply, step to it once it's in a line.
+
 ### Your repertoire
 **Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.
 
@@ -1057,6 +1060,48 @@ In the **My repertoire** tab:
 - **Make main** marks the move to prefer at that position. The arrows change the order.
 - **Remove** first lists what it would delete. A position another line still reaches stays.
 - **transposes** marks a move that reaches a position already listed through another move order. It's the same position, so it's stored once.
+
+### Build my repertoire
+**Build my repertoire…** on an opening prepares you for the replies you're likely to meet, for the side you've chosen.
+
+| Option | What it does |
+|---|---|
+| **Moves** | How deep the tree goes, from the start of the game. Default 12. |
+| **Reply share (%)** | A reply must be played in at least this share of games. Default 5%. Lower adds rarer sidelines. |
+| **Replies per position** | The most replies to prepare for at each position. Default 3. |
+| **Positions** | The most positions in the tree. Default 60. It fills up from the opening outward. |
+
+Signed in to Lichess, the replies come from the explorer. Signed out, they come from the book, which covers fewer of them.
+
+Your answer at each position is, in order: one you already have, the book's move, the most-played move if it's within 50 centipawns of Stockfish's best, or Stockfish's best.
+
+It runs in the background, and **nothing is saved until you've looked it over**. Moves that need a look are flagged:
+- **No book or popular answer: Stockfish's best**: nobody's recommendation but the engine's.
+- **Few games to go on**: too few games here to trust what's popular.
+- **You're clearly worse here**: Stockfish doesn't like the position after your answer.
+
+**Add to my repertoire** saves it, and any move you already had stays as it was. **Discard** throws it away.
+
+### Practice
+**Practice** drills your repertoire. The app plays the other side, picking among your stored replies: toward popular moves if it knows them, otherwise toward your main moves. You play your side.
+
+1. Choose a side, and optionally one opening.
+2. Choose **Due, then a few new**, **New lines** or **All**.
+3. **Start practice**.
+
+Each session walks from the start of the game to a position that's due, so you see how you get there.
+
+- **Right:** a move stored as yours at that position. With **Accept moves close to the engine's best** on, a move within 30 centipawns also counts, and your line carries on with your own move. It's off by default, because the point is to learn your line.
+- **Wrong:** you see your line's move and Stockfish's view of what you played, and can say why you missed it. **Continue** plays your move and the line goes on.
+- **Show the answer** counts as missed, like any help.
+
+Each position has its own schedule, the same boxes as Spaced repetition (see [Training modes](#training-modes)): it starts the first time you get it right, moves up each time it's right when due, and goes back to the first box on a miss or help. After the last box it stops coming up, though **All** still includes it. Walking through a position on the way to another doesn't move it through the schedule.
+
+### Opening stats
+The **Stats** tab shows accuracy, positions due and your weakest positions, for each opening and each line. All of it stays on your PC. Nothing here goes to Lichess, affects any rating, or counts in your puzzle stats or Coach reports.
+
+### From the Coach
+**Study this opening** on an opening weakness in a Coach report opens it here. If the book has no opening by that name, it opens a search for it instead.
 
 ## Keyboard shortcuts
 *Added in v0.2.*

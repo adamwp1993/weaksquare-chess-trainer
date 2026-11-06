@@ -75,7 +75,7 @@ export function App() {
     | { kind: "trainer" }
     | { kind: "games" }
     | { kind: "coach" }
-    | { kind: "openings"; family?: string }
+    | { kind: "openings"; family?: string; query?: string }
     | {
         kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" | "trainer";
         retry?: boolean; hideBest?: boolean;
@@ -404,12 +404,19 @@ export function App() {
             }}
           />
         )}
-        {page.kind === "openings" && <OpeningsView initialFamily={page.family ?? null} coordinates={coordinates} />}
+        {page.kind === "openings" && <OpeningsView key={`${page.family ?? ""}:${page.query ?? ""}`} initialFamily={page.family ?? null} initialQuery={page.query ?? ""} coordinates={coordinates} />}
         {page.kind === "coach" && (
           <CoachView
             sendIds={sendIds}
             onClearSend={() => setSendIds([])}
             onReview={(id, ply) => setPage({ kind: "review", gameId: id, ply, from: "coach" })}
+            onOpening={(name) => {
+              // FR-10.58: its opening in the book, or a search for it when the name doesn't match one.
+              api.matchOpeningFamily(name).then(
+                (family) => setPage({ kind: "openings", family: family ?? undefined, query: family ? undefined : name }),
+                () => setPage({ kind: "openings", query: name }),
+              );
+            }}
             onLoad={(next, m) => {
               // FR-10.24 Load preset: your click; saved presets don't change.
               changeSpec(next);

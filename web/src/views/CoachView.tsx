@@ -87,11 +87,14 @@ function WeaknessTable({
   items,
   testid,
   onExample,
+  onOpening,
 }: {
   title: string;
   items: CoachWeakness[];
   testid: string;
   onExample: (gameId: number, ply: number) => void;
+  /** FR-10.58: an opening weakness links to the opening trainer. */
+  onOpening?: (name: string) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -129,6 +132,11 @@ function WeaknessTable({
                       {i + 1}
                     </Button>
                   ))}
+                  {w.kind === "opening" && onOpening && (
+                    <Button size="compact-xs" variant="light" onClick={() => onOpening(w.name)} data-testid={`weakness-opening-${w.key}`}>
+                      Study this opening
+                    </Button>
+                  )}
                 </Group>
               </Table.Td>
             </Table.Tr>
@@ -144,8 +152,10 @@ function ReportView({
   onExample,
   onLoad,
   onPlanChanged,
+  onOpening,
 }: {
   report: CoachReport;
+  onOpening: (name: string) => void;
   onExample: (gameId: number, ply: number) => void;
   onLoad: (spec: FilterSpec, mode: TrainingMode) => void;
   onPlanChanged: () => void;
@@ -185,7 +195,7 @@ function ReportView({
       <WeaknessTable title="Tactics you allowed" items={r.allowed} testid="coach-allowed" onExample={onExample} />
       <WeaknessTable title="Tactics you missed" items={r.missed} testid="coach-missed" onExample={onExample} />
       <WeaknessTable title="Habits" items={r.habits} testid="coach-habits" onExample={onExample} />
-      <WeaknessTable title="Whole-game weaknesses" items={r.whole_game} testid="coach-whole-game" onExample={onExample} />
+      <WeaknessTable title="Whole-game weaknesses" items={r.whole_game} testid="coach-whole-game" onExample={onExample} onOpening={onOpening} />
       {r.measures && <WholeGameMeasures m={r.measures} />}
       {r.puzzles.length > 0 && (
         <Stack gap={4} data-testid="coach-puzzles">
@@ -235,6 +245,7 @@ export function CoachView({
   sendIds,
   onClearSend,
   onReview,
+  onOpening,
   onLoad,
   onRunDone,
   tab,
@@ -258,6 +269,7 @@ export function CoachView({
   sendIds: number[];
   onClearSend: () => void;
   onReview: (gameId: number, ply: number) => void;
+  onOpening: (name: string) => void;
   onLoad: (spec: FilterSpec, mode: TrainingMode) => void;
   /** A run of yours finished: the Suggested mix may have changed. */
   onRunDone: () => void;
@@ -523,7 +535,7 @@ export function CoachView({
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 8 }}>
         {report ? (
-          <ReportView key={report.id} report={report} onExample={onReview} onLoad={onLoad} onPlanChanged={onPlanChanged} />
+          <ReportView key={report.id} report={report} onExample={onReview} onLoad={onLoad} onPlanChanged={onPlanChanged} onOpening={onOpening} />
         ) : (
           <Text c="dimmed" data-testid="coach-empty">
             Run the Coach to get your first report.

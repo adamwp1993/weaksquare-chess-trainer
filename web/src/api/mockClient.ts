@@ -1267,6 +1267,92 @@ export class MockClient implements ApiClient {
     return mockAnalysis(fen, player);
   }
 
+  async getOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string) {
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to get replies to this move.", retryable: false });
+    }
+    this.calls.push(`openingDeviation:${theirMove}`);
+    return this.openings.deviation(color, moves, theirMove);
+  }
+
+  async addOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string, reply: string) {
+    this.calls.push(`openingDeviationAdd:${theirMove}:${reply}`);
+    return this.openings.addDeviation(color, moves, theirMove, reply);
+  }
+
+  async startRepertoireBuild(color: "white" | "black", family: string, limits: { max_moves: number; min_share: number; max_replies: number; max_positions: number }) {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`repertoireBuild:${color}:${family}:${limits.max_moves}`);
+    const kind = "repertoire_build";
+    this.emit({ id, kind, state: "running", progress: null, message: "Looking at replies and answers…", error_code: null });
+    setTimeout(() => {
+      const proposal = this.openings.build(color, family);
+      this.emit({ id, kind, state: "done", progress: 1, message: proposal, error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async getRepertoireProposal(proposalId: string) {
+    return this.openings.proposal(proposalId);
+  }
+
+  async saveRepertoireProposal(proposalId: string) {
+    this.calls.push("repertoireProposalSaved");
+    return this.openings.saveProposal(proposalId);
+  }
+
+  async discardRepertoireProposal(proposalId: string) {
+    this.openings.discardProposal(proposalId);
+  }
+
+  async getPracticeSummary(color: "white" | "black") {
+    return this.openings.practiceSummary(color);
+  }
+
+  async getPracticeTolerance() {
+    return this.openings.tolerance;
+  }
+
+  async setPracticeTolerance(on: boolean) {
+    this.openings.tolerance = on;
+    return on;
+  }
+
+  async startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null) {
+    this.calls.push(`practiceStart:${color}:${mode}:${openingId}`);
+    return this.openings.startPractice(color, mode);
+  }
+
+  async playPracticeMove(_sessionId: string, uci: string) {
+    this.calls.push(`practiceMove:${uci}`);
+    return this.openings.playPractice(uci);
+  }
+
+  async showPracticeAnswer() {
+    this.calls.push("practiceHelp");
+    return this.openings.showAnswer();
+  }
+
+  async continuePractice() {
+    return this.openings.continuePractice();
+  }
+
+  async endPractice() {
+    this.calls.push("practiceEnd");
+  }
+
+  async setPracticeReason(_attemptId: number, reason: ReasonKey, note: string | null) {
+    this.calls.push(`practiceReason:${reason}:${note}`);
+  }
+
+  async getOpeningStats(color: "white" | "black") {
+    return this.openings.stats(color);
+  }
+
+  async matchOpeningFamily(name: string) {
+    return this.openings.match(name);
+  }
+
   async getRepertoire(color: "white" | "black") {
     return this.openings.repertoire(color);
   }

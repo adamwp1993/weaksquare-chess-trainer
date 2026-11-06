@@ -299,7 +299,7 @@ class ReasonPrompt:
     """§7.3: why did you miss it? The chips are `reasons`, in order (keys 1–6)."""
 
     attempt_id: int
-    source: Literal["puzzle", "danger"]
+    source: Literal["puzzle", "danger", "opening"]
     suggested: ReasonKey | None  # pre-highlighted only; saved when you click (FR-5.9)
     reasons: list[ReasonOption]
 
@@ -1065,6 +1065,106 @@ class OpeningPrefetchPlan:
 
 
 @dataclass(frozen=True)
+class OpeningDeviationReply:
+    uci: str
+    san: str
+    score: str
+
+
+@dataclass(frozen=True)
+class OpeningDeviation:
+    """FR-12.8: their move, checked, and Stockfish's best replies."""
+
+    their_uci: str
+    their_san: str
+    fen_after: str
+    replies: list[OpeningDeviationReply]
+    game_over: str | None
+
+
+@dataclass(frozen=True)
+class ProposedMove:
+    position_key: str
+    move_uci: str
+    san: str
+    source: str
+    yours: bool
+    depth: int
+    share: float | None  # of the games at this position, for a popular reply
+    already_yours: bool
+    flags: list[str]  # engine_answer / few_games / bad_eval (FR-12.14)
+
+
+@dataclass(frozen=True)
+class RepertoireProposal:
+    """FR-12.14: nothing is saved until you add it."""
+
+    id: str
+    color: Literal["white", "black"]
+    family: str
+    moves: list[ProposedMove]
+
+
+@dataclass(frozen=True)
+class PracticeSummary:
+    due: int
+    new: int
+    positions: int
+
+
+@dataclass(frozen=True)
+class PracticeState:
+    session_id: str
+    state: Literal["your_move", "wrong", "helped", "line_end", "finished"]
+    fen: str
+    color: Literal["white", "black"]
+    decisions: int
+    correct: int
+    wrong: int
+    lines_clean: int
+    lines_lost: int
+    remaining: int
+    target_reason: str | None
+    replies: list[list[str]]  # the opponent's moves just played: [uci, san]
+    correct_moves: list[list[str]]  # [uci, san], only after a miss or help
+    attempt_id: int | None
+    message: str | None
+    wrong_fen: str | None
+    reason_prompt: ReasonPrompt | None  # §7.3, after a wrong move
+
+
+@dataclass(frozen=True)
+class OpeningPositionStat:
+    position_key: str
+    label: str
+    attempts: int
+    correct: int
+    due: bool
+
+
+@dataclass(frozen=True)
+class OpeningLineStat:
+    name: str
+    positions: int
+    attempts: int
+    correct: int
+    due: int
+
+
+@dataclass(frozen=True)
+class OpeningStat:
+    id: int
+    name: str
+    eco: str
+    positions: int
+    attempts: int
+    correct: int
+    due: int
+    weakest: list[OpeningPositionStat]
+    lines: list[OpeningLineStat]
+
+
+@dataclass(frozen=True)
 class RepertoireRow:
     depth: int
     position_key: str
@@ -1798,6 +1898,15 @@ EXPORTED += [
     OpeningNote,
     OpeningNoteQuote,
     OpeningPrefetchPlan,
+    OpeningDeviationReply,
+    OpeningDeviation,
+    ProposedMove,
+    RepertoireProposal,
+    PracticeSummary,
+    PracticeState,
+    OpeningPositionStat,
+    OpeningLineStat,
+    OpeningStat,
     RepertoireRow,
     RepertoireOpeningRow,
     Repertoire,

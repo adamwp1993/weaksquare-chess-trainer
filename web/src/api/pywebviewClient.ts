@@ -60,7 +60,12 @@ import type {
   OpeningLines,
   OpeningNote,
   OpeningNoteQuote,
+  OpeningDeviation,
   OpeningPrefetchPlan,
+  OpeningStat,
+  PracticeState,
+  PracticeSummary,
+  RepertoireProposal,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -616,6 +621,74 @@ export class PywebviewClient implements ApiClient {
 
   analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black") {
     return this.call<Analysis>("analyze_opening_position", fen, purpose, player);
+  }
+
+  getOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string) {
+    return this.call<OpeningDeviation>("get_opening_deviation", color, moves, theirMove);
+  }
+
+  addOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string, reply: string) {
+    return this.call<RepertoireAdded>("add_opening_deviation", color, moves, theirMove, reply);
+  }
+
+  startRepertoireBuild(color: "white" | "black", family: string, limits: { max_moves: number; min_share: number; max_replies: number; max_positions: number }) {
+    return this.call<string>("start_repertoire_build", color, family, limits);
+  }
+
+  getRepertoireProposal(proposalId: string) {
+    return this.call<RepertoireProposal>("get_repertoire_proposal", proposalId);
+  }
+
+  saveRepertoireProposal(proposalId: string) {
+    return this.call<RepertoireAdded>("save_repertoire_proposal", proposalId);
+  }
+
+  discardRepertoireProposal(proposalId: string) {
+    return this.call<void>("discard_repertoire_proposal", proposalId);
+  }
+
+  getPracticeSummary(color: "white" | "black") {
+    return this.call<PracticeSummary>("get_practice_summary", color);
+  }
+
+  getPracticeTolerance() {
+    return this.call<boolean>("get_practice_tolerance");
+  }
+
+  setPracticeTolerance(on: boolean) {
+    return this.call<boolean>("set_practice_tolerance", on);
+  }
+
+  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null) {
+    return this.call<PracticeState>("start_practice", color, mode, openingId);
+  }
+
+  playPracticeMove(sessionId: string, uci: string) {
+    return this.call<PracticeState>("play_practice_move", sessionId, uci);
+  }
+
+  showPracticeAnswer(sessionId: string) {
+    return this.call<PracticeState>("show_practice_answer", sessionId);
+  }
+
+  continuePractice(sessionId: string) {
+    return this.call<PracticeState>("continue_practice", sessionId);
+  }
+
+  endPractice(sessionId: string) {
+    return this.call<void>("end_practice", sessionId);
+  }
+
+  setPracticeReason(attemptId: number, reason: ReasonKey, note: string | null) {
+    return this.call<void>("set_practice_reason", attemptId, reason, note);
+  }
+
+  getOpeningStats(color: "white" | "black") {
+    return this.call<OpeningStat[]>("get_opening_stats", color);
+  }
+
+  matchOpeningFamily(name: string) {
+    return this.call<string | null>("match_opening_family", name);
   }
 
   getRepertoire(color: "white" | "black") {

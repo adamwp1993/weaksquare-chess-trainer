@@ -34,6 +34,7 @@ from weaksquare.core.openings import (
     families,
     parse_line,
     position_key,
+    ranked_moves,
     root_of,
     rows_of_tsv,
     select_lines,
@@ -413,3 +414,12 @@ class OpeningsService:
             if ln.family == root.family:
                 keys.update(ln.keys)
         return sorted(keys)
+
+    # ---- for the repertoire (FR-12.8, 12.14) ------------------------------------------------------------------------
+
+    def is_book_move(self, key: str, uci: str) -> bool:
+        return (key, uci) in self._data()[1].through
+
+    def book_moves(self, board: chess.Board) -> list[str]:
+        """The book's moves at this position, best first."""
+        return ranked_moves(self._data()[1], position_key(board), self._popularity(position_key(board)))

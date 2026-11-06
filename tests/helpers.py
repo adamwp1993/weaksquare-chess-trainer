@@ -103,6 +103,7 @@ def build_api(
         openings=services.openings,
         opening_sources=services.opening_sources,
         opening_notes=services.opening_notes,
+        opening_practice=services.opening_practice,
         repertoire=services.repertoire,
     )
 

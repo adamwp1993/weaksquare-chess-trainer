@@ -35,6 +35,7 @@ from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
 from weaksquare.adapters.db.repos.openings import (
     ExplorerCacheRepo,
+    OpeningAttemptsRepo,
     OpeningBookRepo,
     OpeningEngineCacheRepo,
     OpeningNotesRepo,
@@ -107,6 +108,7 @@ from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
 from weaksquare.services.opening_notes import OpeningNotesService
+from weaksquare.services.opening_practice import OpeningPracticeService
 from weaksquare.services.opening_sources import OpeningSources
 from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
@@ -244,6 +246,7 @@ class Services:
     openings: OpeningsService
     opening_sources: OpeningSources
     opening_notes: OpeningNotesService
+    opening_practice: OpeningPracticeService
     repertoire: RepertoireService
 
     def close(self) -> None:
@@ -429,7 +432,10 @@ def build_services(
         OpeningBookRepo(db), OpeningEngineCacheRepo(db), SettingsRepo(db), engine, runner, clock,
         config.OPENING_BOOK_DIR, opening_sources,
     )  # fmt: skip
-    repertoire = RepertoireService(RepertoireRepo(db), openings, clock)
+    repertoire = RepertoireService(RepertoireRepo(db), openings, opening_sources, runner, clock)
+    opening_practice = OpeningPracticeService(
+        OpeningAttemptsRepo(db), MistakeReasonsRepo(db), repertoire, openings, opening_sources, SettingsRepo(db), clock, rng,
+    )  # fmt: skip
     opening_notes = OpeningNotesService(
         OpeningNotesRepo(db), openings, opening_sources, llm_settings, llm_usage, runner, clock,
         paths.data_dir / "exports",
@@ -440,6 +446,7 @@ def build_services(
         openings=openings,
         opening_sources=opening_sources,
         opening_notes=opening_notes,
+        opening_practice=opening_practice,
         repertoire=repertoire,
         db=db,
         http=http,
@@ -561,6 +568,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         openings=services.openings,
         opening_sources=services.opening_sources,
         opening_notes=services.opening_notes,
+        opening_practice=services.opening_practice,
         repertoire=services.repertoire,
     )
     if isinstance(clock, OffsetClock):

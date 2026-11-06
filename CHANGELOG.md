@@ -22,6 +22,11 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **AI notes on openings:** an overview, and **Explain this move**, grounded in Stockfish and Wikibooks. A saved note is free from then on and works offline, and **Regenerate** replaces one after showing the cost. Export or delete an opening's notes. [FR-12.5, FR-12.6, FR-12.7, FR-12.15]
 - **Save notes for this opening:** prefetch with a scope, seeing the requests, tokens, cost, budget share and time before you Confirm. It runs in the background, can be cancelled, and goes in several runs if it's over your per-run cap. [FR-12.7a, FR-12.7b]
 - **Openings** has its own model in Settings → AI. [FR-1.15]
+- **"What if they play…?":** enter a move for the other side, get Stockfish's best replies, and add the branch to your repertoire. [FR-12.8]
+- **Build my repertoire:** adds the replies you're likely to meet, with one answer for you at each position, and flags what needs a look. Nothing is saved until you've reviewed it. [FR-12.14]
+- **Practice:** drill your repertoire with spaced repetition per position. The app plays the other side, and a miss shows your line and Stockfish's view. New positions come a few at a time. [FR-12.9, FR-12.10]
+- **Opening stats:** accuracy, due positions and weakest positions per opening and line. They stay on your PC and affect no rating. [FR-12.11]
+- **Study this opening** on an opening weakness in a Coach report opens the trainer. [FR-10.58]
 - **Your repertoire:** add lines for White or Black, mark main moves and reorder them. Removing a move keeps any position another line still reaches. [FR-12.4]
 
 ### Fixed

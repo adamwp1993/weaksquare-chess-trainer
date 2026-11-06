@@ -188,6 +188,7 @@ export class MockCoach {
       whole_game: games ? [
         w("time:low_clock", "Mistakes under 10% of your clock", 4, 13.3, 450, [], {}),
         w("endgame:rook", "Rook endgames", 2, 6.7, 300, ["rookEndgame"], {}),
+        ...(new URLSearchParams(window.location.search).get("coachopening") ? [w("opening:Italian Game", "Italian Game: you score 30%", 5, 16.7, 120, [], {}), w("opening:Rare Line", "Rare Line: you score 20%", 5, 16.7, 120, [], {})] : []),
       ] : [],
       measures: games >= 24 ? measures(games) : null, // the mock's measures assume a full run
       comparison: second && games ? this.comparison() : null,

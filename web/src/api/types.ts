@@ -230,7 +230,7 @@ export interface ReasonOption {
 
 export interface ReasonPrompt {
   attempt_id: number;
-  source: "puzzle" | "danger";
+  source: "puzzle" | "danger" | "opening";
   suggested: "didntLook" | "missedResource" | "miscalculated" | "unknownPattern" | "rushed" | "misclick" | null;
   reasons: ReasonOption[];
 }
@@ -1366,6 +1366,93 @@ export interface OpeningPrefetchPlan {
   blurb: string;
   scope: OpeningScope;
   extend: boolean;
+}
+
+export interface OpeningDeviationReply {
+  uci: string;
+  san: string;
+  score: string;
+}
+
+export interface OpeningDeviation {
+  their_uci: string;
+  their_san: string;
+  fen_after: string;
+  replies: OpeningDeviationReply[];
+  game_over: string | null;
+}
+
+export interface ProposedMove {
+  position_key: string;
+  move_uci: string;
+  san: string;
+  source: string;
+  yours: boolean;
+  depth: number;
+  share: number | null;
+  already_yours: boolean;
+  flags: string[];
+}
+
+export interface RepertoireProposal {
+  id: string;
+  color: "white" | "black";
+  family: string;
+  moves: ProposedMove[];
+}
+
+export interface PracticeSummary {
+  due: number;
+  new: number;
+  positions: number;
+}
+
+export interface PracticeState {
+  session_id: string;
+  state: "your_move" | "wrong" | "helped" | "line_end" | "finished";
+  fen: string;
+  color: "white" | "black";
+  decisions: number;
+  correct: number;
+  wrong: number;
+  lines_clean: number;
+  lines_lost: number;
+  remaining: number;
+  target_reason: string | null;
+  replies: string[][];
+  correct_moves: string[][];
+  attempt_id: number | null;
+  message: string | null;
+  wrong_fen: string | null;
+  reason_prompt: ReasonPrompt | null;
+}
+
+export interface OpeningPositionStat {
+  position_key: string;
+  label: string;
+  attempts: number;
+  correct: number;
+  due: boolean;
+}
+
+export interface OpeningLineStat {
+  name: string;
+  positions: number;
+  attempts: number;
+  correct: number;
+  due: number;
+}
+
+export interface OpeningStat {
+  id: number;
+  name: string;
+  eco: string;
+  positions: number;
+  attempts: number;
+  correct: number;
+  due: number;
+  weakest: OpeningPositionStat[];
+  lines: OpeningLineStat[];
 }
 
 export interface RepertoireRow {

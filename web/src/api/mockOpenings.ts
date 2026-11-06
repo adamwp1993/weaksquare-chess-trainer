@@ -9,7 +9,13 @@ import type {
   OpeningLines,
   OpeningNote,
   OpeningNoteQuote,
+  OpeningDeviation,
   OpeningPrefetchPlan,
+  OpeningStat,
+  PracticeState,
+  PracticeSummary,
+  ProposedMove,
+  RepertoireProposal,
   OpeningPage,
   OpeningScope,
   OpeningSettings,
@@ -304,6 +310,268 @@ export class MockOpenings {
     const n = this.notes.size;
     this.notes.clear();
     return n;
+  }
+
+  // ---- "What if they play…?" and Build my repertoire ------------------------------------------------------------
+
+  private boardAfter(moves: string[]): Chess {
+    const chess = new Chess();
+    for (const m of moves) chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] });
+    return chess;
+  }
+
+  deviation(color: Color, moves: string[], their: string): OpeningDeviation {
+    const chess = this.boardAfter(moves);
+    if ((chess.turn() === "w") === (color === "white")) {
+      throw new ApiCallError({ code: "invalid_argument", message: "It's your move here. A deviation is a move for the other side.", retryable: false });
+    }
+    let played;
+    try {
+      played = /^[a-h][1-8][a-h][1-8]/.test(their)
+        ? chess.move({ from: their.slice(0, 2), to: their.slice(2, 4), promotion: their[4] })
+        : chess.move(their.trim());
+    } catch {
+      throw new ApiCallError({ code: "invalid_argument", message: "That move isn't legal here.", retryable: false });
+    }
+    const replies = chess.moves({ verbose: true }).slice(0, 3).map((m, i) => ({ uci: m.from + m.to, san: m.san, score: `+0.${3 - i} for you` }));
+    return { their_uci: played.from + played.to, their_san: played.san, fen_after: chess.fen(), replies, game_over: null };
+  }
+
+  addDeviation(color: Color, moves: string[], their: string, reply: string) {
+    const chess = new Chess();
+    let added = 0;
+    let kept = 0;
+    const store = (uci: string, source: string) => {
+      const key = keyOf(chess);
+      const m = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+      const here = this.edges[color].filter((e) => e.key === key);
+      if (here.some((e) => e.uci === uci)) {
+        kept++;
+        return;
+      }
+      added++;
+      this.edges[color].push({ key, uci, san: m.san, source, isMain: here.length === 0 });
+    };
+    moves.forEach((m) => store(m, "book"));
+    store(their, "you");
+    store(reply, "engine");
+    return { added, kept };
+  }
+
+  private proposals = new Map<string, RepertoireProposal>();
+
+  build(color: Color, family: string): string {
+    const params = new URLSearchParams(window.location.search);
+    const chess = new Chess();
+    const sans = this.bookFor(family).lines[0].sans.split(" ");
+    const moves: ProposedMove[] = sans.map((s, i) => {
+      const key = keyOf(chess);
+      const m = chess.move(s);
+      const yours = (i % 2 === 0) === (color === "white");
+      const flagged = i === sans.length - 1;
+      return {
+        position_key: key,
+        move_uci: m.from + m.to,
+        san: m.san,
+        source: flagged ? "engine" : i > 4 ? "explorer" : "book",
+        yours,
+        depth: i,
+        share: !yours && i > 4 ? 0.6 : null,
+        already_yours: this.edges[color].some((e) => e.key === key && e.uci === m.from + m.to),
+        flags: flagged ? ["engine_answer"] : params.get("account") === "signed_out" ? [] : i === 2 ? ["few_games"] : [],
+      };
+    });
+    const id = `b${this.proposals.size + 1}`;
+    this.proposals.set(id, { id, color, family, moves });
+    return id;
+  }
+
+  proposal(id: string): RepertoireProposal {
+    const found = this.proposals.get(id);
+    if (!found) throw new ApiCallError({ code: "not_found", message: "That proposal has gone. Build it again.", retryable: false });
+    return found;
+  }
+
+  saveProposal(id: string) {
+    const p = this.proposal(id);
+    let added = 0;
+    let kept = 0;
+    for (const m of p.moves) {
+      const here = this.edges[p.color].filter((e) => e.key === m.position_key);
+      if (here.some((e) => e.uci === m.move_uci)) {
+        kept++;
+        continue;
+      }
+      added++;
+      this.edges[p.color].push({ key: m.position_key, uci: m.move_uci, san: m.san, source: m.source, isMain: here.length === 0 });
+    }
+    this.picked[p.color].add(p.family);
+    this.proposals.delete(id);
+    return { added, kept };
+  }
+
+  discardProposal(id: string) {
+    this.proposals.delete(id);
+  }
+
+  // ---- Practice and stats ----------------------------------------------------------------------------------------
+
+  tolerance = false;
+  private session: { color: Color; chess: Chess; state: PracticeState["state"]; correct: number; wrong: number; decisions: number; clean: number; targets: number; attempts: Map<string, [number, number]>; wrongFen: string | null } | null = null;
+  private attempts: Record<Color, Map<string, [number, number]>> = { white: new Map(), black: new Map() };
+  private seen: Record<Color, Set<string>> = { white: new Set(), black: new Set() };
+
+  private yourPositions(color: Color): string[] {
+    const turn = color === "white" ? "w" : "b";
+    return [...new Set(this.edges[color].filter((e) => e.key.split(" ")[1] === turn).map((e) => e.key))];
+  }
+
+  practiceSummary(color: Color): PracticeSummary {
+    const mine = this.yourPositions(color);
+    const newOnes = mine.filter((k) => !this.seen[color].has(k)).length;
+    return { due: 0, new: newOnes, positions: mine.length };
+  }
+
+  private practiceState(correct: [string, string][] = [], replies: [string, string][] = [], attempt: number | null = null): PracticeState {
+    const s = this.session as NonNullable<typeof this.session>;
+    return {
+      session_id: "p1",
+      state: s.state,
+      fen: s.chess.fen(),
+      color: s.color,
+      decisions: s.decisions,
+      correct: s.correct,
+      wrong: s.wrong,
+      lines_clean: s.clean,
+      lines_lost: 0,
+      remaining: Math.max(0, s.targets - s.decisions),
+      target_reason: "new",
+      replies,
+      correct_moves: correct,
+      attempt_id: attempt,
+      message: null,
+      wrong_fen: s.wrongFen,
+      reason_prompt:
+        s.state === "wrong"
+          ? {
+              attempt_id: attempt ?? 1,
+              source: "opening",
+              suggested: null,
+              reasons: [
+                { key: "didntLook", label: "I didn't look at their reply", gap: "process" },
+                { key: "missedResource", label: "I missed their reply", gap: "calculation" },
+                { key: "miscalculated", label: "I miscalculated", gap: "calculation" },
+                { key: "unknownPattern", label: "I didn't know the pattern", gap: "knowledge" },
+                { key: "rushed", label: "I rushed", gap: "time" },
+                { key: "misclick", label: "Misclick", gap: "noise" },
+              ],
+            }
+          : null,
+    };
+  }
+
+  private advance(): [string, string][] {
+    const s = this.session as NonNullable<typeof this.session>;
+    const replies: [string, string][] = [];
+    const yourTurn = () => (s.chess.turn() === "w") === (s.color === "white");
+    while (!yourTurn()) {
+      const moves = this.edges[s.color].filter((e) => e.key === keyOf(s.chess));
+      if (moves.length === 0) break;
+      const m = moves.find((e) => e.isMain) ?? moves[0];
+      s.chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+      replies.push([m.uci, m.san]);
+    }
+    const here = this.edges[s.color].filter((e) => e.key === keyOf(s.chess));
+    s.state = yourTurn() && here.length > 0 ? "your_move" : "line_end";
+    if (s.state === "line_end") s.clean += 1;
+    return replies;
+  }
+
+  startPractice(color: Color, mode: "due" | "new" | "all"): PracticeState {
+    const targets = mode === "due" ? this.practiceSummary(color).new : this.yourPositions(color).length;
+    this.session = { color, chess: new Chess(), state: "your_move", correct: 0, wrong: 0, decisions: 0, clean: 0, targets, attempts: this.attempts[color], wrongFen: null };
+    if (targets === 0) {
+      this.session.state = "finished";
+      return this.practiceState();
+    }
+    const replies = this.advance();
+    return this.practiceState([], replies);
+  }
+
+  private tally(key: string, ok: boolean) {
+    const s = this.session as NonNullable<typeof this.session>;
+    const [n, good] = s.attempts.get(key) ?? [0, 0];
+    s.attempts.set(key, [n + 1, good + (ok ? 1 : 0)]);
+    this.seen[s.color].add(key);
+  }
+
+  playPractice(uci: string): PracticeState {
+    const s = this.session as NonNullable<typeof this.session>;
+    const key = keyOf(s.chess);
+    const answers = this.edges[s.color].filter((e) => e.key === key);
+    s.decisions += 1;
+    if (answers.some((e) => e.uci === uci)) {
+      this.tally(key, true);
+      s.correct += 1;
+      s.chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+      const replies = this.advance();
+      return this.practiceState([], replies);
+    }
+    this.tally(key, false);
+    s.wrong += 1;
+    s.state = "wrong";
+    const probe = new Chess(s.chess.fen());
+    probe.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    s.wrongFen = probe.fen();
+    return this.practiceState(answers.map((a) => [a.uci, a.san]), [], s.decisions);
+  }
+
+  showAnswer(): PracticeState {
+    const s = this.session as NonNullable<typeof this.session>;
+    const key = keyOf(s.chess);
+    this.tally(key, false);
+    s.decisions += 1;
+    s.wrong += 1;
+    s.state = "helped";
+    return this.practiceState(this.edges[s.color].filter((e) => e.key === key).map((a) => [a.uci, a.san]), [], s.decisions);
+  }
+
+  continuePractice(): PracticeState {
+    const s = this.session as NonNullable<typeof this.session>;
+    s.wrongFen = null;
+    if (s.state === "wrong" || s.state === "helped") {
+      const answers = this.edges[s.color].filter((e) => e.key === keyOf(s.chess));
+      const m = answers[0];
+      s.chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+      const replies = this.advance();
+      return this.practiceState([], replies);
+    }
+    s.state = "finished";
+    return this.practiceState();
+  }
+
+  stats(color: Color): OpeningStat[] {
+    const rows = [...this.attempts[color].entries()];
+    return [...this.picked[color]].map((name, i) => {
+      const attempts = rows.reduce((n, [, r]) => n + r[0], 0);
+      const correct = rows.reduce((n, [, r]) => n + r[1], 0);
+      return {
+        id: i + 1,
+        name,
+        eco: this.bookFor(name).eco,
+        positions: this.yourPositions(color).length,
+        attempts,
+        correct,
+        due: 0,
+        lines: [{ name, positions: this.yourPositions(color).length, attempts, correct, due: 0 }],
+        weakest: rows.filter(([, r]) => r[1] < r[0]).map(([k, r]) => ({ position_key: k, label: "1. e4", attempts: r[0], correct: r[1], due: false })),
+      };
+    });
+  }
+
+  match(name: string): string | null {
+    const wanted = name.split(":")[0].trim().toLowerCase();
+    return BOOK.find((b) => b.family.toLowerCase() === wanted)?.family ?? null;
   }
 
   // ---- the repertoire --------------------------------------------------------------------------------------
