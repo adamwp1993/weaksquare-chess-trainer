@@ -317,6 +317,7 @@ export class MockPlan {
       kind: e.game_id ? "reflection" : "note", text, game_id: e.game_id ?? null, ply: e.ply ?? null,
       move: e.ply !== undefined && e.ply !== null ? "4. Nxe5" : null, game_label: e.game_id ? "player_a – opponent_b" : null,
       weakness_key: e.weakness_key ?? null, plan_day_id: e.plan_day_id ?? null, plan_task_id: e.plan_task_id ?? null,
+      plan_day_date: this.plans.flatMap((p) => p.days).find((d) => d.id === e.plan_day_id)?.date ?? null,
     }; // prettier-ignore
     this.entries.push(entry);
     this.h.calls.push(`journalAdd:${entry.kind}`);

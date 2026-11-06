@@ -70,7 +70,6 @@ def test_qa2_the_game_tag_search_finds_a_game_and_clears(page: Page) -> None:
     box.press("Escape")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B24: a plan-day tag is saved but shown nowhere")
 def test_qa2_a_plan_day_tag_can_be_seen_on_the_entry(page: Page) -> None:
     _journal(page)
     day = _pick(page, "journal-tag-day", 1)  # not today, so the entry's own date can't stand in for it
@@ -137,7 +136,6 @@ def test_qa2_a_reflection_task_fills_its_tag_and_saving_ticks_it_and_clears_the_
     expect(page.get_by_test_id("journal-tag-game")).to_have_value("")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B27: closing a reflection's question throws away what you wrote")
 def test_qa2_closing_a_reflections_question_keeps_what_you_wrote(page: Page) -> None:
     _open(page, "coach=report&plan=current")
     _coach(page, "plan")
@@ -196,7 +194,6 @@ def test_qa2_a_long_word_stays_inside_the_edit_box_and_the_game_notes(page: Page
     _shot(page, "review-long-note")
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B25: the Include my journal preview doesn't wrap one long word")
 def test_qa2_a_long_word_stays_inside_the_journal_preview(page: Page) -> None:
     _open(page, "ai=on&coach=report&journal=some")
     page.get_by_test_id("nav-coach").click()

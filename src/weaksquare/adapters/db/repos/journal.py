@@ -71,9 +71,9 @@ class JournalRepo:
 
     def search(
         self, *, kinds: Sequence[str] = (), game_id: int | None = None, weakness_key: str | None = None,
-        date_from: str | None = None, date_to: str | None = None, query: str | None = None, limit: int = 500,
+        date_from: str | None = None, date_to: str | None = None, query: str | None = None,
     ) -> list[EntryRow]:  # fmt: skip
-        """FR-10.70: your entries, newest first."""
+        """FR-10.70: your entries, newest first, all of them (QA v0.12-B18)."""
         where: list[str] = []
         args: list[Any] = []
         if kinds:
@@ -98,7 +98,7 @@ class JournalRepo:
         if where:
             sql += " WHERE " + " AND ".join(where)
         with self._db.session() as conn:
-            rows = conn.execute(sql + " ORDER BY entry_date DESC, id DESC LIMIT ?", (*args, limit)).fetchall()
+            rows = conn.execute(sql + " ORDER BY entry_date DESC, id DESC", args).fetchall()
         return [_entry(r) for r in rows]
 
     def earliest_date(self) -> str | None:
@@ -117,6 +117,12 @@ class JournalRepo:
     def day_exists(self, day_id: int) -> bool:
         with self._db.session() as conn:
             return conn.execute("SELECT 1 FROM plan_days WHERE id = ?", (day_id,)).fetchone() is not None
+
+    def day_date(self, day_id: int) -> str | None:
+        """QA v0.12-B24: the date of the plan day an entry is tagged with, to show on the entry."""
+        with self._db.session() as conn:
+            r = conn.execute("SELECT date FROM plan_days WHERE id = ?", (day_id,)).fetchone()
+        return str(r[0]) if r else None
 
     def task_exists(self, task_id: int) -> bool:
         with self._db.session() as conn:
@@ -204,7 +210,7 @@ class DailyLogRepo:
     def plan_tasks_done(self, since: str, until: str) -> list[str]:
         """QA v0.12-B6: done by what the app saw or by your hand, on the day it first was; not if you unticked it."""
         return self._times(
-            "SELECT COALESCE(done_at, manual_at) AS at FROM plan_tasks WHERE removed = 0"
+            "SELECT COALESCE(MIN(done_at, manual_at), done_at, manual_at) AS at FROM plan_tasks WHERE removed = 0"
             " AND (manual_state = 'done' OR (manual_state IS NULL AND done_at IS NOT NULL))"
             " AND at >= ? AND at < ?",
             since, until,

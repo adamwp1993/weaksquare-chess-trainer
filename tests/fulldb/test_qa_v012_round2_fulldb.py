@@ -39,9 +39,6 @@ def api(paths: Any, clock: Any, fulldb_path: Path) -> Api:
     return build_api(p, clock, FakeDesktop())
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B22: when the options run out, Swap stays on one reflection, and it can double on a day"
-)
 def test_qa2_swap_chain_on_the_full_db_moves_on_and_never_doubles(api: Api, paths: Any) -> None:
     plant_managed_install(paths)
     _my_games(_svc(api), 1)

@@ -116,6 +116,9 @@ class PlansRepo:
             conn.execute(
                 "UPDATE training_plans SET status = 'replaced', ended_at = ? WHERE status = 'current'", (created_at,)
             )
+            # QA v0.12-B12, B20: moves looked at before a plan don't count towards it, so a half-finished pass ends here.
+            # Every pass open after this began since the plan did, and may complete a review task however it's reached.
+            conn.execute("DELETE FROM review_passes WHERE completed_at IS NULL")
             cur = conn.execute(
                 f"INSERT INTO training_plans ({_PLAN_COLS.split(', ', 1)[1]}) VALUES (?,?,?,?,?,?,?,?,'current',NULL)",
                 (created_at, report_id, source, ai_run_id, p.weeks, json.dumps(list(p.weekdays)), p.minutes,
@@ -236,6 +239,15 @@ class PlansRepo:
                     out.setdefault(int(g), set()).add(int(p))
         return {k: frozenset(v) for k, v in out.items()}
 
+    def swapped_task_ids(self, plan_id: int) -> list[int]:
+        """Tasks of this plan you swapped away: their sessions' time still counts (QA v0.12-B23)."""
+        with self._db.session() as conn:
+            rows = conn.execute(
+                "SELECT t.id FROM plan_tasks t JOIN plan_days d ON d.id = t.day_id WHERE d.plan_id = ? AND t.removed = 1",
+                (plan_id,),
+            ).fetchall()
+        return [int(r[0]) for r in rows]
+
     def entry_tasks(self, until: str | None = None) -> frozenset[int]:
         """Tasks a journal entry was saved from."""
         with self._db.session() as conn:
@@ -264,15 +276,15 @@ class ReviewPassesRepo:
         self._db = db
 
     def start(self, game_id: int, task_id: int | None, at: str) -> int:
-        """A task resumes its own open pass; otherwise a new one starts, so moves you looked at before the task
-        don't count towards it (QA v0.12-B12)."""
+        """An open pass for this game takes the task on (it began since the plan did: see `PlansRepo.add`); otherwise
+        a new one starts."""
         with self._db.transaction() as conn:
             r = conn.execute(
-                "SELECT id, plan_task_id FROM review_passes WHERE game_id = ? AND completed_at IS NULL"
-                " ORDER BY id DESC LIMIT 1",
+                "SELECT id FROM review_passes WHERE game_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1",
                 (game_id,),
             ).fetchone()
-            if r is not None and r[1] == task_id:
+            if r is not None:
+                conn.execute("UPDATE review_passes SET plan_task_id = ? WHERE id = ?", (task_id, int(r[0])))
                 return int(r[0])
             cur = conn.execute(
                 "INSERT INTO review_passes (game_id, plan_task_id, started_at) VALUES (?,?,?)", (game_id, task_id, at)

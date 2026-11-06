@@ -159,6 +159,9 @@ class JournalService:
         self._entry(entry_id)
         self._repo.delete(entry_id)
 
+    def plan_day_date(self, day_id: int) -> str | None:
+        return self._repo.day_date(day_id)
+
     def get(self, entry_id: Any) -> Any:
         return self._entry(entry_id)
 
@@ -252,7 +255,7 @@ class JournalService:
         date_to = _date(f.get("date_to"), "The end date")
         before = _date(f.get("before"), "before")
         today = self._today()
-        last = date.fromisoformat(date_to) if date_to else today
+        last = min(date.fromisoformat(date_to), today) if date_to else today  # QA v0.12-B19: nothing is dated later
         if before is not None:
             last = min(last, date.fromisoformat(before) - timedelta(days=1))
         want = set(kinds) or set(KINDS)
@@ -262,9 +265,14 @@ class JournalService:
         # QA v0.12-B7: a search or a filter that only entries can match looks at all of them. Only the daily log,
         # which is computed day by day, comes a window at a time.
         if gid or weakness or query or "log" not in want:
-            found = self._repo.search(
-                kinds=entry_kinds, game_id=gid, weakness_key=weakness, date_from=date_from,
-                date_to=last.isoformat(), query=query,
+            # QA v0.12-B17: with only the daily log picked, no entry qualifies (an empty list means "any" to the repo).
+            found = (
+                self._repo.search(
+                    kinds=entry_kinds, game_id=gid, weakness_key=weakness, date_from=date_from,
+                    date_to=last.isoformat(), query=query,
+                )
+                if entry_kinds
+                else []
             )  # fmt: skip
             return Timeline(tuple(TimelineItem(e.entry_date, entry=e) for e in found), date_from or "", False, games)
         first = last - timedelta(days=WINDOW_DAYS - 1)
@@ -289,8 +297,17 @@ class JournalService:
         """Is there anything before this window to page back to? (QA v0.12-B7.)"""
         if floor is not None and first <= floor:
             return False
-        dates = [self._repo.earliest_date(), self._log.earliest()]
-        return any(d is not None and d[:10] < first.isoformat() for d in dates)
+        entry = self._repo.earliest_date()
+        if entry is not None and entry < first.isoformat():
+            return True
+        logged = self._log.earliest()  # a stored time: QA v0.12-B19, sorted onto your local day like the log itself
+        if logged is None:
+            return False
+        try:
+            t = datetime.fromisoformat(logged)
+        except ValueError:
+            return False
+        return self._clock.local_date(t if t.tzinfo else t.replace(tzinfo=UTC)) < first
 
     # ------------------------------------------------------------ Include my journal (FR-10.71)
 

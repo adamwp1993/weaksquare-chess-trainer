@@ -1226,6 +1226,7 @@ class JournalEntry:
     weakness_key: str | None
     plan_day_id: int | None
     plan_task_id: int | None
+    plan_day_date: str | None  # the tagged plan day's date, to show on the entry
 
 
 @dataclass(frozen=True)

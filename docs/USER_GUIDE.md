@@ -812,7 +812,7 @@ Only your own moves count, and the first six moves (the opening) aren't counted 
 
 Every report after your first compares itself with your previous one of the same kind, so you can see whether the work is paying off. Another player's reports only ever compare with that player's, and a report on your puzzle history compares only with other puzzle-history reports.
 
-- **Each weakness** in either report: its rate per 10 games then and now, marked **New** (not in the last report) or **Gone** (no longer in the top list).
+- **Each weakness** in either report: its rate per 10 games then and now, marked **New** (not in the last report) or **Gone** (no longer in the top list). A whole-game weakness that's gone has no rate this time, because it can still be happening below the point where it's listed, so it just says *no longer in the top list*: that isn't the same as better.
 - **Better or worse** only when both reports have at least 5 games in that group and at least 5 of this report's games are new. An opening, for example, needs 5 games of that opening in each report: one that merely dropped below 5 is **Gone**, but not better. Otherwise it says *not enough new games yet*, however big the change looks.
 - **Last N reports:** from your third report on, the trend across up to your 5 latest.
 - **Puzzles on its themes:** your first-try accuracy on that weakness's themes, up to the last report and since. Each side needs at least 10 attempts.

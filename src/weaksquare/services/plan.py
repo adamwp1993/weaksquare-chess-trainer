@@ -44,7 +44,7 @@ from weaksquare.core.plan import (
     general_task,
     plan_progress,
     status_of,
-    swap_for,
+    swap_choices,
     task_minutes,
     task_spec,
     to_carry,
@@ -341,11 +341,14 @@ class PlanService:
             source = by_id.get(t.carried_from) if t.carried_from is not None else None
             attempts[t.id] = n + (attempts.get(source.id, 0) if source else 0)
             seconds[t.id] = round(ms / 1000)  # QA v0.12-B5: a copy keeps the progress, not the time spent
+        swapped = sum(raw.get(i, (0, 0))[1] for i in self._plans.swapped_task_ids(plan.id))
         retry_games = {int(t.params["game_id"]) for t in tasks if t.type == RETRY and isinstance(t.params.get("game_id"), int)}  # fmt: skip
         needed = {g: frozenset(self._review.retry_plies(g)) for g in retry_games}
         return Facts(
             attempts=attempts,
             seconds=seconds,
+            carried=frozenset(t.carried_from for t in tasks if t.carried_from is not None),
+            swapped_seconds=round(swapped / 1000),
             retry_needed=needed,
             retry_tried=self._plans.retries_since(sorted(retry_games), plan.created_at, until),
             reviewed_tasks=self._passes.completed_tasks(until),
@@ -374,7 +377,7 @@ class PlanService:
         carried = frozenset(t.carried_from for d in plan.days for t in d.tasks if t.carried_from is not None)
         days: list[DayView] = []
         counts = {"done": 0, "skipped": 0, "left": 0}
-        spent = 0
+        spent = round(facts.swapped_seconds / 60)
         for d in plan.days:
             views: list[TaskView] = []
             for t in d.tasks:
@@ -444,12 +447,25 @@ class PlanService:
         ctx = self.context(report)
         old = Task(t.type, t.minutes, t.title, t.params, t.weakness_key)
         today = [Task(x.type, x.minutes, x.title, x.params, x.weakness_key) for x in place.day.tasks if x.id != t.id]
-        # QA v0.12-B11: what this slot has already been counts, so Swap keeps moving on.
-        return int(
-            self._plans.swap(
-                t.id, self.fit_task(swap_for(old, data, ctx, [*today, *self._plans.swapped_away(t.id)]), ctx)
-            )
-        )
+        return self._swap_in(t.id, old, data, ctx, today)
+
+    def _swap_in(self, task_id: int, old: Task, data: Any, ctx: Context, today: list[Task]) -> int:
+        """QA v0.12-B11, B22: what this slot has been counts, so Swap keeps moving on, and when it's been everything it
+        starts over. Fitting can turn a task into another one, so the result is checked after that."""
+        been = self._plans.swapped_away(task_id)
+
+        def same(x: Task, y: Task) -> bool:
+            return x.type == y.type and x.title == y.title
+
+        for t in swap_choices(old, data, ctx):
+            fitted = self.fit_task(t, ctx)
+            if not any(same(fitted, x) for x in [old, *today, *been]):
+                return int(self._plans.swap(task_id, fitted))
+        for t in swap_choices(old, data, ctx):
+            fitted = self.fit_task(t, ctx)
+            if not any(same(fitted, x) for x in [old, *today]):
+                return int(self._plans.swap(task_id, fitted))
+        return int(self._plans.swap(task_id, old))  # nothing else fits a full day: it stays as it was
 
     def _report_for_plan(self, plan_id: int) -> Any:
         plan = self._plans.get(plan_id)
@@ -511,6 +527,8 @@ class PlanService:
         """Learn X from a task: its puzzles for this session only (FR-10.63), never through your filters."""
         place = self._place(task_id)
         t = place.task
+        if not self._puzzles_ready():  # QA v0.12-B29
+            raise ValidationError("Import the puzzle database first: this drill needs its puzzles.")
         report = self._report_for_plan(place.plan_id)
         families = _families(report)
         found = topic(str(t.params.get("topic")), families)

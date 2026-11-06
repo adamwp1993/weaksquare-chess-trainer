@@ -1195,6 +1195,7 @@ export interface JournalEntry {
   weakness_key: string | null;
   plan_day_id: number | null;
   plan_task_id: number | null;
+  plan_day_date: string | null;
 }
 
 export interface DayLogTally {

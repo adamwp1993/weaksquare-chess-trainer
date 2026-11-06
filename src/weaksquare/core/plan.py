@@ -46,6 +46,11 @@ MODE_LABELS = {
     "danger_spotting": "Danger-spotting ",
 }
 DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+SWAP_PROMPTS = (
+    "What's the one thing to remember from today?",
+    "Which of your recent mistakes do you most want to stop making?",
+    "What will you look for before every move in your next game?",
+)
 
 
 @dataclass(frozen=True)
@@ -418,17 +423,29 @@ def _once_key(t: Task) -> tuple[str, Any] | None:
 def swap_for(task: Task, report: Mapping[str, Any], ctx: Context, today: Sequence[Task]) -> Task:
     """FR-10.64 Swap: the next task for the same weakness, otherwise for the next weakness, otherwise general
     puzzles. Deterministic. Never one already on the day, or the task being swapped."""
+    return _first_free(task, report, ctx, today)
+
+
+def _first_free(task: Task, report: Mapping[str, Any], ctx: Context, taken: Sequence[Task]) -> Task:
+    busy = [*taken, task]
+    choices = swap_choices(task, report, ctx)
+    for t in choices:
+        if not any(_same(t, x) or t.title == x.title for x in busy):
+            return t
+    return choices[-1]
+
+
+def swap_choices(task: Task, report: Mapping[str, Any], ctx: Context) -> list[Task]:
+    """Everything a Swap can offer, in order: the same weakness, the next weaknesses, then a pool that never runs out
+    (QA v0.12-B22): general puzzles in each mode, and questions for your journal."""
     weak = focus(report)
     ordered = [w for w in weak if w["key"] == task.weakness_key] + [w for w in weak if w["key"] != task.weakness_key]
-    taken = [*today, task]
-    for w in ordered:
-        for t in _options(w, task.minutes, ctx):
-            if not any(_same(t, x) or t.title == x.title for x in taken):
-                return t
-    general = general_task(ctx, task.minutes)
-    return general if not any(_same(general, x) or general.title == x.title for x in taken) else reflection_task(
-        task.minutes, task.weakness_key, "What's the one thing to remember from today?"
-    )  # fmt: skip
+    out = [t for w in ordered for t in _options(w, task.minutes, ctx)]
+    out.append(general_task(ctx, task.minutes))
+    for mode in ("commit_line", "name_idea"):
+        out.append(puzzle_task(ctx, task.minutes, None, "any theme", mode=mode))
+    out += [reflection_task(task.minutes, task.weakness_key, p) for p in SWAP_PROMPTS]
+    return out
 
 
 def resize(task: Task, minutes: int, ctx: Context) -> Task:
@@ -519,12 +536,16 @@ class Facts:
     reviewed_games: frozenset[int] = frozenset()  # games stepped through since the plan began
     entry_tasks: frozenset[int] = frozenset()  # tasks a journal entry was saved from
     seconds: Mapping[int, int] = field(default_factory=dict)  # task id → solving time in its sessions
+    carried: frozenset[int] = frozenset()  # tasks with a copy: from then on the copy is the task (QA v0.12-B26)
+    swapped_seconds: int = 0  # solving time on tasks you swapped away (QA v0.12-B23)
 
 
 def auto_done(t: TaskRow, f: Facts) -> bool:
     """Did the app see this task done? (FR-10.64.) A lesson's `done_at` is set when you open it."""
     if t.done_at is not None:
         return True
+    if t.id in f.carried:
+        return False
     if t.type in (PUZZLES, GAME_PUZZLES):
         return f.attempts.get(t.id, 0) >= int(t.params.get("count") or 1)
     gid = t.params.get("game_id")
@@ -595,7 +616,7 @@ def plan_progress(plan: PlanRow, today: date, f: Facts, theme_stats: Mapping[str
     carried = frozenset(t.carried_from for d in plan.days for t in d.tasks if t.carried_from is not None)
     by_type: dict[str, dict[str, int]] = {}
     by_weakness: dict[str, dict[str, int]] = {}
-    minutes = 0
+    minutes = round(f.swapped_seconds / 60)
     for d in plan.days:
         for t in d.tasks:
             st = status_of(t, d.date, today, f, carried)

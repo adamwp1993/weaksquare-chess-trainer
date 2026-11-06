@@ -204,7 +204,14 @@ def _weakness_rows(
         in_now = key in now_rates
         was = key in old_rates
         then = float(old_rates[key].get("per10") or 0.0) if was else None
-        now = float(now_rates[key].get("per10") or 0.0) if in_now else 0.0
+        # A tactical weakness missing from a report really didn't happen: every one found is stored. A whole-game one
+        # can be missing and still happen, below its gate or out of the capped list, so its rate is unknown
+        # (QA v0.12-B16), not 0, and there's nothing to call better.
+        now = (
+            float(now_rates[key].get("per10") or 0.0)
+            if in_now
+            else (None if _group_games({}, key) is not None else 0.0)
+        )
         flag = "new" if key not in old_rates else "gone" if key not in now_top else None
         verdict = _verdict(
             then, now, enough=_group_enough(cur, old, key, enough), higher_is_better=False, same=SAME_RATE

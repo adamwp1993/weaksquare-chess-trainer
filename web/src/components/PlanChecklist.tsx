@@ -44,7 +44,7 @@ function TaskRow({
           data-testid={`plan-tick-${t.id}`}
         />
         <Stack gap={0} style={{ minWidth: 0 }}>
-          <Text size="sm" td={skipped ? "line-through" : undefined} c={skipped ? "dimmed" : undefined}>
+          <Text size="sm" td={skipped ? "line-through" : undefined} c={skipped ? "dimmed" : undefined} style={{ overflowWrap: "anywhere" }}>
             {t.title}
           </Text>
           <Group gap={6}>

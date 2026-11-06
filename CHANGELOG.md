@@ -27,7 +27,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ### Changed
 - The Coach is now three tabs: **Report**, **Plan** and **Journal**. [FR-10.65]
-- The weakness tables' **Since last report** column now says better or worse only with at least 5 games in each report and 5 new games; otherwise *not enough new games yet*. A weakness that's new says **New** rather than *worse*. [FR-10.73]
+- The weakness tables' **Since last report** column now says better or worse only with at least 5 games in that group in each report and 5 new games; otherwise *not enough new games yet*. A weakness that's new says **New** rather than *worse*. [FR-10.73]
 - AI coaching allows longer answers, up to 7,500 tokens at Summary and 10,000 at Detailed, to leave room for the plan. Its estimate and worst-case cost are higher, so a costly model may now need a higher per-run cap, most of all at Detailed or a higher reasoning level. [FR-8.14]
 - A saved AI answer is reused only if it has a plan and, with Include my journal, only while your journal text is unchanged. [FR-10.66, FR-10.71]
 

@@ -1141,8 +1141,18 @@ class Api:
             dto.JournalItem(i.date, self._entry_dto(i.entry) if i.entry is not None else None, _day_log_dto(i.log) if i.log is not None else None)
             for i in t.items
         ]  # fmt: skip
-        games = [dto.JournalGame(gid, self._game_label(gid)) for gid in t.games]
-        return dto.JournalTimeline(items, t.window_start, t.older, games)
+        return dto.JournalTimeline(items, t.window_start, t.older, self._journal_games(t.games))
+
+    def _journal_games(self, ids: Any) -> list[dto.JournalGame]:
+        """The Game filter's choices. QA v0.12-B28: with the date, so two games against one opponent differ, and with
+        the id only for games that still look alike."""
+        labels: dict[int, str] = {}
+        for gid in ids:
+            g = self._games.get(gid)
+            played = (g.played_at or "")[:10]
+            labels[gid] = self._game_label(gid) + (f" ({played})" if played else "")
+        seen = list(labels.values())
+        return [dto.JournalGame(gid, lb if seen.count(lb) == 1 else f"{lb} #{gid}") for gid, lb in labels.items()]
 
     def _game_label(self, game_id: int) -> str:
         g = self._games.get(game_id)
@@ -1184,6 +1194,7 @@ class Api:
         return dto.JournalEntry(
             e.id, e.created_at, e.updated_at, e.entry_date, e.kind, e.text, e.game_id, e.ply, move, label,
             e.weakness_key, e.plan_day_id, e.plan_task_id,
+            self._journal.plan_day_date(e.plan_day_id) if e.plan_day_id is not None else None,
         )  # fmt: skip
 
     @bridge_call

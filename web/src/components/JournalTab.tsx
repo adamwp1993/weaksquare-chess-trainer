@@ -87,6 +87,11 @@ function EntryView({
               {weaknessLabel ?? e.weakness_key}
             </Badge>
           )}
+          {e.plan_day_date && (
+            <Badge size="xs" variant="outline" color="gray" data-testid={`journal-day-${e.id}`}>
+              Plan: {dayLabel(e.plan_day_date)}
+            </Badge>
+          )}
           {e.game_id !== null && (
             <Anchor size="xs" component="button" onClick={() => onOpen(e.game_id!, e.ply === null ? 0 : e.ply + 1)} data-testid={`journal-open-${e.id}`}>
               {e.game_label}
@@ -160,8 +165,18 @@ export function JournalTab({
   const [dayTag, setDayTag] = useState<string | null>(draft?.plan_day_id ? String(draft.plan_day_id) : null);
   const [gameOptions, setGameOptions] = useState<{ value: string; label: string }[]>([]);
   const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
+  // A reflection task's Start fills in its tags. Closing its question keeps what you've written (QA v0.12-B27).
+  const draftTask = draft?.plan_task_id ?? null;
   useEffect(() => {
-    api.listGames({ limit: 50 }).then((p) => setGameOptions(p.games.map((g) => ({ value: String(g.id), label: `${g.white ?? "?"} – ${g.black ?? "?"} (${(g.played_at ?? "").slice(0, 10)})` }))), () => undefined); // prettier-ignore
+    if (draftTask === null || !draft) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- filled in once per task, and you can change them after */
+    setTag(draft.weakness_key);
+    setGameTag(draft.game_id ? String(draft.game_id) : null);
+    setDayTag(draft.plan_day_id ? String(draft.plan_day_id) : null);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [draftTask]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    api.listGames({ limit: 50 }).then((p) => setGameOptions(p.games.map((g) => ({ value: String(g.id), label: `${g.white ?? "?"} – ${g.black ?? "?"}${g.played_at ? ` (${g.played_at.slice(0, 10)})` : ""}` }))), () => undefined); // prettier-ignore
     api.getCurrentPlan().then((p) => setDayOptions((p?.days ?? []).map((d) => ({ value: String(d.id), label: `Week ${d.week} · ${dayLabel(d.date)}` }))), () => undefined); // prettier-ignore
   }, []);
 

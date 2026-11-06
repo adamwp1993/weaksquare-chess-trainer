@@ -534,7 +534,6 @@ export function CoachView({
       <Tabs.Panel value="journal">
         {tab === "journal" && (
           <JournalTab
-            key={journalDraft?.plan_task_id ?? "journal"}
             weaknesses={weaknesses}
             draft={journalDraft}
             onClearDraft={onClearDraft}

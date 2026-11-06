@@ -158,9 +158,6 @@ def test_qa2_carry_off_then_on_keeps_the_limit(api: Api, clock: Any) -> None:
     assert sum(t["minutes"] for t in _carried(plan, 1)) == 20
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B26: a session running when the task is carried finishes the task and its copy"
-)
 def test_qa2_a_session_running_past_midnight_does_not_finish_a_task_twice(api: Api, paths: Any, clock: Any) -> None:
     plan = _plan_with(api, [[_puzzles_task(2, 10), _ref("x")], [_ref("b")]])
     tid = _task(plan)["id"]
@@ -181,9 +178,6 @@ def test_qa2_a_session_running_past_midnight_does_not_finish_a_task_twice(api: A
 # ---- FR-10.65: minutes spent ----
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B23: minutes really spent on a task vanish from the totals when you swap it"
-)
 def test_qa2_minutes_spent_stay_after_a_swap(api: Api, paths: Any, clock: Any) -> None:
     _real_report(api, paths, 6)
     plan = _plan_with(api, [[_puzzles_task(5, 10), _ref("x")]])
@@ -202,7 +196,6 @@ def test_qa2_minutes_spent_stay_after_a_swap(api: Api, paths: Any, clock: Any) -
 # ---- FR-10.64: Swap, again and again ----
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B22: Swap can give the same task again, and ends stuck on one reflection")
 def test_qa2_a_long_swap_chain_moves_on_and_never_doubles_a_task_on_the_day(api: Api, paths: Any) -> None:
     plant_managed_install(paths)
     _my_games(_svc(api), 1)
@@ -281,9 +274,6 @@ def test_qa2_an_app_seen_task_unticked_and_ticked_again_counts_once(api: Api) ->
     assert _log_done(api, day) == 1
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B21: a hand tick moves to a later day in the log when the app sees the task done then"
-)
 def test_qa2_a_hand_tick_stays_on_its_day_when_the_app_sees_it_done_later(api: Api, clock: Any) -> None:
     plan = _plan_with(api, [[_ref("a"), _ref("b")], [_ref("c")]])
     a = _day(plan, 0)[0]
@@ -333,9 +323,6 @@ def _review_plan(api: Api, gid: int) -> dict[str, Any]:
     return _plan_with(api, [[Task(REVIEW, 10, "v", {"game_id": gid}), _ref("x")], [_ref("y")]])
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B20: a pass left open before the plan keeps a whole review since then from ticking"
-)
 def test_qa2_a_whole_review_since_the_plan_began_ticks_with_an_old_pass_left_open(
     api: Api, paths: Any, clock: Any
 ) -> None:
@@ -359,7 +346,6 @@ def test_qa2_a_review_task_ticks_without_start_when_no_pass_is_open(api: Api, pa
     assert _task(_ok(api.get_current_plan()))["status"] == "done"
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B20: Start on a carried review task drops the moves already visited")
 def test_qa2_a_carried_review_task_keeps_the_moves_you_already_visited(api: Api, paths: Any, clock: Any) -> None:
     plant_managed_install(paths)
     gid = _games(_svc(api), 1)[0]
@@ -503,16 +489,12 @@ def test_qa2_older_stops_at_from_and_to_moves_the_window(api: Api, clock: Any) -
     assert t["items"] == [] and t["older"] is False
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B19: a To date after today moves the window past everything")
 def test_qa2_a_to_date_after_today_still_shows_today(api: Api, clock: Any) -> None:
     _ok(api.add_journal_entry({"text": "today's"}))
     later = (clock.now() + timedelta(days=200)).date().isoformat()
     assert _texts(_ok(api.get_journal({"date_to": later}))) == ["today's"]
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B17: Show Daily log with a search or filter lists entries you didn't pick"
-)
 @pytest.mark.parametrize("field", ["query", "weakness_key", "game_id"])
 def test_qa2_show_daily_log_with_a_search_or_filter_lists_no_entries(api: Api, field: str) -> None:
     gid = _secret_game(api, 0)
@@ -544,9 +526,6 @@ def test_qa2_filters_combine(api: Api, clock: Any) -> None:
     assert {g["id"] for g in t["games"]} == {g1, g2}  # the Game filter's choices don't narrow with the filter
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B18: search and Notes or Reflections stop at the newest 500 with no way to see more"
-)
 def test_qa2_search_reaches_every_entry_past_500(api: Api) -> None:
     with _svc(api).db.transaction() as conn:
         conn.executemany(
@@ -558,9 +537,6 @@ def test_qa2_search_reaches_every_entry_past_500(api: Api) -> None:
     assert shown == 501 or t["older"] is True, shown
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B19: older compares UTC dates with local days, so the oldest local day can't be reached"
-)
 def test_qa2_older_is_true_for_a_local_day_the_utc_date_hides(
     paths: Any, desktop: FakeDesktop, fixture_puzzles_db: Any
 ) -> None:
@@ -580,7 +556,6 @@ def test_qa2_older_is_true_for_a_local_day_the_utc_date_hides(
     assert t["older"] is True
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B28: the Game filter names two games of the same players the same")
 def test_qa2_the_game_filter_tells_apart_two_games_against_one_opponent(api: Api) -> None:
     g1, g2 = _secret_game(api, 0), _secret_game(api, 1)
     _ok(api.add_journal_entry({"text": "one", "game_id": g1}))
@@ -797,10 +772,6 @@ def test_qa2_the_ai_is_told_not_enough_and_a_better_claim_is_dropped_for_each_ki
         assert notes == [] and dropped == 1, key
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="v0.12-B16: a weakness out of the top list with 5 or more games in its group scores 0 and is called better",
-)
 def test_qa2_a_group_with_5_games_gone_from_the_list_because_others_are_worse_is_not_better() -> None:
     """A weakness pushed out of the capped list (or below its gate) still has games in its group: its rate isn't 0."""
     key = "opening:Sicilian"
@@ -809,9 +780,6 @@ def test_qa2_a_group_with_5_games_gone_from_the_list_because_others_are_worse_is
     assert w.verdict != "better", (w.then, w.now, w.verdict)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v0.12-B16: a weakness below its gate scores 0 and is called better, its rate unchanged"
-)
 def test_qa2_low_clock_mistakes_unchanged_but_gone_from_the_list_are_not_better() -> None:
     """Built by the real measures from digests: as many low-clock mistakes as before, but mistakes elsewhere rose, so
     the weakness's gate (low-clock rate above the rest) closes. Its rate hasn't improved."""
@@ -952,7 +920,6 @@ def test_qa2_the_whole_plan_with_no_puzzle_database_through_start(nodb: Api, pat
     assert _ok(api.get_journal({}))
 
 
-@pytest.mark.xfail(strict=True, reason="v0.12-B29: a lesson's drill crashes with no puzzle database (bridge only)")
 def test_qa2_a_lessons_drill_with_no_puzzle_database(nodb: Api, paths: Any) -> None:
     api = nodb
     plant_managed_install(paths)

@@ -46,7 +46,19 @@ function WeaknessRow({ w, unit, trend }: { w: CoachWeaknessChange; unit: string;
       </Table.Td>
       <Table.Td ta="right">{num(w.then, unit)}</Table.Td>
       <Table.Td ta="right">{num(w.now, unit)}</Table.Td>
-      <Table.Td>{w.flag === "new" ? <Text size="xs" c="dimmed">new in this report</Text> : <Verdict v={w.verdict} />}</Table.Td>
+      <Table.Td>
+        {w.flag === "new" ? (
+          <Text size="xs" c="dimmed">
+            new in this report
+          </Text>
+        ) : w.flag === "gone" && w.now === null ? (
+          <Text size="xs" c="dimmed" data-testid={`since-out-${w.key}`}>
+            no longer in the top list
+          </Text>
+        ) : (
+          <Verdict v={w.verdict} />
+        )}
+      </Table.Td>
       {trend && (
         <Table.Td>
           <Text size="xs" c="dimmed">

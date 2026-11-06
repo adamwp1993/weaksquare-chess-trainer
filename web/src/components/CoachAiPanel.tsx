@@ -459,7 +459,9 @@ export function CoachAiPanel({
                     {n.game ? `${n.game} · ${n.move ?? `ply ${n.ply}`}` : "A puzzle"}
                     {n.reason ? ` · ${n.reason}` : ""}
                   </Text>
-                  <Text size="sm">{n.text}</Text>
+                  <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                    {n.text}
+                  </Text>
                 </Paper>
               ))
             ))}
@@ -485,7 +487,9 @@ export function CoachAiPanel({
                     {n.game ? ` · ${n.game}${n.move ? ` · ${n.move}` : ""}` : ""}
                     {n.weakness ? ` · ${n.weakness}` : ""}
                   </Text>
-                  <Text size="sm">{n.text}</Text>
+                  <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                    {n.text}
+                  </Text>
                 </Paper>
               ))
             ))}
