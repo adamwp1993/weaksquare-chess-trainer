@@ -101,6 +101,7 @@ def build_api(
         plan=services.plan,
         journal=services.journal,
         openings=services.openings,
+        opening_sources=services.opening_sources,
         repertoire=services.repertoire,
     )
 

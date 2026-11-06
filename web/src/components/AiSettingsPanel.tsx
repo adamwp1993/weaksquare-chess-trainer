@@ -216,6 +216,7 @@ export function AiSettingsPanel({ full = false }: { full?: boolean }) {
             Coach
           </Text>
           <FeatureModelPicker feature="coach" reasoning onError={setError} />
+          <FeatureModelPicker feature="openings" reasoning onError={setError} />
         </Stack>
       )}
       {full && (

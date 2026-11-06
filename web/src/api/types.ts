@@ -465,7 +465,7 @@ export interface LlmModelChoice {
 }
 
 export interface LlmFeature {
-  feature: "explain" | "game_review" | "coach";
+  feature: "explain" | "game_review" | "coach" | "openings";
   label: string;
   choice: "same" | "anthropic" | "openai" | "none";
   model: string;
@@ -1295,6 +1295,19 @@ export interface OpeningLines {
 export interface OpeningSettings {
   scope: OpeningScope;
   extend: boolean;
+  use_wikibooks: boolean;
+  explorer_source: "lichess" | "masters";
+  explorer_ratings: number[];
+  signed_in: boolean;
+}
+
+export interface OpeningPage {
+  state: "ok" | "missing" | "unavailable" | "off";
+  label: string;
+  text: string;
+  url: string;
+  licence: string;
+  licence_url: string;
 }
 
 export interface RepertoireRow {

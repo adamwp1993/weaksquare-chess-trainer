@@ -3,15 +3,18 @@
 // the engine, the explorer or you. All text is plain React text.
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Group,
   Loader,
   NumberInput,
   Paper,
+  MultiSelect,
   ScrollArea,
   SegmentedControl,
   Stack,
+  Switch,
   Tabs,
   Text,
   TextInput,
@@ -25,6 +28,7 @@ import type {
   BookFamily,
   OpeningLine,
   OpeningLines,
+  OpeningPage,
   OpeningScope,
   OpeningSettings,
   Repertoire,
@@ -202,7 +206,137 @@ function LearnBoard({
           status={engine}
           onStatusChanged={onEngineChanged}
         />
+        <WikibooksPanel sans={line.moves.slice(0, mode === "play" ? 0 : step).map((m) => m.san)} />
       </Stack>
+    </Group>
+  );
+}
+
+// ---- Wikibooks (FR-12.15): fetched only when you open the panel ----------------------------------------------------
+
+function WikibooksPanel({ sans }: { sans: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [page, setPage] = useState<OpeningPage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const moves = sans.join(" ");
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    api.getOpeningPage(moves ? moves.split(" ") : []).then(
+      (p) => alive && setPage(p),
+      (e: unknown) => alive && setError(message(e)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [open, moves]);
+
+  return (
+    <Paper withBorder p="sm" radius="md" data-testid="wikibooks-panel">
+      <Group justify="space-between" gap="xs">
+        <Text fw={700} size="sm">
+          Wikibooks
+        </Text>
+        <Button size="compact-xs" variant="subtle" onClick={() => setOpen(!open)} data-testid="wikibooks-toggle">
+          {open ? "Hide" : "Read about this position"}
+        </Button>
+      </Group>
+      {open && error && (
+        <Text size="sm" c="red">
+          {error}
+        </Text>
+      )}
+      {open && page && page.state === "ok" && (
+        <Stack gap={6} mt={6}>
+          <ScrollArea.Autosize mah={280}>
+            <Text size="sm" style={{ whiteSpace: "pre-wrap" }} data-testid="wikibooks-text">
+              {page.text}
+            </Text>
+          </ScrollArea.Autosize>
+          <Text size="xs" c="dimmed" data-testid="wikibooks-attribution">
+            From Wikibooks, <Anchor size="xs" href={page.url} target="_blank" rel="noreferrer">Chess Opening Theory: {page.label}</Anchor>,{" "}
+            <Anchor size="xs" href={page.licence_url} target="_blank" rel="noreferrer">{page.licence}</Anchor>. It's written by volunteers and may be wrong.
+          </Text>
+        </Stack>
+      )}
+      {open && page && page.state === "missing" && (
+        <Text size="sm" c="dimmed" mt={6} data-testid="wikibooks-missing">
+          Wikibooks has no page for this exact move order.
+        </Text>
+      )}
+      {open && page && page.state === "unavailable" && (
+        <Text size="sm" c="dimmed" mt={6} data-testid="wikibooks-unavailable">
+          Couldn't reach Wikibooks, and this page isn't saved yet.
+        </Text>
+      )}
+      {open && page && page.state === "off" && (
+        <Text size="sm" c="dimmed" mt={6} data-testid="wikibooks-off">
+          Wikibooks is turned off below.
+        </Text>
+      )}
+    </Paper>
+  );
+}
+
+// ---- where outside text and popular moves come from (FR-12.2, 12.15) ---------------------------------------------------
+
+const RATING_BANDS = ["0", "1000", "1200", "1400", "1600", "1800", "2000", "2200", "2500"];
+
+function SourceControls({ settings, onChange }: { settings: OpeningSettings; onChange: (s: OpeningSettings) => void }) {
+  const save = (use: boolean, source: "lichess" | "masters", ratings: number[]) => {
+    if (ratings.length > 0) api.setOpeningSources(use, source, ratings).then(onChange, () => undefined);
+  };
+  return (
+    <Group gap="md" align="flex-end" wrap="wrap" data-testid="opening-sources">
+      <Switch
+        size="sm"
+        checked={settings.use_wikibooks}
+        onChange={(e) => save(e.currentTarget.checked, settings.explorer_source, settings.explorer_ratings)}
+        label={
+          <>
+            Use Wikibooks <OptionInfo id="openings.useWikibooks" />
+          </>
+        }
+        data-testid="opening-wikibooks"
+      />
+      {settings.signed_in ? (
+        <>
+          <div data-option-group>
+            <Text size="sm" fw={500}>
+              Popular moves from <OptionInfo id="openings.explorerSource" />
+            </Text>
+            <SegmentedControl
+              size="xs"
+              value={settings.explorer_source}
+              onChange={(v) => save(settings.use_wikibooks, v as "lichess" | "masters", settings.explorer_ratings)}
+              data={[
+                { value: "lichess", label: "Lichess games" },
+                { value: "masters", label: "Masters" },
+              ]}
+              data-testid="opening-explorer-source"
+            />
+          </div>
+          {settings.explorer_source === "lichess" && (
+            <MultiSelect
+              size="xs"
+              w={260}
+              label={
+                <>
+                  Rating bands <OptionInfo id="openings.explorerRatings" />
+                </>
+              }
+              data={RATING_BANDS}
+              value={settings.explorer_ratings.map(String)}
+              onChange={(v) => save(settings.use_wikibooks, settings.explorer_source, v.map(Number))}
+              data-testid="opening-explorer-ratings"
+            />
+          )}
+        </>
+      ) : (
+        <Text size="xs" c="dimmed" data-testid="opening-explorer-signed-out">
+          Sign in to Lichess to rank lines by popular moves.
+        </Text>
+      )}
     </Group>
   );
 }
@@ -370,6 +504,7 @@ function OpeningDetail({
         </Group>
       </Group>
       {settings && <ScopeControls settings={settings} onChange={change} />}
+      {settings && <SourceControls settings={settings} onChange={setSettings} />}
       {error && (
         <Alert color="red" data-testid="opening-error">
           {error}

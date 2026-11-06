@@ -22,11 +22,13 @@ from weaksquare.core.engine import EngineLine, EngineNotInstalled, validate_fen
 from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.openings import (
     SOURCE_ENGINE,
+    SOURCE_EXPLORER,
     BookIndex,
     BookLine,
     Family,
     Line,
     OpeningScope,
+    board_of,
     build_index,
     extend_line,
     families,
@@ -38,12 +40,14 @@ from weaksquare.core.openings import (
     validate_scope,
 )
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
+from weaksquare.services.opening_sources import OpeningSources
 
 BOOK_FILES = ("a.tsv", "b.tsv", "c.tsv", "d.tsv", "e.tsv")
 BOOK_VERSION_KEY = "openings.book_version"
 SCOPE_KEY = "openings.scope"  # FR-12.7a
 EXTEND_KEY = "openings.extend"  # FR-12.13, default on
 MULTIPV = 3
+MIN_POPULAR_GAMES = 10  # fewer than this isn't a popular move, it's a few people's game
 IMPORT_JOB, EXTEND_JOB = "opening_book_import", "opening_extend"
 
 
@@ -106,8 +110,9 @@ class LinesView:
 class OpeningsService:
     def __init__(
         self, book: Book, cache: EngineCache, settings: Settings, engine: Engine, runner: JobRunner, clock: Clock,
-        folder: Path,
+        folder: Path, sources: OpeningSources,
     ) -> None:  # fmt: skip
+        self._sources = sources
         self._book = book
         self._cache = cache
         self._settings = settings
@@ -242,7 +247,16 @@ class OpeningsService:
     def _stored(self, key: str) -> list[EngineLine] | None:
         return self._cache.get(key, self._think_ms(), MULTIPV, self._engine.engine_id())
 
+    def _popularity(self, key: str) -> dict[str, int] | None:
+        """FR-12.2: explorer games per move, from the store only: reading a screen never uses the network."""
+        found = self._sources.stored_explorer(board_of(key))
+        return found.popularity() if found is not None else None
+
     def _next_stored(self, board: chess.Board) -> tuple[str, str] | None:
+        """FR-12.13: the explorer's most-played move, otherwise Stockfish's best. Stored results only."""
+        popular = self._sources.most_played(self._sources.stored_explorer(board), MIN_POPULAR_GAMES)
+        if popular is not None:
+            return popular.uci, SOURCE_EXPLORER
         lines = self._stored(position_key(board)) if self._engine_ready() else None
         if not lines or not lines[0].pv:
             return None
@@ -250,7 +264,7 @@ class OpeningsService:
 
     def _book_lines(self, family: object, sub_lines: int, max_moves: int) -> list[Line]:
         root = self.root(family)
-        return select_lines(self._data()[1], root, sub_lines, max_moves)
+        return select_lines(self._data()[1], root, sub_lines, max_moves, self._popularity)
 
     def lines(self, family: object, scope: OpeningScope | None = None, extend: bool | None = None) -> LinesView:
         s = scope or self.scope()
@@ -276,6 +290,11 @@ class OpeningsService:
     ) -> Callable[[chess.Board], tuple[str, str] | None]:
         def next_move(board: chess.Board) -> tuple[str, str] | None:
             token.raise_if_cancelled()
+            popular = self._sources.most_played(self._sources.fetch_explorer(board), MIN_POPULAR_GAMES)
+            if popular is not None:
+                return popular.uci, SOURCE_EXPLORER
+            if not self._engine_ready():
+                return None
             key = position_key(board)
             lines = self._stored(key)
             if lines is None:
@@ -301,13 +320,18 @@ class OpeningsService:
 
         next_move = self._next_computed(token, counted)
         for line in lines:
+            board = chess.Board()
+            for m in line.moves:  # the book's own positions too: their popularity ranks its lines (FR-12.2)
+                token.raise_if_cancelled()
+                self._sources.fetch_explorer(board)
+                board.push(chess.Move.from_uci(m.uci))
             extend_line(line, max_moves, next_move)
         return done[0]
 
     def start_extend(self, family: object, scope: OpeningScope | None = None) -> str | None:
         """Grow the lines past the book with Stockfish. None when there's nothing to do."""
         s = scope or self.scope()
-        if not self._engine_ready():
+        if not self._engine_ready() and not self._sources.signed_in():
             raise EngineNotInstalled("Install Stockfish to continue lines past the book.")
         book = self._book_lines(family, s.sub_lines, s.max_moves)
         key = (str(family), s.sub_lines, s.max_moves)

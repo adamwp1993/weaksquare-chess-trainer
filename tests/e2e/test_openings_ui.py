@@ -157,3 +157,59 @@ def test_coordinates_show_here_too(page: Any) -> None:
     openings(page)
     pick(page, "Italian Game")
     assert page.locator("[data-testid=board] coords").count() > 0
+
+
+# ---- Wikibooks and the explorer's settings (FR-12.2, 12.15) ---------------------------------------------
+
+
+def calls(page: Any) -> list[str]:
+    return list(page.evaluate("window.__mockApi.calls"))
+
+
+def test_wikibooks_loads_only_when_you_open_the_panel_and_credits_its_source(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("learn-forward").click()
+    assert not [c for c in calls(page) if c.startswith("openingPage")]
+    page.get_by_test_id("wikibooks-toggle").click()
+    page.get_by_test_id("wikibooks-text").wait_for()
+    attribution = page.get_by_test_id("wikibooks-attribution")
+    assert "CC BY-SA 4.0" in attribution.inner_text()
+    links = [a.get_attribute("href") for a in attribution.get_by_role("link").all()]
+    assert any(h and h.startswith("https://en.wikibooks.org/wiki/") for h in links)
+    assert "https://creativecommons.org/licenses/by-sa/4.0/" in links
+
+
+def test_wikibooks_can_be_turned_off(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("wikibooks-toggle").click()
+    page.get_by_test_id("wikibooks-text").wait_for()
+    page.get_by_test_id("opening-wikibooks").uncheck(force=True)
+    page.get_by_test_id("learn-forward").click()
+    page.get_by_test_id("wikibooks-off").wait_for()
+
+
+def test_play_along_doesnt_reveal_the_line_through_wikibooks(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("wikibooks-toggle").click()
+    page.get_by_test_id("wikibooks-text").wait_for()
+    page.get_by_test_id("learn-mode").get_by_text("Play along").click()
+    page.get_by_text("Your move.").wait_for()
+    assert [c for c in calls(page) if c.startswith("openingPage")][-1] == "openingPage:"
+
+
+def test_signed_out_says_why_there_are_no_popular_moves(page: Any) -> None:
+    openings(page, "?openings=ready&account=signed_out")
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-explorer-signed-out").wait_for()
+    assert page.get_by_test_id("opening-explorer-source").count() == 0
+
+
+def test_masters_hides_the_rating_bands(page: Any) -> None:
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-explorer-ratings").wait_for()
+    page.get_by_test_id("opening-explorer-source").get_by_text("Masters").click()
+    page.get_by_test_id("opening-explorer-ratings").wait_for(state="detached")

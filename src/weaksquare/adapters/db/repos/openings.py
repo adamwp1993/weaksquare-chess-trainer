@@ -6,9 +6,11 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from weaksquare.adapters.db.connection import Database
 from weaksquare.core.engine import EngineLine
+from weaksquare.core.opening_sources import WikiPage
 from weaksquare.core.openings import MOVE_NUMBER, BookLine
 from weaksquare.core.repertoire import Edge, NewMove
 
@@ -184,4 +186,49 @@ class OpeningEngineCacheRepo:
                 "INSERT OR REPLACE INTO opening_engine_cache"
                 " (position_key, think_ms, multipv, engine, lines_json, created_at) VALUES (?,?,?,?,?,?)",
                 (position_key, think_ms, multipv, engine, body, created_at),
+            )
+
+
+class ExplorerCacheRepo:
+    """Explorer answers as they came (FR-12.2). They're checked against the position each time they're read."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get(self, position_key: str, params: str) -> tuple[Any, str] | None:
+        with self._db.session() as conn:
+            row = conn.execute(
+                "SELECT body_json, fetched_at FROM explorer_cache WHERE position_key = ? AND params = ?",
+                (position_key, params),
+            ).fetchone()
+        return (json.loads(row[0]), str(row[1])) if row is not None else None
+
+    def put(self, position_key: str, params: str, body: Any, fetched_at: str) -> None:
+        with self._db.session() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO explorer_cache (position_key, params, body_json, fetched_at) VALUES (?,?,?,?)",
+                (position_key, params, json.dumps(body, separators=(",", ":")), fetched_at),
+            )
+
+
+class WikibooksPagesRepo:
+    """Wikibooks text kept on your PC (FR-12.15). A missing page is remembered too, so it isn't asked for again."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get(self, title: str) -> tuple[WikiPage, str] | None:
+        with self._db.session() as conn:
+            row = conn.execute(
+                "SELECT title, status, revision_id, body, fetched_at FROM wikibooks_pages WHERE title = ?", (title,)
+            ).fetchone()
+        if row is None:
+            return None
+        return WikiPage(str(row[0]), str(row[1]), row[2], str(row[3])), str(row[4])
+
+    def put(self, page: WikiPage, fetched_at: str) -> None:
+        with self._db.session() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO wikibooks_pages (title, revision_id, body, status, fetched_at) VALUES (?,?,?,?,?)",
+                (page.title, page.revision_id, page.text, page.status, fetched_at),
             )

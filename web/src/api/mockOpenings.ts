@@ -7,6 +7,7 @@ import type {
   BookFamily,
   OpeningLine,
   OpeningLines,
+  OpeningPage,
   OpeningScope,
   OpeningSettings,
   Repertoire,
@@ -82,6 +83,9 @@ export class MockOpenings {
   private scope: OpeningScope = { preset: "standard", sub_lines: 3, max_moves: 12 };
   private extend = true;
   private extended = new Set<string>();
+  private useWikibooks = true;
+  private explorerSource: "lichess" | "masters" = "lichess";
+  private explorerRatings = [1600, 1800, 2000];
   private edges: Record<Color, Edge[]> = { white: [], black: [] };
   private picked: Record<Color, Set<string>> = { white: new Set(), black: new Set() };
 
@@ -103,7 +107,14 @@ export class MockOpenings {
   }
 
   settings(): OpeningSettings {
-    return { scope: { ...this.scope }, extend: this.extend };
+    return {
+      scope: { ...this.scope },
+      extend: this.extend,
+      use_wikibooks: this.useWikibooks,
+      explorer_source: this.explorerSource,
+      explorer_ratings: [...this.explorerRatings],
+      signed_in: new URLSearchParams(window.location.search).get("account") !== "signed_out",
+    };
   }
 
   setSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null): OpeningSettings {
@@ -119,6 +130,22 @@ export class MockOpenings {
     }
     if (extend !== null) this.extend = extend;
     return this.settings();
+  }
+
+  setSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]): OpeningSettings {
+    this.useWikibooks = useWikibooks;
+    this.explorerSource = source;
+    this.explorerRatings = [...ratings];
+    return this.settings();
+  }
+
+  page(sans: string[]): OpeningPage {
+    const label = sans.map((s, i) => (i % 2 === 0 ? `${i / 2 + 1}. ${s}` : `${(i - 1) / 2 + 1}...${s}`)).join(" ") || "Chess Opening Theory";
+    const url = `https://en.wikibooks.org/wiki/Chess_Opening_Theory/${label.replace(/ /g, "_")}`;
+    const common = { label, url, licence: "CC BY-SA 4.0", licence_url: "https://creativecommons.org/licenses/by-sa/4.0/" };
+    if (!this.useWikibooks) return { state: "off", text: "", ...common };
+    if (sans.length > 8) return { state: "missing", text: "", ...common };
+    return { state: "ok", text: "Invented mock text about this position, its plans and its pawn structure.", ...common };
   }
 
   private bookFor(family: string) {

@@ -276,3 +276,59 @@ def test_main_and_order_can_be_changed(book: Any, services: Any) -> None:
     assert next(e.move_uci for e in services.repertoire.edges("black") if e.position_key == key) == order[1]
     with pytest.raises(NotFoundError):
         services.repertoire.set_main("black", key, "a1a1")
+
+
+# ---- the explorer in lines (FR-12.2, 12.13) --------------------------------------------------------------
+
+
+def _store_popular(services: Any, key: str, moves: dict[str, int]) -> None:
+    from weaksquare.adapters.db.repos.openings import ExplorerCacheRepo
+
+    params = services.opening_sources.explorer_settings().params
+    body = {"moves": [{"uci": u, "white": n, "draws": 0, "black": 0} for u, n in moves.items()]}
+    ExplorerCacheRepo(services.db).put(key, params, body, "2026-01-01T12:00:00+00:00")
+
+
+def test_stored_popularity_ranks_the_lines(book: Any, services: Any) -> None:
+    root = book.root("Italian Game")
+    assert book.lines("Italian Game", CUSTOM, extend=False).lines[0].moves[5].san == "Bc5"
+    _store_popular(services, root.final_key, {"g8f6": 5000, "f8c5": 10})
+    assert book.lines("Italian Game", CUSTOM, extend=False).lines[0].moves[5].san == "Nf6"
+
+
+def test_a_line_continues_with_a_popular_move_labelled_as_such(book: Any, services: Any, engine_ready: Any) -> None:
+    from weaksquare.core.openings import final_key_of
+
+    scope = validate_scope("custom", 0, 12)
+    book.extend_now(book.lines("Polish Opening", scope, extend=False).lines, 12, CancelToken(), lambda _f, _m: None)
+    line = book.lines("Polish Opening", scope, extend=False).lines[0]
+    key = final_key_of(line.moves)
+    from weaksquare.core.openings import board_of
+
+    legal = next(iter(board_of(key).legal_moves)).uci()
+    _store_popular(services, key, {legal: 500})
+    grown = book.lines("Polish Opening", scope, extend=True).lines[0]
+    assert grown.moves[len(line.moves)].uci == legal
+    assert grown.moves[len(line.moves)].source == "explorer"
+
+
+def test_too_few_games_is_not_a_popular_move(book: Any, services: Any, engine_ready: Any) -> None:
+    from weaksquare.core.openings import board_of, final_key_of
+
+    scope = validate_scope("custom", 0, 12)
+    line = book.lines("Polish Opening", scope, extend=False).lines[0]
+    key = final_key_of(line.moves)
+    legal = next(iter(board_of(key).legal_moves)).uci()
+    _store_popular(services, key, {legal: 3})
+    grown = book.lines("Polish Opening", scope, extend=True).lines[0]
+    assert all(m.source != "explorer" for m in grown.moves)
+
+
+def test_a_broken_stored_answer_cant_put_an_illegal_move_in_a_line(book: Any, services: Any) -> None:
+    from weaksquare.core.openings import final_key_of
+
+    scope = validate_scope("custom", 0, 12)
+    line = book.lines("Polish Opening", scope, extend=False).lines[0]
+    key = final_key_of(line.moves)
+    _store_popular(services, key, {"a1a8": 5000, "nonsense": 5000})
+    assert book.lines("Polish Opening", scope, extend=True).lines[0].moves == line.moves

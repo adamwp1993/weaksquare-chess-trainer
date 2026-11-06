@@ -68,6 +68,9 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your Lichess puzzle dashboard:** with the **Puzzle history** or **Both** source and while you're signed in, the app reads your per-theme puzzle results for the last 30 days from lichess.org (`/api/puzzle/dashboard/30`). Nothing is sent but the request.
     - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
     - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
+  - **The opening trainer** (v0.13). The book ships with the app, and your repertoire stays in `user.db`:
+    - **Popular moves**, only while you're signed in: when you ask for lines to be continued, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
+    - **Wikibooks**: opening **Read about this position** requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -999,25 +1002,32 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 
 Learn an opening line by line, and keep the lines you want in your own repertoire. **Openings** in the top bar opens it. The first time you open it, the app reads its opening book, which takes a few seconds and needs no internet.
 
-The moves always come from the opening book or from Stockfish, and each one is labelled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
+The moves always come from the opening book, from Stockfish, or from what's popular in real games on Lichess, and each one is labelled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
 
 ### Choosing an opening
 1. In the **Book** tab, search by name or ECO code, and pick an opening.
 2. Choose **As White** or **As Black**. The board turns to your side.
 3. Pick a line from the list. The first is the main line.
 
-The book doesn't say which lines matter most, so the app ranks them by how many book lines pass through each move. *Main line* means the line that follows the top-ranked move at each step.
+The book doesn't say which lines matter most, so the app ranks them by how often each move is played when you're signed in to Lichess, and otherwise by how many book lines pass through it. *Main line* means the line that follows the top-ranked move at each step.
 
 | Option | What it does |
 |---|---|
 | **Lines: Light / Standard / Deep / Custom** | How many lines to show. Light is the main line and 1 sub-line, up to 8 moves. Standard is the main line and 3, up to 12. Deep is the main line and 6, up to 16. Custom is your own numbers: 0 to 10 sub-lines and 4 to 20 moves. |
-| **After the book: Extend past the book / Stop at the book's end** | The book's lines are short, most around 5 moves. **Extend** lets Stockfish continue them up to your moves per line. **Stop** uses only book moves, so lines stay short, and moves per line is just an upper limit. |
+| **After the book: Extend past the book / Stop at the book's end** | The book's lines are short, most around 5 moves. **Extend** continues them up to your moves per line, with the most-played move when you're signed in to Lichess and Stockfish's best otherwise. **Stop** uses only book moves, so lines stay short, and moves per line is just an upper limit. |
+| **Use Wikibooks** | On by default. See *Reading about a position*. |
+| **Popular moves from: Lichess games / Masters**, **Rating bands** | Signed in to Lichess only. Which games count when ranking lines and continuing them. Choose bands near your own, so you practise the replies you'll meet. |
 
-With **Extend**, **Continue with Stockfish** runs in the background, and you can keep using the app. What it works out is saved, so a line reads the same next time. Moves it added show a **Stockfish** label. Without Stockfish installed, lines stop at the book's end.
+With **Extend**, **Continue with Stockfish** runs in the background, and you can keep using the app. What it works out is saved, so a line reads the same next time. Moves it added show a **Stockfish** or **Popular** label. Signed out and without Stockfish installed, lines stop at the book's end.
 
 ### Learning a line
 - **Step through:** move forward and back with the buttons, or click a move in the list. The Stockfish panel shows the eval and top lines of the position on the board. If you've already looked at a position, its result is saved and appears straight away.
 - **Play along:** the app plays the other side and you make your side's moves. The moves still to come are hidden. If you play something else, the piece goes back and you get a nudge to try again. **Start again** returns to the first move. Nothing is scored.
+
+### Reading about a position
+**Read about this position** opens the page for your line's moves so far from *Chess Opening Theory* on English Wikibooks. It's fetched only when you open it, then saved on your PC, so it works offline next time. The credit and links under the text go to the page and its licence, CC BY-SA 4.0. Volunteers write these pages, so they vary: main openings have good explanations, and deeper lines may have a sentence or nothing. If Stockfish and the page disagree, trust Stockfish.
+
+A page is found by its exact moves, so a position you reached through another move order may have none, even if it has a page under the usual order.
 
 ### Your repertoire
 **Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.

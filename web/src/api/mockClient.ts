@@ -854,7 +854,7 @@ export class MockClient implements ApiClient {
   }
 
   // ---- v0.9: a model per AI feature and Game Review AI ------------------------------------------
-  async setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
+  async setLlmFeature(feature: "game_review" | "coach" | "openings", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
     return this.llm.setFeature(feature, choice, model, reasoning);
   }
 
@@ -1162,6 +1162,16 @@ export class MockClient implements ApiClient {
 
   async getOpeningSettings() {
     return this.openings.settings();
+  }
+
+  async setOpeningSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]) {
+    this.calls.push(`openingSources:${useWikibooks}:${source}:${ratings.join(",")}`);
+    return this.openings.setSources(useWikibooks, source, ratings);
+  }
+
+  async getOpeningPage(sans: string[]) {
+    this.calls.push(`openingPage:${sans.join(" ")}`);
+    return this.openings.page(sans);
   }
 
   async setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null) {

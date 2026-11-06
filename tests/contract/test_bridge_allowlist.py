@@ -150,6 +150,8 @@ ALLOWLIST = {
     "start_opening_book_import",  # v0.13
     "get_opening_families",  # v0.13
     "get_opening_settings",  # v0.13
+    "set_opening_sources",  # v0.13: FR-12.2, 12.15
+    "get_opening_page",  # v0.13: FR-12.15
     "set_opening_settings",  # v0.13
     "get_opening_lines",  # v0.13
     "start_opening_extend",  # v0.13: FR-12.13

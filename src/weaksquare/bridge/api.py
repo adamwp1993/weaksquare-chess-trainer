@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
+import chess
+
 from weaksquare.adapters.desktop import Desktop
 from weaksquare.bridge import dto
 from weaksquare.bridge.dto import AppInfo, Job, PuzzleDbStatus
@@ -34,6 +36,7 @@ from weaksquare.core.llm.defaults import (
     TYPICAL_PROMPT_CHARS,
     PriceRow,
 )
+from weaksquare.core.opening_sources import LICENCE_NAME, LICENCE_URL, page_title, page_url, short_title
 from weaksquare.core.plan import PlanDraft
 from weaksquare.core.preset_suggestion import validate_coach_preset
 from weaksquare.core.reasons import REASONS
@@ -54,6 +57,7 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.opening_sources import OpeningSources
 from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import Preset, PresetService
@@ -118,8 +122,10 @@ class Api:
         plan: PlanService,
         journal: JournalService,
         openings: OpeningsService,
+        opening_sources: OpeningSources,
         repertoire: RepertoireService,
     ) -> None:
+        self._opening_sources = opening_sources
         self._openings = openings
         self._repertoire = repertoire
         self._plan = plan
@@ -707,7 +713,7 @@ class Api:
     @bridge_call
     def set_llm_feature(
         self,
-        feature: Literal["game_review", "coach"],
+        feature: Literal["game_review", "coach", "openings"],
         provider: Literal["same", "anthropic", "openai"],
         model: str,
         reasoning: Literal["low", "medium", "high"],
@@ -1156,9 +1162,40 @@ class Api:
     def _opening_scope_dto(self, s: Any) -> dto.OpeningScope:
         return dto.OpeningScope(s.preset, s.sub_lines, s.max_moves)
 
+    def _opening_settings_dto(self) -> dto.OpeningSettings:
+        src = self._opening_sources
+        ex = src.explorer_settings()
+        return dto.OpeningSettings(
+            self._opening_scope_dto(self._openings.scope()), self._openings.extend_setting(), src.use_wikibooks(),
+            ex.source, list(ex.ratings), src.signed_in(),  # type: ignore[arg-type]
+        )  # fmt: skip
+
     @bridge_call
     def get_opening_settings(self) -> dto.OpeningSettings:
-        return dto.OpeningSettings(self._opening_scope_dto(self._openings.scope()), self._openings.extend_setting())
+        return self._opening_settings_dto()
+
+    @bridge_call
+    def set_opening_sources(
+        self, use_wikibooks: bool, explorer_source: Literal["lichess", "masters"], explorer_ratings: list[int]
+    ) -> dto.OpeningSettings:
+        """FR-12.2, 12.15: where outside text and popular moves come from."""
+        self._opening_sources.set_use_wikibooks(use_wikibooks)
+        self._opening_sources.set_explorer_settings(explorer_source, explorer_ratings)
+        return self._opening_settings_dto()
+
+    @bridge_call
+    def get_opening_page(self, sans: list[str]) -> dto.OpeningPage:
+        """FR-12.15: the Wikibooks page for a line's moves so far. Only when you open the panel."""
+        moves = validated_sans(sans)
+        title = page_title(moves)
+        common = (short_title(title), LICENCE_NAME, LICENCE_URL)
+        url = page_url(title)
+        if not self._opening_sources.use_wikibooks():
+            return dto.OpeningPage("off", common[0], "", url, common[1], common[2])
+        page = self._opening_sources.fetch_page(title)
+        if page is None:
+            return dto.OpeningPage("unavailable", common[0], "", url, common[1], common[2])
+        return dto.OpeningPage(page.status, common[0], page.text, url, common[1], common[2])  # type: ignore[arg-type]
 
     @bridge_call
     def set_opening_settings(
@@ -1167,7 +1204,7 @@ class Api:
         self._openings.set_scope(preset, sub_lines, max_moves)
         if extend is not None:
             self._openings.set_extend(extend)
-        return dto.OpeningSettings(self._opening_scope_dto(self._openings.scope()), self._openings.extend_setting())
+        return self._opening_settings_dto()
 
     @bridge_call
     def get_opening_lines(self, family: str) -> dto.OpeningLines:
@@ -1624,6 +1661,24 @@ def idea_result(i: Any) -> dto.IdeaResult:
 
 def danger_reveal(d: Any) -> dto.DangerReveal:
     return dto.DangerReveal(d.candidate, d.is_safe, d.call, d.best_score, d.candidate_score, list(d.line))
+
+
+def validated_sans(sans: Any) -> list[str]:
+    """FR-12.15: a page title is built only from a legal line, so nothing else can reach Wikimedia."""
+    board = chess.Board()
+    out: list[str] = []
+    if not isinstance(sans, list):
+        raise ValidationError("That isn't a line of moves.")
+    for san in sans:
+        try:
+            move = board.parse_san(san) if isinstance(san, str) else None
+        except ValueError:
+            move = None
+        if move is None:
+            raise ValidationError("That isn't a line of moves.")
+        out.append(board.san(move))
+        board.push(move)
+    return out
 
 
 def analysis_dto(a: AnalysisResult) -> dto.Analysis:

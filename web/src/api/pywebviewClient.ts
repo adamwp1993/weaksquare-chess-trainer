@@ -58,6 +58,7 @@ import type {
   BookFamily,
   OpeningBookStatus,
   OpeningLines,
+  OpeningPage,
   OpeningScope,
   OpeningSettings,
   Repertoire,
@@ -556,6 +557,14 @@ export class PywebviewClient implements ApiClient {
 
   getOpeningSettings() {
     return this.call<OpeningSettings>("get_opening_settings");
+  }
+
+  setOpeningSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]) {
+    return this.call<OpeningSettings>("set_opening_sources", useWikibooks, source, ratings);
+  }
+
+  getOpeningPage(sans: string[]) {
+    return this.call<OpeningPage>("get_opening_page", sans);
   }
 
   setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null) {

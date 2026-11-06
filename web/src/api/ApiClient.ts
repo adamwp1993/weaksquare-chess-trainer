@@ -38,6 +38,7 @@ import type {
   BookFamily,
   OpeningBookStatus,
   OpeningLines,
+  OpeningPage,
   OpeningScope,
   OpeningSettings,
   Repertoire,
@@ -352,7 +353,7 @@ export interface ApiClient {
   getExplanation(sessionId: number): Promise<Explanation | null>;
   // ---- v0.9: a model per AI feature (FR-1.15) and Game Review AI (§11.4) -----------------------
   /** Game Review's own provider and model, or "same" to follow Explain's; and its reasoning level. */
-  setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
+  setLlmFeature(feature: "game_review" | "coach" | "openings", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
   /** Can Explain this move run for one of your analyzed moves, and about what would it cost? */
   getGameMoveQuote(gameId: number, ply: number): Promise<GameAiQuote>;
   /** Explain this move (FR-11.17), as a job. Then call getGameMoveExplanation. */
@@ -451,6 +452,9 @@ export interface ApiClient {
   startOpeningBookImport(): Promise<string>;
   getOpeningFamilies(query: string): Promise<BookFamily[]>;
   getOpeningSettings(): Promise<OpeningSettings>;
+  setOpeningSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]): Promise<OpeningSettings>;
+  /** FR-12.15: the Wikibooks page for a line's moves so far. Only when you open the panel. */
+  getOpeningPage(sans: string[]): Promise<OpeningPage>;
   setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null): Promise<OpeningSettings>;
   /** FR-12.13: lines grow past the book only from stored results; this never runs the engine. */
   getOpeningLines(family: string): Promise<OpeningLines>;

@@ -3,12 +3,16 @@
 // option a later version adds. The Playwright walk in tests/e2e/test_v012_tooltips.py fails on a control without one.
 export const TOOLTIPS = {
   // ---- the opening trainer (v0.13) ----
+  "ai.model.openings": "The model for the opening trainer's overviews and move explanations. Follow Puzzle Explain, or pick your own. A saved note is reused, so a cheaper model here costs little for a whole opening.",
   "openings.color": "Which side you're learning this opening for. The board turns to that side, and a repertoire is kept separately for White and Black.",
   "openings.scope": "How many lines to show. Light: the main line and 1 sub-line, up to 8 moves. Standard: main line and 3, up to 12. Deep: main line and 6, up to 16. Custom: your own numbers. Few book lines are that long, so moves per line is an upper limit.",
   "openings.subLines": "Sub-lines besides the main line, from 0 to 10.",
   "openings.maxMoves": "The most moves a line can have, counted from the start of the game, from 4 to 20.",
   "openings.extend": "The opening book's lines are short, most around 5 moves. Extend past the book: Stockfish continues them up to your moves per line, and each move is labelled with where it came from. Stop at the book's end: only moves from the book, and lines stay short.",
   "openings.learnMode": "Step through: read the line with the forward and back buttons. Play along: the app plays the other side and you make your side's moves. If you go wrong you get a nudge and try again. Nothing is scored either way.",
+  "openings.useWikibooks": "On: the app fetches the Chess Opening Theory pages on English Wikibooks for the lines you study, keeps them on your PC, and uses them as background for AI notes. Your line's moves go to Wikimedia as a page name. Off: nothing is fetched and AI notes use only the book and Stockfish.",
+  "openings.explorerSource": "Where popular moves come from, when you're signed in to Lichess. Lichess: games played on Lichess in the rating bands you choose. Masters: over-the-board games by strong players. Popular moves rank the lines and continue them past the book.",
+  "openings.explorerRatings": "Which players' games count as popular, by rating. Choose bands near your own, so the replies you practise are the ones you'll meet.",
   "repertoire.color": "Shows your repertoire for this side. White and Black are kept separately.",
   // ---- the training plan and journal (v0.12) ----
   "plan.weeks": "How long the plan runs: 1 to 4 weeks. The app builds every day of it up front from your latest Coach report.",

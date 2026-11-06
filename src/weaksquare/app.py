@@ -33,7 +33,13 @@ from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
 from weaksquare.adapters.db.repos.journal import DailyLogRepo, JournalRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
-from weaksquare.adapters.db.repos.openings import OpeningBookRepo, OpeningEngineCacheRepo, RepertoireRepo
+from weaksquare.adapters.db.repos.openings import (
+    ExplorerCacheRepo,
+    OpeningBookRepo,
+    OpeningEngineCacheRepo,
+    RepertoireRepo,
+    WikibooksPagesRepo,
+)
 from weaksquare.adapters.db.repos.plans import PlansRepo, ReviewPassesRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
@@ -70,6 +76,7 @@ from weaksquare.adapters.llm.anthropic import AnthropicProvider
 from weaksquare.adapters.llm.openai import OpenAIProvider
 from weaksquare.adapters.logging_setup import setup_logging
 from weaksquare.adapters.oauth_loopback import LoopbackCancelled, LoopbackListener, LoopbackTimeout
+from weaksquare.adapters.opening_sources import LichessExplorer, WikibooksClient
 from weaksquare.adapters.scheduler import TimerScheduler
 from weaksquare.adapters.secret_store import KeyringSecretStore, MemorySecretStore, SecretStore, service_name
 from weaksquare.adapters.stockfish import StockfishEngine, probe_engine
@@ -98,6 +105,7 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.opening_sources import OpeningSources
 from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import PresetService
@@ -232,6 +240,7 @@ class Services:
     plan: PlanService
     journal: JournalService
     openings: OpeningsService
+    opening_sources: OpeningSources
     repertoire: RepertoireService
 
     def close(self) -> None:
@@ -409,15 +418,20 @@ def build_services(
     )  # fmt: skip
     journal = JournalService(JournalRepo(db), DailyLogRepo(db), games_repo, StatsRepo(db), clock)
     coach.attach_plan(plan, journal)
+    opening_sources = OpeningSources(
+        LichessExplorer(http), WikibooksClient(http), ExplorerCacheRepo(db), WikibooksPagesRepo(db),
+        SettingsRepo(db), account, clock,
+    )  # fmt: skip
     openings = OpeningsService(
         OpeningBookRepo(db), OpeningEngineCacheRepo(db), SettingsRepo(db), engine, runner, clock,
-        config.OPENING_BOOK_DIR,
+        config.OPENING_BOOK_DIR, opening_sources,
     )  # fmt: skip
     repertoire = RepertoireService(RepertoireRepo(db), openings, clock)
     return Services(
         plan=plan,
         journal=journal,
         openings=openings,
+        opening_sources=opening_sources,
         repertoire=repertoire,
         db=db,
         http=http,
@@ -537,6 +551,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         plan=services.plan,
         journal=services.journal,
         openings=services.openings,
+        opening_sources=services.opening_sources,
         repertoire=services.repertoire,
     )
     if isinstance(clock, OffsetClock):

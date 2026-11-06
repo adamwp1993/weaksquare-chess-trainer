@@ -35,7 +35,7 @@ export function FeatureModelPicker({
   compact = false,
   onError,
 }: {
-  feature?: "game_review" | "coach";
+  feature?: "game_review" | "coach" | "openings";
   reasoning?: boolean;
   compact?: boolean;
   onError?: (message: string | null) => void;

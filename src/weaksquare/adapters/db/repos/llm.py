@@ -82,15 +82,25 @@ class LlmUsageRepo:
 
     def append(
         self, ts: str, local_month: str, feature: str, provider: str, model: str, input_tokens: int,
-        output_tokens: int, cost_usd: float, status: str,
+        output_tokens: int, cost_usd: float, status: str, duration_ms: int | None = None,
     ) -> int:  # fmt: skip
         with self._db.session() as conn:
             cur = conn.execute(
                 "INSERT INTO llm_usage (ts, local_month, feature, provider, model, input_tokens, output_tokens,"
-                " cost_usd, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (ts, local_month, feature, provider, model, input_tokens, output_tokens, cost_usd, status),
+                " cost_usd, status, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ts, local_month, feature, provider, model, input_tokens, output_tokens, cost_usd, status, duration_ms),
             )
             return int(cur.lastrowid or 0)
+
+    def recent_seconds(self, provider: str, model: str, last: int = 20) -> float | None:
+        """FR-12.7b: this model's average response time over its latest timed requests, or None without any."""
+        with self._db.session() as conn:
+            row = conn.execute(
+                "SELECT AVG(duration_ms) FROM (SELECT duration_ms FROM llm_usage WHERE provider = ? AND model = ?"
+                " AND duration_ms > 0 ORDER BY id DESC LIMIT ?)",
+                (provider, model, last),
+            ).fetchone()
+        return float(row[0]) / 1000 if row[0] is not None else None
 
     def spent_in(self, local_month: str) -> float:
         """The total cost of the requests made in `local_month` (YYYY-MM)."""
