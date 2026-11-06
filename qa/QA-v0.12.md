@@ -399,3 +399,181 @@ Everything from round 1's list still stands (the live test, AI plan quality, the
 - **Whether the composer's game tag needs a ply.** FR-10.67 says "a game (and ply)"; the composer tags the game only, and the tooltip points to Game Review for one move. I didn't file this as a bug.
 - **Tag a plan day (B24):** what you'd want it to show.
 - **Whether the 50 latest games are enough** for Tag a game.
+
+---
+
+# Round 3 (re-verification), 2026-11-05
+
+Branch `v0.12` at `6524009`, run by the independent `qa-tester`. I changed no product code, migrations, config or docs. New tests are under `tests/` only. `-m live` was **not** run: nobody asked for it. No real credentials were read or used.
+
+## Verdict: **PASS WITH ISSUES** (no blocker, no major, 9 minor)
+
+All of B16 to B30 pass their re-test, including B16, the only major left from round 2. B1 to B15 have not regressed. I found 9 new minor bugs, B31 to B39. Two come directly from round 2's fixes: B31 (from B22) and B34 (from B26). B33 and B35 are older gaps in the same code that round 2's fixes made easier to see. None loses data, sends anything it shouldn't, or calls a weakness better than it is, and each has a workaround by hand, so I rate none as major.
+
+The gate's QA condition (minor issues only) is met. Whether to fix any of these before the rc is Adam's call. If only one gets fixed, I'd pick **B33**, because it contradicts a sentence in both FR-10.64 and the User Guide.
+
+## Re-test of B16 to B30
+
+| Bug | Result | Evidence and what I checked |
+|---|---|---|
+| B16 weakness out of the list called better | **Fixed** | Real window, real reports with their stored numbers set: `6 / — / no longer in the top list`, marked **Gone**, no "better" (`tests/e2e/artifacts/qa-v012-r3-whole-game-gone.png`). Through the real `get_coach_report`: `now`, `delta` and the last series value are null, the verdict is `not_enough`, and sorting doesn't crash. The AI's part says `not_enough`, with `this report: null`. `validate_trend` drops "improved", "worse" and "same". A five-report series with the weakness coming and going keeps its gaps; when it comes back it's **New** with no verdict. A tactical weakness that's gone stays `0.0, better`, as designed (but see B36). |
+| B17 Daily log with a filter | **Fixed** | Round 2's 3 cases through the bridge. |
+| B18 search capped at 500 | **Fixed** | Past 500 by round 2's test. 5,000 entries: all returned, `older` false, under 3 s. 2,000 notes tagged to a move: 0.75 s. |
+| B19 window edges | **Fixed** | Round 2's two tests. Also a window wholly in the future, From after To, and To far ahead with a search. |
+| B20 review passes | **Fixed** | Round 2's three tests. New: finished passes and the log's *reviewed* count survive a new plan; a replaced plan keeps its finished review, and its half review stays undone after visits made later; a new plan made in the same second as a visit still works. |
+| B21 hand tick's day | **Fixed** | Stays on day 1 when the app sees it on day 2. Untick and re-tick gave the expected counts. |
+| B22 Swap's dead ends | **Fixed, with a regression** (B31) | Full DB: every slot moves on with no doubles, and all three pool modes start with puzzles. Real window, from the ⋯ menu, 5 swaps: all different, minutes kept. A fixture-DB chain of 30 keeps the day's minutes, count and other tasks, and every result starts. |
+| B23 minutes after a swap | **Fixed** | A chain of swaps with time on each adds up. The AI's `minutes_spent` equals the screen's, with copies and swaps mixed. |
+| B24 plan-day tag | **Fixed** | Real window: the badge shows and stays the same after the plan is replaced. Through the bridge: it also stays after an edit. It doesn't say the plan has ended (see "Observations"). |
+| B25 preview long word | **Fixed** | Round 2's e2e test. |
+| B26 task finished twice | **Fixed for puzzles, Retry, review; gap filed as B34** | Copy chains over 3 days keep progress and finish once. `done`, the log and the screen agree. |
+| B27 closing the question | **Fixed** | Real window and mock: words and tags stay. Saving clears the composer. Start again brings the question back. See "Observations" for the tick. |
+| B28 game labels | **Fixed** | Two games on one day against one opponent still differ (new test). Real composer: no empty `()`. |
+| B29 drill with no puzzle DB | **Fixed** | Round 2's test through the bridge. |
+| B30 CHANGELOG wording | **Fixed** | The line now says "in that group". |
+
+**B1 to B15:** all their tests pass in the suites below, and their xfail marks are gone. Spot check by name: `-k` on 15 of round 1's test names gave 14 passed. The real-app main flow, `test_qa_v012_the_main_flow_in_the_real_app`, passed.
+
+**Hunted and clean:**
+- **`PlansRepo.add`:** see B20 above. Nothing else reads an open pass; the log reads `completed_at` only.
+- **Copies:** a hand tick and untick on the copy; swapping a copy never brings the original back on later days.
+- **Unknown rate:** all paths listed under B16.
+- **Search:** see B18.
+- **Swap speed on the full DB:** 0.23 s at worst over 25 swaps, even with a puzzle count per choice.
+
+## New bugs
+
+### v0.12-B31 (minor, regression from B22): Swap gives the same puzzles again when your speed has changed
+**Steps:** have 50 or more attempts. A day holds `6 puzzles: any theme` from when you were slower. Swap the other task on that day until it reaches general puzzles.
+**Expected:** never a task already on the day (`swap_for`'s rule, and round 2's B22).
+**Actual:** the day holds `6 puzzles: any theme` and `30 puzzles: any theme`. `_swap_in` compares type and title only, and the count is in the title. The old code also compared `_same`, which ignores the count. The same applies when swapping a puzzle task itself, which then looks like a resize. Anyone with 50 attempts has a speed that drifts as they solve.
+**Evidence:** `test_qa3_swap_is_not_fooled_by_a_new_puzzle_count_after_your_speed_changes` (xfail).
+
+### v0.12-B32 (minor): a hand tick on a task "Moved to the next day" leaves its copy open
+**Steps:** miss a day so a task carries. Open the earlier day in the Plan tab, where the row says **Moved to the next day**. Its Start and ⋯ are hidden, but its checkbox is live. Tick it.
+**Expected:** one task, settled once ("once a task has a copy, the copy is the task").
+**Actual:** the original is done and the copy is still left (real window: `original: done, copy: left, done: 1`). Tick the copy too, and `done` and the log's **Plan tasks done** both count 2 for one task.
+**Evidence:** `test_qa3_a_hand_tick_on_a_task_moved_to_the_next_day_settles_the_one_task` (xfail); `tests/e2e/artifacts/qa-v012-r3-hand-tick-on-moved.png`.
+
+### v0.12-B33 (minor): a task you unticked comes back ticked when it's copied
+**Steps:** finish a puzzle, Retry or review task, then untick it. Next training day, read the plan.
+**Expected:** still unticked (FR-10.64 and the User Guide: "a box you unticked stays unticked until you tick it again").
+**Actual:** the copy has no hand choice and inherits the facts, so it's `done` at once, and `done` counts it. Unticking the copy does hold.
+**Evidence:** `test_qa3_a_task_you_unticked_stays_unticked_when_it_carries` (3 cases, xfail).
+
+### v0.12-B34 (minor, from B26): a reflection or lesson finished from the original after its copy is made doesn't count for the copy
+**Steps:** Start a reflection or a lesson task before midnight. Something reads the plan after midnight, which makes the copy. Then save the entry, or open the lesson's link, still from that Start.
+**Expected:** the task is done once.
+**Actual:** a reflection ticks neither: the original is blocked by `Facts.carried`, and the copy has another id, so it stays left though you wrote the entry. A lesson marks the original done and leaves the copy left. It's narrow: the app has to stay open over midnight.
+**Evidence:** `test_qa3_a_reflection_or_lesson_started_before_midnight_ticks_after_it` (2 cases, xfail).
+
+### v0.12-B35 (minor): Swap offers a game already in the plan, or already reviewed
+**Steps:** a plan from a report with a few games, then press Swap repeatedly. Or review a game first, then Swap.
+**Expected:** a task you can still do. `core/plan.py` says games are used once per plan.
+**Actual:** Swap offers a review of a game another day already has, so one pass ticks both. A game already reviewed since the plan began gives a task that's **done the moment it appears**, which adds 1 to `done`. `swap_choices` and `_swap_in` don't check the rest of the plan.
+**Evidence:** `test_qa3_swap_does_not_offer_a_game_another_day_of_the_plan_already_has`, `test_qa3_swap_never_gives_a_task_that_is_already_done` (xfail).
+
+### v0.12-B36 (minor): a tactical weakness that's gone shows two different numbers
+**Steps:** three reports, with a tactical weakness in the first two and not in the third.
+**Expected:** one number for the latest report.
+**Actual:** **Now** says `0` and the verdict is *better*, but **Last 3 reports** ends in `—`. The AI gets `this report: null` with `change: better`.
+**Evidence:** `test_qa3_a_tactical_weakness_gone_has_the_same_number_in_its_series_and_the_prompt` (xfail); `_weakness_rows` sets `now` to 0.0 and the series to None.
+
+### v0.12-B37 (minor): Send to Coach from My games can land on a tab that hides its message
+**Steps:** open Coach → Plan or Journal. Go to My games, tick a game, press **Send to Coach**.
+**Expected:** the Coach shows what was sent, and **Run the Coach**.
+**Actual:** it stays on the tab you left, so *N games sent from My games* and the run button are on a tab you aren't looking at. Nothing appears to have happened. `App.tsx` doesn't set the Coach tab on this path. Found by my own test in the real window, then confirmed on the mock.
+**Evidence:** `test_qa3_send_to_coach_from_my_games_shows_what_was_sent_whatever_tab_you_left` (xfail).
+
+### v0.12-B38 (minor): a slow, older journal answer replaces the newer one on screen
+**Steps:** clear the Search box and type a word straight away, so the whole journal (slower, it has the daily log) is still being worked out when the search answers.
+**Expected:** the screen shows the word you searched for.
+**Actual:** the older answer lands last and stays: the box says `find`, the list shows everything. `JournalTab.load` doesn't ignore out-of-date answers.
+**How sure I am:** the test proves this with a delay I inject in front of the real bridge, so it shows the code has no guard, not how often it happens. My guide walk failed twice in 7 runs at the same place (search typed, the daily log stayed), which fits, but I didn't prove that's the cause. Two loops without an injected delay (25 and 24 rounds) didn't reproduce it.
+**Evidence:** `test_qa3_a_slow_older_answer_does_not_replace_the_search_you_asked_for` (xfail, smoke).
+
+### v0.12-B39 (minor, docs and leftovers)
+- **User Guide, *The checkboxes*:** Swap is "the next task for the same weakness, otherwise for the next weakness". Since B22 it also goes on to general puzzles in other modes and to journal questions, and starts over when it's been through them.
+- **ARCHITECTURE §7, the `review_passes` entry:** doesn't record that a new plan deletes unfinished passes.
+- **`core/plan.py`:** `swap_for` and `_first_free` are now used only by unit tests, so those tests pass on code the app no longer runs.
+
+## Developer Guide commands (the whole table, this time)
+
+| Command | Result |
+|---|---|
+| `python scripts/setup.py --no-shortcut --skip-puzzle-db --skip-engine` (temp `WEAKSQUARE_DATA_DIR`) | rc 0, "Setup complete". Not with no flags: that would create shortcuts and write the real data folder |
+| `uv run python scripts/fetch_puzzle_db.py` with a temp `WEAKSQUARE_DATA_DIR`, not `--dev` | rc 0, real download and import: 6,193,530 puzzles in 546 s. Not `--dev`, because that would replace the DB the full-DB tests read |
+| `uv run python scripts/fetch_stockfish.py --dev` | already installed, nothing to do |
+| `npm.cmd --prefix web run build`, `uv run python -m weaksquare --dev` | **As written, on the dev data folder**: the window loads `WeakSquare Chess Trainer`, closes with rc 0. This opens the dev `user.db`, so it's now migrated to this version |
+| `npm.cmd --prefix web run dev`, then `uv run python -m weaksquare --dev-server` | the window loads `http://localhost:5173/`, closes with rc 0 |
+| `npm.cmd --prefix web run dev -- --mode mock` | HTTP 200 on 5173 |
+| `uv run python scripts/gen_types.py` | `types.ts` unchanged, though its time changes, so the next smoke run stops with the "run build" message, as the guide says |
+| `uv run python scripts/make_icon.py --check` | up to date |
+| `uv run python tests/fixtures/tools/record_db_update.py` | Writes scrubbed copies. Diff: `page.html`'s date and one link's class. Fixture checks passed on it (47 passed). I restored the committed file |
+| The test, lint, type, docs and screenshot rows | see the suites below |
+| `set_test_token.py` (both rows), `-m live` (all rows) | **Not run:** Adam's (credentials) |
+| Build the Windows installer | `TODO(v1.0)`, nothing to run |
+
+No human-facing command uses a `.ps1` script, bare `npm` or `npx`, or venv activation.
+
+## User Guide walk
+
+`test_qa3_the_user_guide_sections_step_by_step_in_the_real_app` follows the guide's own words in the real window.
+- ***Your training plan*:** the run-the-Coach-first message, the labels and defaults of the builder, Preview (nothing saved), Start this plan, starting today, 2 to 4 tasks adding up to your minutes, at least one reflection a week (the test checks at least one, not exactly one), replace only with confirm, Earlier plans, ticks on the Today card shown in the Plan tab, an untick that stays, and the Skip and Swap menu words.
+- ***Your training journal*:** Save, Edit, Delete, Search, Show and the daily log.
+- ***Finding out what an option does*:** hover in the real window. Tab is on the mock, because a window driven over CDP has no OS focus.
+- ***Since last report*:** read against the real screenshot, including the new *no longer in the top list* wording.
+- ***Include my journal* and *AI coaching*:** not walked step by step here. The preview is in the main-flow smoke test, and the saved-answer rules are in round 1's tests. A real AI answer is manual only.
+- **Not walked again:** the Today card on a rest day, which round 1's tests cover.
+
+Labels, order and defaults match, except what B39 lists. No step misleads, so nothing here is major.
+
+## Automated suites (one at a time)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | Before my tests: **2913 passed, 1 skipped** (461 s). With the final tests: **2932 passed, 1 skipped, 10 xfailed** (473 s), rc 0 |
+| `uv run pytest -m e2e` | **386 passed, 1 xfailed** (862 s), rc 0. I added two tests to `test_qa_v012_round3_ui.py` after this run started and fixed one; that file alone: **5 passed, 1 xfailed**. I did not repeat the whole command |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | First run: 42 passed, 1 skipped, **1 failed** (631 s). See below. Rerun with the final tests: build rc 0, **43 passed, 1 skipped, 1 xfailed** (654 s), rc 0 |
+| `uv run pytest -m engine` | **19 passed** (71 s) |
+| `uv run pytest -m fulldb` | dev `puzzles.db` imported: **76 passed, 3 xfailed** (568 s): the older v0.2-B2 and v0.5-B10 speed limits, none from v0.12 |
+| `uv run pytest -m docs_screenshots` | **46 passed** (130 s). One image changed, below |
+| `uv run ruff check .` / `uv run ruff format --check .` | All checks passed / 429 files formatted |
+| `uv run mypy src` | Success: 132 source files |
+| `npm.cmd --prefix web run typecheck` / `lint` | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | rc 0: hardcoded secrets Passed; keyring only in secret_store.py Passed |
+| `python scripts/check_docs.py` / `--strict` | `check_docs: 0 error(s), 0 warning(s) [version v0.12]` |
+
+**The one smoke failure, with both results:** `test_qa3_the_user_guide_sections_step_by_step_in_the_real_app`
+- **In the full run: failed.** After typing a search, the daily log stayed on screen. Same step as B38.
+- **Alone: 1 passed** (17 s).
+- **What I changed:** the test now waits a second before searching, with a comment naming B38. So the final run's pass doesn't cover that race; its own test does.
+- Round 1's flake (`test_try_again_in_the_real_app`) and round 2's tag test passed in both full runs.
+
+**Screenshots:** `docs/img/stats-reasons.png` changed. I looked at the committed and the new image, and they differ only in a hover highlight on the **Why you missed** tab. It's the same file size (130,141 bytes) as before the last commit, so this image flips between two captures on each regeneration. It's harmless, and I restored the committed one. No other image changed.
+
+## Tests added
+
+All of these were run. Open bugs are `xfail(strict=True)` with their ID.
+- `tests/integration/test_qa_v012_round3.py`: passes across a new plan, copy chains, hand ticks on copies, Swap and its pool, the unknown rate through the real report read and the prompt, the five-report series, thousands of entries, the badge, window edges, B21, B23, B26, B28.
+- `tests/e2e/test_qa_v012_round3_ui.py`: the composer after a closed question, the badge, Send to Coach, Tab on an info mark, repeated search.
+- `tests/smoke/test_qa_v012_round3_real_app.py`: the round 2 fixes together in the real window, the User Guide walk, search order, B38.
+- `tests/fulldb/test_qa_v012_round3_fulldb.py`: Swap's speed and pool on the full DB.
+
+## Scope, architecture, security
+
+Fix commit only: no new or edited migration, no change to `uv.lock` or `package-lock.json`. No `datetime.now()`, `time.time()` or global `random` in `core/plan.py`, `core/report_compare.py`, `services/plan.py` or `services/journal.py`. `types.ts` matches the DTOs. The new tests use placeholder names only, and pre-commit's secret scan passed. Nothing new from a later version.
+
+## Observations (not filed as bugs)
+
+- **Closing a reflection's question means saving won't tick the task.** Your words and tags stay, but the link to the task is gone, so the saved note leaves the task unticked with no message (real window: task stays `left`). That follows "saved from the task", but someone may close the box just to get it out of the way.
+- **With its copy swapped away, the original says Missed** rather than **Moved to the next day**. That's accurate enough, and a test records it.
+- **The plan-day badge doesn't say the plan has ended.** `Plan: Thu, Nov 5` reads the same for a replaced plan.
+
+## For Adam's manual test
+
+Everything from round 1's list still stands: the live test, AI plan quality, the real two-day flow, real lesson links and tooltip wording. Also:
+- **Which of B31 to B39 to fix before the rc.** All are minor, so the gate doesn't require any. I'd start with B33, then B31 and B35, which make Swap and the totals look wrong.
+- **Whether saving after closing the question should tick the task.**
+- **Your remaining calls from round 2:** the composer's game tag has no ply, what a plan-day tag should show, and whether 50 games are enough for Tag a game.
+- **Your dev database:** my `--dev` run opened it, so it's migrated to this version.
