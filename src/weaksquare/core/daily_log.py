@@ -27,6 +27,7 @@ class DayFacts:
     retries_found: int = 0
     plan_tasks_done: int = 0
     coach_runs: tuple[str, ...] = ()  # each run's top weakness ("" when it had none)
+    games_played: int = 0  # on the day you played them, whenever they were synced
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class DayLog:
     def empty(self) -> bool:
         f = self.facts
         return not (
-            self.overall.attempts or self.by_mode or self.misclicks or f.games_synced or f.games_analyzed
+            self.overall.attempts or self.by_mode or self.misclicks or f.games_played or f.games_synced or f.games_analyzed
             or f.games_reviewed or f.retries or f.plan_tasks_done or f.coach_runs
         )  # fmt: skip
 

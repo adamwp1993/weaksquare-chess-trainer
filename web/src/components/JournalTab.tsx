@@ -31,6 +31,7 @@ function LogView({ log }: { log: DayLog }) {
   }
   if (log.missed_themes.length) lines.push(`Missed most: ${log.missed_themes.join(", ")}.`);
   const games = [
+    log.games_played ? `${log.games_played} played` : "",
     log.games_synced ? `${log.games_synced} synced` : "",
     log.games_analyzed ? `${log.games_analyzed} analyzed` : "",
     log.games_reviewed ? `${log.games_reviewed} reviewed` : "",
@@ -141,12 +142,14 @@ export function JournalTab({
   weaknesses,
   draft,
   onClearDraft,
+  onCloseQuestion,
   onOpen,
   onChanged,
 }: {
   weaknesses: { value: string; label: string }[]; // from your latest report, for tagging and the filter
   draft: JournalDraft | null; // a reflection task's Start
   onClearDraft: () => void;
+  onCloseQuestion: () => void; // hides the question only: the note stays linked to its task (Adam, 2026-11-06)
   /** Opens Game Review with this many moves played: a note on a move shows that move. */
   onOpen: (gameId: number, movesPlayed: number) => void;
   onChanged: () => void; // an entry saved from a task ticks it
@@ -228,9 +231,14 @@ export function JournalTab({
         <Stack gap="xs">
           <Title order={5}>Write a note</Title>
           {draft?.prompt && (
-            <Alert color="blue" p="xs" withCloseButton onClose={onClearDraft} data-testid="journal-prompt">
+            <Alert color="blue" p="xs" withCloseButton onClose={onCloseQuestion} data-testid="journal-prompt">
               {draft.prompt}
             </Alert>
+          )}
+          {draft && !draft.prompt && (
+            <Text size="xs" c="dimmed" data-testid="journal-task-link">
+              Saving this ticks its reflection task in your plan.
+            </Text>
           )}
           <Textarea
             autosize

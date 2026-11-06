@@ -122,7 +122,7 @@ def test_qa3_the_round_2_fixes_together_in_the_real_app(pw, tmp_path: Path, fixt
             badge_text = badge.text_content()
             status = next(t for t in _tasks(_ok(_call(page, "get_current_plan"))) if t["id"] == refl["id"])["status"]
             facts["closed_question_task_status"] = status
-            facts["reflection_left_unticked_after_closing"] = status == "left"
+            assert status == "done" and row[3] == refl["id"], row  # Adam, 2026-11-06: closing the box doesn't unlink it
 
             # A word from it, by search; and the badge after the plan is replaced.
             page.get_by_test_id("journal-search").fill("findme")

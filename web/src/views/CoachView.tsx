@@ -244,6 +244,7 @@ export function CoachView({
   onStartTask,
   journalDraft,
   onClearDraft,
+  onCloseQuestion,
 }: {
   tab: CoachTab;
   onTab: (t: CoachTab) => void;
@@ -252,6 +253,7 @@ export function CoachView({
   onStartTask: (t: PlanTask) => void;
   journalDraft: JournalDraft | null;
   onClearDraft: () => void;
+  onCloseQuestion: () => void;
   /** Send to Coach (FR-11.30): exactly these games. */
   sendIds: number[];
   onClearSend: () => void;
@@ -537,6 +539,7 @@ export function CoachView({
             weaknesses={weaknesses}
             draft={journalDraft}
             onClearDraft={onClearDraft}
+            onCloseQuestion={onCloseQuestion}
             onOpen={onReview}
             onChanged={onPlanChanged}
           />

@@ -199,6 +199,7 @@ class JournalService:
                     out[d] = out.get(d, 0) + 1
             return out
 
+        played = count(self._log.games_played(since, until))
         synced = count(self._log.games_synced(since, until))
         analyzed = count(self._log.games_analyzed(since, until))
         reviewed = count(self._log.games_reviewed(since, until))
@@ -227,7 +228,7 @@ class JournalService:
             log = build_day(
                 d, rows.get(d, []), sources.get(d, []), display_name,
                 DayFacts(synced.get(d, 0), analyzed.get(d, 0), reviewed.get(d, 0), tried.get(d, 0), found.get(d, 0),
-                         done.get(d, 0), tuple(runs.get(d, ()))),
+                         done.get(d, 0), tuple(runs.get(d, ())), played.get(d, 0)),
             )  # fmt: skip
             if not log.empty:
                 out[d] = log

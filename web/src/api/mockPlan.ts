@@ -350,7 +350,7 @@ export class MockPlan {
     return {
       date: "2026-11-04", overall: tally("all", "All puzzles", 20, 14), by_mode: [tally("standard", "Standard", 12, 9), tally("danger_spotting", "Danger spotting", 8, 5)],
       by_source: [tally("lichess", "Lichess puzzles", 16, 11), tally("my", "My puzzles", 4, 3)], missed_themes: ["Fork", "Pin"], misclicks: 1,
-      games_synced: 3, games_analyzed: 3, games_reviewed: 1, retries: 4, retries_found: 2, plan_tasks_done: 2, coach_runs: ["Allowed: Fork"],
+      games_played: 4, games_synced: 3, games_analyzed: 3, games_reviewed: 1, retries: 4, retries_found: 2, plan_tasks_done: 2, coach_runs: ["Allowed: Fork"],
     }; // prettier-ignore
   }
 

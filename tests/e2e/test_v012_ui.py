@@ -228,7 +228,33 @@ def test_a_reflection_task_opens_the_journal_and_saving_ticks_it(page: Page) -> 
     expect(_in_plan(page).get_by_test_id(f"plan-task-{tid}")).to_have_attribute("data-status", "done")
 
 
+def test_saving_a_reflection_ticks_its_task_after_you_closed_the_question(page: Page) -> None:
+    """Adam, 2026-11-06: closing the box only gets it out of the way, and the composer says what saving will do."""
+    _open(page, "coach=report&plan=current")
+    _coach(page, "plan")
+    _expand_all(page)
+    tid = _task_of_type(page, "Reflection:")
+    _in_plan(page).get_by_test_id(f"plan-start-{tid}").click()
+    expect(page.get_by_test_id("journal-prompt")).to_be_visible()
+    expect(page.get_by_test_id("journal-task-link")).to_have_count(0)
+    page.get_by_test_id("journal-prompt").get_by_role("button").click()
+    expect(page.get_by_test_id("journal-prompt")).to_have_count(0)
+    expect(page.get_by_test_id("journal-task-link")).to_be_visible()
+    page.get_by_test_id("journal-text").fill("Saved after closing the question.")
+    page.get_by_test_id("journal-save").click()
+    expect(page.get_by_test_id("journal-task-link")).to_have_count(0)
+    page.get_by_test_id("coach-tab-plan").click()
+    _expand_all(page)
+    expect(_in_plan(page).get_by_test_id(f"plan-task-{tid}")).to_have_attribute("data-status", "done")
+
+
 # ---- the journal ----
+
+
+def test_the_daily_log_says_how_many_games_you_played(page: Page) -> None:
+    _open(page, "coach=report&plan=current&journal=some")
+    _coach(page, "journal")
+    expect(page.get_by_test_id("journal-log").first).to_contain_text("played")
 
 
 def test_write_edit_and_delete_a_note(page: Page) -> None:

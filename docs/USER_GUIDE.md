@@ -962,6 +962,7 @@ Your top weaknesses get the most time. A day has 2 to 4 tasks that add up to you
 **The checkboxes:**
 - Tick or untick any box by hand. **Your choice always wins:** a box you unticked stays unticked even if the app sees the task done, until you tick it again.
 - **⋯** skips a task or swaps it for another: the next task for the same weakness, then for the next weakness, then general puzzles in each training mode and questions for your journal. Swap skips what's already on that day, a game or lesson the plan already has, and a game you've already finished. Once a task has been everything, it starts over.
+- **Start** on a reflection opens the journal with its question. Saving ticks the task, even if you closed the question first; the composer tells you when that's the case.
 - **Carry over missed tasks** (on by default): on your next training day, the unfinished tasks of the last one are added, up to one day's worth. Older ones, or all of them with this off, are marked **Missed**. A row that says **Moved to the next day** has no box of its own: tick its copy on the later day. A box you unticked stays unticked on the copy too.
 
 ![Today's plan](img/today-card.png)
@@ -985,7 +986,7 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 **What's in it:**
 - **Your notes:** write up to 5,000 characters and press **Save**. **Tag a weakness**, **Tag a game** and **Tag a plan day** link a note to one from your report, your latest 50 games or your current plan. **Edit** and **Delete** are on each entry.
 - **Game reflections:** in Game Review, **Add a note** saves a note on the game, or with **On this move**, on the move on the board. The move gets a ✎ marker, the game lists its notes, and the journal entry links back to that position.
-- **The daily log:** written by the app from what you did: puzzles by mode and source with first-try accuracy and the themes you missed most, games synced, analyzed and reviewed, Retry results, plan tasks done, and Coach runs with their top weakness. It matches [Stats](#stats) for that day: Danger spotting counts only under its mode, and misclicks are left out.
+- **The daily log:** written by the app from what you did: puzzles by mode and source with first-try accuracy and the themes you missed most, games played, synced, analyzed and reviewed, Retry results, plan tasks done, and Coach runs with their top weakness. A game counts as **played** on the day you played it, so syncing can fill in an earlier day, while **synced** is the day the app fetched it. It matches [Stats](#stats) for that day: Danger spotting counts only under its mode, and misclicks are left out.
 
 **Finding things:** **Show** picks the kinds of entry, **Weakness**, **Game** and **From** / **To** narrow it down, and **Search** finds words in your entries, however old. The daily log comes 30 days at a time: **Show older days** loads the 30 before, when there's anything there. It has no words or tags of its own, so it's hidden while you search or filter by weakness or game.
 

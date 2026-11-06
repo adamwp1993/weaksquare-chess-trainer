@@ -1441,7 +1441,7 @@ def _day_log_dto(x: Any) -> dto.DayLog:
     f = x.facts
     return dto.DayLog(
         x.date, _tally_dto(x.overall), [_tally_dto(t) for t in x.by_mode], [_tally_dto(t) for t in x.by_source],
-        list(x.missed_themes), x.misclicks, f.games_synced, f.games_analyzed, f.games_reviewed, f.retries,
+        list(x.missed_themes), x.misclicks, f.games_played, f.games_synced, f.games_analyzed, f.games_reviewed, f.retries,
         f.retries_found, f.plan_tasks_done, list(f.coach_runs),
     )  # fmt: skip
 

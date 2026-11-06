@@ -181,6 +181,13 @@ class DailyLogRepo:
         with self._db.session() as conn:
             return [str(r[0]) for r in conn.execute(sql, (since, until)).fetchall() if r[0]]
 
+    def games_played(self, since: str, until: str) -> list[str]:
+        return self._times(
+            "SELECT g.played_at FROM games g JOIN game_subjects s ON s.game_id = g.id AND s.subject = 'me'"
+            " WHERE g.played_at >= ? AND g.played_at < ?",
+            since, until,
+        )  # fmt: skip
+
     def games_synced(self, since: str, until: str) -> list[str]:
         return self._times(
             "SELECT g.fetched_at FROM games g JOIN game_subjects s ON s.game_id = g.id AND s.subject = 'me'"
@@ -221,6 +228,7 @@ class DailyLogRepo:
         sql = (
             "SELECT MIN(t) FROM (SELECT MIN(finished_at) AS t FROM attempts"
             " UNION ALL SELECT MIN(g.fetched_at) FROM games g JOIN game_subjects s ON s.game_id = g.id AND s.subject = 'me'"
+            " UNION ALL SELECT MIN(g.played_at) FROM games g JOIN game_subjects s ON s.game_id = g.id AND s.subject = 'me'"
             " UNION ALL SELECT MIN(created_at) FROM retry_attempts"
             " UNION ALL SELECT MIN(completed_at) FROM review_passes"
             " UNION ALL SELECT MIN(created_at) FROM coach_reports WHERE subject = 'me')"

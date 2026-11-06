@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -111,6 +111,45 @@ def test_the_daily_log_counts_games_retries_plan_tasks_and_coach_runs(services) 
     assert sum(x.facts.retries_found for x in wide.values()) == 1
     assert sum(x.facts.plan_tasks_done for x in wide.values()) == 1
     assert [r for x in wide.values() for r in x.facts.coach_runs] == ["missed:fork"]
+
+
+def _played(services: Any, game_id: int, when: str | None) -> None:
+    with services.db.transaction() as conn:
+        conn.execute("UPDATE games SET played_at = ? WHERE id = ?", (when, game_id))
+
+
+def test_a_game_counts_on_the_day_you_played_it_not_the_day_it_synced(services, clock) -> None:  # type: ignore[no-untyped-def]
+    """Adam, 2026-11-06: the log had games synced, analyzed and reviewed, but not played."""
+    gid, other = _games(services, 2)
+    today = services.plan._today()
+    played = today - timedelta(days=3)
+    for g in (gid, other):
+        _played(services, g, f"{played.isoformat()}T12:00:00+00:00")
+    logs = services.journal.day_logs(played, today)
+    # Only the games were played that day, and that's still a day to show.
+    assert logs[played.isoformat()].facts.games_played == 2
+    assert logs[played.isoformat()].facts.games_synced == 0
+    assert logs[today.isoformat()].facts.games_played == 0
+    assert logs[today.isoformat()].facts.games_synced == 2
+
+
+def test_only_your_own_games_with_a_known_date_count_as_played(services) -> None:  # type: ignore[no-untyped-def]
+    mine, theirs, undated = _games(services, 3)
+    today = services.plan._today()
+    for g in (mine, theirs):
+        _played(services, g, f"{today.isoformat()}T12:00:00+00:00")
+    _played(services, undated, None)
+    with services.db.transaction() as conn:
+        conn.execute("UPDATE game_subjects SET subject = 'someone_else' WHERE game_id = ?", (theirs,))
+    assert services.journal.day_logs(today, today)[today.isoformat()].facts.games_played == 1
+
+
+def test_show_older_days_reaches_a_game_played_long_before_anything_else(services) -> None:  # type: ignore[no-untyped-def]
+    gid = _games(services, 1)[0]
+    _played(services, gid, "2024-03-01T12:00:00+00:00")
+    assert services.journal.timeline().older is True
+    found = services.journal.timeline({"date_from": "2024-03-01", "date_to": "2024-03-01"})
+    assert [i.log.facts.games_played for i in found.items if i.log is not None] == [1]
 
 
 def test_a_day_with_nothing_has_no_log(services) -> None:  # type: ignore[no-untyped-def]

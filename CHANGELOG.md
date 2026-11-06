@@ -12,7 +12,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - `python scripts/check_docs.py` checks this structure and that every requirement ID cited here exists.
 
 ## [Unreleased]
-Candidates: v0.12-rc1 (2026-11-05)
+Candidates: v0.12-rc1 (2026-11-05), v0.12-rc2 (2026-11-06)
 
 ### Added
 - **A training plan** in the Coach's new **Plan** tab: 1–4 weeks built from your latest report, on the weekdays you pick, sized by minutes per day, with your top weaknesses getting the most time. Free, on your PC. [FR-10.61, FR-10.62, FR-10.65]

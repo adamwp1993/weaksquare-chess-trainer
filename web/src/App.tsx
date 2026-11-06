@@ -422,6 +422,7 @@ export function App() {
             onStartTask={startPlanTask}
             journalDraft={journalDraft}
             onClearDraft={() => setJournalDraft(null)}
+            onCloseQuestion={() => setJournalDraft((d) => (d ? { ...d, prompt: null } : d))}
           />
         )}
         {page.kind === "review" && (

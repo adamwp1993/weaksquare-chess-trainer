@@ -1246,6 +1246,7 @@ class DayLog:
     by_source: list[DayLogTally]
     missed_themes: list[str]
     misclicks: int
+    games_played: int
     games_synced: int
     games_analyzed: int
     games_reviewed: int

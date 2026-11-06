@@ -1213,6 +1213,7 @@ export interface DayLog {
   by_source: DayLogTally[];
   missed_themes: string[];
   misclicks: number;
+  games_played: number;
   games_synced: number;
   games_analyzed: number;
   games_reviewed: number;
