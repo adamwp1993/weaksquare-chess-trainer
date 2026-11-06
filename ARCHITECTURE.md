@@ -243,6 +243,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-06, v0.13 planning: Opening trainer data and sources
+- Context: the opening book has 3,865 lines, median 5 full moves, and no main-line marker. FR-12.4's `parent_id` couldn't hold a position reached by two paths. Adam chose to feed Wikibooks text (CC BY-SA 4.0) to the LLM, and that text is publicly editable.
+- Decision:
+  - The book is bundled and pinned, and imported into `user.db`, because `puzzles.db` is rebuilt on every import.
+  - Repertoire moves are edges keyed by a normalised position (`board.epd(en_passant="legal")`), with no parent column. Removal deletes what's no longer reachable.
+  - Lines are ranked by explorer popularity, otherwise by book lines under a move. Extending past the book is a setting.
+  - Wikibooks text is fetched at runtime, never shipped, and treated as untrusted. Notes record the pages and revisions they used, and show and export the attribution.
+  - Bulk jobs use the background engine, and a batch quote enforces the per-run cap across a run's requests.
+- Alternatives: keeping Wikibooks out of the prompt, which avoids the licence question, rejected by Adam for richer notes. Bundling Wikibooks text, rejected because it would put CC BY-SA content in the repo.
+- Consequences: a new remote host in the privacy section, and estimates count unfetched pages at the size limit, so they run high. Whether AI output based on the text must carry the licence hasn't been settled, so the app takes the cautious route. Fixtures use invented text.
+
 ### 2026-11-06, planning: Lichess studies and an analysis board tab become v0.14 and v0.15
 - Context: Adam wants to browse Lichess studies, heart them and keep his place, and wants an analysis board as its own tab. The Lichess API can fetch a study by ID or list one author's, but can't browse or search all of them.
 - Decision: the order is v0.13 opening trainer → v0.14 Lichess studies (FR-13) → v0.15 analysis board tab (FR-14) → v1.0 → v1.1. Studies are found through a Lichess window inside the app, a browser plus a pasted link, or a starter list of links only. The window has no bridge, and is dropped if that can't be proven.

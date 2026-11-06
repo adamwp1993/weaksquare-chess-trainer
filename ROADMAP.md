@@ -246,7 +246,7 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v0.1
 - **v0.13c Deviations and practice:** "What if they play…?" with engine replies and stored branches (FR-12.8); Practice mode with per-position spaced repetition (FR-12.9, 12.10); opening stats (FR-12.11).
 - **Coach link:** an opening weakness links to the trainer, as FR-10.58 promises once it exists.
 - **Docs:** a User Guide chapter for the Opening trainer, including what it sends (FR-12.12).
-- **Decide at planning (Adam, 2026-11-06):** a **Build my repertoire** step that adds common opponent replies, Wikibooks text alongside the AI for concepts, and Learn mode modeled on play-along lessons. These are proposals, not yet requirements.
+- **Decided at planning (Adam, 2026-11-06):** **Build my repertoire** (FR-12.14), a setting to extend lines past the book or stop at its end (FR-12.13), Wikibooks text fed to the AI and shown in its own panel (FR-12.15), and a step-through / play-along switch (FR-12.16).
 
 **Done when:**
 - Every book line passes python-chess validation at import, and transpositions map to the same position (test).
@@ -263,12 +263,23 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v0.1
 - Spaced-repetition scheduling tests use the injected clock.
 - The explorer is skipped cleanly when you're signed out or offline.
 - Recorded LLM and explorer fixtures are scrubbed.
+- Each short-line setting gives the right lines and counts, signed in and signed out, and every move shows its source.
+- Build my repertoire saves nothing before review, keeps your stored moves and flags gaps.
+- Removing a line keeps a position another line still reaches.
+- Wikibooks: instructions planted in a page change nothing drawn or stored; a missing page and offline fall back to engine-only; URLs never reach the prompt or a link; every note using a page shows its attribution, and exports carry it; no fixture holds real Wikibooks text.
+- The run cap blocks a run whose single requests each pass, and a run that reaches it stops and keeps finished notes.
+- Opening attempts leave puzzle stats, ratings, sync and the Coach unchanged.
 
 **Adam's manual test:**
 1. Pick the Italian Game as White → read the overview → step through the main line with Explain on a few moves.
 2. Open the prefetch dialog and switch between Light, Standard and Deep (the counts, cost and time update and read sensibly) → prefetch with Standard (confirm, then check the spend indicator against the estimate) → close and reopen, and check the notes load with no new spend.
 3. Enter 2 sidelines for Black with "What if they play…?" and check the engine replies and explanations make sense.
 4. Practice for 15 positions, including a deliberate mistake → come back the next day and check the due positions.
+5. Switch the short-line setting on the Italian and compare the lines.
+6. Run Build my repertoire for the Caro-Kann as Black, signed in. Check the gaps and that the reply choices look sensible.
+7. Compare a Wikibooks-grounded note against its panel and attribution link.
+8. Play a line in play-along.
+9. Repeat one prefetch signed out and offline.
 
 ---
 
