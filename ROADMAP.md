@@ -246,6 +246,7 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v0.1
 - **v0.13c Deviations and practice:** "What if they play…?" with engine replies and stored branches (FR-12.8); Practice mode with per-position spaced repetition (FR-12.9, 12.10); opening stats (FR-12.11).
 - **Coach link:** an opening weakness links to the trainer, as FR-10.58 promises once it exists.
 - **Docs:** a User Guide chapter for the Opening trainer, including what it sends (FR-12.12).
+- **Decide at planning (Adam, 2026-11-06):** a **Build my repertoire** step that adds common opponent replies, Wikibooks text alongside the AI for concepts, and Learn mode modeled on play-along lessons. These are proposals, not yet requirements.
 
 **Done when:**
 - Every book line passes python-chess validation at import, and transpositions map to the same position (test).
@@ -268,6 +269,63 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v0.1
 2. Open the prefetch dialog and switch between Light, Standard and Deep (the counts, cost and time update and read sensibly) → prefetch with Standard (confirm, then check the spend indicator against the estimate) → close and reopen, and check the notes load with no new spend.
 3. Enter 2 sidelines for Black with "What if they play…?" and check the engine replies and explanations make sense.
 4. Practice for 15 positions, including a deliberate mistake → come back the next day and check the due positions.
+
+---
+
+## v0.14: Lichess studies
+**Goal:** find Lichess studies, work through them inside the app with your place saved, and add what you learn to your repertoire (REQUIREMENTS §19). It needs v0.13's repertoire, Practice and play-along screen. Split from v0.13 by Adam, 2026-11-06.
+
+- **Find:** real Lichess in a window inside the app with **Add this study** (FR-13.3, 13.4), open in your browser and paste a link (FR-13.5), and a built-in starter list (FR-13.6). Test the window's isolation first. If it can't be proven, the window is dropped and the other two ways remain.
+- **Your studies:** the Studies tab, saved copies with **Check for updates** (FR-13.1, 13.7), hearts and a saved place in each study (FR-13.9, 13.10).
+- **Work through them:** play along with the text, arrows and highlights (FR-13.8), then **Add to my repertoire** (FR-13.11).
+- **Docs:** a User Guide chapter for Lichess studies, including what the window loads and what's requested from Lichess (FR-13.12).
+
+**Done when:**
+- A test proves the Lichess window has no access to the bridge, your settings or your tokens, and can't navigate away from lichess.org.
+- **Add this study** only accepts a study address, and works from the study's ID alone.
+- Every move in a downloaded study passes python-chess validation. An illegal chapter is rejected with a clear message and the rest are kept.
+- Comments render as plain text, and an arrow or highlight naming an invalid square is dropped.
+- A study still opens offline, and after its author deletes it.
+- **Check for updates** never changes your copy without asking, and keeps your place when that chapter still exists.
+- Hearts and your place survive a restart, and nothing is ever sent to Lichess for them.
+- The starter list contains only links, titles and authors, and a test proves it.
+- **Add to my repertoire** stores `source = study`, a transposition reuses its position, and the added lines are drilled in Practice.
+- A test proves study text never reaches the LLM.
+- Recorded study fixtures are scrubbed and anonymized.
+
+**Adam's manual test:**
+1. Find a study in the Lichess window, add it, and check the app kept it.
+2. Open Lichess in your browser, paste `https://lichess.org/study/ZCPaIb70`, and work through 2 chapters. Compare the text, arrows and play-along with the same chapters on Lichess.
+3. Close the app in the middle of a chapter, reopen it, and check **Continue** returns you to that move.
+4. Add a study from the starter list, heart it, and filter by favorites.
+5. Add a study's lines to your repertoire and drill them in Practice.
+6. Turn off your network and open a saved study.
+
+---
+
+## v0.15: Analysis board tab
+**Goal:** a board of its own for setting up positions, importing PGNs and exploring, without needing a puzzle or a game first (REQUIREMENTS §20). Added by Adam, 2026-11-06. It reuses the analysis board from v0.4 and Game Review, not a second one.
+
+- **The tab:** opens at the starting position (FR-14.1), and moves are never scored or saved to your stats (FR-14.5).
+- **Set up:** drag pieces onto the board or paste a FEN (FR-14.2).
+- **Import:** paste a PGN and move through it (FR-14.3).
+- **Explore:** move for either side and keep the lines you try, with the engine's eval and top 3 lines, plus popular replies when you're signed in (FR-14.4).
+- **Open from elsewhere:** **Open in Analysis tab** from the existing analysis boards (FR-14.6).
+- **Docs:** a User Guide chapter for the Analysis tab.
+
+**Done when:**
+- An illegal or impossible position from the editor or a FEN gets a clear message and never reaches Stockfish.
+- A bad PGN gets a clear message and changes nothing on the board.
+- PGN comments, headers and clocks never reach the engine or an LLM.
+- Trying lines leaves puzzles, stats, your game library and Coach reports unchanged.
+- Popular replies are skipped cleanly when you're signed out or offline.
+- **Open in Analysis tab** opens the same position, from puzzles and from Game Review.
+
+**Adam's manual test:**
+1. Set up a position from one of your games by dragging pieces, and check the engine's lines.
+2. Paste a FEN, then paste a PGN and step through it.
+3. Try two different lines from one position and move between them.
+4. Open the tab from a finished puzzle and from Game Review.
 
 ---
 

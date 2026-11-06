@@ -243,6 +243,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-06, planning: Lichess studies and an analysis board tab become v0.14 and v0.15
+- Context: Adam wants to browse Lichess studies, heart them and keep his place, and wants an analysis board as its own tab. The Lichess API can fetch a study by ID or list one author's, but can't browse or search all of them.
+- Decision: the order is v0.13 opening trainer → v0.14 Lichess studies (FR-13) → v0.15 analysis board tab (FR-14) → v1.0 → v1.1. Studies are found through a Lichess window inside the app, a browser plus a pasted link, or a starter list of links only. The window has no bridge, and is dropped if that can't be proven.
+- Alternatives: reading Lichess's study pages behind the scenes, rejected because it's undocumented, would break when the pages change, and breaks the documented-APIs-only rule. Bundling study content, rejected because authors keep their rights. Keeping studies in v0.13, rejected because of its size, its single QA run and the risk from the window.
+- Consequences: the window is the first remote website the app shows, so its isolation gets tested first. v1.0's fix tracking and Progress page move two versions later. The opening trainer's repertoire schema must allow `source = study`.
+
 ### 2026-11-06, planning: The opening trainer moves before v1.0, and checkpoints gain a schedule and a report
 - Context: Adam wants the opening trainer before the macOS and Linux port, and before v1.0. He also wants Coach reports generated automatically, by game count or on a schedule.
 - Decision: the opening trainer is now v0.13, so the order is v0.12 → v0.13 → v1.0 → v1.1. Its FR-12 numbers don't change. A checkpoint can also run on a time schedule, and it saves a normal Coach report (FR-10.32, 10.33).
