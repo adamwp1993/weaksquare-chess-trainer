@@ -423,8 +423,8 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
 - **FR-10.31** **Never overwrite your choices:** if you've changed the filters by hand, a new suggestion appears as a banner (*"New suggested mix from checkpoint #N — Apply / Compare / Dismiss"*) instead of replacing your settings. **Compare** shows the old and new mix side by side.
 
 ### 10.8 Checkpoints and fix tracking
-- **FR-10.32** **Trigger:** a checkpoint runs automatically after every **10 new eligible games** across your linked accounts (eligible = matches the Coach game filters, FR-10.4; default rated rapid + classical). There's also a **Run checkpoint now** button. Both numbers are configurable.
-- **FR-10.33** **What a checkpoint does:** syncs and analyzes the new games in the background (§11.2 pipeline; local CPU only, free), recomputes every weakness metric, updates statuses, saves a `coach_checkpoints` row, and rebuilds the Suggested preset (§10.7).
+- **FR-10.32** **Trigger:** a checkpoint runs automatically after every **10 new eligible games** across your linked accounts (eligible = matches the Coach game filters, FR-10.4; default rated rapid + classical). There's also a **Run checkpoint now** button. Both numbers are configurable, so you can choose every 50 games, for example. *(Adam, 2026-11-06:)* You can also set a **time schedule** (every N days or a chosen weekday, default off). It runs only while the app is open, or the next time you open it if one came due while it was closed; the app installs no Windows scheduled task. A scheduled checkpoint with no new eligible games does nothing.
+- **FR-10.33** **What a checkpoint does:** syncs and analyzes the new games in the background (§11.2 pipeline; local CPU only, free), recomputes every weakness metric, updates statuses, saves a `coach_checkpoints` row, and rebuilds the Suggested preset (§10.7). *(Adam, 2026-11-06:)* It also saves a **normal Coach report** on the rolling window (FR-10.34), linked by `report_id`, so you can read it and compare it under **Since last report** (FR-10.73) like any other. It never creates or replaces your training plan: that still takes your confirmation (FR-10.65).
 - **FR-10.34** **Metrics** (per weakness, stored in `weakness_metrics`):
   - **Game rate:** occurrences per 10 games over a **rolling window of the last 30 eligible games** (configurable), compared to the **baseline**, which is the rate when the weakness was first identified (from the first Coach run's window, default 50 games). Baselines are frozen.
   - **Puzzle accuracy:** first-try accuracy on the weakness's related themes, from local attempts and the Lichess dashboard.
@@ -529,7 +529,7 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
     - `habit:castledLate`: castling after move 12, or never, while the opponent's queen is on the board (king safety uses the habit kind)
 - **FR-10.58** **Something to do for each weakness:**
   - tactical → a puzzle preset (FR-10.22)
-  - opening → the games where it happened, and the opening trainer once it exists (v2.0)
+  - opening → the games where it happened, and the opening trainer once it exists (v0.13)
   - endgame or conversion → the positions from your games where it happened, opened on the analysis board
   - time → flagged in "Why this mix" (FR-10.30)
 - **FR-10.59** **Lesson pointers:**
@@ -778,7 +778,7 @@ Estimated cost per request at these prices (my token estimates; actual usage get
 
 ---
 
-## 18. Opening trainer (v2.0)
+## 18. Opening trainer (v0.13; moved from v2.0 by Adam, 2026-11-06)
 
 Learn an opening line by line with grounded explanations, build your own repertoire (including your answers to the opponent's sidelines), then drill it. **The moves always come from a book, the engine or you, never from the LLM.** The LLM only explains moves that already exist and have been validated, exactly as in §9.2.
 
@@ -830,4 +830,4 @@ Learn an opening line by line with grounded explanations, build your own reperto
 - **FR-12.11** **Stats:** per opening and per line, the accuracy, due count and weakest positions. All local, never synced to Lichess, and no effect on any rating.
 
 ### 18.5 Privacy and cost
-- **FR-12.12** The LLM receives only opening data: names, ECO codes, SAN moves of book or repertoire lines, engine evals and lines. It never receives anything about you or your games. Explorer requests send positions to Lichess with your token, to the documented API only, and appear in the User Guide's privacy section. Prefetch estimates reuse the §9.3 machinery. A typical opening (overview plus 4 lines of about 12 moves) is roughly 20–30k input tokens and 8–12k output tokens in total. The v2.0 plan replaces this with figures from the `llm_prices` table, never hard-coded.
+- **FR-12.12** The LLM receives only opening data: names, ECO codes, SAN moves of book or repertoire lines, engine evals and lines. It never receives anything about you or your games. Explorer requests send positions to Lichess with your token, to the documented API only, and appear in the User Guide's privacy section. Prefetch estimates reuse the §9.3 machinery. A typical opening (overview plus 4 lines of about 12 moves) is roughly 20–30k input tokens and 8–12k output tokens in total. The v0.13 plan replaces this with figures from the `llm_prices` table, never hard-coded.

@@ -243,6 +243,12 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-06, planning: The opening trainer moves before v1.0, and checkpoints gain a schedule and a report
+- Context: Adam wants the opening trainer before the macOS and Linux port, and before v1.0. He also wants Coach reports generated automatically, by game count or on a schedule.
+- Decision: the opening trainer is now v0.13, so the order is v0.12 → v0.13 → v1.0 → v1.1. Its FR-12 numbers don't change. A checkpoint can also run on a time schedule, and it saves a normal Coach report (FR-10.32, 10.33).
+- Alternatives: a Windows scheduled task, so a schedule could run with the app closed, rejected for now because it's more OS-specific work, and the app opens the due checkpoint at the next launch anyway.
+- Consequences: the trainer needs only the engine, the LLM guardrails and Lichess sign-in, which have all shipped. v1.0's polish pass, complete User Guide and first-run wizard now have the trainer to cover. Earlier plans and QA reports still say v2.0, as a record of the time.
+
 ### 2026-11-05, v0.12: What QA round 1 changed in the plan and journal
 - Context: QA v0.12 round 1 found the carry-over limit reset on each read, a group's guard ignored, an ended plan still changing, and more (`qa/QA-v0.12.md`).
 - Decision:
