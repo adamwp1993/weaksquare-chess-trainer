@@ -239,6 +239,36 @@ export class MockOpenings {
     });
   }
 
+  private lastOf(moves: string[]): { key: string; uci: string } {
+    const chess = this.boardAfter(moves.slice(0, -1));
+    return { key: keyOf(chess), uci: moves[moves.length - 1] };
+  }
+
+  movesQuote(moves: string[], regenerate: boolean, ai: boolean): OpeningNoteQuote {
+    const base = { provider: "anthropic", model: "claude-haiku-5-5" };
+    if (!ai) return { state: "not_configured", message: "Choose an AI provider and save its key in Settings → AI.", typical_usd: null, worst_usd: null, ...base };
+    const t = this.lastOf(moves);
+    if (!regenerate && this.note(t.key, t.uci, "move")) return { state: "cached", message: null, typical_usd: 0, worst_usd: 0, ...base };
+    return { state: "ok", message: null, typical_usd: 0.0021, worst_usd: 0.004, ...base };
+  }
+
+  saveMovesNote(moves: string[]) {
+    const t = this.lastOf(moves);
+    this.notes.set(`${t.key}|${t.uci}|move`, {
+      position_key: t.key,
+      move_uci: t.uci,
+      kind: "move",
+      sections: [{ heading: "Why this move", text: "It answers their move and keeps your center." }],
+      annotations: [],
+      provider: "anthropic",
+      model: "claude-haiku-5-5",
+      other_model: false,
+      sources: [],
+      licence: "CC BY-SA 4.0",
+      licence_url: "https://creativecommons.org/licenses/by-sa/4.0/",
+    });
+  }
+
   private withScope<T>(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean, fn: () => T): T {
     const saved = [this.scope, this.extend] as const;
     this.setSettings(preset, subLines, maxMoves, extend);
@@ -451,6 +481,7 @@ export class MockOpenings {
       attempt_id: attempt,
       message: null,
       wrong_fen: s.wrongFen,
+      position_key: keyOf(s.chess),
       reason_prompt:
         s.state === "wrong"
           ? {
@@ -488,7 +519,7 @@ export class MockOpenings {
   }
 
   startPractice(color: Color, mode: "due" | "new" | "all"): PracticeState {
-    const targets = mode === "due" ? this.practiceSummary(color).new : this.yourPositions(color).length;
+    const targets = mode === "all" ? this.yourPositions(color).length : this.practiceSummary(color).new;
     this.session = { color, chess: new Chess(), state: "your_move", correct: 0, wrong: 0, decisions: 0, clean: 0, targets, attempts: this.attempts[color], wrongFen: null };
     if (targets === 0) {
       this.session.state = "finished";

@@ -1131,6 +1131,7 @@ class PracticeState:
     message: str | None
     wrong_fen: str | None
     reason_prompt: ReasonPrompt | None  # §7.3, after a wrong move
+    position_key: str  # with correct_moves, finds a stored explanation (FR-12.9)
 
 
 @dataclass(frozen=True)

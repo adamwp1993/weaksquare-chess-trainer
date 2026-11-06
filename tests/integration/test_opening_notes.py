@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import chess
 import pytest
 
 from tests.fakes.engine import FakeEngine, plant_managed_install
@@ -12,7 +13,7 @@ from tests.fakes.llm import FakeLLMProvider
 from tests.helpers import build_api
 from weaksquare.adapters.db.repos.openings import RepertoireRepo, WikibooksPagesRepo
 from weaksquare.core.engine import EngineNotInstalled
-from weaksquare.core.errors import AppError
+from weaksquare.core.errors import AppError, ValidationError
 from weaksquare.core.llm.provider import LLMResponse
 from weaksquare.core.opening_explain import (
     LINE_SYSTEM_PROMPT,
@@ -24,7 +25,7 @@ from weaksquare.core.opening_explain import (
     validate_overview,
 )
 from weaksquare.core.opening_sources import WikiPage, page_title
-from weaksquare.core.openings import STARTING_KEY, LineMove, validate_scope
+from weaksquare.core.openings import STARTING_KEY, LineMove, position_key, validate_scope
 from weaksquare.jobs.runner import CancelToken, JobCancelled
 
 KEY = "sk-ant-FAKE0000000000000000"
@@ -484,3 +485,28 @@ def test_no_note_or_prompt_holds_anything_about_you(api: Any) -> None:
     finish(api, api._opening_notes.start_prefetch(FAMILY, "light", None, None, False))
     for r in provider(api).requests:
         assert "player_a" not in r.user and "username" not in r.user.lower() and "rating" not in r.user.lower()
+
+
+# ---- Explain a reply to a deviation (FR-12.8) ---------------------------------------------------------------------
+
+
+def test_a_reply_outside_the_book_can_be_explained_once(api: Any) -> None:
+    configure(api)
+    wiki_off(api)
+    moves = ["e2e4", "a7a6", "d2d4"]
+    assert api._opening_notes.quote_moves_note(moves).state == "ok"
+    finish(api, api._opening_notes.start_moves_note(moves))
+    assert len(provider(api).requests) == 1
+    assert api._opening_notes.quote_moves_note(moves).state == "cached"
+    assert api._opening_notes.start_moves_note(moves) is None
+    assert len(provider(api).requests) == 1
+    position = position_key(chess.Board("rnbqkbnr/1ppppppp/p7/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"))
+    assert api._opening_notes.note(position, "d2d4", "move") is not None
+
+
+@pytest.mark.parametrize("moves", [[], "e2e4", ["e2e5"], ["bad"], [3]])
+def test_a_bad_line_cant_be_explained(api: Any, moves: Any) -> None:
+    configure(api)
+    with pytest.raises(ValidationError):
+        api._opening_notes.quote_moves_note(moves)
+    assert provider(api).requests == []

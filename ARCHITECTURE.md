@@ -87,6 +87,11 @@ weaksquare-chess-trainer/
 │  │  ├─ lessons.py            # lesson topics, the curated Lichess map, search links (v0.11)
 │  │  ├─ urls.py               # strip web addresses from notes and AI text (v0.11)
 │  │  ├─ plan.py               # the deterministic plan, ticks, carry-over and swap (v0.12)
+│  │  ├─ openings.py           # v0.13: the book, position keys, ranking, line selection and extension
+│  │  ├─ repertoire.py         # v0.13: the repertoire as edges between positions; removal by reachability
+│  │  ├─ opening_sources.py    # v0.13: Wikibooks titles, cleaning and limits; explorer parsing
+│  │  ├─ opening_explain.py    # v0.13: notes' prompts, schemas and validation
+│  │  ├─ opening_practice.py   # v0.13: the per-position schedule, what comes up, Build my repertoire's proposal
 │  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
 │  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
 │  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
@@ -105,6 +110,7 @@ weaksquare-chess-trainer/
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
 │  │                           #   v0.9: game_explain.py (Explain this move, Explain my game)
 │  │                           #   v0.12: plan.py (the training plan), journal.py (the journal, the daily log)
+│  │                           #   v0.13: openings.py, repertoire.py, opening_sources.py, opening_notes.py, opening_practice.py
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -242,6 +248,19 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-06, v0.13: What building the opening trainer settled
+- Context: the plan left how notes, sessions and the builder fit the existing services open.
+- Decision:
+  - **Reading a screen never does I/O beyond the database.** `OpeningsService.lines` extends and ranks from stored engine and explorer results only. A job (`opening_extend`, prefetch) fills the store, so a line reads the same each time.
+  - **`LlmUsageService.quote_batch` and `run_spent`** make the per-run cap cover a whole run: `quote_batch` before it starts, `run_spent` on each request. Other features pass neither and behave as before.
+  - **A prefetch's split isn't stored.** Each run sends the first requests that fit under the cap, and what's saved drops out of the next plan, so the next run is simply the next plan.
+  - **`practice` sessions live in memory** and attempts in `opening_attempts`, its own table. Nothing joins it to `attempts`, so puzzle stats, ratings, sync and the Coach can't see it. Mistake reasons use `source = 'opening'`, which the puzzle and Coach queries already filter out.
+  - **`Target.reason`** decides what's recorded: a correct answer counts only when a position is due or new, so **All** and walking through a position leave the schedule alone. A miss always counts.
+  - **The bundled book needs `.gitattributes`** (`-text`), or Git on Windows rewrites its line endings and its SHA-256 pin fails on a fresh clone. It lives in `opening_book/`, because `.gitignore` has a `data/` rule.
+  - **`.ws-board` in `components/board.css`** sets board coordinates: chessground's theme colors don't suit ranks on the left edge.
+- Alternatives: a `parent_id` tree for the repertoire, rejected in planning. Asking the AI once per move in a prefetch, rejected by FR-12.7's one request per line.
+- Consequences: an explorer or engine answer stored today shapes lines until it's refreshed (30 days for the explorer). `LlmUsageService.run` still holds its lock across the network call, so a puzzle Explain may wait for one prefetch request.
 
 ### 2026-11-06, v0.13 planning: Opening trainer data and sources
 - Context: the opening book has 3,865 lines, median 5 full moves, and no main-line marker. FR-12.4's `parent_id` couldn't hold a position reached by two paths. Adam chose to feed Wikibooks text (CC BY-SA 4.0) to the LLM, and that text is publicly editable.

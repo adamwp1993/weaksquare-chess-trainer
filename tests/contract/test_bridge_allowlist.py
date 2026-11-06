@@ -155,6 +155,8 @@ ALLOWLIST = {
     "get_opening_note",  # v0.13: FR-12.5-12.7
     "get_opening_note_quote",  # v0.13
     "start_opening_note",  # v0.13
+    "get_opening_moves_note_quote",  # v0.13: FR-12.8
+    "start_opening_moves_note",  # v0.13
     "get_opening_overview_key",  # v0.13
     "get_opening_prefetch_plan",  # v0.13: FR-12.7b
     "start_opening_prefetch",  # v0.13

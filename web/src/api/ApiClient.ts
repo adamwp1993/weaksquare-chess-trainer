@@ -470,6 +470,9 @@ export interface ApiClient {
   /** `ply` null is the opening's overview. A saved note is free unless you're regenerating it. */
   getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean): Promise<OpeningNoteQuote>;
   startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean): Promise<string | null>;
+  /** FR-12.8: Explain the last move of a line outside the book. */
+  getOpeningMovesNoteQuote(moves: string[], regenerate: boolean): Promise<OpeningNoteQuote>;
+  startOpeningMovesNote(moves: string[], regenerate: boolean): Promise<string | null>;
   getOpeningOverviewKey(family: string): Promise<string>;
   getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): Promise<OpeningPrefetchPlan>;
   /** Only after you Confirm the estimate (FR-8.11, 12.7b). */

@@ -515,3 +515,28 @@ def test_an_opening_the_book_doesnt_name_opens_a_search(page: Any) -> None:
     page.get_by_test_id("openings-view").wait_for()
     assert page.get_by_test_id("openings-search").input_value() == "Rare Line"
     assert page.get_by_test_id("opening-detail").count() == 0
+
+
+def test_a_reply_can_be_explained_with_its_cost_first(page: Any) -> None:
+    openings(page, AI)
+    pick(page, "Italian Game")
+    page.get_by_test_id("learn-forward").click()
+    page.get_by_test_id("what-if-move").fill("a6")
+    page.get_by_test_id("what-if-go").click()
+    page.get_by_test_id("what-if-note-button").filter(has_text="$").wait_for()
+    page.get_by_test_id("what-if-note-button").click()
+    page.get_by_test_id("what-if-note").get_by_test_id("opening-note").wait_for()
+
+
+def test_a_miss_shows_your_saved_explanation(page: Any) -> None:
+    openings(page, AI)
+    pick(page, "Italian Game")
+    page.get_by_test_id("move-note-button").click()  # 1.e4's note
+    page.get_by_test_id("move-note").get_by_test_id("opening-note").wait_for()
+    page.get_by_test_id("opening-add-0").click()
+    page.get_by_test_id("opening-added").wait_for()
+    page.get_by_test_id("openings-tab-practice").click()
+    page.get_by_test_id("practice-begin").click()
+    page.get_by_test_id("practice-your-move").wait_for()
+    play(page, "d2d4", "white")
+    page.get_by_test_id("practice-missed").get_by_test_id("opening-note").wait_for()

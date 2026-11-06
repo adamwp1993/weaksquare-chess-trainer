@@ -75,10 +75,13 @@ export function NoteBlock({
   label,
   onNote,
   testId,
+  moves,
 }: {
   family: string;
   lineIndex: number;
   ply: number | null;
+  /** FR-12.8: a line outside the book: the note is about its last move, and `family` isn't used. */
+  moves?: string[];
   positionKey: string | null;
   moveUci: string;
   label: string;
@@ -102,8 +105,11 @@ export function NoteBlock({
       },
       (e: unknown) => setError(message(e)),
     );
-    api.getOpeningNoteQuote(family, lineIndex, ply, false).then(setQuote, (e: unknown) => setError(message(e)));
-  }, [positionKey, moveUci, kind, family, lineIndex, ply, onNote]);
+    (moves ? api.getOpeningMovesNoteQuote(moves, false) : api.getOpeningNoteQuote(family, lineIndex, ply, false)).then(
+      setQuote,
+      (e: unknown) => setError(message(e)),
+    );
+  }, [positionKey, moveUci, kind, family, lineIndex, ply, onNote, moves]);
 
   useEffect(load, [load]);
 
@@ -115,7 +121,7 @@ export function NoteBlock({
   const run = (regenerate: boolean) => {
     setError(null);
     setRegen(null);
-    api.startOpeningNote(family, lineIndex, ply, regenerate).then(
+    (moves ? api.startOpeningMovesNote(moves, regenerate) : api.startOpeningNote(family, lineIndex, ply, regenerate)).then(
       (id) => (id ? setJobId(id) : load()),
       (e: unknown) => setError(message(e)),
     );
@@ -151,7 +157,11 @@ export function NoteBlock({
           variant="subtle"
           disabled={running}
           style={{ alignSelf: "flex-start" }}
-          onClick={() => api.getOpeningNoteQuote(family, lineIndex, ply, true).then(setRegen, (e: unknown) => setError(message(e)))}
+          onClick={() =>
+            (moves ? api.getOpeningMovesNoteQuote(moves, true) : api.getOpeningNoteQuote(family, lineIndex, ply, true)).then(setRegen, (e: unknown) =>
+              setError(message(e)),
+            )
+          }
           data-testid={`${testId}-regenerate`}
         >
           {running ? "Asking the AI…" : "Regenerate"}

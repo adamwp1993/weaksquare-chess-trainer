@@ -1206,6 +1206,25 @@ export class MockClient implements ApiClient {
     return id;
   }
 
+  async getOpeningMovesNoteQuote(moves: string[], regenerate: boolean) {
+    return this.openings.movesQuote(moves, regenerate, this.openingAi());
+  }
+
+  async startOpeningMovesNote(moves: string[], regenerate: boolean) {
+    const quote = this.openings.movesQuote(moves, regenerate, this.openingAi());
+    if (quote.state === "cached") return null;
+    if (quote.state !== "ok") throw new ApiCallError({ code: quote.state, message: quote.message ?? "", retryable: false });
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingMovesNote:${moves.join(" ")}`);
+    const kind = "opening_note";
+    this.emit({ id, kind, state: "running", progress: null, message: "Asking the AI…", error_code: null });
+    setTimeout(() => {
+      this.openings.saveMovesNote(moves);
+      this.emit({ id, kind, state: "done", progress: 1, message: "Saved.", error_code: null });
+    }, 100);
+    return id;
+  }
+
   async getOpeningOverviewKey(family: string) {
     return this.openings.overviewKey(family);
   }

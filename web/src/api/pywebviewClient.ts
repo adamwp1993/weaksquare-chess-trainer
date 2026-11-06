@@ -595,6 +595,14 @@ export class PywebviewClient implements ApiClient {
     return this.call<string | null>("start_opening_note", family, lineIndex, ply, regenerate);
   }
 
+  getOpeningMovesNoteQuote(moves: string[], regenerate: boolean) {
+    return this.call<OpeningNoteQuote>("get_opening_moves_note_quote", moves, regenerate);
+  }
+
+  startOpeningMovesNote(moves: string[], regenerate: boolean) {
+    return this.call<string | null>("start_opening_moves_note", moves, regenerate);
+  }
+
   getOpeningOverviewKey(family: string) {
     return this.call<string>("get_opening_overview_key", family);
   }

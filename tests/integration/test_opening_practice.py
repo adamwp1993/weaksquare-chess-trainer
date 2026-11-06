@@ -161,7 +161,9 @@ def test_signed_in_uses_popular_replies(svc: Any, monkeypatch: pytest.MonkeyPatc
 
 def test_book_answers_win_over_the_engine_and_a_fallback_is_flagged(svc: Any) -> None:
     limits = {"max_moves": 12, "max_replies": 1, "max_positions": 60}
-    yours = [m for c in ("white", "black") for m in svc.repertoire.build_now(c, "Italian Game", limits).moves if m.yours]
+    yours = [
+        m for c in ("white", "black") for m in svc.repertoire.build_now(c, "Italian Game", limits).moves if m.yours
+    ]
     assert any(m.source == "book" for m in yours)
     # The book ends on one side's move, so past it that side's opponent, you, gets Stockfish's best.
     assert any(m.source == "engine" and "engine_answer" in m.flags for m in yours)
@@ -511,3 +513,46 @@ def test_a_build_goes_through_the_job_and_needs_saving(api: Any) -> None:
 def test_a_games_opening_finds_its_family_for_the_coach_link(api: Any) -> None:
     assert ok(api.match_opening_family("Italian Game: Giuoco Piano")) == "Italian Game"
     assert ok(api.match_opening_family("Nothing Like It")) is None
+
+
+# ---- gaps found reviewing against FR-12.8, 12.9 and the plan ------------------------------------------------------
+
+
+def test_all_doesnt_move_a_position_through_the_schedule(svc: Any, clock: Any) -> None:
+    add_italian(svc)
+    play_all_correct(svc)
+    edges = svc.repertoire.edges("white")
+    before = svc.opening_practice._cards("white", edges)
+    attempts = len(svc.opening_practice._attempts.for_color("white"))
+    assert all(c is not None and c.box == 1 for c in before.values())
+    s = play_all_correct(svc, mode="all")  # nothing's due yet: it's all review
+    assert s.correct > 0
+    assert len(svc.opening_practice._attempts.for_color("white")) == attempts
+    assert svc.opening_practice._cards("white", edges) == before
+
+
+def test_all_still_counts_what_was_due(svc: Any, clock: Any) -> None:
+    add_italian(svc)
+    play_all_correct(svc)
+    clock.advance(days=1)
+    edges = svc.repertoire.edges("white")
+    play_all_correct(svc, mode="all")
+    assert all(c is not None and c.box == 2 for c in svc.opening_practice._cards("white", edges).values())
+
+
+def test_a_miss_in_all_still_counts(svc: Any, clock: Any) -> None:
+    add_italian(svc)
+    play_all_correct(svc)
+    s = session(svc, mode="all")
+    s = svc.opening_practice.play(s.session_id, "d2d4")
+    assert s.state == "wrong" and s.attempt_id is not None
+    assert svc.opening_practice.summary("white")["due"] == 0  # back in box 1, due tomorrow
+    clock.advance(days=1)
+    assert svc.opening_practice.summary("white")["due"] >= 1
+
+
+def test_a_miss_says_which_position_to_find_its_note(svc: Any) -> None:
+    add_italian(svc)
+    s = session(svc)
+    s = svc.opening_practice.play(s.session_id, "d2d4")
+    assert s.position_key == STARTING_KEY and s.correct_moves[0][0] == E4

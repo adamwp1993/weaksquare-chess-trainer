@@ -1425,6 +1425,7 @@ export interface PracticeState {
   message: string | null;
   wrong_fen: string | null;
   reason_prompt: ReasonPrompt | null;
+  position_key: string;
 }
 
 export interface OpeningPositionStat {

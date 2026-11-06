@@ -1258,6 +1258,16 @@ class Api:
         return self._opening_notes.start_note(family, line_index, ply, regenerate)
 
     @bridge_call
+    def get_opening_moves_note_quote(self, moves: list[str], regenerate: bool = False) -> dto.OpeningNoteQuote:
+        """FR-12.8: Explain for a line that isn't in the book, such as your reply to a deviation."""
+        q = self._opening_notes.quote_moves_note(moves, regenerate)
+        return dto.OpeningNoteQuote(q.state, q.message, q.typical_usd, q.worst_usd, q.provider, q.model)
+
+    @bridge_call
+    def start_opening_moves_note(self, moves: list[str], regenerate: bool = False) -> str | None:
+        return self._opening_notes.start_moves_note(moves, regenerate)
+
+    @bridge_call
     def get_opening_overview_key(self, family: str) -> str:
         return self._openings.root(family).final_key
 
@@ -1838,6 +1848,7 @@ def _practice_dto(s: PracticeStateResult) -> dto.PracticeState:
         dto.ReasonPrompt(s.attempt_id, "opening", None, [dto.ReasonOption(r.key, r.label, r.gap) for r in REASONS])
         if s.state == "wrong" and s.attempt_id is not None
         else None,
+        s.position_key,
     )  # fmt: skip
 
 

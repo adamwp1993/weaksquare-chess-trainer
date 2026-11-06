@@ -18,13 +18,14 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
-import type { Analysis, OpeningDeviation, OpeningStat, PracticeState, PracticeSummary, RepertoireOpeningRow, RepertoireProposal } from "../api/types";
+import type { Analysis, OpeningDeviation, OpeningNote, OpeningStat, PracticeState, PracticeSummary, RepertoireOpeningRow, RepertoireProposal } from "../api/types";
 import { sourceLabel } from "../state/openingLine";
 import { useJob } from "../state/useJob";
 import { Board } from "./Board";
+import { NoteBlock, NoteView } from "./OpeningNotes";
 import { OptionInfo } from "./OptionInfo";
 import { ReasonChips } from "./ReasonChips";
 
@@ -45,6 +46,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
   const [tolerance, setTolerance] = useState(false);
   const [s, setS] = useState<PracticeState | null>(null);
   const [refutation, setRefutation] = useState<Analysis | null>(null);
+  const [stored, setStored] = useState<OpeningNote | null>(null);
   const [reason, setReason] = useState<ReasonKey | null>(null);
   const [note, setNote] = useState("");
   const [asked, setAsked] = useState(true);
@@ -61,11 +63,16 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
     setS(next);
     setError(null);
     setRefutation(null);
+    setStored(null);
     setReason(null);
     setNote("");
     setAsked(true);
     if (next.state === "wrong" && next.wrong_fen) {
       api.analyzeOpeningPosition(next.wrong_fen, "board", next.color as Color).then(setRefutation, () => undefined);
+    }
+    if ((next.state === "wrong" || next.state === "helped") && next.correct_moves[0]) {
+      // FR-12.9: its stored explanation, if you've saved one. This never asks the AI.
+      api.getOpeningNote(next.position_key, next.correct_moves[0][0], "move").then(setStored, () => undefined);
     }
     if (next.state === "finished") refresh();
   };
@@ -230,6 +237,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
                   After your move, Stockfish says {refutation.lines[0].score}.
                 </Text>
               )}
+              {stored && <NoteView note={stored} />}
               {s.state === "wrong" && s.reason_prompt && asked && (
                 <ReasonChips
                   prompt={s.reason_prompt}
@@ -390,6 +398,11 @@ export function WhatIfPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const line = useMemo(() => (d && reply ? [...moves, d.their_uci, reply] : null), [d, reply, moves]);
+  const replyKey = useMemo(() => {
+    if (!d) return null;
+    return d.fen_after.split(" ").slice(0, 4).join(" ");
+  }, [d]);
 
   const ask = useCallback(
     (move: string) => {
@@ -490,6 +503,19 @@ export function WhatIfPanel({
               Clear
             </Button>
           </Group>
+          {line && replyKey && reply && (
+            <NoteBlock
+              key={reply}
+              family=""
+              lineIndex={0}
+              ply={line.length - 1}
+              moves={line}
+              positionKey={replyKey}
+              moveUci={reply}
+              label="Explain this reply"
+              testId="what-if-note"
+            />
+          )}
         </Stack>
       )}
       {saved && (

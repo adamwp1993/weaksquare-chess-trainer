@@ -645,3 +645,57 @@ def test_suggested_mix_banner(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("suggestion-banner").wait_for()
     page.mouse.move(1270, 890)
     shot(page, "suggested-mix-banner", clip={"x": 0, "y": 0, "width": 1280, "height": 420})
+
+
+def test_opening_trainer(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.13: a line with its overview, the source controls and the board."""
+    page.goto(page.base_url + "/?openings=ready&ai=on")
+    page.get_by_test_id("nav-openings").click()
+    page.locator("[data-testid=opening-family][data-name='Italian Game']").click()
+    page.get_by_test_id("overview-note-button").click()
+    page.get_by_test_id("overview-note").get_by_test_id("opening-note").wait_for()
+    page.get_by_test_id("engine-lines").wait_for(state="attached")
+    page.mouse.move(1270, 890)
+    shot(page, "opening-trainer", full_page=True)
+
+
+def test_opening_prefetch(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-12.7b: the scope, what it costs and how long it takes."""
+    page.goto(page.base_url + "/?openings=ready&ai=on")
+    page.get_by_test_id("nav-openings").click()
+    page.locator("[data-testid=opening-family][data-name='Italian Game']").click()
+    page.get_by_test_id("opening-prefetch").click()
+    page.get_by_test_id("prefetch-plan").wait_for()
+    page.wait_for_timeout(400)
+    page.mouse.move(1270, 890)
+    shot(page, "opening-prefetch")
+
+
+def test_opening_build(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-12.14: a proposal to review, with what needs a look flagged."""
+    page.goto(page.base_url + "/?openings=ready")
+    page.get_by_test_id("nav-openings").click()
+    page.locator("[data-testid=opening-family][data-name='Caro-Kann Defense']").click()
+    page.get_by_test_id("opening-color").get_by_text("As Black").click()
+    page.get_by_test_id("opening-build").click()
+    page.get_by_test_id("build-start").click()
+    page.get_by_test_id("build-summary").wait_for()
+    page.wait_for_timeout(400)
+    page.mouse.move(1270, 890)
+    shot(page, "opening-build")
+
+
+def test_opening_practice(page) -> None:  # type: ignore[no-untyped-def]
+    """FR-12.9: a miss shows your line and Stockfish's view, and asks why."""
+    page.goto(page.base_url + "/?openings=ready")
+    page.get_by_test_id("nav-openings").click()
+    page.locator("[data-testid=opening-family][data-name='Italian Game']").click()
+    page.get_by_test_id("opening-add-0").click()
+    page.get_by_test_id("opening-added").wait_for()
+    page.get_by_test_id("openings-tab-practice").click()
+    page.get_by_test_id("practice-begin").click()
+    page.get_by_test_id("practice-your-move").wait_for()
+    play(page, "d2d4", "white")
+    page.get_by_test_id("practice-refutation").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "opening-practice")

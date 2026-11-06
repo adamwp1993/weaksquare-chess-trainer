@@ -58,7 +58,7 @@ from weaksquare.core.opening_sources import (
     short_title,
     unfetched_chars,
 )
-from weaksquare.core.openings import Line, OpeningScope, board_of, validate_scope
+from weaksquare.core.openings import Line, LineMove, OpeningScope, board_of, position_key, validate_scope
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import BatchQuote, LlmUsageService, prompt_chars
@@ -367,6 +367,65 @@ class OpeningNotesService:
                     if not saved:
                         raise AppError("The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
                                        code="llm_bad_answer", retryable=True)  # fmt: skip
+            except AppError as e:
+                raise JobFailed(e.code, e.message, e.retryable) from None
+            return f"Saved for ${cost:.4f}."
+
+        return self._runner.submit(NOTE_JOB, job)
+
+    # ---- a move outside the book (FR-12.8) ------------------------------------------------------------------------
+
+    @staticmethod
+    def _moves_line(moves: object) -> Line:
+        """A line of legal UCI moves as a line a note can be about. Its moves were checked here, not by the AI."""
+        if not isinstance(moves, list) or not moves:
+            raise ValidationError("That isn't a line of moves.")
+        board = chess.Board()
+        out: list[LineMove] = []
+        for uci in moves:
+            try:
+                move = chess.Move.from_uci(uci) if isinstance(uci, str) else None
+            except ValueError:
+                move = None
+            if move is None or move not in board.legal_moves:
+                raise ValidationError("That isn't a line of legal moves.")
+            out.append(LineMove(move.uci(), board.san(move), "line", position_key(board)))
+            board.push(move)
+        return Line("Your line", "none", tuple(out))
+
+    def quote_moves_note(self, moves: object, regenerate: bool = False) -> NoteQuote:
+        line = self._moves_line(moves)
+        last = line.moves[-1]
+        cfg = self._settings.config(FEATURE)
+        if not regenerate and self._stored(last.key_before, last.uci, MOVE) is not None:
+            return NoteQuote("cached", None, 0.0, 0.0, cfg.provider, cfg.model)
+        chars = prompt_chars(
+            LINE_SYSTEM_PROMPT, build_line_prompt(line.name, line.eco, line.moves, [], ""), LINE_SCHEMA
+        )
+        q = self._usage.quote(KIND_MOVE, chars + PER_MOVE_PROMPT_CHARS + unfetched_chars(1), cfg)
+        est = q.estimate
+        return NoteQuote(str(q.state), q.message, est.typical_usd if est else None, est.worst_usd if est else None,
+                         q.provider, q.model)  # fmt: skip
+
+    def start_moves_note(self, moves: object, regenerate: bool = False) -> str | None:
+        """Explain the last move of a line. None when it's already saved."""
+        if not isinstance(regenerate, bool):
+            raise ValidationError("Regenerate must be true or false.")
+        quote = self.quote_moves_note(moves, regenerate)
+        if quote.state == "cached":
+            return None
+        if quote.state != "ok":
+            raise AppError(quote.message or "The AI can't run now.", code=quote.state)
+        self._engine_or_raise()
+        line = self._moves_line(moves)
+
+        def job(progress: ProgressFn, token: CancelToken) -> str:
+            progress(None, "Asking the AI…")
+            try:
+                saved, cost = self._explain_plies(line, [len(line.moves) - 1], KIND_MOVE, 0.0)
+                if not saved:
+                    raise AppError("The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
+                                   code="llm_bad_answer", retryable=True)  # fmt: skip
             except AppError as e:
                 raise JobFailed(e.code, e.message, e.retryable) from None
             return f"Saved for ${cost:.4f}."

@@ -121,6 +121,7 @@ class PracticeState:
     attempt_id: int | None
     message: str | None
     wrong_fen: str | None
+    position_key: str
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,12 @@ class OpeningStat:
 
 def _tally(rows: Sequence[Any]) -> tuple[int, int]:
     return len(rows), sum(1 for r in rows if r.outcome == CORRECT)
+
+
+def _reason_for(card: Card | None, today: Any) -> str:
+    if card is None:
+        return "new"
+    return "due" if is_due(card, today) else "review"
 
 
 def _session_key(rng: random.Random) -> str:
@@ -245,7 +252,9 @@ class OpeningPracticeService:
             keys = sorted(
                 (k for k in mine if within is None or k in within), key=lambda k: (len(path_to(edges, k) or []), k)
             )
-            targets = [Target(k, "all") for k in keys]
+            # Everything comes up, but only what was due or new is recorded when you get it right, so going
+            # through it all doesn't move anything through the schedule early.
+            targets = [Target(k, _reason_for(cards.get(k), today)) for k in keys]
         else:
             targets = due_and_new(edges, c, cards, today, within, new_limit if mode == "due" else limit)  # type: ignore[arg-type]
             if mode == "new":
@@ -289,6 +298,7 @@ class OpeningPracticeService:
         return PracticeState(
             s.id, s.state, s.board.fen(), s.color, s.decisions, s.correct, s.wrong, s.lines_clean, s.lines_lost,
             len(s.targets), reason, s.last_moves, tuple(correct), s.last_attempt, s.message, wrong_fen,
+            position_key(s.board),
         )  # fmt: skip
 
     def _next_line(self, s: _Session, edges: Sequence[Edge]) -> None:
@@ -401,8 +411,9 @@ class OpeningPracticeService:
             s.last_moves = ()
             return self._state(s, tuple((a.move_uci, a.san) for a in answers))
         s.correct += 1
-        wanted = key not in s.recorded and any(t.position_key == key for t in s.targets)
+        wanted = key not in s.recorded and any(t.position_key == key and t.reason != "review" for t in s.targets)
         s.last_attempt = self._record(s, move, san, CORRECT) if wanted else None
+        s.targets = [t for t in s.targets if t.position_key != key]
         if close:
             answer = answers[0]
             s.message = f"Close enough: {san} is within the engine's tolerance, but your line plays {answer.san}."

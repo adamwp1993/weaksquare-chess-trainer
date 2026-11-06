@@ -1005,6 +1005,8 @@ Learn an opening line by line, and keep the lines you want in your own repertoir
 
 The moves always come from the opening book, from Stockfish, or from what's popular in real games on Lichess, and each one is labelled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
 
+![The opening trainer: an opening's lines, its overview and the board](img/opening-trainer.png)
+
 ### Choosing an opening
 1. In the **Book** tab, search by name or ECO code, and pick an opening.
 2. Choose **As White** or **As Black**. The board turns to your side.
@@ -1043,6 +1045,8 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 
 **Save notes for this opening…** gets everything in one go. Choose how much, and before anything is sent you see the number of lines, positions and requests, how many are already saved, the tokens and cost, its share of your remaining budget, and the time. A yellow warning appears above 25% of your remaining budget or 10 minutes. If it's over your per-run cap, it goes in several runs, each under the cap: open the dialog again for the next one. The cap itself never changes.
 
+![Save notes for this opening: the scope, what it costs and how long it takes](img/opening-prefetch.png)
+
 **Confirm** starts it in the background, and you can keep using the app. Cancel at any time: what's finished stays saved. Without an AI provider, the dialog offers Stockfish's evals only. Estimates assume full Wikibooks pages, since none are fetched until you Confirm, so the cost usually comes in lower.
 
 **Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes.
@@ -1050,7 +1054,7 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 Openings has its own model in **Settings → AI**.
 
 ### What if they play…?
-On the other side's turn in **Step through**, play their move on the board or type it (`a6` or `a7a6`). The app checks it, and Stockfish gives your best replies with their evals, the best one selected. **Add to my repertoire** stores their move and your reply, along with the moves leading to them, and Practice drills it like any other line. Your move is labelled **You** and Stockfish's choice **Stockfish**. To explain a reply, step to it once it's in a line.
+On the other side's turn in **Step through**, play their move on the board or type it (`a6` or `a7a6`). The app checks it, and Stockfish gives your best replies with their evals, the best one selected. **Add to my repertoire** stores their move and your reply, along with the moves leading to them, and Practice drills it like any other line. Their move is labelled **You** and Stockfish's choice **Stockfish**. **Explain this reply** says why a reply works, with its cost shown first, and a saved explanation is free.
 
 ### Your repertoire
 **Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.
@@ -1080,6 +1084,8 @@ It runs in the background, and **nothing is saved until you've looked it over**.
 - **Few games to go on**: too few games here to trust what's popular.
 - **You're clearly worse here**: Stockfish doesn't like the position after your answer.
 
+![A proposed repertoire, with moves that need a look flagged](img/opening-build.png)
+
 **Add to my repertoire** saves it, and any move you already had stays as it was. **Discard** throws it away.
 
 ### Practice
@@ -1092,8 +1098,10 @@ It runs in the background, and **nothing is saved until you've looked it over**.
 Each session walks from the start of the game to a position that's due, so you see how you get there.
 
 - **Right:** a move stored as yours at that position. With **Accept moves close to the engine's best** on, a move within 30 centipawns also counts, and your line carries on with your own move. It's off by default, because the point is to learn your line.
-- **Wrong:** you see your line's move and Stockfish's view of what you played, and can say why you missed it. **Continue** plays your move and the line goes on.
+- **Wrong:** you see your line's move, your saved explanation of it if you have one, and Stockfish's view of what you played, and can say why you missed it. **Continue** plays your move and the line goes on. Practice never asks the AI, so it costs nothing.
 - **Show the answer** counts as missed, like any help.
+
+![Practice after a wrong move: your line, Stockfish's view and why you missed it](img/opening-practice.png)
 
 Each position has its own schedule, the same boxes as Spaced repetition (see [Training modes](#training-modes)): it starts the first time you get it right, moves up each time it's right when due, and goes back to the first box on a miss or help. After the last box it stops coming up, though **All** still includes it. Walking through a position on the way to another doesn't move it through the schedule.
 
