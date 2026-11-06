@@ -1,0 +1,51 @@
+/* Readable board coordinates, on every board.
+ *
+ * chessground draws them at 9px and 80% opacity, and its brown theme alternates grey and white text.
+ * With the ranks on the left edge those colors land on squares of the same shade (a white 8 on a8), and
+ * the "dark" squares are a mid tan that white text can't stand out on. So every label is one dark color,
+ * with a soft light edge for when a piece sits behind it.
+ *
+ * The positions don't use chessground's fixed pixel offsets, which push the file letters a whole square
+ * sideways on a small board. `.ws-board` is here to outrank the theme's color rules.
+ */
+.ws-board.cg-wrap coords {
+  opacity: 1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ws-board.cg-wrap coords.ranks coord,
+.ws-board.cg-wrap coords.files coord {
+  color: #2b1d10;
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.7);
+  flex: 1 1 0;
+  min-width: 0;
+  transform: none;
+}
+
+/* Numbers: the top left corner of each square on the left edge. */
+.ws-board.cg-wrap coords.ranks {
+  left: 3px;
+  top: 0;
+  width: auto;
+  height: 100%;
+}
+
+.ws-board.cg-wrap coords.ranks coord {
+  padding-top: 3px;
+}
+
+/* Letters: the bottom right corner of each square on the bottom edge. */
+.ws-board.cg-wrap coords.files {
+  left: 0;
+  bottom: 2px;
+  width: 100%;
+  height: auto;
+  align-items: flex-end;
+}
+
+.ws-board.cg-wrap coords.files coord {
+  padding-right: 3px;
+  text-align: right;
+}

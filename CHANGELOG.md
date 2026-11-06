@@ -13,6 +13,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Fixed
+- **Board letters and numbers are readable on every board.** They were so small and faint that they looked missing, especially in My games, where some numbers blended into their squares.
+
 ## [v0.12] - 2026-11-06
 Candidates: v0.12-rc1 (2026-11-05), v0.12-rc2 (2026-11-06)
 

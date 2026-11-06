@@ -1012,7 +1012,7 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 
-**Board coordinates:** press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved.
+**Board coordinates:** the numbers run down the left edge of the board and the letters along the bottom, on every board in the app. To hide or show them, press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved. *Changed in v0.13: they're larger and easier to read.*
 
 ## Finding out what an option does
 *Added in v0.12.*

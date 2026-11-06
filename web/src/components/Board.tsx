@@ -1,6 +1,7 @@
 import "chessground/assets/chessground.base.css";
 import "chessground/assets/chessground.brown.css";
 import "chessground/assets/chessground.cburnett.css";
+import "./board.css";
 import { Button, Group, Paper, Text } from "@mantine/core";
 import { Chess, type Square } from "chess.js";
 import { Chessground } from "chessground";
@@ -138,6 +139,7 @@ export function Board({
     <div style={{ position: "relative", width: "100%", maxWidth, aspectRatio: "1 / 1" }}>
       <div
         ref={el}
+        className="ws-board"
         data-testid="board"
         data-hint={hintSquare ?? ""}
         data-arrows={arrows.map(([a, b]) => a + b).join(" ")}
