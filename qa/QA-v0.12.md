@@ -236,3 +236,166 @@ All of these were run. Open bugs are `xfail(strict=True)` with their ID.
 - **Real lesson links** from a lesson task: the smoke test avoids opening your browser. Only the fake desktop proved that they open and tick.
 - **Tooltip wording**, read as a user, and whether the Today card takes too much space above the Mixer with 4 tasks.
 - **Whether you want B4** as written, or would rather change the requirement.
+
+---
+
+# Round 2 (re-verification), 2026-11-05
+
+Branch `v0.12` at `5fcbe6b`, run by the independent `qa-tester`. I changed no product code, migrations, config or docs. New tests are under `tests/` only. `-m live` was **not** run: nobody asked for it. No real credentials were read or used.
+
+## Verdict: **FAIL** (1 major, 14 minor, no blocker)
+
+All of B1 to B15 pass their re-test, and two have a gap filed as a new bug (B2 as B16, B13 as B29). The gate (minor issues only) isn't met because of one new major bug:
+- **B16 (major):** a whole-game weakness that leaves the top list while its group still has 5 or more games is scored as rate 0 and called **better**, and the AI is told so. B2's fix closed the path for small groups but not this one. From real measures: the same low-clock mistake rate in both reports gives `then 4.0, now 0.0, better`, because mistakes elsewhere rose.
+
+Four of the new minor bugs come from the round 1 fixes themselves: B17 and B18 (from B7), B20 (from B12) and B21 (from B6).
+
+## Re-test of B1 to B15
+
+| Bug | Result | Evidence and what I checked |
+|---|---|---|
+| B1 carry-over limit | **Fixed** | Round 1's test, plus 3 reads a day over 4 missed days: 20 minutes carried each day, no pile-up (`test_qa2_the_limit_holds_every_day_of_a_run_of_missed_days`). Done or skipped copies still use up the limit and don't carry again. Swapping a copy lets nothing extra in. |
+| B2 group guard | **Fixed for what was reported; gap filed as B16** | All 5 whole-game kinds (opening, endgame, conversion, low clock, late castling) at group sizes (8,2), (2,8), (4,4), (8,0), (5,4), (4,5), in and out of the list: `not_enough`. (5,5) gets a verdict. Old reports with no measures on either side, and malformed `measures`: `not_enough`, no crash. `validate_trend` drops an "improved" claim. A real report has the groups the guard reads. |
+| B3 journal link | **Fixed** | Real app, notes on ply 0 and ply 4: the link opens that very move highlighted. The main flow's facts file says `note_ply: 0, journal_link_shows: move-0`. |
+| B4 game filter and tags | **Fixed** (see B24, B27, B28) | Real app: Tag a game and Tag a plan day stored `game_id` and `plan_day_id`; the Game filter narrows the list, hides the log and clears. Round 1's own test only looks for the label, so `test_qa2_the_game_filter_really_filters_and_hides_the_log` now covers the behaviour. |
+| B5 doubled minutes | **Fixed** | Round 1's test (see B23 for the same total after a Swap). |
+| B6 hand ticks in the log | **Fixed** (see B21) | Real app: tick +1, untick back, read from the real `get_journal`. Through the bridge: a late tick files on its own day, an app-seen task unticked and re-ticked counts once, a copy counts once, a swapped-away tick is gone. |
+| B7 search and `older` | **Fixed** (see B17, B18, B19) | Empty journal: `older` false. Paging reaches a 100-day-old note and stops. `older` stops at From. From after To is empty. Combined filters are right. |
+| B8 entry links | **Fixed** | Past-the-end and negative ply refused. Last move accepted. Missing day or task gets a plain refusal. A future date is refused. |
+| B9 ended plan | **Fixed** | A session still running across the replacement carries on without error; its later attempts don't count. What happened before the end (attempt, review, reflection) still counts 2 days later. Hand changes, Start and Swap on the old plan are refused. A note saved later doesn't tick it. |
+| B10 tag with a URL | **Fixed** | 11 bad keys refused on add and on edit. 25 real keys accepted, including `St. George Defense`, `King's Indian Attack`, `Réti Opening`. Every key from a real report and a real plan is accepted. |
+| B11 Swap | **Fixed** (see B22) | Full DB: every slot reaches 3 or more different tasks with no A, B, A. |
+| B12 review since the plan | **Fixed, with a regression** (B20) | Round 1's test passes. Resuming a task's own pass keeps its visits. |
+| B13 no puzzle DB | **Fixed for Preview and Start** (see B29) | Bridge and real window: preview, create, Today, Swap, skip, tick, AI run all work; a puzzle task's Start gives a plain "Import the puzzle database first". **Correction to round 1:** the real window with no DB shows only *Get the puzzle database*, with no nav and no Coach, so this is reachable only through the bridge. |
+| B14 long word | **Fixed** (see B25) | Real app, 5,000 characters in one word: no sideways scroll. Also fine in the edit box, Game Review's notes and at 900 px. |
+| B15 docs | **Fixed** (see B30) | The Developer Guide row is there, §4.3 lists the columns, the counter reads `5,000 / 5,000`, and the live test now looks for the fixture's names. |
+
+**The builder's edits to QA's tests don't weaken them.** Each moved date is there because future dates are now refused; the assertions are unchanged. The moved dates are the `clock.advance` additions and `entry_date` in `test_qa_a_weakness_tag_can_not_carry_a_url_to_the_llm`. That test now passes through its refusal branch, so `test_qa2_a_tag_can_not_be_a_web_address_on_add_or_on_edit` covers it directly. `ply=12` became `ply=2` in `test_plan_ai.py` because a ply past the end is now refused; it still proves the label is 1-based. The counter text is stricter than before. `test_0012_adds_when_you_ticked_a_task_by_hand` only reads a fresh database, so the migration tests below cover the upgrade paths.
+
+## Regressions hunted, and clean
+
+- **`user/0012`:** a v0.11 database (at 0010) and one at 0011 with a plan keep their rows and hand choices, and migrating again changes nothing. The real app opens the 0011 one. Hand ticks made at 0011 have no time, so they aren't in the log; they don't crash, and v0.12 isn't released, so only a dev database has any.
+- **FR-8.16, what the tags send:** with a game tag inside and outside the report and a plan-day tag, the prompt's lines hold only `note`, `kind`, `game` (`G5`, inside the report only), `ply` and `weakness`. No plan day or task, game id, player name, URL or date. The labels with names stay in the UI.
+- **Tooltip walk:** it covers the three new controls (`journal.tagGame`, `journal.tagDay`, `journal.filterGame`), and each opens with its own text on hover.
+- **Game filter after deleting its last entry:** the box keeps its value and can still be cleared.
+- **Speed:** the 4-week, 7-day preview takes 0.36 s on the full DB with the puzzle check.
+- **Layout:** composer and filters, real app and mock, at normal width and at 900 px, are fine apart from B28's empty `()`.
+
+## New bugs
+
+### v0.12-B16 (major): a weakness out of the top list with its group still at 5 or more games is called better
+**Steps:** two reports of 5 new games each, both with 5 games on a low clock. The first has `time:low_clock` as a weakness. In the second, low-clock mistakes are the same (8.0 per 100 moves in both) but mistakes elsewhere rose, so the weakness's gate (low-clock rate above the rest) closes.
+**Expected:** not called better (FR-10.73). The report's own `low_clock` measure says the rate is unchanged.
+**Actual:** `flag=gone, then=4.0, now=0.0, verdict=better`, and the same goes to the AI as `change`, so an "improved" statement passes `validate_trend`. `_weakness_rows` uses `0.0` for any key missing from `rates()`, but `whole_game` is both gated and capped at 10 (`game_weaknesses`). So missing doesn't mean zero. The same happens to `habit:castledLate` when its gate closes, and to any whole-game weakness pushed past the cap of 10.
+**Evidence:** `test_qa2_low_clock_mistakes_unchanged_but_gone_from_the_list_are_not_better`, `test_qa2_a_group_with_5_games_gone_from_the_list_because_others_are_worse_is_not_better` (xfail).
+
+### v0.12-B17 (minor, regression from B7): Show Daily log with a search or filter lists entries
+**Steps:** Journal, **Show** only **Daily log**, then type a word in Search, or pick a Weakness or Game.
+**Expected:** nothing, since the log has no words or tags. **Actual:** notes and reflections you didn't pick. `entry_kinds` is empty, and `search` treats an empty list as "all kinds". The window path had a guard for this; the new path doesn't.
+**Evidence:** `test_qa2_show_daily_log_with_a_search_or_filter_lists_no_entries` (3 cases, xfail).
+
+### v0.12-B18 (minor, regression from B7): search and Notes or Reflections stop at the newest 500
+**Steps:** have 501 matching entries, search, or Show only Notes.
+**Expected:** all of them, or a way to see more. The User Guide says Search finds words "however old". **Actual:** 500, with `older` false. `search` has `limit=500`, and this path no longer pages.
+**Evidence:** `test_qa2_search_reaches_every_entry_past_500` (xfail).
+
+### v0.12-B19 (minor): two edges of the timeline window
+- **A To date after today shows nothing.** Set **To** 200 days ahead: *Nothing here*, because the window starts from that date. It should stop at today. `test_qa2_a_to_date_after_today_still_shows_today` (xfail).
+- **`older` compares UTC dates with local days.** West of UTC, an evening's activity has the next day's UTC date. If it's your oldest activity and the window starts on that UTC date, `older` is false and that local day can't be reached. This is rare. `test_qa2_older_is_true_for_a_local_day_the_utc_date_hides` (xfail).
+
+### v0.12-B20 (minor, regression from B12): review passes lose or block real visits
+- **A pass left open before the plan blocks the tick.** Look at one move of a game. A week later, start a plan with a review of that game, and visit every key moment and the final move from **My games** rather than Start. **Expected:** done (FR-10.64). **Actual:** left: `visit` adds to the old open pass, and `completed_games` needs a pass begun since the plan. Start works, and so does a hand tick. `test_qa2_a_whole_review_since_the_plan_began_ticks_with_an_old_pass_left_open` (xfail).
+- **Start on a carried review task drops what you visited.** Visit the key moments from the task, miss the day, press Start on the copy, and visit the final move. **Expected:** done. **Actual:** left: the copy has another task id, so a new pass starts. `test_qa2_a_carried_review_task_keeps_the_moves_you_already_visited` (xfail).
+
+### v0.12-B21 (minor, from B6): a hand tick moves to a later day in the log
+**Steps:** tick a task by hand on day 1. On day 2 the app sees it done (here, a note saved from the task).
+**Expected:** it stays on day 1, as `plan_tasks_done`'s docstring says ("on the day it first was"). **Actual:** day 1 drops by one and day 2 gains one: `COALESCE(done_at, manual_at)` prefers the later time.
+**Evidence:** `test_qa2_a_hand_tick_stays_on_its_day_when_the_app_sees_it_done_later` (xfail).
+
+### v0.12-B22 (minor): Swap's dead ends
+- **Full DB:** after the options run out, each Swap gives the same reflection again ("What's the one thing to remember from today?"), so it appears to do nothing. Two slots can hold that same reflection on one day, though `swap_for` says "never one already on the day". The fallback isn't checked.
+- **Fixture DB:** a general task swapped 12 times stays `9 puzzles: any theme`, because `fit_task` turns each option back into the same general task after the title check. The options are too thin here; on the full DB I saw this only as the reflection case above.
+- **Evidence:** `test_qa2_swap_chain_on_the_full_db_moves_on_and_never_doubles`, `test_qa2_a_long_swap_chain_moves_on_and_never_doubles_a_task_on_the_day` (xfail).
+
+### v0.12-B23 (minor): minutes spent vanish when you swap a task
+**Steps:** spend 10 minutes on a puzzle task, then Swap it.
+**Expected:** still about 10 min. **Actual:** 0. Totals read only tasks with `removed = 0`, though `attempt_facts` says swapped tasks count too. The plan progress sent to the AI is affected as well.
+**Evidence:** `test_qa2_minutes_spent_stay_after_a_swap` (xfail).
+
+### v0.12-B24 (minor): a plan-day tag is shown nowhere
+**Steps:** Tag a plan day, Save.
+**Expected:** you can see the tag (FR-10.67). **Actual:** it's stored, but no entry, filter or Plan tab shows it, so it looks as if nothing happened.
+**Evidence:** `test_qa2_a_plan_day_tag_can_be_seen_on_the_entry` (xfail).
+
+### v0.12-B25 (minor): the Include my journal preview doesn't wrap a long word
+**Steps:** an entry with a long unbroken word (a long link is cut, but other text isn't). Open the preview.
+**Expected:** it wraps, as B14's fix did elsewhere. **Actual:** the text runs out of its box. The check puts 1,000 characters into the real element, because the mock's preview is fixed text.
+**Evidence:** `test_qa2_a_long_word_stays_inside_the_journal_preview` (xfail); `tests/e2e/artifacts/qa-v012-r2-preview-long-word.png`.
+
+### v0.12-B26 (minor): a session running when a task carries finishes the task twice
+**Steps:** start a puzzle task late in the day, let the plan read after midnight (the copy is made), then finish the session.
+**Expected:** one task done. **Actual:** the original and its copy both turn done, so **done** and **Plan tasks done** count 2. The copy inherits the original's attempts, and the original still collects them.
+**Evidence:** `test_qa2_a_session_running_past_midnight_does_not_finish_a_task_twice` (xfail).
+
+### v0.12-B27 (minor): closing a reflection's question throws away what you wrote
+**Steps:** Start a reflection task, write something, then close the blue question box.
+**Expected:** your words stay. **Actual:** the text box empties: clearing the draft changes the component's `key`, which remounts the tab.
+**Evidence:** `test_qa2_closing_a_reflections_question_keeps_what_you_wrote` (xfail).
+
+### v0.12-B28 (minor): game labels
+- **The Game filter names two games against one opponent the same** (`White – Black`, no date), so you can't tell them apart. `test_qa2_the_game_filter_tells_apart_two_games_against_one_opponent` (xfail).
+- **A game with no date shows empty brackets** in Tag a game: `player_a – opponent_b ()`. `tests/e2e/artifacts/qa-v012-r2-real-composer.png`.
+
+### v0.12-B29 (minor, bridge only): a lesson's drill crashes with no puzzle database
+**Steps:** with no `puzzles.db`, call `start_plan_lesson_drill`.
+**Expected:** the plain message Start gives. **Actual:** *Something went wrong* (`no such table: pz.theme_bits`): `start_lesson_drill` has no `_puzzles_ready` check. The real window can't reach this, since it shows only *Get the puzzle database*.
+**Evidence:** `test_qa2_a_lessons_drill_with_no_puzzle_database` (xfail).
+
+### v0.12-B30 (minor, docs)
+CHANGELOG's Changed line for **Since last report** still says "at least 5 games in each report", while the User Guide and FR-10.73 say "in that group".
+
+## Automated suites (one at a time)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **2897 passed, 1 skipped, 16 xfailed** (448 s), rc 0 |
+| `uv run pytest -m e2e` | **380 passed, 3 xfailed** (834 s), rc 0 |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | build rc 0; 39 passed, 1 skipped, **1 failed** (538 s). See below |
+| `uv run pytest -m engine` | **19 passed** (74 s) |
+| `uv run pytest -m fulldb` | dev `puzzles.db` imported: **74 passed, 4 xfailed** (568 s): B22, plus the older v0.2-B2 and v0.5-B10 speed limits |
+| `uv run ruff check .` / `uv run ruff format --check .` | All checks passed / 425 files formatted |
+| `uv run mypy src` | Success: 132 source files |
+| `npm.cmd --prefix web run typecheck` / `lint` | rc 0 / rc 0 |
+| `uv run pre-commit run --all-files` | Hardcoded secrets Passed; keyring only in secret_store.py Passed |
+| `python scripts/check_docs.py --strict` | `check_docs: 0 error(s), 0 warning(s) [version v0.12]`, rc 0 |
+
+**The one smoke failure, with both results:** `test_qa2_the_new_tags_filter_link_and_hand_tick_in_the_real_app`
+- **In the full smoke run: failed** on `journal-tag-day`'s `input_value()`, read right after the question appeared.
+- **Alone, before any change: 1 passed.**
+- **Cause, as far as I can tell:** a fault in my test, which didn't wait for the day list to load. The evidence is that it only failed under load, and the same test's stored row check passes. I didn't reproduce the failure on purpose.
+- **After fixing the wait:** the whole new smoke file passed 3 times alone (3 passed each). I did **not** repeat the full smoke run after that.
+- Round 1's flake (`test_try_again_in_the_real_app`) passed this time.
+
+Round 1's 16 regression tests for B1 to B14, run again by name after the suites: 13 and 3 passed.
+
+## Tests added
+
+All of these were run. Open bugs are `xfail(strict=True)` with their ID.
+- `tests/integration/test_qa_v012_round2.py`: carry-over over several days, Swap chain, hand ticks, review passes, an ended plan with a running session, timeline paging and mixed filters, tags and what they send, the group guard for each kind, migrations, no puzzle DB.
+- `tests/e2e/test_qa_v012_round2_ui.py`: the composer's tags, the Game filter, tooltips on the new controls, a narrow window, long words.
+- `tests/smoke/test_qa_v012_round2_real_app.py`: tags, filter, journal link, long word, hand tick and a reflection task in the real window; a database at 0011; the real bridge with no puzzle DB.
+- `tests/fulldb/test_qa_v012_round2_fulldb.py`: the Swap chain and preview speed on the full DB.
+
+## Scope, architecture, security
+
+Fix commit only: one new migration, none edited. No dependency change. No `datetime.now()`, `time.time()` or global `random` in the files it changed under `core/` and `services/`. The new `JournalGame` DTO is exported and `types.ts` has it. The new test fixtures use placeholder names only, and pre-commit's secret scan passed.
+
+I re-ran only the commands listed above, as this round's request asked, not the whole Developer Guide table. I did not re-walk the User Guide; I read its changed lines against the behaviour above (B18, B30).
+
+## For Adam's manual test
+
+Everything from round 1's list still stands (the live test, AI plan quality, the real two-day flow, real lesson links, tooltip wording). Also:
+- **Whether B16 should be fixed** by working out the real rate, or by saying *not enough* / *out of the top list* with no verdict. That's your call on the wording.
+- **Whether the composer's game tag needs a ply.** FR-10.67 says "a game (and ply)"; the composer tags the game only, and the tooltip points to Game Review for one move. I didn't file this as a bug.
+- **Tag a plan day (B24):** what you'd want it to show.
+- **Whether the 50 latest games are enough** for Tag a game.
