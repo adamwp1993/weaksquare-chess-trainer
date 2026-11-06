@@ -71,7 +71,7 @@ export function PresetBox({
             <Button size="xs" color="yellow" onClick={() => save(name, true)} data-testid={`${testid}-replace`}>
               Replace it
             </Button>
-            <TextInput size="xs" label="Or save as" value={name} maxLength={60} onChange={(e) => setName(e.currentTarget.value)} data-testid={`${testid}-name`} />
+            <TextInput data-no-tip="a name you type" size="xs" label="Or save as" value={name} maxLength={60} onChange={(e) => setName(e.currentTarget.value)} data-testid={`${testid}-name`} />
             <Button size="xs" variant="default" onClick={() => save(name, false)} data-testid={`${testid}-save-as`}>
               Save
             </Button>

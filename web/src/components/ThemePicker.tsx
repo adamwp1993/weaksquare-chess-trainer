@@ -1,6 +1,8 @@
 import { Badge, Button, Checkbox, Group, Popover, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { useMemo, useState } from "react";
 import type { ThemeGroup } from "../api/types";
+import type { TooltipId } from "../text/tooltips";
+import { OptionInfo } from "./OptionInfo";
 
 // FR-3.1 / FR-3.2: a dropdown of grouped checkboxes with search and Select all / Clear.
 // Used twice: for the themes to include, and for the themes to exclude.
@@ -11,7 +13,10 @@ export function ThemePicker({
   onChange,
   emptyLabel,
   testId,
+  tip = "filters.themes",
 }: {
+  /** FR-10.72: which tooltip this picker shows. */
+  tip?: TooltipId;
   label: string;
   catalog: ThemeGroup[];
   value: string[];
@@ -40,9 +45,10 @@ export function ThemePicker({
   };
 
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-option-group>
       <Text size="sm" fw={500}>
         {label}
+        <OptionInfo id={tip} />
       </Text>
       <Popover width={360} position="bottom-start" shadow="md" trapFocus>
         <Popover.Target>
@@ -53,6 +59,7 @@ export function ThemePicker({
         <Popover.Dropdown>
           <Stack gap="xs">
             <TextInput
+              data-no-tip="a search box"
               placeholder="Search themes"
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
@@ -76,6 +83,7 @@ export function ThemePicker({
                     {g.themes.map((t) => (
                       <Checkbox
                         key={t.key}
+                        data-no-tip="one theme of the list: the picker's label explains the list"
                         size="xs"
                         checked={selected.has(t.key)}
                         onChange={() => toggle(t.key)}

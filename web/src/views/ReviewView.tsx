@@ -10,7 +10,7 @@ import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
-import type { EngineStatus, Explanation, GameMoment, GameNarrative, GameReview, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
+import type { EngineStatus, Explanation, GameMoment, GameNarrative, GameReview, JournalEntry, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
 import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
 import { EnginePanel } from "../components/EnginePanel";
 import { legalArrow } from "../state/engine";
@@ -19,10 +19,12 @@ import { Board, type BoardShape } from "../components/Board";
 import { EvalGraph } from "../components/EvalGraph";
 import { showMeFor } from "../components/ExplainPanel";
 import { GameNarrativePanel, MomentNote, MoveExplain } from "../components/GameAiPanel";
+import { GameNotes } from "../components/GameNotes";
 import { ReasonChips } from "../components/ReasonChips";
 import { CLASS_COLOR, PLATFORM_LABEL, cap, gameDate, gamePrompt, moveLabel, resultLabel } from "../state/games";
 import { useShortcuts } from "../state/shortcuts";
 import { useJob } from "../state/useJob";
+import { Labeled, OptionInfo } from "../components/OptionInfo";
 
 const sq = (uci: string): [string, string] => [uci.slice(0, 2), uci.slice(2, 4)];
 
@@ -49,7 +51,13 @@ export function ReviewView({
   coordinates,
   autoExplain = false,
   onTrain,
+  startRetry = false,
+  hideBest = false,
 }: {
+  /** v0.12 (FR-10.63): a Retry task opens straight in Retry mode. */
+  startRetry?: boolean;
+  /** v0.12 (FR-10.62): a review task opens with best moves hidden, without changing your saved setting. */
+  hideBest?: boolean;
   gameId: number;
   onBack: () => void;
   backLabel?: string;
@@ -81,13 +89,24 @@ export function ReviewView({
   const [engine, setEngine] = useState<EngineStatus | null>(null);
   const [freeBest, setFreeBest] = useState<string | null>(null);
 
+  const [gameNotes, setGameNotes] = useState<JournalEntry[]>([]); // v0.12 (FR-10.69)
+
   useEffect(() => {
+    if (hideBest) return; // it stays off for this task, whatever your setting says
     api.getSettings().then((s) => setShowBest(s.show_best), () => undefined);
-  }, []);
+  }, [hideBest]);
   const toggleBest = (on: boolean) => {
     setShowBest(on);
-    api.setSetting("review.show_best", on).catch((e: Error) => setError(e.message));
+    if (!hideBest) api.setSetting("review.show_best", on).catch((e: Error) => setError(e.message)); // FR-10.62
   };
+  const loadNotes = useCallback(() => {
+    api.getGameNotes(gameId).then(setGameNotes, () => undefined);
+  }, [gameId]);
+  useEffect(loadNotes, [loadNotes]);
+  // FR-10.64, 10.68: the moves you look at are what a pass through the game is made of. `cursor` counts moves played.
+  useEffect(() => {
+    if (cursor >= 1) api.markReviewPly(gameId, cursor - 1).catch(() => undefined);
+  }, [gameId, cursor]);
   const loadEngine = useCallback(() => {
     api.getEngineStatus().then(setEngine, () => undefined);
   }, []);
@@ -122,6 +141,16 @@ export function ReviewView({
     setShowing(null);
     setCursor(Math.max(0, Math.min(n, c)));
   };
+  // FR-10.63: a Retry task opens straight in Retry mode, once, when there's something to retry.
+  const autoRetried = useRef(false);
+  useEffect(() => {
+    if (!startRetry || autoRetried.current || !review?.analyzed || review.retry_plies.length === 0) return;
+    autoRetried.current = true;
+    setRetry(0);
+    setResult(null);
+    setShownAt(Date.now());
+  }, [startRetry, review]);
+  const notedPlies = useMemo(() => new Set(gameNotes.map((x) => x.ply)), [gameNotes]);
   const retrying = retry !== null && review !== null;
   useShortcuts(
     {
@@ -277,7 +306,7 @@ export function ReviewView({
         <Group gap="xs">
           {review.analyzed && (
             <Switch
-              label="Show best moves"
+              label={<Labeled id="review.showBest">Show best moves</Labeled>}
               checked={showBest}
               onChange={(e) => toggleBest(e.currentTarget.checked)}
               data-testid="review-show-best"
@@ -305,8 +334,11 @@ export function ReviewView({
       {error && <Alert color="red">{error}</Alert>}
       {g.user_color === null && (
         <Paper withBorder p="sm" data-testid="review-color">
-          <Group>
-            <Text size="sm">Which side did you play?</Text>
+          <Group data-option-group>
+            <Text size="sm">
+              Which side did you play?
+              <OptionInfo id="review.side" />
+            </Text>
             <Radio.Group value={color} onChange={(v) => setColor(v as typeof color)}>
               <Group>
                 <Radio value="white" label="White" />
@@ -610,10 +642,19 @@ export function ReviewView({
                     {m.ply % 2 === 0 ? `${m.ply / 2 + 1}. ` : ""}
                     {m.san}
                     {m.symbol ?? ""}
+                    {notedPlies.has(m.ply) ? <span data-testid={`move-note-${m.ply}`}> ✎</span> : null}
                   </Button>
                 ))}
               </Group>
             </Paper>
+            <GameNotes
+              gameId={gameId}
+              notes={gameNotes}
+              ply={cursor >= 1 ? cursor - 1 : null}
+              moveLabel={cursor >= 1 && moves[cursor - 1] ? `${moveLabel(cursor - 1)} ${moves[cursor - 1].san}` : null}
+              onChanged={loadNotes}
+              onGo={(ply) => go(ply + 1)}
+            />
           </Stack>
         </Grid.Col>
       </Grid>

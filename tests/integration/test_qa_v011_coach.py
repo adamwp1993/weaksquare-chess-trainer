@@ -341,7 +341,7 @@ def test_qa_r2_migration_0010_backfills_every_shape(tmp_path) -> None:  # type: 
     migrate(db_path, MIGRATIONS_DIR / "user", CLOCK)
     conn = sqlite3.connect(db_path)
     got = dict(conn.execute("SELECT topic_key, report_ids FROM coach_observations").fetchall())
-    assert max(r[0] for r in conn.execute("SELECT version FROM schema_version")) == 10
+    assert max(r[0] for r in conn.execute("SELECT version FROM schema_version")) >= 10  # later versions add migrations
     conn.close()
     assert {k: json.loads(v) for k, v in got.items()} == {
         "concept:a": [], "concept:b": [4], "concept:c": [1, 2], "concept:d": [2, 1],

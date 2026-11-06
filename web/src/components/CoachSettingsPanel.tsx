@@ -1,6 +1,7 @@
 import { Checkbox, Group, Stack, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { Labeled } from "./OptionInfo";
 
 type Site = "youtube" | "chesscom" | "custom";
 
@@ -45,12 +46,12 @@ export function CoachSettingsPanel() {
         Lesson pointers: search links
       </Text>
       <Group gap="md">
-        <Checkbox label="YouTube" checked={sites.includes("youtube")} onChange={(e) => toggle("youtube", e.currentTarget.checked)} data-testid="lesson-site-youtube" />
-        <Checkbox label="chess.com" checked={sites.includes("chesscom")} onChange={(e) => toggle("chesscom", e.currentTarget.checked)} data-testid="lesson-site-chesscom" />
-        <Checkbox label="My own site" checked={sites.includes("custom")} onChange={(e) => toggle("custom", e.currentTarget.checked)} data-testid="lesson-site-custom" />
+        <Checkbox label={<Labeled id="lessons.youtube">YouTube</Labeled>} checked={sites.includes("youtube")} onChange={(e) => toggle("youtube", e.currentTarget.checked)} data-testid="lesson-site-youtube" />
+        <Checkbox label={<Labeled id="lessons.chesscom">chess.com</Labeled>} checked={sites.includes("chesscom")} onChange={(e) => toggle("chesscom", e.currentTarget.checked)} data-testid="lesson-site-chesscom" />
+        <Checkbox label={<Labeled id="lessons.custom">My own site</Labeled>} checked={sites.includes("custom")} onChange={(e) => toggle("custom", e.currentTarget.checked)} data-testid="lesson-site-custom" />
       </Group>
       <TextInput
-        label="My own search site"
+        label={<Labeled id="lessons.customUrl">My own search site</Labeled>}
         description="An https:// search address with {q} where the search words go, e.g. https://example.org/search?q={q}"
         value={custom}
         onChange={(e) => setCustom(e.currentTarget.value)}

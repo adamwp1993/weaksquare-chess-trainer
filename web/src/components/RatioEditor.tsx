@@ -1,6 +1,7 @@
 import { ActionIcon, Button, Group, NumberInput, Paper, Stack, Text } from "@mantine/core";
 import type { RatioBucket, ThemeGroup } from "../api/types";
 import { ThemePicker } from "./ThemePicker";
+import { Labeled } from "./OptionInfo";
 
 const MAX_GROUPS = 10;
 
@@ -35,7 +36,7 @@ export function RatioEditor({
             <Stack gap={6}>
               <Group justify="space-between" align="end" wrap="nowrap">
                 <NumberInput
-                  label={`Group ${i + 1} share`}
+                  label={<Labeled id="filters.ratioShare">{`Group ${i + 1} share`}</Labeled>}
                   size="xs"
                   w={110}
                   min={1}
@@ -64,6 +65,7 @@ export function RatioEditor({
               </Group>
               <ThemePicker
                 label={`Group ${i + 1} themes (any of)`}
+                tip="filters.ratioThemes"
                 catalog={catalog}
                 value={b.themes}
                 onChange={(themes) => update(i, { themes })}

@@ -13,6 +13,27 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.12] - 2026-11-06
+Candidates: v0.12-rc1 (2026-11-05), v0.12-rc2 (2026-11-06)
+
+### Added
+- **A training plan** in the Coach's new **Plan** tab: 1–4 weeks built from your latest report, on the weekdays you pick, sized by minutes per day, with your top weaknesses getting the most time. Free, on your PC. [FR-10.61, FR-10.62, FR-10.65]
+- **Daily checklists that tick themselves**: a task ticks when the app sees it done, you can tick or untick any box by hand (your choice always wins), and you can skip or swap a task. A missed day's tasks carry over, up to one day's worth, unless you turn that off. [FR-10.64]
+- **Start** on each task opens its screen: puzzle sessions, puzzles from your games, Retry on a named game, a review with best moves hidden, a lesson, or a reflection. A task never changes your filters, mode or presets. [FR-10.62, FR-10.63]
+- **Today's plan** card on the main page, with the same checkboxes as the Plan tab. [FR-10.65]
+- **A training journal** in the Coach's new **Journal** tab: your notes, your reflections on games, and an automatic daily log, with filters and search. [FR-10.67, FR-10.68, FR-10.70]
+- **Add a note** in Game Review, on a game or one of its moves. The move gets a marker, and the note appears in your journal with a link back. [FR-10.69]
+- **AI coaching proposes a plan**, checked task by task with the free plan filling any gaps. Compare the two, then **Use this plan**. The next run is told how your plan went, as numbers only. [FR-10.66]
+- **Include my journal**, an option for one AI run, with a preview of exactly what's sent. Off every time. [FR-10.71]
+- **Since last report** in every report: each weakness's rate then and now, New and Gone, game health, whole-game measures, puzzle accuracy on each weakness's themes, and the trend over your last 5 reports. AI coaching says what improved and what got worse, and a claim that contradicts the numbers is dropped. [FR-10.73]
+- **An ⓘ on every option**: hover over it or tab to it to see what the option does and, for a choice, what each choice means and costs. [FR-10.72]
+
+### Changed
+- The Coach is now three tabs: **Report**, **Plan** and **Journal**. [FR-10.65]
+- The weakness tables' **Since last report** column now says better or worse only with at least 5 games in that group in each report and 5 new games; otherwise *not enough new games yet*. A weakness that's new says **New** rather than *worse*. [FR-10.73]
+- AI coaching allows longer answers, up to 7,500 tokens at Summary and 10,000 at Detailed, to leave room for the plan. Its estimate and worst-case cost are higher, so a costly model may now need a higher per-run cap, most of all at Detailed or a higher reasoning level. [FR-8.14]
+- A saved AI answer is reused only if it has a plan and, with Include my journal, only while your journal text is unchanged. [FR-10.66, FR-10.71]
+
 ## [v0.11] - 2026-11-05
 Candidates: v0.11-rc1 (2026-11-05)
 

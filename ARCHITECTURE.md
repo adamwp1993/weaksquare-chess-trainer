@@ -86,6 +86,10 @@ weaksquare-chess-trainer/
 │  │  ├─ coach_diagnosis.py    # the whole-game AI prompt, schema and evidence rule (v0.11)
 │  │  ├─ lessons.py            # lesson topics, the curated Lichess map, search links (v0.11)
 │  │  ├─ urls.py               # strip web addresses from notes and AI text (v0.11)
+│  │  ├─ plan.py               # the deterministic plan, ticks, carry-over and swap (v0.12)
+│  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
+│  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
+│  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
 │  │  └─ weakness.py           # metrics + status rules               (v1.0)
 │  ├─ services/                # one module per use-case area; created when first needed
 │  │                           #   v0.1: puzzle_db.py (import and upgrade jobs), mixer.py (catalogs, counts), session.py
@@ -100,6 +104,7 @@ weaksquare-chess-trainer/
 │  │                           #         background engine, Review settings), review.py (review, Retry,
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
 │  │                           #   v0.9: game_explain.py (Explain this move, Explain my game)
+│  │                           #   v0.12: plan.py (the training plan), journal.py (the journal, the daily log)
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -107,7 +112,7 @@ weaksquare-chess-trainer/
 │  │  │  ├─ puzzles_indexes.sql  # built after each puzzle import's bulk load
 │  │  │  ├─ migrations/puzzles/0001_init.sql …
 │  │  │  ├─ migrations/user/0001_init.sql …
-│  │  │  └─ repos/             # one repository per aggregate; v0.8: games.py, game_analysis.py,
+│  │  │  └─ repos/             # one repository per aggregate; v0.12: plans.py, journal.py; v0.8: games.py, game_analysis.py,
 │  │  │                        #   custom_puzzles.py (+ CustomPuzzleSource, RetryRepo), puzzle_sources.py
 │  │  │                        #   (CombinedSource: Lichess DB + My puzzles)
 │  │  ├─ http.py               # shared httpx client: UA, timeouts, retry/backoff, redaction
@@ -237,6 +242,67 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-06, planning: The opening trainer moves before v1.0, and checkpoints gain a schedule and a report
+- Context: Adam wants the opening trainer before the macOS and Linux port, and before v1.0. He also wants Coach reports generated automatically, by game count or on a schedule.
+- Decision: the opening trainer is now v0.13, so the order is v0.12 → v0.13 → v1.0 → v1.1. Its FR-12 numbers don't change. A checkpoint can also run on a time schedule, and it saves a normal Coach report (FR-10.32, 10.33).
+- Alternatives: a Windows scheduled task, so a schedule could run with the app closed, rejected for now because it's more OS-specific work, and the app opens the due checkpoint at the next launch anyway.
+- Consequences: the trainer needs only the engine, the LLM guardrails and Lichess sign-in, which have all shipped. v1.0's polish pass, complete User Guide and first-run wizard now have the trainer to cover. Earlier plans and QA reports still say v2.0, as a record of the time.
+
+### 2026-11-05, v0.12: What QA round 1 changed in the plan and journal
+- Context: QA v0.12 round 1 found the carry-over limit reset on each read, a group's guard ignored, an ended plan still changing, and more (`qa/QA-v0.12.md`).
+- Decision:
+  - **`to_carry`** counts what's already carried into today against the limit, so reads are safe to repeat and the limit holds.
+  - **`report_compare._group_enough`** applies FR-10.73's guard to a whole-game weakness's own group, from the measures in each report.
+  - **`user/0012_plan_manual_at.sql`** records when you ticked by hand, so the daily log counts it. `done_at` stays what the app saw.
+  - **`_facts` has an upper limit,** `plan.ended_at`, so an ended plan stays as it was.
+  - **`ReviewPassesRepo.start`** resumes only the task's own pass, and `completed_games` needs a pass begun since the plan began.
+  - **The timeline** looks at all entries when a search or filter can only match entries. Only the daily log, computed day by day, comes in 30-day windows, and `older` is true only when something is there.
+  - **`JournalService.add`** checks links, moves and dates, and accepts only a real weakness key as a tag, since tags go to the AI.
+- Alternatives: editing 0011 for `manual_at`, rejected by the rule that migrations are never edited.
+- Consequences: the journal composer has no date control, so a future date can only come from a direct bridge call, and it's refused.
+
+### 2026-11-05, v0.12: Plan ticks are worked out from stored events when read, not pushed by hooks
+- Context: a task ticks from puzzle sessions, Retry, Game Review and journal entries (FR-10.64), four services that know nothing about plans.
+- Decision: `services/plan.py` reads the events when the plan is read: attempts through the new `sessions.plan_task_id`, `retry_attempts` since the plan began, `review_passes`, and `journal_entries.plan_task_id`. The time it first sees a task done goes in `plan_tasks.done_at`, for the daily log. `plan_tasks.manual_state` (done / undone) is your hand choice, and it always wins. A lesson's `done_at` is set when you open it, because nothing else records that. A swapped task stays, marked `removed`, so its sessions stay linked.
+- Alternatives: listeners in each service, rejected because every new task type would touch another service, and a missed event would leave a box wrong for good.
+- Consequences: nothing can fall out of step, and the session and review services stay unaware of plans. A read does some queries and may write `done_at` or carried tasks; it's safe to repeat (a task with a copy is never copied again).
+
+### 2026-11-05, v0.12: The plan is a pure function, and a puzzle task builds its own filters
+- Context: the plan must fit your minutes and days, weight by score, and never change your Mixer (FR-10.61–10.63).
+- Decision: `core/plan.build_plan` shares slots by smooth weighted round-robin over the weakness scores, so time follows the score and weaknesses stay mixed across days. `core/plan.task_spec` builds a task's `FilterSpec` from the defaults. `PlanService.start_task` starts the session directly, and the front end has a separate path for it (`planSession` in `App.tsx`). `fit_task` widens a task's rating band until it has enough puzzles.
+- Alternatives: one weakness per day, rejected because a test showed it capped your worst weakness at one slot a day.
+- Consequences: a test can compare `settings` byte for byte across a task's Start. The Mixer panel keeps showing your filters during a plan session, so a banner says the session uses the task's own.
+
+### 2026-11-05, v0.12: Review passes, not a single "reviewed" flag
+- Context: a review task ticks when you've visited every key moment and the final move (Adam, v0.12 planning), and the daily log counts games reviewed per day (FR-10.68). A game can be reviewed twice.
+- Decision: `review_passes` has one row per pass, with the plies visited. A new pass starts once the last was completed, and a new plan deletes unfinished passes, because moves looked at before a plan don't count towards it (`PlansRepo.add`). `Api.mark_review_ply` is called as the cursor moves; `ReviewService.mark_visited` decides completion. `games.analyzed_at` records analysis time for the log. FR-10.68's "no extra tracking" was reworded: these are the two additions.
+- Alternatives: `games.reviewed_at`, rejected because a second review would overwrite the first day's count, and a task couldn't tell a fresh pass from an old one.
+- Consequences: one bridge call per move viewed. Passes for games reviewed before v0.12 don't exist, so those days show none.
+
+### 2026-11-05, v0.12: The AI's plan is validated task by task, and trend claims must match the numbers
+- Context: the plan is LLM output (CLAUDE.md "LLM output is untrusted"), and FR-10.73 says a trend finding is checked like any other. `validate()` drops a finding with no game citation, but a weakness that's gone has no game to cite.
+- Decision: `core/plan_llm.validate_plan` drops an unknown type, theme, mode, game or topic, writes every title itself (only a reflection's question is AI text, cleaned), and fills each day from the deterministic plan. A trend statement is a separate `trend` field: its key must have been sent and its `change` must equal `core/report_compare`'s guarded verdict, or it's dropped. Both schemas are extended by `add_to_schema` rather than edited: `plan` only for your own reports.
+- Alternatives: asking for the plan in a second request, rejected because FR-10.66 has it in the answer and it would need a second Confirm.
+- Consequences: Coach `max_tokens` rise to 7,500 and 10,000 and `COACH_TIMEOUT_S` to 300 (Adam, v0.12 planning: flat limits). Worst-case estimates rise on every Coach run, so costly models at High reasoning can now be blocked by the default $0.50 cap.
+
+### 2026-11-05, v0.12: A saved AI answer stands only for what it was given
+- Context: `_cached_run` matched on options and model. An answer from before plans would hide the plan, and a saved answer reused after you edit your journal would mean the preview showed text that was never sent.
+- Decision: `coach_ai_runs` gains `include_journal` and `journal_hash` (SHA-256 of the lines sent, no text). A stored answer is reused only with the same hash and, for your own reports, with a `plan`. The hash, not the text, is stored in those columns.
+- Alternatives: never reusing with the journal on, rejected because it would re-bill you for an unchanged request.
+- Consequences: Plan settings aren't in the key: a saved answer keeps the shape it was made with, so changing settings never re-bills you.
+
+### 2026-11-05, v0.12: Since last report replaces the unguarded trend in the UI
+- Context: the v0.10 column said better or worse with no sample check, and `core/coach.trend` treated a new weakness as a rise from zero. FR-10.73 requires guards.
+- Decision: `core/report_compare.compare` is the only source of better / worse, and the weakness tables read `CoachWeakness.change` from it. Reports save `analysis_settings` from v0.12; older ones show *settings unknown*. Puzzle accuracy per weakness is worked out from `attempts` by time window, and kept in memory once worked out because both windows have closed.
+- Alternatives: storing the comparison with the report, rejected because it would be wrong after the older report's numbers were read differently, and it isn't expensive to compute.
+- Consequences: `core/coach.trend` stays for its existing callers but no longer reaches the screen. v1.0's statuses can reuse the comparison.
+
+### 2026-11-05, v0.12: One tooltip table, checked by a walk over the real screens
+- Context: FR-10.72 puts a tooltip on every option, app-wide, and later versions must not forget one.
+- Decision: `web/src/text/tooltips.ts` holds all the text under typed ids. `OptionInfo` renders the mark, and `Labeled` puts it in a Mantine label. `tests/e2e/test_v012_tooltips.py` walks the screens and requires each control to have its own mark: inside its label, in its `data-option-group`, or named by `data-option-for`. `data-no-tip="<reason>"` opts out free text and row selectors. The first test plants a bare control to prove the walk catches one.
+- Alternatives: Mantine's `description` prop, rejected because it takes up room on every control; a lint rule, rejected because it can't see what renders.
+- Consequences: the mark sits inside the `<label>`, so a click on it has to `preventDefault`, or it would toggle the option (a test checks this). It's an SVG with no text, so a control's accessible name stays exactly its label (a first version with an `aria-label` turned "Puzzles" into "PuzzlesMore about this option", caught by the older tests); the tooltip's words reach assistive tech through `aria-description`.
 
 ### 2026-11-04, v0.11: QA fixes (v0.11-B1 to B14)
 - Context: QA round 1 (`qa/QA-v0.11.md`), FAIL: three major and five minor bugs; round 2, FAIL: B9 (major) and B10 (minor) in the URL filter; round 3, PASS WITH ISSUES: B11–B14 (minor), also in the URL filter.

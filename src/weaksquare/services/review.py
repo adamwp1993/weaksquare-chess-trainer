@@ -205,7 +205,9 @@ class ReviewService:
         reasons: Reasons,
         ask: AskPrefs,
         clock: Clock,
+        passes: Any = None,
     ) -> None:
+        self._passes = passes  # v0.12: your passes through a game (FR-10.64, 10.68)
         self._games = games
         self._analysis = analysis
         self._prefs = prefs
@@ -313,6 +315,34 @@ class ReviewService:
             retry_plies=tuple(sorted(retry)),
             ask_reasons=mine and self._ask.reasons_ask() in ("always", "game_review"),
         )
+
+    def _colors(self, game: GameRow) -> tuple[str, ...]:
+        if game.user_color == "both":
+            return ("white", "black")
+        return (game.user_color,) if game.user_color else ()
+
+    def retry_plies(self, game_id: int) -> tuple[int, ...]:
+        """Your mistakes and blunders in this game: what Retry goes through (FR-11.15)."""
+        game = self._games.get(game_id)
+        if game is None or not self._mine(game) or game.analysis_status == "none":
+            return ()
+        rows = self._analysis.rows(game_id)
+        return tuple(r.ply for r in rows if self._yours(game, r.mover) and r.classification in RETRY_CLASSES)
+
+    def mark_visited(self, game_id: int, ply: int) -> bool:
+        """You looked at this move in Game Review. A pass through the game is complete once you've visited
+        every key moment and the final move (FR-10.64; Adam, v0.12 planning). True when this one completed it."""
+        game = self._game(game_id)
+        if not isinstance(ply, int) or isinstance(ply, bool) or ply < 0:
+            raise ValidationError("ply must be a whole number")
+        if self._passes is None:
+            return False
+        rows = self._analysis.rows(game_id) if game.analysis_status != "none" else []
+        if not rows or ply >= len(rows):
+            return False
+        n = self._prefs.settings().key_moments
+        needed = {r.ply for c in self._colors(game) for r in key_moments(rows, c, n)} | {rows[-1].ply}
+        return bool(self._passes.visit(game_id, ply, self._now(), frozenset(needed)))
 
     def _row(self, game: GameRow, ply: int) -> MoveRow:
         if not isinstance(ply, int) or isinstance(ply, bool):

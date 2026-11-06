@@ -34,6 +34,7 @@ from weaksquare.core.llm.defaults import (
     TYPICAL_PROMPT_CHARS,
     PriceRow,
 )
+from weaksquare.core.plan import PlanDraft
 from weaksquare.core.preset_suggestion import validate_coach_preset
 from weaksquare.core.reasons import REASONS
 from weaksquare.core.themes import display_name
@@ -48,10 +49,12 @@ from weaksquare.services.explain import ExplainService, ExplainView
 from weaksquare.services.game_explain import GameExplainService, GameQuote, NarrativeView
 from weaksquare.services.game_puzzles import GamePuzzlesService
 from weaksquare.services.games import GameLibraryService
+from weaksquare.services.journal import JournalService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.puzzle_import import PuzzleImportService
@@ -110,7 +113,11 @@ class Api:
         game_explain: GameExplainService,
         game_puzzles: GamePuzzlesService,
         coach: CoachService,
+        plan: PlanService,
+        journal: JournalService,
     ) -> None:
+        self._plan = plan
+        self._journal = journal
         self._game_puzzles = game_puzzles
         self._coach = coach
         self._explain = explain
@@ -277,6 +284,8 @@ class Api:
             "review.show_best",
             "coach.lesson_sites",
             "coach.lesson_custom_url",
+            "plan.params",
+            "plan.carry_over",
         ],
         value: Any,
     ) -> None:
@@ -860,13 +869,14 @@ class Api:
 
     @bridge_call
     def get_coach_report(self, report_id: int) -> dto.CoachReport:
-        row, trend = self._coach.report(report_id)
+        row, _ = self._coach.report(report_id)
         rep = row.report
-        has_prev = bool(trend)
         preset = rep.get("preset")
+        comparison = self._coach.comparison(row.id)  # FR-10.73: the guarded comparison replaces the bare trend
+        changes = {c.key: c for c in comparison.weaknesses} if comparison is not None else {}
 
         def ws(group: str) -> list[dto.CoachWeakness]:
-            return [_weakness_dto(w, trend, has_prev) for w in rep.get(group) or [] if isinstance(w, dict)]
+            return [_weakness_dto(w, changes) for w in rep.get(group) or [] if isinstance(w, dict)]
 
         return dto.CoachReport(
             row.id, row.created_at, row.subject_label, row.subject == "me", row.source_kind,  # type: ignore[arg-type]
@@ -877,6 +887,7 @@ class Api:
             int(rep.get("low_clock_errors") or 0),
             _preset_dto("The report's mix", preset) if isinstance(preset, dict) else None,
             [str(n) for n in rep.get("notes") or []], ws("whole_game"), _measures_dto(rep.get("measures")),
+            _comparison_dto(comparison),
         )  # fmt: skip
 
     @bridge_call
@@ -910,7 +921,7 @@ class Api:
             out.append(
                 dto.CoachAiRunSummary(
                     r.id, r.created_at, r.format, r.advanced, r.include_notes, r.game_cap,  # type: ignore[arg-type]
-                    r.provider, r.model, round(r.cost_usd, 6), count, len(r.new),
+                    r.provider, r.model, round(r.cost_usd, 6), count, len(r.new), r.include_journal,
                 )
             )  # fmt: skip
         return out
@@ -971,8 +982,21 @@ class Api:
         return dto.CoachAiRun(
             run.id, run.created_at, run.format, run.advanced, run.include_notes, run.game_cap,  # type: ignore[arg-type]
             str(res.get("summary") or ""), findings, presets, bool(res.get("fallback_preset")),
-            int(res.get("discarded") or 0), run.provider, run.model, round(run.cost_usd, 6),
+            int(res.get("discarded") or 0), run.provider, run.model, round(run.cost_usd, 6), run.include_journal,
+            [
+                dto.CoachTrendNote(str(n["key"]), labels.get(str(n["key"]), str(n["key"])), n["change"], str(n["comment"]))
+                for n in res.get("trend") or []
+                if isinstance(n, dict)
+            ],
+            self._ai_plan_dto(res.get("plan")),
+            dto.AiPlanCheck(**res["plan_check"]) if isinstance(res.get("plan_check"), dict) else None,
         )  # fmt: skip
+
+    def _ai_plan_dto(self, raw: Any) -> dto.PlanPreview | None:
+        if not isinstance(raw, dict):
+            return None
+        draft = PlanDraft.from_json(raw)
+        return _draft_dto(draft, None, self._plan.preview_replaces())
 
     def _lesson_dto(self, report_id: int, topic: str) -> dto.CoachLesson | None:
         lv = self._coach.lesson(report_id, topic)
@@ -1000,6 +1024,178 @@ class Api:
                 move = sans[n.ply - 1] if 0 < n.ply <= len(sans) else None
             out.append(dto.CoachNote(n.game, n.ply, move, n.reason, n.text, n.source))  # type: ignore[arg-type]
         return out
+
+    @bridge_call
+    def get_coach_journal_preview(self, report_id: int) -> list[dto.CoachJournalLine]:
+        """FR-10.71: exactly the entries Include my journal would send."""
+        row, _ = self._coach.report(report_id)
+        games: dict[str, int] = {}
+        if row.game_ids:
+            games = {f"G{n}": gid for n, (gid, _) in enumerate(self._coach.digests(row.game_ids, row.subject), start=1)}
+        out = []
+        for j in self._coach.journal_preview(report_id):
+            move = None
+            if j.game in games and j.ply is not None:
+                sans = self._coach.move_labels(games[j.game])
+                move = sans[j.ply - 1] if 0 < j.ply <= len(sans) else None
+            out.append(dto.CoachJournalLine(j.text, j.kind, j.game, j.ply, move, j.weakness))  # type: ignore[arg-type]
+        return out
+
+    # ---- v0.12: the training plan (FR-10.61-10.66) --------------------------------------------------
+    @bridge_call
+    def get_plan_settings(self) -> dto.PlanSettings:
+        p = self._plan.params()
+        return dto.PlanSettings(p.weeks, list(p.weekdays), p.minutes, self._plan.carry_over(), self._plan.has_report())
+
+    @bridge_call
+    def preview_plan(self, params: dict | None = None) -> dto.PlanPreview:  # type: ignore[type-arg]
+        """The plan these settings would make from your latest report. Nothing is saved."""
+        pv = self._plan.preview(params)
+        return _draft_dto(pv.draft, pv.dates, pv.replaces, pv.start_date)
+
+    @bridge_call
+    def create_plan(self, params: dict, confirmed: bool = False) -> dto.TrainingPlan:  # type: ignore[type-arg]
+        """Start the deterministic plan. It replaces the current one only when you confirm (FR-10.65)."""
+        self._plan.create(params, confirmed=bool(confirmed))
+        view = self._plan.current()
+        assert view is not None
+        return _plan_dto(view)
+
+    @bridge_call
+    def use_ai_plan(self, run_id: int, confirmed: bool = False) -> dto.TrainingPlan:
+        """Use this plan (FR-10.66): a stored AI plan becomes current."""
+        self._coach.use_ai_plan(run_id, confirmed)
+        view = self._plan.current()
+        assert view is not None
+        return _plan_dto(view)
+
+    @bridge_call
+    def get_current_plan(self) -> dto.TrainingPlan | None:
+        view = self._plan.current()
+        return _plan_dto(view) if view is not None else None
+
+    @bridge_call
+    def get_today_plan(self) -> dto.TodayPlan | None:
+        t = self._plan.today()
+        if t is None:
+            return None
+        return dto.TodayPlan(
+            t.plan_id, t.today, _day_dto(t.day) if t.day is not None else None, t.next_date, t.finished
+        )
+
+    @bridge_call
+    def list_plans(self) -> list[dto.TrainingPlan]:
+        """Every plan, newest first, old ones with their completion (FR-10.65)."""
+        return [_plan_dto(v) for v in self._plan.history()]
+
+    @bridge_call
+    def set_plan_task_tick(self, task_id: int, done: bool) -> None:
+        """Your hand tick or untick, which always wins over what the app saw (FR-10.64)."""
+        self._plan.set_tick(task_id, done)
+
+    @bridge_call
+    def skip_plan_task(self, task_id: int, skipped: bool = True) -> None:
+        self._plan.skip(task_id, skipped)
+
+    @bridge_call
+    def swap_plan_task(self, task_id: int) -> int:
+        return self._plan.swap(task_id)
+
+    @bridge_call
+    def start_plan_task(self, task_id: int, rated: bool = True) -> dto.PlanTaskAction:
+        """Start (FR-10.63): a puzzle task's session uses its own filters, and your Mixer stays as it was."""
+        return self._action_dto(self._plan.start_task(task_id, rated))
+
+    @bridge_call
+    def start_plan_lesson_drill(self, task_id: int, rated: bool = True) -> dto.PlanTaskAction:
+        """A lesson task's drill, as a session of its own: your filters stay as they were."""
+        return self._action_dto(self._plan.start_lesson_drill(task_id, rated))
+
+    @bridge_call
+    def open_plan_lesson(self, task_id: int, target: str) -> None:
+        """Open one of a lesson task's links, which ticks the task. The backend builds the URL (FR-10.59)."""
+        report_id, topic = self._plan.lesson_ref(task_id)
+        self._desktop.open_in_browser(self._coach.lesson_url(report_id, topic, target))
+        self._plan.lesson_opened(task_id)
+
+    @bridge_call
+    def mark_review_ply(self, game_id: int, ply: int) -> bool:
+        """You looked at this move in Game Review (FR-10.64, 10.68). True when that completed the pass."""
+        return self._review.mark_visited(game_id, ply)
+
+    def _action_dto(self, a: Any) -> dto.PlanTaskAction:
+        session = None
+        if a.session is not None:
+            i = a.session
+            session = dto.SessionInfo(i.session_id, i.match_count, i.queue_size, i.empty_buckets, i.mode)
+        lesson = self._lesson_dto(a.report_id, a.topic) if a.topic and a.report_id is not None else None
+        return dto.PlanTaskAction(
+            a.kind, a.task_id, session, a.remaining, a.mode, a.game_id, lesson, a.prompt, a.weakness_key, a.plan_day_id
+        )
+
+    # ---- v0.12: the journal (FR-10.67-10.70) ------------------------------------------------------
+    @bridge_call
+    def get_journal(self, filters: dict | None = None) -> dto.JournalTimeline:  # type: ignore[type-arg]
+        t = self._journal.timeline(filters)
+        items = [
+            dto.JournalItem(i.date, self._entry_dto(i.entry) if i.entry is not None else None, _day_log_dto(i.log) if i.log is not None else None)
+            for i in t.items
+        ]  # fmt: skip
+        return dto.JournalTimeline(items, t.window_start, t.older, self._journal_games(t.games))
+
+    def _journal_games(self, ids: Any) -> list[dto.JournalGame]:
+        """The Game filter's choices. QA v0.12-B28: with the date, so two games against one opponent differ, and with
+        the id only for games that still look alike."""
+        labels: dict[int, str] = {}
+        for gid in ids:
+            g = self._games.get(gid)
+            played = (g.played_at or "")[:10]
+            labels[gid] = self._game_label(gid) + (f" ({played})" if played else "")
+        seen = list(labels.values())
+        return [dto.JournalGame(gid, lb if seen.count(lb) == 1 else f"{lb} #{gid}") for gid, lb in labels.items()]
+
+    def _game_label(self, game_id: int) -> str:
+        g = self._games.get(game_id)
+        return f"{g.white or '?'} – {g.black or '?'}"
+
+    @bridge_call
+    def add_journal_entry(self, entry: dict) -> dto.JournalEntry:  # type: ignore[type-arg]
+        """A note, or with a game a reflection (FR-10.67, 10.69)."""
+        if not isinstance(entry, dict) or set(entry) - JOURNAL_FIELDS:
+            raise ValidationError("Unknown journal fields.")
+        eid = self._journal.add(
+            entry.get("text"), entry_date=entry.get("entry_date"), weakness_key=entry.get("weakness_key"),
+            game_id=entry.get("game_id"), ply=entry.get("ply"), plan_day_id=entry.get("plan_day_id"),
+            plan_task_id=entry.get("plan_task_id"),
+        )  # fmt: skip
+        return self._entry_dto(self._journal.get(eid))
+
+    @bridge_call
+    def edit_journal_entry(self, entry_id: int, text: str, weakness_key: str | None = None) -> dto.JournalEntry:
+        self._journal.edit(entry_id, text, weakness_key)
+        return self._entry_dto(self._journal.get(entry_id))
+
+    @bridge_call
+    def delete_journal_entry(self, entry_id: int) -> None:
+        self._journal.delete(entry_id)
+
+    @bridge_call
+    def get_game_notes(self, game_id: int) -> list[dto.JournalEntry]:
+        """FR-10.69: a game's notes, in order of the move they're on."""
+        return [self._entry_dto(e) for e in self._journal.game_notes(game_id)]
+
+    def _entry_dto(self, e: Any) -> dto.JournalEntry:
+        move = label = None
+        if e.game_id is not None:
+            label = self._game_label(e.game_id)
+            if e.ply is not None:
+                sans = self._coach.move_labels(e.game_id)
+                move = sans[e.ply] if 0 <= e.ply < len(sans) else None
+        return dto.JournalEntry(
+            e.id, e.created_at, e.updated_at, e.entry_date, e.kind, e.text, e.game_id, e.ply, move, label,
+            e.weakness_key, e.plan_day_id, e.plan_task_id,
+            self._journal.plan_day_date(e.plan_day_id) if e.plan_day_id is not None else None,
+        )  # fmt: skip
 
     @bridge_call
     def open_lesson(self, report_id: int, topic: str, target: str) -> None:
@@ -1175,14 +1371,91 @@ def _player_label(subject: str) -> str:
     return f"{name} ({'Lichess' if platform == 'lichess' else 'chess.com'})"
 
 
-def _weakness_dto(w: dict[str, Any], trend: dict[str, float], has_prev: bool) -> dto.CoachWeakness:
+JOURNAL_FIELDS = {"text", "entry_date", "weakness_key", "game_id", "ply", "plan_day_id", "plan_task_id"}
+
+
+def _comparison_dto(c: Any) -> dto.CoachComparison | None:
+    if c is None:
+        return None
+
+    def puzzle(p: Any) -> dto.CoachPuzzleChange | None:
+        if p is None:
+            return None
+        return dto.CoachPuzzleChange(p.then, p.now, p.then_attempts, p.now_attempts, p.verdict)
+
+    def measure(m: Any) -> dto.CoachMeasureChange:
+        return dto.CoachMeasureChange(m.key, m.label, m.unit, m.then, m.now, m.delta, m.verdict)
+
+    return dto.CoachComparison(
+        c.earlier_id, c.earlier_created_at, c.days_between, c.new_games, c.shared_games, c.enough_new_games, c.settings,
+        c.puzzle_history, len(c.history),
+        [
+            dto.CoachWeaknessChange(w.key, w.label, w.then, w.now, w.delta, w.flag, w.verdict, list(w.series), puzzle(w.puzzle))
+            for w in c.weaknesses
+        ],
+        [measure(m) for m in c.health], [measure(m) for m in c.measures],
+    )  # fmt: skip
+
+
+def _draft_dto(draft: Any, dates: Any, replaces: bool, start: str | None = None) -> dto.PlanPreview:
+    p = draft.params
+    return dto.PlanPreview(
+        p.weeks, list(p.weekdays), p.minutes, start, replaces,
+        [
+            dto.PlanPreviewDay(
+                d.week, d.position, dates[i] if dates is not None and i < len(dates) else None,
+                [dto.PlanPreviewTask(t.type, t.title, t.minutes, t.weakness_key) for t in d.tasks],
+            )
+            for i, d in enumerate(draft.days)
+        ],
+    )  # fmt: skip
+
+
+def _task_dto(v: Any) -> dto.PlanTask:
+    t = v.task
+    count = t.params.get("count") if t.type in ("puzzles", "game_puzzles") else None
+    return dto.PlanTask(
+        t.id, t.type, t.title, t.weakness_key, t.minutes, v.status, v.auto, t.manual_state, v.progress,
+        int(count) if isinstance(count, int) else None, v.minutes_spent, t.carried_from is not None,
+    )  # fmt: skip
+
+
+def _day_dto(v: Any) -> dto.PlanDay:
+    d = v.day
+    return dto.PlanDay(d.id, d.week, d.position, d.date, v.is_today, [_task_dto(t) for t in v.tasks])
+
+
+def _plan_dto(v: Any) -> dto.TrainingPlan:
+    p = v.plan
+    return dto.TrainingPlan(
+        p.id, p.created_at, p.source, p.status, p.params.weeks, list(p.params.weekdays), p.params.minutes, p.start_date,
+        p.ended_at, v.done, v.skipped, v.left, v.minutes_spent, v.today, [_day_dto(d) for d in v.days],
+    )  # fmt: skip
+
+
+def _tally_dto(t: Any) -> dto.DayLogTally:
+    return dto.DayLogTally(t.key, t.label, t.attempts, t.solved, t.accuracy)
+
+
+def _day_log_dto(x: Any) -> dto.DayLog:
+    f = x.facts
+    return dto.DayLog(
+        x.date, _tally_dto(x.overall), [_tally_dto(t) for t in x.by_mode], [_tally_dto(t) for t in x.by_source],
+        list(x.missed_themes), x.misclicks, f.games_played, f.games_synced, f.games_analyzed, f.games_reviewed, f.retries,
+        f.retries_found, f.plan_tasks_done, list(f.coach_runs),
+    )  # fmt: skip
+
+
+def _weakness_dto(w: dict[str, Any], changes: dict[str, Any]) -> dto.CoachWeakness:
     key = str(w.get("key"))
+    c = changes.get(key)
     return dto.CoachWeakness(
         key, w.get("kind"), str(w.get("name")), str(w.get("label")), int(w.get("count") or 0),  # type: ignore[arg-type]
         float(w.get("per10") or 0.0), int(w.get("severity") or 0), float(w.get("score") or 0.0),
         [str(t) for t in w.get("themes") or []], w.get("mode"), dict(w.get("reasons") or {}),
         [dto.CoachExample(int(e["game_id"]), int(e["ply"]), int(e["cp_loss"])) for e in w.get("examples") or []],
-        w.get("puzzle_accuracy"), trend.get(key) if has_prev else None,
+        w.get("puzzle_accuracy"), c.delta if c is not None else None,
+        (c.flag or c.verdict) if c is not None else None,
     )  # fmt: skip
 
 

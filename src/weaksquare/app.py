@@ -30,8 +30,10 @@ from weaksquare.adapters.db.repos.coach import (
 from weaksquare.adapters.db.repos.custom_puzzles import CustomPuzzleSource, CustomPuzzlesRepo, RetryRepo
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.adapters.db.repos.games import AccountSyncRepo, GamesRepo
+from weaksquare.adapters.db.repos.journal import DailyLogRepo, JournalRepo
 from weaksquare.adapters.db.repos.lichess import LichessHistoryRepo, SyncRepo
 from weaksquare.adapters.db.repos.llm import LlmCacheRepo, LlmPricesRepo, LlmUsageRepo
+from weaksquare.adapters.db.repos.plans import PlansRepo, ReviewPassesRepo
 from weaksquare.adapters.db.repos.presets import PresetsRepo
 from weaksquare.adapters.db.repos.puzzle_import import ExistingPuzzleDb, PuzzleDbWriter
 from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
@@ -90,10 +92,12 @@ from weaksquare.services.explain import ExplainService
 from weaksquare.services.game_explain import GameExplainService
 from weaksquare.services.game_puzzles import GamePuzzlesService
 from weaksquare.services.games import GameLibraryService
+from weaksquare.services.journal import JournalService
 from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import PresetService
 from weaksquare.services.puzzle_db import ImportDeps, PuzzleDbService
 from weaksquare.services.puzzle_import import PuzzleImportService
@@ -222,6 +226,8 @@ class Services:
     puzzle_import: PuzzleImportService
     game_puzzles: GamePuzzlesService
     coach: CoachService
+    plan: PlanService
+    journal: JournalService
 
     def close(self) -> None:
         self.engine.close()  # NFR-6: stop the engine process
@@ -349,7 +355,7 @@ def build_services(
     )
     games_repo = GamesRepo(db)
     analysis_repo = GameAnalysisRepo(db)
-    analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner)
+    analysis = AnalysisService(games_repo, analysis_repo, engine, SettingsRepo(db), runner, clock)
     sessions = SessionService(puzzles, attempts, SessionsRepo(db), clock, rng, sync=sync, queue_fields=SyncFields,
                               engine=engine, prefs=ui_settings, mode_fields=ModeFields,
                               tolerance_cp=lambda: analysis.settings().tolerance_cp)  # fmt: skip
@@ -379,7 +385,7 @@ def build_services(
     puzzle_import = PuzzleImportService(custom_puzzles, runner, clock)
     review = ReviewService(
         games_repo, analysis_repo, analysis, analysis.is_current, engine, custom_puzzles, RetryRepo(db),
-        MistakeReasonsRepo(db), ui_settings, clock,
+        MistakeReasonsRepo(db), ui_settings, clock, passes=ReviewPassesRepo(db),
     )  # fmt: skip
     game_explain = GameExplainService(games_repo, analysis_repo, analysis, llm_settings, llm_usage, llm_cache, runner,
                                       clock)  # fmt: skip
@@ -392,7 +398,15 @@ def build_services(
         account, lichess, SettingsRepo(db), clock, runner, analysis_repo, llm_settings, llm_usage,
         digests=DigestsRepo(db), ai_runs=AiRunsRepo(db), observations=ObservationsRepo(db),
     )  # fmt: skip
+    plan = PlanService(
+        PlansRepo(db), ReviewPassesRepo(db), CoachReportsRepo(db), games_repo, review, sessions, puzzles, StatsRepo(db),
+        SettingsRepo(db), engine, custom_puzzles, account, clock, puzzle_db,
+    )  # fmt: skip
+    journal = JournalService(JournalRepo(db), DailyLogRepo(db), games_repo, StatsRepo(db), clock)
+    coach.attach_plan(plan, journal)
     return Services(
+        plan=plan,
+        journal=journal,
         db=db,
         http=http,
         puzzle_db=puzzle_db,
@@ -508,6 +522,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         game_explain=services.game_explain,
         game_puzzles=services.game_puzzles,
         coach=services.coach,
+        plan=services.plan,
+        journal=services.journal,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

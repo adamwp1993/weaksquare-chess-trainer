@@ -85,7 +85,8 @@ def run(tmp_path_factory, fixture_puzzles_db):  # type: ignore[no-untyped-def]
               db_update=s.db_update, account=s.account, sync=s.sync, history=s.history, engine=s.engine,
               reasons=s.reasons, llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain,
               games=s.games, analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import,
-              game_explain=s.game_explain)  # fmt: skip
+              game_explain=s.game_explain, game_puzzles=s.game_puzzles, coach=s.coach, plan=s.plan,
+              journal=s.journal)  # fmt: skip
     model = LIVE_TEST_MODEL[provider]
     gid = api.import_game_pgn(SCHOLAR)["data"]["game_id"]
     assert api.set_game_color(gid, "black")["ok"]

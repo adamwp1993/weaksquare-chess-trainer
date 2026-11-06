@@ -75,7 +75,7 @@ def test_the_prompt_is_anonymized(services, paths) -> None:  # type: ignore[no-u
     assert '"game":"G1"' in req.user and "Rd8#" in req.user  # games go as labels, positions as SAN
     assert "Move lists" not in req.user and "Your own notes" not in req.user  # a standard run
     assert "including but not limited to" in req.system
-    assert req.max_tokens == 2500 and req.timeout_s == 180  # FR-8.14: Coach Summary
+    assert req.max_tokens == 7500 and req.timeout_s == 300  # FR-8.14: Coach Summary
 
 
 def test_the_answer_is_validated_saved_and_logged_under_the_coach(services, paths) -> None:  # type: ignore[no-untyped-def]

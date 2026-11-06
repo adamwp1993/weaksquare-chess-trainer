@@ -5,6 +5,7 @@ import { api } from "../api";
 import type { TrainingMode } from "../api/ApiClient";
 import type { FilterSpec, PuzzleSet } from "../api/types";
 import { TIME_CLASSES, cap } from "../state/games";
+import { Labeled, OptionInfo } from "./OptionInfo";
 
 const LICHESS_ONLY_MODES: TrainingMode[] = ["name_idea", "danger_spotting"];
 
@@ -12,6 +13,7 @@ export function SourceSelect({ spec, mode, onChange }: { spec: FilterSpec; mode:
   const locked = LICHESS_ONLY_MODES.includes(mode);
   const control = (
     <SegmentedControl
+      data-option-for="source.source"
       size="xs"
       fullWidth
       disabled={locked}
@@ -34,6 +36,7 @@ export function SourceSelect({ spec, mode, onChange }: { spec: FilterSpec; mode:
     <Stack gap={2}>
       <Text size="sm" fw={500}>
         Puzzles from
+        <OptionInfo id="source.source" />
       </Text>
       {locked ? (
         <Tooltip label="My puzzles work in Standard, Commit the line and Spaced repetition.">
@@ -58,7 +61,7 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
       </Text>
       <MultiSelect
         size="xs"
-        label="Origin"
+        label={<Labeled id="source.origin">Origin</Labeled>}
         placeholder="All"
         data={[
           { value: "coach", label: "From my games (made automatically)" },
@@ -71,7 +74,7 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
       />
       <MultiSelect
         size="xs"
-        label="Severity"
+        label={<Labeled id="source.severity">Severity</Labeled>}
         placeholder="Any"
         data={[
           { value: "blunder", label: "Blunders" },
@@ -84,7 +87,7 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
       />
       <MultiSelect
         size="xs"
-        label="Set"
+        label={<Labeled id="source.set">Set</Labeled>}
         placeholder={sets.length ? "All sets" : "No imported sets yet"}
         data={sets.map((s) => ({ value: s.label, label: `${s.label} (${s.count})` }))}
         value={spec.my_sets}
@@ -93,7 +96,7 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
       />
       <MultiSelect
         size="xs"
-        label="Missed / Allowed"
+        label={<Labeled id="source.kind">Missed / Allowed</Labeled>}
         placeholder="Both"
         data={[
           { value: "missed", label: "Missed: you had a tactic" },
@@ -104,7 +107,7 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
       />
       <MultiSelect
         size="xs"
-        label="Phase"
+        label={<Labeled id="source.phase">Phase</Labeled>}
         placeholder="Any"
         data={["opening", "middlegame", "endgame"].map((p) => ({ value: p, label: cap(p) }))}
         value={spec.my_phases}
@@ -112,7 +115,7 @@ export function MyPuzzlesFilters({ spec, onChange, version }: { spec: FilterSpec
       />
       <MultiSelect
         size="xs"
-        label="Time control"
+        label={<Labeled id="source.time">Time control</Labeled>}
         placeholder="Any"
         data={TIME_CLASSES.map((t) => ({ value: t, label: cap(t) }))}
         value={spec.my_time_classes}

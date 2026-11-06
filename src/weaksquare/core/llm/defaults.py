@@ -40,7 +40,14 @@ FEATURE_OF: dict[str, Feature] = {
 DROPDOWN_KIND: dict[Feature, str] = {"explain": "explain", "game_review": "game_narrative", "coach": "coach_summary"}
 
 # FR-8.14: the hard max_tokens per request kind at Low reasoning.
-MAX_TOKENS = {"explain": 1500, "game_move": 1500, "game_narrative": 4000, "coach_summary": 2500, "coach_detailed": 5000}
+# The Coach's limits leave room for the AI's training plan, up to 112 tasks (FR-10.66; Adam, v0.12 planning).
+MAX_TOKENS = {
+    "explain": 1500,
+    "game_move": 1500,
+    "game_narrative": 4000,
+    "coach_summary": 7500,
+    "coach_detailed": 10000,
+}
 # A typical prompt's size in characters, for the per-model cost shown in the model dropdown (FR-1.3).
 # Explain my game is about 10k input tokens (FR-11.21).
 TYPICAL_PROMPT_CHARS = {
@@ -55,15 +62,15 @@ TYPICAL_OUTPUT_TOKENS = {
     "explain": 600,
     "game_move": 600,
     "game_narrative": 3000,
-    "coach_summary": 1500,
-    "coach_detailed": 3000,
+    "coach_summary": 2900,  # v0.12: with a default plan of 30 tasks
+    "coach_detailed": 4400,
 }
 
 # v0.11 (FR-10.56): the "about N minutes" of an AI coaching run. A typical speed, not a measurement:
 # output tokens per second, and input tokens read per second, across the default models.
 TYPICAL_OUTPUT_TOKENS_PER_S = 50
 TYPICAL_INPUT_TOKENS_PER_S = 2000
-COACH_TIMEOUT_S = 180.0  # v0.11 planning: whole-game prompts are larger than v0.10's
+COACH_TIMEOUT_S = 300.0  # v0.12: 10,000 tokens at the typical speed above takes 200 s
 
 DEFAULT_RUN_CAP_USD = 0.50  # FR-8.12
 DEFAULT_MONTHLY_BUDGET_USD = 5.00  # FR-8.13

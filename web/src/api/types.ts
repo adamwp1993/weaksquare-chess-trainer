@@ -801,6 +801,7 @@ export interface CoachWeakness {
   examples: CoachExample[];
   puzzle_accuracy: number | null;
   trend: number | null;
+  change: "better" | "worse" | "same" | "not_enough" | "new" | "gone" | null;
 }
 
 export interface CoachGapRow {
@@ -842,6 +843,7 @@ export interface CoachReport {
   notes: string[];
   whole_game: CoachWeakness[];
   measures: CoachMeasures | null;
+  comparison: CoachComparison | null;
 }
 
 export interface CoachReportSummary {
@@ -954,6 +956,7 @@ export interface CoachAiRunSummary {
   cost_usd: number;
   findings: number;
   new: number;
+  include_journal: boolean;
 }
 
 export interface CoachEvidence {
@@ -1001,6 +1004,10 @@ export interface CoachAiRun {
   provider: string;
   model: string;
   cost_usd: number;
+  include_journal: boolean;
+  trend: CoachTrendNote[];
+  plan: PlanPreview | null;
+  plan_check: AiPlanCheck | null;
 }
 
 export interface CoachNote {
@@ -1010,6 +1017,228 @@ export interface CoachNote {
   reason: string | null;
   text: string;
   source: "game" | "retry" | "puzzle" | "danger";
+}
+
+export interface CoachJournalLine {
+  text: string;
+  kind: "note" | "reflection";
+  game: string | null;
+  ply: number | null;
+  move: string | null;
+  weakness: string | null;
+}
+
+export interface CoachPuzzleChange {
+  then: number | null;
+  now: number | null;
+  then_attempts: number;
+  now_attempts: number;
+  verdict: "better" | "worse" | "same" | "not_enough";
+}
+
+export interface CoachWeaknessChange {
+  key: string;
+  label: string;
+  then: number | null;
+  now: number | null;
+  delta: number | null;
+  flag: "new" | "gone" | null;
+  verdict: "better" | "worse" | "same" | "not_enough";
+  series: (number | null)[];
+  puzzle: CoachPuzzleChange | null;
+}
+
+export interface CoachMeasureChange {
+  key: string;
+  label: string;
+  unit: "per10" | "pct";
+  then: number | null;
+  now: number | null;
+  delta: number | null;
+  verdict: "better" | "worse" | "same" | "not_enough";
+}
+
+export interface CoachComparison {
+  earlier_id: number;
+  earlier_created_at: string;
+  days_between: number;
+  new_games: number;
+  shared_games: number;
+  enough_new_games: boolean;
+  settings: "same" | "different" | "unknown";
+  puzzle_history: boolean;
+  reports: number;
+  weaknesses: CoachWeaknessChange[];
+  health: CoachMeasureChange[];
+  measures: CoachMeasureChange[];
+}
+
+export interface CoachTrendNote {
+  key: string;
+  label: string;
+  change: "improved" | "worse" | "same";
+  comment: string;
+}
+
+export interface PlanSettings {
+  weeks: number;
+  weekdays: number[];
+  minutes: number;
+  carry_over: boolean;
+  has_report: boolean;
+}
+
+export interface PlanPreviewTask {
+  type: "puzzles" | "game_puzzles" | "retry" | "review" | "lesson" | "reflection";
+  title: string;
+  minutes: number;
+  weakness_key: string | null;
+}
+
+export interface PlanPreviewDay {
+  week: number;
+  position: number;
+  date: string | null;
+  tasks: PlanPreviewTask[];
+}
+
+export interface PlanPreview {
+  weeks: number;
+  weekdays: number[];
+  minutes: number;
+  start_date: string | null;
+  replaces: boolean;
+  days: PlanPreviewDay[];
+}
+
+export interface AiPlanCheck {
+  ai_tasks: number;
+  dropped: number;
+  filled: number;
+  fallback: boolean;
+}
+
+export interface PlanTask {
+  id: number;
+  type: "puzzles" | "game_puzzles" | "retry" | "review" | "lesson" | "reflection";
+  title: string;
+  weakness_key: string | null;
+  minutes: number;
+  status: "left" | "done" | "skipped" | "carried" | "missed";
+  auto: boolean;
+  manual: "done" | "undone" | null;
+  progress: number | null;
+  count: number | null;
+  minutes_spent: number;
+  carried: boolean;
+}
+
+export interface PlanDay {
+  id: number;
+  week: number;
+  position: number;
+  date: string;
+  is_today: boolean;
+  tasks: PlanTask[];
+}
+
+export interface TrainingPlan {
+  id: number;
+  created_at: string;
+  source: "deterministic" | "ai";
+  status: "current" | "replaced";
+  weeks: number;
+  weekdays: number[];
+  minutes_per_day: number;
+  start_date: string;
+  ended_at: string | null;
+  done: number;
+  skipped: number;
+  left: number;
+  minutes_spent: number;
+  today: string;
+  days: PlanDay[];
+}
+
+export interface TodayPlan {
+  plan_id: number;
+  today: string;
+  day: PlanDay | null;
+  next_date: string | null;
+  finished: boolean;
+}
+
+export interface PlanTaskAction {
+  kind: "session" | "retry" | "review" | "lesson" | "reflection";
+  task_id: number;
+  session: SessionInfo | null;
+  remaining: number | null;
+  mode: string | null;
+  game_id: number | null;
+  lesson: CoachLesson | null;
+  prompt: string | null;
+  weakness_key: string | null;
+  plan_day_id: number | null;
+}
+
+export interface JournalEntry {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  entry_date: string;
+  kind: "note" | "reflection";
+  text: string;
+  game_id: number | null;
+  ply: number | null;
+  move: string | null;
+  game_label: string | null;
+  weakness_key: string | null;
+  plan_day_id: number | null;
+  plan_task_id: number | null;
+  plan_day_date: string | null;
+}
+
+export interface DayLogTally {
+  key: string;
+  label: string;
+  attempts: number;
+  solved: number;
+  accuracy: number | null;
+}
+
+export interface DayLog {
+  date: string;
+  overall: DayLogTally;
+  by_mode: DayLogTally[];
+  by_source: DayLogTally[];
+  missed_themes: string[];
+  misclicks: number;
+  games_played: number;
+  games_synced: number;
+  games_analyzed: number;
+  games_reviewed: number;
+  retries: number;
+  retries_found: number;
+  plan_tasks_done: number;
+  coach_runs: string[];
+}
+
+export interface JournalItem {
+  date: string;
+  entry: JournalEntry | null;
+  log: DayLog | null;
+}
+
+export interface JournalGame {
+  id: number;
+  label: string;
+}
+
+export interface JournalTimeline {
+  items: JournalItem[];
+  window_start: string;
+  older: boolean;
+  games: JournalGame[];
 }
 
 export interface SuggestionView {

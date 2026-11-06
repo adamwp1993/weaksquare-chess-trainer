@@ -20,11 +20,13 @@ waits behind the Apply / Compare / Dismiss banner. Another player's run never to
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import threading
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 from typing import Any, Protocol
 
 from weaksquare.core.clock import Clock
@@ -77,6 +79,25 @@ from weaksquare.core.lessons import (
 )
 from weaksquare.core.lichess import Dashboard
 from weaksquare.core.llm.defaults import COACH_TIMEOUT_S, TYPICAL_INPUT_TOKENS_PER_S, TYPICAL_OUTPUT_TOKENS_PER_S
+from weaksquare.core.plan import PlanDraft
+from weaksquare.core.plan_llm import (
+    PLAN_RULES,
+    TREND_RULES,
+    JournalLine,
+    add_to_schema,
+    prompt_parts,
+    validate_plan,
+)
+from weaksquare.core.report_compare import (
+    MAX_HISTORY,
+    Comparison,
+    PuzzleChange,
+    Side,
+    compare,
+    prompt_json,
+    puzzle_changes,
+    validate_trend,
+)
 from weaksquare.core.stats import AttemptRow
 from weaksquare.core.stats import Report as StatsReport
 from weaksquare.core.suggested_mix import DEFAULT_RATING, Suggestion, build_suggestion, report_preset
@@ -228,6 +249,8 @@ class Reports(Protocol):
 
     def previous(self, subject: str, before_id: int) -> Any: ...
 
+    def history(self, subject: str, puzzles_only: bool, before_id: int, limit: int) -> list[Any]: ...
+
     def count(self, subject: str) -> int: ...
 
     def errors(self, subject: str, game_ids: list[int]) -> list[ErrorRow]: ...
@@ -284,6 +307,7 @@ class CoachAiOptions:
     advanced: bool = False
     game_cap: int = GAME_CAP_DEFAULT
     include_notes: bool = False
+    include_journal: bool = False  # v0.12, FR-10.71
 
     @classmethod
     def from_json(cls, data: Any) -> CoachAiOptions:
@@ -291,15 +315,16 @@ class CoachAiOptions:
             return cls()
         if isinstance(data, CoachAiOptions):
             return data
-        if not isinstance(data, dict) or set(data) - {"advanced", "game_cap", "include_notes"}:
+        if not isinstance(data, dict) or set(data) - {"advanced", "game_cap", "include_notes", "include_journal"}:
             raise ValidationError("Unknown AI coaching options.")
         adv, notes = data.get("advanced", False), data.get("include_notes", False)
+        journal = data.get("include_journal", False)
         cap = data.get("game_cap", GAME_CAP_DEFAULT)
-        if not isinstance(adv, bool) or not isinstance(notes, bool):
-            raise ValidationError("advanced and include_notes must be true or false")
+        if not isinstance(adv, bool) or not isinstance(notes, bool) or not isinstance(journal, bool):
+            raise ValidationError("advanced, include_notes and include_journal must be true or false")
         if not isinstance(cap, int) or isinstance(cap, bool) or not GAME_CAP_MIN <= cap <= GAME_CAP_MAX:
             raise ValidationError(f"The game cap must be {GAME_CAP_MIN}–{GAME_CAP_MAX}.")
-        return cls(adv, cap, notes)
+        return cls(adv, cap, notes, journal)
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -338,6 +363,10 @@ class _AiRequest:
     fallback: dict[str, Any] | None = None
     notes: list[NoteItem] = field(default_factory=list)
     moves: int = 0  # games whose move list was sent (Advanced)
+    journal: list[JournalLine] = field(default_factory=list)  # v0.12, FR-10.71
+    journal_hash: str | None = None
+    comparison: Comparison | None = None  # v0.12, FR-10.73
+    topics: list[str] = field(default_factory=list)  # lesson topic ids sent
 
 
 @dataclass(frozen=True)
@@ -353,6 +382,7 @@ class AiRunView:
     cost_usd: float
     result: dict[str, Any]
     new: tuple[int, ...]  # indexes of findings no earlier run of this report had
+    include_journal: bool = False  # v0.12, FR-10.71
 
 
 @dataclass(frozen=True)
@@ -419,6 +449,9 @@ class CoachService:
         ai_runs: Any = None,
         observations: Any = None,
     ) -> None:
+        self._plan: Any = None  # v0.12: attach_plan
+        self._journal: Any = None
+        self._comparisons: dict[tuple[int, int], dict[str, PuzzleChange]] = {}
         self._digests = digests
         self._notes_repo: Any = reports if hasattr(reports, "game_notes") else None
         self._ai_jobs: dict[str, dict[str, int | None]] = {}
@@ -443,6 +476,12 @@ class CoachService:
         self._clock = clock
         self._runner = runner
         self._runs: dict[str, _RunState] = {}
+
+    def attach_plan(self, plan: Any, journal: Any) -> None:
+        """v0.12: the training plan and journal build on the Coach's reports, and AI coaching feeds on them, so
+        they're connected once both exist (FR-10.66, 10.71)."""
+        self._plan = plan
+        self._journal = journal
 
     # ------------------------------------------------------------ settings
 
@@ -699,11 +738,21 @@ class CoachService:
         preset = report_preset(report, self._rating() if subject == ME else None, None)
         data["preset"] = preset.to_json() if preset else None
         data["notes"] = list(state.notes)
+        if params.source != "puzzles":
+            data["analysis_settings"] = self._analysis_settings()  # FR-10.73: flag reports that differ
         rid = self._reports.add(
             self._clock.now().isoformat(timespec="seconds"), subject, label, params.source, params.to_json(), data,
             game_ids,
         )  # fmt: skip
         return rid
+
+    def _analysis_settings(self) -> dict[str, Any] | None:
+        st = self._analysis.settings()
+        th = getattr(st, "thresholds", None)
+        think = getattr(st, "think_s", None)
+        if th is None or think is None:
+            return None
+        return {"think_s": think, "thresholds": asdict(th)}
 
     # ------------------------------------------------------------ reports
 
@@ -720,6 +769,43 @@ class CoachService:
         prev = self._reports.previous(row.subject, row.id) if row.source_kind != "puzzles" else None
         cur = build_report_from_json(row.report)
         return row, (trend(cur, prev.report) if prev is not None and cur is not None else {})
+
+    # ------------------------------------------------------------ Since last report (FR-10.73)
+
+    def comparison(self, report_id: int) -> Comparison | None:
+        """This report against the subject's earlier ones of the same kind. None with no earlier report."""
+        row = self._reports.get(report_id) if isinstance(report_id, int) else None
+        if row is None:
+            return None
+        earlier = self._reports.history(row.subject, row.source_kind == "puzzles", row.id, MAX_HISTORY - 1)
+        if not earlier:
+            return None
+        cur = _side(row)
+        puzzle = self._puzzle_changes(row, earlier[-1]) if row.subject == ME and row.source_kind != "puzzles" else {}
+        return compare(cur, [_side(r) for r in earlier], puzzle)
+
+    def _puzzle_changes(self, row: Any, older: Any) -> dict[str, PuzzleChange]:
+        """Your puzzle accuracy on each weakness's themes. Both windows have closed, so it's kept once worked out."""
+        key = (row.id, older.id)
+        if key not in self._comparisons:
+            weak = {}
+            for side in (row, older):
+                for w in [*(side.report.get("weaknesses") or ()), *(side.report.get("whole_game") or ())]:
+                    if isinstance(w, dict) and w.get("key") and w.get("themes"):
+                        weak[str(w["key"])] = [str(t) for t in w["themes"]]
+            self._comparisons[key] = puzzle_changes(
+                self._attempts.attempt_rows(), weak, datetime.fromisoformat(older.created_at),
+                datetime.fromisoformat(row.created_at),
+            )  # fmt: skip
+        return self._comparisons[key]
+
+    def _comparison_json(self, row: Any) -> tuple[Comparison | None, dict[str, Any] | None]:
+        c = self.comparison(row.id)
+        if c is None:
+            return None, None
+        this = datetime.fromisoformat(row.created_at).date()
+        days = [(this - datetime.fromisoformat(at).date()).days for _, at in c.history]
+        return c, prompt_json(c, days)
 
     # ------------------------------------------------------------ AI coaching (FR-10.21–10.25, 10.54–10.60)
 
@@ -781,9 +867,13 @@ class CoachService:
         reasons = self._reports.game_reasons() if row.subject == ME else {}
         digests = self.digests(row.game_ids, row.subject, reasons) if row.game_ids else []
         if not digests:  # a puzzle-history report (or no analyzed games): the v0.10 keyed prompt
-            if options.advanced or options.include_notes:
-                raise ValidationError("Advanced analysis and Include my notes need a report with games.")
-            user = build_prompt(row.report, self._examples(row, detail), detail)
+            if options.advanced or options.include_notes or options.include_journal:
+                raise ValidationError(
+                    "Advanced analysis, Include my notes and Include my journal need a report with games."
+                )
+            comparison, trend = self._comparison_json(row)
+            user = build_prompt(row.report, self._examples(row, detail), detail) + self._extras(row, trend, None)
+            schema = add_to_schema(SCHEMA, plan=self._plans_for(row))
             keys = [
                 str(w.get("key"))
                 for g in ("missed", "allowed", "habits", "puzzles")
@@ -791,8 +881,9 @@ class CoachService:
                 if isinstance(w, dict)
             ]
             return _AiRequest(
-                row, kind, "keyed", SYSTEM_PROMPT, user, SCHEMA_NAME, SCHEMA, keys=keys, fallback=fallback
-            )
+                row, kind, "keyed", self._system(SYSTEM_PROMPT, row), user, SCHEMA_NAME, schema, keys=keys,
+                fallback=fallback, comparison=comparison,
+            )  # fmt: skip
         labels = {gid: f"G{n}" for n, (gid, _) in enumerate(digests, start=1)}
         games = [(labels[gid], d) for gid, d in digests]
         examples = [(e, labels.get(gid), ply + 1) for e, gid, ply in self._example_refs(row, detail) if gid in labels]
@@ -810,19 +901,59 @@ class CoachService:
         notes = self._notes(row, labels) if options.include_notes else None
         topics = catalog([d.family for _, d in digests])
         user, sent = build_diagnosis_prompt(row.report, games, examples, detail, topics, moves=moves, notes=notes)
+        journal = self._journal_lines(row, labels) if options.include_journal else None
+        comparison, trend = self._comparison_json(row)
+        user += self._extras(row, trend, journal)
         return _AiRequest(
-            row, kind, "diagnosis", DIAGNOSIS_PROMPT, user, DIAGNOSIS_SCHEMA_NAME, DIAGNOSIS_SCHEMA,
+            row, kind, "diagnosis", self._system(DIAGNOSIS_PROMPT, row), user, DIAGNOSIS_SCHEMA_NAME,
+            add_to_schema(DIAGNOSIS_SCHEMA, plan=self._plans_for(row)),
             sent=sent, labels={v: k for k, v in labels.items()}, fallback=fallback, notes=notes or [],
-            moves=len(moves or {}),
+            moves=len(moves or {}), journal=journal or [],
+            journal_hash=_journal_hash(journal) if options.include_journal else None, comparison=comparison,
+            topics=[t.id for t in topics],
         )  # fmt: skip
 
-    def _cached_run(self, report_id: int, options: CoachAiOptions, cfg: Any, fmt: str) -> Any:
+    def _plans_for(self, row: Any) -> bool:
+        """The AI proposes a plan for your own reports only (v0.12 planning)."""
+        return row.subject == ME and self._plan is not None
+
+    @staticmethod
+    def _system_rules(plan: bool) -> str:
+        return TREND_RULES + (PLAN_RULES if plan else "")
+
+    def _system(self, base: str, row: Any) -> str:
+        return base + self._system_rules(self._plans_for(row))
+
+    def _extras(self, row: Any, trend: dict[str, Any] | None, journal: list[JournalLine] | None) -> str:
+        mine = self._plans_for(row)
+        return prompt_parts(
+            comparison=trend, progress=self._plan.progress() if mine else None,
+            params=self._plan.params() if mine else None, journal=journal,
+        )  # fmt: skip
+
+    def _journal_lines(self, row: Any, labels: dict[int, str]) -> list[JournalLine]:
+        """FR-10.71: your journal for this report, exactly as it's sent. Yours only."""
+        if self._journal is None or row.subject != ME:
+            return []
+        return [
+            JournalLine(i.text, i.kind, i.game, i.ply, i.weakness)
+            for i in self._journal.prompt_items(labels, row.report.get("first_played"))
+        ]
+
+    def _cached_run(
+        self, report_id: int, options: CoachAiOptions, cfg: Any, fmt: str, journal_hash: str | None = None,
+        wants_plan: bool = False,
+    ) -> Any:  # fmt: skip
         if self._ai_runs is None:
             return None
         for r in reversed(self._ai_runs.for_report(report_id)):
             same = r.advanced == options.advanced and r.include_notes == options.include_notes
             if options.advanced:
                 same = same and r.game_cap == options.game_cap
+            # v0.12: FR-10.71 a saved answer stands only while the journal text it was given is the same, and
+            # FR-10.66 an answer from before plans can't stand in for one with a plan.
+            same = same and r.include_journal == options.include_journal and r.journal_hash == journal_hash
+            same = same and (not wants_plan or "plan" in r.result)
             if same and r.format == fmt and r.provider == cfg.provider and r.model == cfg.model:
                 return r
         return None
@@ -836,7 +967,7 @@ class CoachService:
         req = self._ai_request(report_id, opts)
         cfg = self._llm_settings.config("coach")
         spend = self._llm_usage.spend(cfg)
-        cached = self._cached_run(req.row.id, opts, cfg, req.fmt)
+        cached = self._cached_run(req.row.id, opts, cfg, req.fmt, req.journal_hash, self._plans_for(req.row))
         if cached is not None:
             q = GameQuote("cached", None, cfg.provider, cfg.model, None, cfg.run_cap_usd, spend)
             return CoachQuote(q, None, cached.id)
@@ -863,6 +994,10 @@ class CoachService:
     def notes_preview(self, report_id: Any) -> list[NoteItem]:
         """FR-10.60: exactly the notes Include my notes would send."""
         return self._ai_request(report_id, CoachAiOptions(include_notes=True)).notes
+
+    def journal_preview(self, report_id: Any) -> list[JournalLine]:
+        """FR-10.71: exactly the entries Include my journal would send."""
+        return self._ai_request(report_id, CoachAiOptions(include_journal=True)).journal
 
     def start_ai(self, report_id: Any, options: Any = None) -> str:
         """Run the AI coaching. The UI calls this only after you Confirm the estimate (FR-8.11)."""
@@ -904,7 +1039,7 @@ class CoachService:
     def _coach_ai(self, report_id: Any, opts: CoachAiOptions, progress: ProgressFn) -> tuple[str, int | None]:
         req = self._ai_request(report_id, opts)
         cfg = self._llm_settings.config("coach")
-        cached = self._cached_run(req.row.id, opts, cfg, req.fmt)
+        cached = self._cached_run(req.row.id, opts, cfg, req.fmt, req.journal_hash, self._plans_for(req.row))
         if cached is not None:
             return "AI coaching (saved).", cached.id
         progress(None, "Asking the AI to coach you…")
@@ -936,6 +1071,7 @@ class CoachService:
                 code="llm_bad_answer",
                 retryable=True,
             )
+        self._add_v012_parts(req, r.text, data)
         data.update({"provider": result.provider, "model": result.model, "cost_usd": result.cost_usd})
         run_id = None
         if self._ai_runs is not None:
@@ -943,8 +1079,51 @@ class CoachService:
                 req.row.id, self._clock.now().isoformat(timespec="seconds"), req.fmt, advanced=opts.advanced,
                 include_notes=opts.include_notes, game_cap=opts.game_cap if opts.advanced else None,
                 provider=result.provider, model=result.model, cost_usd=result.cost_usd, result=data,
+                include_journal=opts.include_journal, journal_hash=req.journal_hash,
             )  # fmt: skip
         return f"AI coaching for ${result.cost_usd:.4f}.", run_id
+
+    def _add_v012_parts(self, req: _AiRequest, text: str, data: dict[str, Any]) -> None:
+        """The trend statements that hold up (FR-10.73) and the plan, always complete (FR-10.66)."""
+        try:
+            answer = json.loads(text)
+        except ValueError:
+            answer = {}
+        answer = answer if isinstance(answer, dict) else {}
+        notes, dropped = validate_trend(answer.get("trend"), req.comparison)
+        data["trend"] = [n.to_json() for n in notes]
+        data["trend_dropped"] = dropped
+        if not self._plans_for(req.row):
+            return
+        params = self._plan.params()
+        draft = self._plan.build(req.row, params)
+        ctx = self._plan.context(req.row)
+        keys = [
+            str(w.get("key"))
+            for group in ("weaknesses", "missed", "allowed", "habits", "puzzles", "whole_game")
+            for w in req.row.report.get(group) or []
+            if isinstance(w, dict)
+        ]
+
+        def game(label: str, kind: str) -> tuple[int, str] | None:
+            gid = req.labels.get(label)
+            return self._plan.game_for_task(gid, kind) if gid is not None else None
+
+        plan, check = validate_plan(answer.get("plan"), draft, ctx, keys, req.topics, game)
+        plan = self._plan.fit(plan, ctx)
+        data["plan"] = plan.to_json()
+        data["plan_check"] = check.to_json()
+
+    def use_ai_plan(self, run_id: Any, confirmed: Any = False) -> int:
+        """Use this plan (FR-10.66): a stored AI plan becomes current, from the next picked day."""
+        if not isinstance(run_id, int) or isinstance(run_id, bool) or not isinstance(confirmed, bool):
+            raise ValidationError("run_id must be a whole number")
+        run = self._ai_runs.get(run_id) if self._ai_runs is not None else None
+        row = self._reports.get(run.report_id) if run is not None else None
+        raw = run.result.get("plan") if run is not None else None
+        if run is None or row is None or row.subject != ME or not isinstance(raw, dict) or self._plan is None:
+            raise NotFoundError("That answer has no plan to use.")
+        return int(self._plan.use_draft(PlanDraft.from_json(raw), row.id, run.id, confirmed=confirmed))
 
     def _observe(self, row: Any, diag: Diagnosis) -> list[int]:
         """FR-10.57: observations (findings with no measured key) are noted per subject and report. The
@@ -983,7 +1162,7 @@ class CoachService:
                         new.append(i)
             out.append(
                 AiRunView(r.id, r.created_at, r.format, r.advanced, r.include_notes, r.game_cap, r.provider, r.model,
-                          r.cost_usd, r.result, tuple(new))
+                          r.cost_usd, r.result, tuple(new), r.include_journal)
             )  # fmt: skip
             seen.update(ids)
         return out
@@ -1130,6 +1309,16 @@ class CoachService:
         except ValidationError:
             return False
         return spec == self._settings.get(APPLIED_KEY)
+
+
+def _side(row: Any) -> Side:
+    return Side(row.id, row.created_at, row.report, frozenset(row.game_ids))
+
+
+def _journal_hash(journal: list[JournalLine] | None) -> str:
+    """What identifies the journal text a run sent (FR-10.71). The text stays out of the database's AI tables."""
+    payload = json.dumps([asdict(j) for j in journal or []], sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def build_report_from_json(data: dict[str, Any]) -> Report | None:

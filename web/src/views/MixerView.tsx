@@ -34,6 +34,7 @@ import { MyPuzzlesFilters, SourceSelect } from "../components/SourceControls";
 import { ThemePicker } from "../components/ThemePicker";
 import { useEngineStatus } from "../state/engine";
 import { LADDER_MODES, MODES, modeLabel, shortDate } from "../state/modes";
+import { Labeled, OptionInfo } from "../components/OptionInfo";
 
 const COUNT_DEBOUNCE_MS = 250;
 // The panel scrolls on its own, so the page (and the board beside it) never does.
@@ -225,9 +226,10 @@ export function MixerView({
             «
           </ActionIcon>
         </Group>
-        <Stack gap={4}>
+        <Stack gap={4} data-option-group>
           <Text size="sm" fw={500}>
             Mode
+            <OptionInfo id="mixer.mode" />
           </Text>
           <SegmentedControl
             size="xs"
@@ -245,7 +247,7 @@ export function MixerView({
         </Stack>
         {mode === "commit_line" && (
           <Switch
-            label="Show move count"
+            label={<Labeled id="mixer.showLength">Show move count</Labeled>}
             description={
               showLength
                 ? "You see how many moves the solution has. Lichess counts these solves for less, because you knew the length. From the next session."
@@ -293,7 +295,7 @@ export function MixerView({
         <div style={lichessOnly} aria-disabled={onlyMine}>
         <Stack gap="md">
         <Switch
-          label="Mix by ratio"
+          label={<Labeled id="mixer.ratio">Mix by ratio</Labeled>}
           description={ladderOrder ? "Can't be combined with the depth ladder." : "e.g. 50% forks, 30% pins, 20% one-movers"}
           checked={usingRatios}
           disabled={ladderOrder || spec.source !== "lichess"}
@@ -312,8 +314,11 @@ export function MixerView({
               emptyLabel="All themes"
               testId="themes-picker"
             />
-            <Group gap="xs">
-              <Text size="sm">Match</Text>
+            <Group gap="xs" data-option-group>
+              <Text size="sm">
+                Match
+                <OptionInfo id="mixer.match" />
+              </Text>
               <SegmentedControl
                 size="xs"
                 value={spec.match}
@@ -332,6 +337,7 @@ export function MixerView({
         )}
         <ThemePicker
           label="Exclude themes"
+          tip="filters.excludeThemes"
           catalog={catalog}
           value={spec.exclude_themes}
           onChange={(exclude_themes) => set({ exclude_themes })}
@@ -416,7 +422,7 @@ export function MixerView({
         </Group>
         <QueueControls value={spec.queue_size} onChange={(queue_size) => set({ queue_size })} />
         <Switch
-          label="Rated"
+          label={<Labeled id="mixer.rated">Rated</Labeled>}
           description={
             dangerMode
               ? "Danger spotting stays on this PC: nothing is sent to Lichess."

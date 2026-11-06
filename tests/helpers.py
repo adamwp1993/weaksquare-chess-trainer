@@ -98,6 +98,8 @@ def build_api(
         game_explain=services.game_explain,
         game_puzzles=services.game_puzzles,
         coach=services.coach,
+        plan=services.plan,
+        journal=services.journal,
     )
 
 

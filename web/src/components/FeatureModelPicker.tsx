@@ -4,6 +4,7 @@ import { api } from "../api";
 import type { LlmProvider } from "../api/ApiClient";
 import type { LlmFeature, LlmSettings } from "../api/types";
 import { dollars, publishLlm, useLlmSettings } from "../state/llm";
+import { Labeled, OptionInfo } from "./OptionInfo";
 
 const SAME = "same";
 const LABELS: Record<LlmProvider, string> = { anthropic: "Anthropic", openai: "OpenAI" };
@@ -114,7 +115,7 @@ export function FeatureModelPicker({
   return (
     <Stack gap={4} data-testid={`ai-feature-${feature}`}>
       <Select
-        label={compact ? undefined : `${f.label} model`}
+        label={<Labeled id={`ai.model.${feature}`}>{compact ? "Model" : `${f.label} model`}</Labeled>}
         aria-label={`${f.label} model`}
         description={
           compact
@@ -140,6 +141,7 @@ export function FeatureModelPicker({
       {needsKey && (
         <Group align="flex-end" gap="xs" wrap="nowrap">
           <PasswordInput
+            data-no-tip="your key: it has its own description"
             style={{ flex: 1 }}
             size={compact ? "xs" : "sm"}
             label={`${LABELS[f.provider as LlmProvider]} API key`}
@@ -156,9 +158,10 @@ export function FeatureModelPicker({
         </Group>
       )}
       {reasoning && (
-        <Stack gap={2}>
+        <Stack gap={2} data-option-group>
           <Text size="sm" fw={500}>
             {f.label} reasoning
+            <OptionInfo id="ai.reasoning" />
           </Text>
           <SegmentedControl
             data={REASONING}

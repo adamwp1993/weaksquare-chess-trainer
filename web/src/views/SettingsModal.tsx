@@ -20,6 +20,7 @@ import { GamesSettingsPanel } from "../components/GamesSettingsPanel";
 import { EngineSettingsPanel } from "../components/EngineSettingsPanel";
 import { DebugPanel, TrainingSettingsPanel } from "../components/TrainingSettingsPanel";
 import { sounds as player } from "../sound/player";
+import { Labeled, OptionInfo } from "../components/OptionInfo";
 
 const SETS: { value: SoundSettings["set"]; label: string }[] = [
   { value: "sfx", label: "Standard effects (sfx)" },
@@ -79,8 +80,12 @@ export function SettingsModal({
           <AccountPanel account={account} onChanged={onAccountChanged} />
         </Stack>
         <Stack gap="xs">
-          <Title order={5}>Appearance</Title>
+          <Title order={5} data-option-group>
+            Appearance
+            <OptionInfo id="settings.scheme" />
+          </Title>
           <SegmentedControl
+            data-option-for="settings.scheme"
             value={colorScheme}
             onChange={(v) => setColorScheme(v as "light" | "dark" | "auto")}
             data={[
@@ -94,13 +99,13 @@ export function SettingsModal({
           <Text size="xs" c="dimmed">
             Match system follows the Windows app mode (Settings → Personalization → Colors), even while the app is open.
           </Text>
-          <Switch label="Board coordinates" checked={coordinates} onChange={onCoordinates} data-testid="coordinates-switch" />
+          <Switch label={<Labeled id="settings.coordinates">Board coordinates</Labeled>} checked={coordinates} onChange={onCoordinates} data-testid="coordinates-switch" />
         </Stack>
 
         <Stack gap="xs">
           <Title order={5}>Sounds</Title>
           <Switch
-            label="Move sounds"
+            label={<Labeled id="settings.sounds">Move sounds</Labeled>}
             description="Moves, captures, checks, mates, and solved or failed puzzles."
             checked={sounds.on}
             onChange={(e) => onSounds({ ...sounds, on: e.currentTarget.checked })}
@@ -108,8 +113,10 @@ export function SettingsModal({
           />
           <Text size="sm" mt={4}>
             Volume
+            <OptionInfo id="settings.volume" />
           </Text>
           <Slider
+            data-no-tip="its heading just above has the tooltip"
             value={sounds.volume}
             onChangeEnd={(volume) => onSounds({ ...sounds, volume })}
             min={0}
@@ -122,7 +129,7 @@ export function SettingsModal({
           />
           <Group align="end" gap="xs">
             <Select
-              label="Sound set"
+              label={<Labeled id="settings.soundSet">Sound set</Labeled>}
               data={SETS}
               value={sounds.set}
               onChange={(v) => v && onSounds({ ...sounds, set: v as SoundSettings["set"] })}
@@ -168,7 +175,7 @@ export function SettingsModal({
         <Stack gap="xs">
           <Title order={5}>Puzzle database</Title>
           <Switch
-            label="Check for a newer puzzle database once a day"
+            label={<Labeled id="settings.autoCheck">Check for a newer puzzle database once a day</Labeled>}
             description="Asks database.lichess.org for its checksum list, the file's date and size, and the puzzle count. Nothing about you is sent."
             checked={autoCheck}
             onChange={(e) => onAutoCheck(e.currentTarget.checked)}

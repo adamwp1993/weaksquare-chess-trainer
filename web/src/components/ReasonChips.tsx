@@ -96,6 +96,7 @@ export function ReasonChips({
         {noteOpen && (
           <Group gap={4} align="start">
             <TextInput
+              data-no-tip="your own words"
               style={{ flex: 1 }}
               size="xs"
               placeholder="A short note (optional)"

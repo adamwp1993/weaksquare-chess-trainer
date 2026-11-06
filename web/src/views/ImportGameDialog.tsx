@@ -6,6 +6,7 @@ import { api } from "../api";
 import { ApiCallError } from "../api/ApiClient";
 import type { GameImport } from "../api/types";
 import { useJob } from "../state/useJob";
+import { OptionInfo } from "../components/OptionInfo";
 
 export function ImportGameDialog({
   opened,
@@ -95,8 +96,11 @@ export function ImportGameDialog({
     <Modal opened={opened} onClose={close} title="Import a game" size="lg" data-testid="import-game-dialog">
       {colorFor !== null ? (
         <Stack>
-          <Text size="sm">Which side did you play? The app couldn't tell from your linked accounts.</Text>
-          <Radio.Group value={color} onChange={(v) => setColor(v as typeof color)}>
+          <Text size="sm" data-option-group>
+            Which side did you play? The app couldn't tell from your linked accounts.
+            <OptionInfo id="import.side" />
+          </Text>
+          <Radio.Group data-option-for="import.side" value={color} onChange={(v) => setColor(v as typeof color)}>
             <Group>
               <Radio value="white" label="White" />
               <Radio value="black" label="Black" />
@@ -124,6 +128,7 @@ export function ImportGameDialog({
             <Stack gap={6}>
               {listed.choices.map((c) => (
                 <Radio
+                  data-no-tip="picks a game from your file"
                   key={c.index}
                   value={String(c.index)}
                   disabled={c.error !== null}
@@ -160,6 +165,7 @@ export function ImportGameDialog({
           <Tabs.Panel value="paste" pt="sm">
             <Stack>
               <Textarea
+                data-no-tip="a game you paste"
                 autosize
                 minRows={6}
                 maxRows={14}
@@ -190,6 +196,7 @@ export function ImportGameDialog({
           <Tabs.Panel value="url" pt="sm">
             <Stack>
               <TextInput
+                data-no-tip="a link you paste"
                 label="Lichess or chess.com game URL"
                 placeholder="https://lichess.org/abcdefgh or https://www.chess.com/game/live/123…"
                 value={url}
@@ -198,6 +205,7 @@ export function ImportGameDialog({
               />
               {needCcUser && (
                 <TextInput
+                  data-no-tip="it has its own description"
                   label="Your chess.com username"
                   description="chess.com has no single-game lookup, so the app searches your recent monthly archives."
                   value={ccUser}

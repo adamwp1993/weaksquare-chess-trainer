@@ -4,6 +4,7 @@ import { api } from "../api";
 import type { LlmPriceChange, LlmProvider } from "../api/ApiClient";
 import type { LlmPrice } from "../api/types";
 import { refreshLlm } from "../state/llm";
+import { Labeled } from "./OptionInfo";
 
 const EMPTY: LlmPriceChange = { provider: "anthropic", model: "", input_per_m: 0, output_per_m: 0 };
 const num = (v: string | number) => (v === "" ? null : Number(v));
@@ -93,7 +94,7 @@ export function PriceTable() {
       )}
       <Group grow align="flex-end" gap="xs">
         <Select
-          label="Provider"
+          label={<Labeled id="price.provider">Provider</Labeled>}
           data={[
             { value: "anthropic", label: "Anthropic" },
             { value: "openai", label: "OpenAI" },
@@ -102,20 +103,20 @@ export function PriceTable() {
           allowDeselect={false}
           onChange={(v) => v && setForm({ ...form, provider: v as LlmProvider })}
         />
-        <TextInput label="Model ID" value={form.model} onChange={(e) => setForm({ ...form, model: e.currentTarget.value })} data-testid="price-model" />
+        <TextInput label={<Labeled id="price.model">Model ID</Labeled>} value={form.model} onChange={(e) => setForm({ ...form, model: e.currentTarget.value })} data-testid="price-model" />
       </Group>
       <Group grow align="flex-end" gap="xs">
-        <NumberInput label="Input $" min={0} max={1000} decimalScale={4} value={form.input_per_m}
+        <NumberInput label={<Labeled id="price.input">Input $</Labeled>} min={0} max={1000} decimalScale={4} value={form.input_per_m}
           onChange={(v) => setForm({ ...form, input_per_m: Number(v) })} data-testid="price-input" />
-        <NumberInput label="Output $" min={0} max={1000} decimalScale={4} value={form.output_per_m}
+        <NumberInput label={<Labeled id="price.output">Output $</Labeled>} min={0} max={1000} decimalScale={4} value={form.output_per_m}
           onChange={(v) => setForm({ ...form, output_per_m: Number(v) })} data-testid="price-output" />
       </Group>
       <Group grow align="flex-end" gap="xs">
-        <NumberInput label="Long context over (tokens)" min={1} allowDecimal={false} value={form.long_ctx_threshold ?? ""}
+        <NumberInput label={<Labeled id="price.longOver">Long context over (tokens)</Labeled>} min={1} allowDecimal={false} value={form.long_ctx_threshold ?? ""}
           onChange={(v) => setForm({ ...form, long_ctx_threshold: num(v) })} />
-        <NumberInput label="Long input $" min={0} max={1000} decimalScale={4} value={form.long_input_per_m ?? ""}
+        <NumberInput label={<Labeled id="price.longInput">Long input $</Labeled>} min={0} max={1000} decimalScale={4} value={form.long_input_per_m ?? ""}
           onChange={(v) => setForm({ ...form, long_input_per_m: num(v) })} />
-        <NumberInput label="Long output $" min={0} max={1000} decimalScale={4} value={form.long_output_per_m ?? ""}
+        <NumberInput label={<Labeled id="price.longOutput">Long output $</Labeled>} min={0} max={1000} decimalScale={4} value={form.long_output_per_m ?? ""}
           onChange={(v) => setForm({ ...form, long_output_per_m: num(v) })} />
       </Group>
       <Group gap="xs">

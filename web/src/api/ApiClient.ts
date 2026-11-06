@@ -3,63 +3,71 @@
 import type {
   AccountStatus,
   Analysis,
-  ExplainQuote,
-  GameAiQuote,
-  GameNarrative,
-  Explanation,
-  LlmPrice,
-  LlmSettings,
-  LlmSpend,
-  EngineSettings,
-  EngineStatus,
-  Refutation,
-  AttemptRating,
-  BucketCounts,
-  CommitFeedback,
-  DangerFeedback,
-  ReasonPrompt,
-  ReasonStats,
-  LadderPreview,
-  SrsStatus,
+  AnalysisQueue,
   ApiError,
   AppInfo,
-  FilterSpec,
-  HelpResponse,
-  Job,
-  MoveFeedback,
-  OpeningFamily,
-  Preset,
-  PuzzleDbStatus,
-  PuzzleView,
-  RatingHistory,
-  SessionInfo,
-  SessionStats,
-  SoundSettings,
-  StatsReport,
-  SyncEvent,
-  SyncStatus,
-  UpdateOffer,
-  ThemeGroup,
-  AnalysisQueue,
+  AttemptRating,
+  BucketCounts,
   ChesscomProfile,
+  CoachAiQuote,
+  CoachAiRun,
+  CoachAiRunSummary,
+  CoachDefaults,
+  CoachJournalLine,
+  CoachNote,
+  CoachReport,
+  CoachReportSummary,
+  CommitFeedback,
+  DangerFeedback,
+  EngineSettings,
+  EngineStatus,
+  ExplainQuote,
+  Explanation,
+  FilterSpec,
+  GameAiQuote,
   GameImport,
+  GameNarrative,
   GamePage,
   GameReview,
   GameStats,
   GamesSettings,
+  HelpResponse,
+  Job,
+  JournalEntry,
+  JournalTimeline,
+  LadderPreview,
+  LlmPrice,
+  LlmSettings,
+  LlmSpend,
+  MoveFeedback,
+  OpeningFamily,
+  PlanPreview,
+  PlanSettings,
+  PlanTaskAction,
+  Preset,
+  PuzzleDbStatus,
   PuzzleImportReport,
   PuzzleSet,
+  PuzzleView,
+  RatingHistory,
+  ReasonPrompt,
+  ReasonStats,
+  Refutation,
   RetryResult,
   SavedPuzzle,
-  UiSettings,
-  CoachAiQuote,
-  CoachAiRun,
-  CoachAiRunSummary,
-  CoachNote,
-  CoachDefaults,
-  CoachReport,
-  CoachReportSummary,
+  SessionInfo,
+  SessionStats,
+  SoundSettings,
+  SrsStatus,
+  StatsReport,
   SuggestionView,
+  SyncEvent,
+  SyncStatus,
+  ThemeGroup,
+  TodayPlan,
+  TrainingPlan,
+  UiSettings,
+  UpdateOffer,
 } from "./types";
 
 /** v0.10: one Coach run's settings (FR-10.2–10.5). `player` null means you. */
@@ -170,6 +178,9 @@ export interface SettingValues {
   // v0.11 (FR-10.59)
   "coach.lesson_sites": ("youtube" | "chesscom" | "custom")[];
   "coach.lesson_custom_url": string;
+  // v0.12 (FR-10.61, 10.64)
+  "plan.params": PlanParams;
+  "plan.carry_over": boolean;
 }
 
 /** One AI coaching run's options (FR-10.56, 10.60): chosen each time, off by default, never saved. */
@@ -177,6 +188,36 @@ export interface CoachAiOptions {
   advanced: boolean;
   game_cap: number;
   include_notes: boolean;
+  include_journal: boolean; // v0.12, FR-10.71
+}
+
+/** v0.12: the settings of a training plan (FR-10.61). `weekdays`: Monday = 0. */
+export interface PlanParams {
+  weeks: number;
+  weekdays: number[];
+  minutes: number;
+}
+
+/** v0.12: a new journal entry (FR-10.67, 10.69). With a game it's a reflection. */
+export interface JournalEntryInput {
+  text: string;
+  entry_date?: string;
+  weakness_key?: string | null;
+  game_id?: number | null;
+  ply?: number | null;
+  plan_day_id?: number | null;
+  plan_task_id?: number | null;
+}
+
+/** v0.12: the Journal tab's filters (FR-10.70). */
+export interface JournalFilters {
+  kinds?: ("note" | "reflection" | "log")[];
+  game_id?: number;
+  weakness_key?: string;
+  date_from?: string;
+  date_to?: string;
+  query?: string;
+  before?: string;
 }
 
 /** Why you missed it (§7.3, FR-5.6). */
@@ -374,6 +415,36 @@ export interface ApiClient {
   getCoachNotesPreview(reportId: number): Promise<CoachNote[]>;
   /** FR-10.59: open a lesson pointer in your browser. Only the topic and target go; the backend builds the URL. */
   openLesson(reportId: number, topic: string, target: string): Promise<void>;
+  // ---- v0.12: the training plan and journal (§10.12) --------------------------------------------
+  /** FR-10.71: exactly the entries Include my journal would send. */
+  getCoachJournalPreview(reportId: number): Promise<CoachJournalLine[]>;
+  getPlanSettings(): Promise<PlanSettings>;
+  /** The plan these settings would make from your latest report. Nothing is saved. */
+  previewPlan(params: PlanParams | null): Promise<PlanPreview>;
+  /** Start the deterministic plan. It replaces the current one only when `confirmed` (FR-10.65). */
+  createPlan(params: PlanParams, confirmed: boolean): Promise<TrainingPlan>;
+  /** Use this plan (FR-10.66). */
+  useAiPlan(runId: number, confirmed: boolean): Promise<TrainingPlan>;
+  getCurrentPlan(): Promise<TrainingPlan | null>;
+  getTodayPlan(): Promise<TodayPlan | null>;
+  listPlans(): Promise<TrainingPlan[]>;
+  /** Your hand tick or untick, which always wins over what the app saw (FR-10.64). */
+  setPlanTaskTick(taskId: number, done: boolean): Promise<void>;
+  skipPlanTask(taskId: number, skipped: boolean): Promise<void>;
+  swapPlanTask(taskId: number): Promise<number>;
+  /** Start (FR-10.63): a puzzle task's session uses its own filters; your Mixer stays as it was. */
+  startPlanTask(taskId: number, rated: boolean): Promise<PlanTaskAction>;
+  startPlanLessonDrill(taskId: number, rated: boolean): Promise<PlanTaskAction>;
+  /** Open one of a lesson task's links, which ticks it. The backend builds the URL (FR-10.59). */
+  openPlanLesson(taskId: number, target: string): Promise<void>;
+  /** You looked at this move in Game Review (FR-10.64, 10.68). */
+  markReviewPly(gameId: number, ply: number): Promise<boolean>;
+  getJournal(filters: JournalFilters): Promise<JournalTimeline>;
+  addJournalEntry(entry: JournalEntryInput): Promise<JournalEntry>;
+  editJournalEntry(entryId: number, text: string, weaknessKey: string | null): Promise<JournalEntry>;
+  deleteJournalEntry(entryId: number): Promise<void>;
+  /** FR-10.69: a game's notes, in order of the move they're on. */
+  getGameNotes(gameId: number): Promise<JournalEntry[]>;
   getSuggestion(): Promise<SuggestionView | null>;
   applySuggestion(): Promise<SuggestionView>;
   dismissSuggestion(): Promise<SuggestionView | null>;
