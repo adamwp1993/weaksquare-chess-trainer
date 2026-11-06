@@ -1215,6 +1215,7 @@ export class MockClient implements ApiClient {
   }
 
   async getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    this.calls.push("openingPrefetchPlan");
     return this.openings.prefetchPlan(family, preset, subLines, maxMoves, extend, this.openingAi());
   }
 

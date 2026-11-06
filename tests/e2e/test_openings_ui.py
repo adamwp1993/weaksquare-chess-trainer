@@ -185,7 +185,7 @@ def test_wikibooks_can_be_turned_off(page: Any) -> None:
     pick(page, "Italian Game")
     page.get_by_test_id("wikibooks-toggle").click()
     page.get_by_test_id("wikibooks-text").wait_for()
-    page.get_by_test_id("opening-wikibooks").click(force=True)
+    page.get_by_test_id("opening-sources").locator(".mantine-Switch-track").click()
     page.get_by_test_id("learn-forward").click()
     page.get_by_test_id("wikibooks-off").wait_for()
 
@@ -284,7 +284,7 @@ def test_the_prefetch_dialog_updates_with_the_scope(page: Any) -> None:
 
 def test_nothing_is_sent_before_confirm_and_a_second_run_is_free(page: Any) -> None:
     open_prefetch(page)
-    assert not [c for c in calls(page) if c.startswith("openingPrefetch")]
+    assert not [c for c in calls(page) if c.startswith("openingPrefetch:")]
     page.get_by_test_id("prefetch-confirm").click()
     page.get_by_test_id("prefetch-done").filter(has_text="Saved").wait_for()
     page.get_by_test_id("prefetch-counts").filter(has_text="0 requests").wait_for()
@@ -332,3 +332,15 @@ def test_the_dialogs_options_have_tooltips(page: Any) -> None:
     page.get_by_test_id("prefetch-preset").get_by_text("Custom").click()
     page.get_by_test_id("prefetch-sub-lines").wait_for()
     _assert_all_have_tips(page, "Prefetch dialog")
+
+
+def test_finishing_a_prefetch_settles(page: Any) -> None:
+    """Regression: the dialog's "finished" callback re-rendered its parent, which fired it again, forever."""
+    open_prefetch(page)
+    page.get_by_test_id("prefetch-confirm").click()
+    page.get_by_test_id("prefetch-done").wait_for()
+    page.wait_for_timeout(300)
+    plans = page.evaluate("window.__mockApi.calls.length")
+    page.wait_for_timeout(500)
+    assert page.evaluate("window.__mockApi.calls.length") == plans
+    page.get_by_test_id("prefetch-counts").filter(has_text="0 requests").wait_for()

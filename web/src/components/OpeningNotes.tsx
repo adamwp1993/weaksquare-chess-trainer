@@ -14,7 +14,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Job, OpeningNote, OpeningNoteQuote, OpeningPrefetchPlan, OpeningScope } from "../api/types";
 import { dollars } from "../state/llm";
@@ -215,13 +215,20 @@ export function PrefetchDialog({
   }, [family, scope, custom, extend]);
   useEffect(reload, [reload]);
 
-  const state = job?.state;
+  // Once per job: `onFinished` re-renders the parent, so it can't be what triggers this.
+  const finished = useRef(onFinished);
   useEffect(() => {
-    if (state && state !== "running") {
+    finished.current = onFinished;
+  }, [onFinished]);
+  const state = job?.state;
+  const over = state !== undefined && state !== "running";
+  useEffect(() => {
+    if (over) {
       reload();
-      onFinished();
+      finished.current();
     }
-  }, [state, reload, onFinished]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `reload` changes with the scope; a new scope isn't a new job
+  }, [over, jobId]);
 
   const running = jobId !== null && (job === null || job.state === "running");
   const blocked = plan !== null && plan.llm && !["ok", "split"].includes(plan.state);
