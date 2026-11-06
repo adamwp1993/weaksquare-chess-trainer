@@ -961,8 +961,8 @@ Your top weaknesses get the most time. A day has 2 to 4 tasks that add up to you
 
 **The checkboxes:**
 - Tick or untick any box by hand. **Your choice always wins:** a box you unticked stays unticked even if the app sees the task done, until you tick it again.
-- **⋯** skips a task or swaps it for another: the next task for the same weakness, otherwise for the next weakness.
-- **Carry over missed tasks** (on by default): on your next training day, the unfinished tasks of the last one are added, up to one day's worth. Older ones, or all of them with this off, are marked **Missed**.
+- **⋯** skips a task or swaps it for another: the next task for the same weakness, then for the next weakness, then general puzzles in each training mode and questions for your journal. Swap skips what's already on that day, a game or lesson the plan already has, and a game you've already finished. Once a task has been everything, it starts over.
+- **Carry over missed tasks** (on by default): on your next training day, the unfinished tasks of the last one are added, up to one day's worth. Older ones, or all of them with this off, are marked **Missed**. A row that says **Moved to the next day** has no box of its own: tick its copy on the later day. A box you unticked stays unticked on the copy too.
 
 ![Today's plan](img/today-card.png)
 

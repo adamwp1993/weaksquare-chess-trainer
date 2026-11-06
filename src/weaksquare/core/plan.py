@@ -324,6 +324,15 @@ def _core(t: Task) -> dict[str, Any]:
     return {k: v for k, v in t.params.items() if k != "count"}
 
 
+def same_task(a: Task, b: Task) -> bool:
+    """QA v0.12-B31: for Swap, the same task whatever its size. A puzzle count follows your speed and a rating band can
+    be widened to fit, so neither makes it another task."""
+    if a.type != b.type:
+        return False
+    drop = ("count", "rating_min", "rating_max")
+    return {k: v for k, v in a.params.items() if k not in drop} == {k: v for k, v in b.params.items() if k not in drop}
+
+
 def _resized(t: Task, minutes: int, ctx: Context) -> Task:
     if t.type == PUZZLES:
         p = t.params
@@ -420,24 +429,9 @@ def _once_key(t: Task) -> tuple[str, Any] | None:
     return None
 
 
-def swap_for(task: Task, report: Mapping[str, Any], ctx: Context, today: Sequence[Task]) -> Task:
-    """FR-10.64 Swap: the next task for the same weakness, otherwise for the next weakness, otherwise general
-    puzzles. Deterministic. Never one already on the day, or the task being swapped."""
-    return _first_free(task, report, ctx, today)
-
-
-def _first_free(task: Task, report: Mapping[str, Any], ctx: Context, taken: Sequence[Task]) -> Task:
-    busy = [*taken, task]
-    choices = swap_choices(task, report, ctx)
-    for t in choices:
-        if not any(_same(t, x) or t.title == x.title for x in busy):
-            return t
-    return choices[-1]
-
-
 def swap_choices(task: Task, report: Mapping[str, Any], ctx: Context) -> list[Task]:
     """Everything a Swap can offer, in order: the same weakness, the next weaknesses, then a pool that never runs out
-    (QA v0.12-B22): general puzzles in each mode, and questions for your journal."""
+    (QA v0.12-B22): general puzzles in each mode, and questions for your journal. `services.plan` picks from these."""
     weak = focus(report)
     ordered = [w for w in weak if w["key"] == task.weakness_key] + [w for w in weak if w["key"] != task.weakness_key]
     out = [t for w in ordered for t in _options(w, task.minutes, ctx)]

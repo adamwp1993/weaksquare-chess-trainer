@@ -3,6 +3,7 @@ open bug is marked xfail with its ID."""
 
 from __future__ import annotations
 
+import itertools
 import json
 import time
 from typing import Any
@@ -174,9 +175,6 @@ def test_qa3_a_chain_of_copies_keeps_its_progress_and_finishes_once(api: Api, pa
     assert prog["left"] == sum(1 for t in _all_tasks(prog) if t["status"] == "left")
 
 
-@pytest.mark.xfail(
-    strict=True, reason="QA v0.12-B32: a hand tick on the original leaves the copy open, so it counts twice"
-)
 def test_qa3_a_hand_tick_on_a_task_moved_to_the_next_day_settles_the_one_task(api: Api, clock: Any) -> None:
     plan, original, copy = _carried_pair(api, clock, _ref("a"))
     _ok(api.set_plan_task_tick(original, True))
@@ -203,7 +201,6 @@ def test_qa3_a_hand_tick_on_the_copy_leaves_the_original_moved(api: Api, clock: 
 
 
 @pytest.mark.parametrize("kind", ["puzzles", "review", "retry"])
-@pytest.mark.xfail(strict=True, reason="QA v0.12-B33: a task you unticked comes back ticked as soon as it's copied")
 def test_qa3_a_task_you_unticked_stays_unticked_when_it_carries(api: Api, paths: Any, clock: Any, kind: str) -> None:
     plant_managed_install(paths)
     gid = _games(_svc(api), 1)[0]
@@ -238,9 +235,6 @@ def test_qa3_a_task_you_unticked_stays_unticked_when_it_carries(api: Api, paths:
 
 
 @pytest.mark.parametrize("kind", ["reflection", "lesson"])
-@pytest.mark.xfail(
-    strict=True, reason="QA v0.12-B34: what you finish from the original past midnight does not reach the copy"
-)
 def test_qa3_a_reflection_or_lesson_started_before_midnight_ticks_after_it(
     api: Api, paths: Any, clock: Any, kind: str
 ) -> None:
@@ -318,9 +312,6 @@ def _weak_report(api: Api, paths: Any) -> dict[str, Any]:
     return _ok(api.create_plan({"weeks": 1, "weekdays": EVERY_DAY, "minutes": 30}))
 
 
-@pytest.mark.xfail(
-    strict=True, reason="QA v0.12-B31: Swap compares titles only, so a new puzzle count is 'another' task"
-)
 def test_qa3_swap_is_not_fooled_by_a_new_puzzle_count_after_your_speed_changes(api: Api, paths: Any) -> None:
     _real_report(api, paths, 6)
     plan = _plan_with(api, [[general_task(Context(), 10), _ref("x")]])
@@ -343,11 +334,11 @@ def test_qa3_swap_is_not_fooled_by_a_new_puzzle_count_after_your_speed_changes(a
     for _ in range(12):
         tid = _ok(api.swap_plan_task(tid))
         titles = [t["title"] for t in _day(_ok(api.get_current_plan()), 0)]
-        same = [x for x in titles if x.endswith("puzzles: any theme")]
-        assert len(same) <= 1, titles  # FR-10.64 and swap_for: never one already on the day
+        # Another mode ("30 Commit-the-line puzzles: any theme") is another task, so it may share the day.
+        same = [x for x in titles if x.split(" ", 1)[1:] == ["puzzles: any theme"]]
+        assert len(same) <= 1, titles  # FR-10.64: never one already on the day
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.12-B35: Swap offers a game already used elsewhere in the plan")
 def test_qa3_swap_does_not_offer_a_game_another_day_of_the_plan_already_has(api: Api, paths: Any) -> None:
     plan = _weak_report(api, paths)
     current = api._plan._plans.current()
@@ -365,9 +356,6 @@ def test_qa3_swap_does_not_offer_a_game_another_day_of_the_plan_already_has(api:
     assert not set(first_seen) & used, (first_seen, used)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="QA v0.12-B35: Swap offers a game you already reviewed, and it ticks itself at once"
-)
 def test_qa3_swap_never_gives_a_task_that_is_already_done(api: Api, paths: Any, clock: Any) -> None:
     plan = _weak_report(api, paths)
     current = api._plan._plans.current()
@@ -384,6 +372,19 @@ def test_qa3_swap_never_gives_a_task_that_is_already_done(api: Api, paths: Any, 
         plan = _ok(api.get_current_plan())
         assert _by_id(plan, tid)["status"] != "done", _by_id(plan, tid)["title"]
     assert plan["done"] == done
+
+
+def test_swap_keeps_cycling_once_it_has_been_everything_and_never_bounces_between_two(api: Api, paths: Any) -> None:
+    """Found by the gate after the B35 fix shrank the pool: starting over from the top alternated between two tasks."""
+    plan = _weak_report(api, paths)
+    current = _day(plan, 0)[0]
+    tid, seen = current["id"], [current["title"]]
+    for _ in range(60):
+        tid = _ok(api.swap_plan_task(tid))
+        seen.append(_by_id(_ok(api.get_current_plan()), tid)["title"])
+    assert all(a != b for a, b in itertools.pairwise(seen)), seen
+    assert not any(seen[i] == seen[i + 2] for i in range(len(seen) - 2)), seen
+    assert len(set(seen)) >= 4, seen
 
 
 def test_qa3_every_pool_task_can_start_and_keeps_the_minutes_and_a_full_day(api: Api, paths: Any) -> None:
@@ -519,9 +520,6 @@ def test_qa3_a_tactical_weakness_gone_is_still_better_and_the_ai_sees_one_number
     assert row.now == 0.0 and row.flag == "gone" and row.verdict == "better"
 
 
-@pytest.mark.xfail(
-    strict=True, reason="QA v0.12-B36: a tactical weakness gone says Now 0 but its series and prompt say no rate"
-)
 def test_qa3_a_tactical_weakness_gone_has_the_same_number_in_its_series_and_the_prompt() -> None:
     def side(i: int, rows: list[dict[str, Any]]) -> Side:
         data = {"source": "games", "games": 20, "missed": rows, "weaknesses": rows, "whole_game": []}

@@ -60,9 +60,6 @@ def test_qa3_a_day_tag_chosen_by_hand_shows_its_badge(page: Page) -> None:
     expect(entry.locator('[data-testid^="journal-day-"]')).to_contain_text("Plan:")
 
 
-@pytest.mark.xfail(
-    strict=True, reason="QA v0.12-B37: Send to Coach stays on the Plan or Journal tab, so its message is hidden"
-)
 def test_qa3_send_to_coach_from_my_games_shows_what_was_sent_whatever_tab_you_left(page: Page) -> None:
     _open(page, "coach=report&plan=current&games=some")
     _coach(page, "plan")

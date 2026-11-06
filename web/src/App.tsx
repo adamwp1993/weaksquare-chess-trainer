@@ -397,6 +397,7 @@ export function App() {
             onImport={() => setImportOpen(true)}
             onSendToCoach={(ids) => {
               setSendIds(ids);
+              setCoachTab("report"); // QA v0.12-B37: what was sent and the run button are on this tab
               setPage({ kind: "coach" });
             }}
           />

@@ -33,8 +33,9 @@ from weaksquare.core.plan import (
     first_day,
     is_done,
     plan_progress,
+    same_task,
     status_of,
-    swap_for,
+    swap_choices,
     task_spec,
     to_carry,
     training_dates,
@@ -265,7 +266,7 @@ def test_statuses() -> None:
 def test_swap_gives_a_different_task_for_the_same_weakness_first() -> None:
     plan = build_plan(REPORT, PlanParams(1, (0,), 20), CTX)
     first = plan.days[0].tasks[0]
-    new = swap_for(first, REPORT, CTX, [first])
+    new = next(t for t in swap_choices(first, REPORT, CTX) if not same_task(t, first))
     assert new.weakness_key == first.weakness_key
     assert (new.type, new.params) != (first.type, first.params)
     assert new.minutes == first.minutes
@@ -274,7 +275,32 @@ def test_swap_gives_a_different_task_for_the_same_weakness_first() -> None:
 def test_swap_is_deterministic_and_always_finds_something() -> None:
     t = Task(PUZZLES, 10, "x", {"themes": [], "mode": "standard", "count": 5}, None)
     empty = {"weaknesses": [], "whole_game": []}
-    assert swap_for(t, empty, Context(), [t]) == swap_for(t, empty, Context(), [t])
+    choices = swap_choices(t, empty, Context())
+    assert choices == swap_choices(t, empty, Context())
+    assert any(not same_task(c, t) for c in choices)
+
+
+def test_same_task_ignores_the_size_and_rating_band_only() -> None:
+    a = Task(
+        PUZZLES,
+        10,
+        "6 puzzles",
+        {"themes": ["fork"], "mode": "standard", "count": 6, "rating_min": 1000, "rating_max": 1400},
+    )
+    bigger = Task(
+        PUZZLES,
+        10,
+        "30 puzzles",
+        {"themes": ["fork"], "mode": "standard", "count": 30, "rating_min": 800, "rating_max": 1600},
+    )
+    other_mode = Task(
+        PUZZLES,
+        10,
+        "6 puzzles",
+        {"themes": ["fork"], "mode": "commit_line", "count": 6, "rating_min": 1000, "rating_max": 1400},
+    )
+    assert same_task(a, bigger)
+    assert not same_task(a, other_mode)
 
 
 # ---- carry-over ----

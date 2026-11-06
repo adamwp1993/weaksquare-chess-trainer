@@ -219,7 +219,8 @@ def _weakness_rows(
         out.append(
             WeaknessChange(
                 key, str(w.get("label") or key), then, now, _delta(then, now), flag, verdict,
-                tuple(float(s.rates()[key].get("per10") or 0.0) if key in s.rates() else None for s in series_sides),
+                # QA v0.12-B36: the series ends in this report's own number.
+                (*(float(s.rates()[key].get("per10") or 0.0) if key in s.rates() else None for s in series_sides[:-1]), now),
                 puzzle.get(key),
             )
         )  # fmt: skip

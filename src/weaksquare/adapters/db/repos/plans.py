@@ -156,6 +156,18 @@ class PlansRepo:
                 (state, at, task_id),
             )
 
+    def live_copy(self, task_id: int) -> int:
+        """The task itself, or the copy that took it over (a copy swapped away no longer does)."""
+        with self._db.session() as conn:
+            current = task_id
+            while True:
+                r = conn.execute(
+                    "SELECT id FROM plan_tasks WHERE carried_from = ? AND removed = 0", (current,)
+                ).fetchone()
+                if r is None:
+                    return current
+                current = int(r[0])
+
     def swapped_away(self, task_id: int) -> list[Task]:
         """QA v0.12-B11: what this task's slot has been before, following `swapped_from`."""
         out: list[Task] = []
@@ -205,7 +217,9 @@ class PlansRepo:
                 if exists:  # safe to repeat
                     continue
                 pos += 1
-                self._insert(conn, day_id, pos, Task(t.type, t.minutes, t.title, t.params, t.weakness_key), carried_from=t.id)  # fmt: skip
+                new = self._insert(conn, day_id, pos, Task(t.type, t.minutes, t.title, t.params, t.weakness_key), carried_from=t.id)  # fmt: skip
+                if t.manual_state == "undone":  # QA v0.12-B33: a box you unticked stays unticked (FR-10.64)
+                    conn.execute("UPDATE plan_tasks SET manual_state = 'undone' WHERE id = ?", (new,))
 
     def link_session(self, session_id: int, task_id: int) -> None:
         with self._db.transaction() as conn:

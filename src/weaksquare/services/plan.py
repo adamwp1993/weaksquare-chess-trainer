@@ -12,6 +12,8 @@ your presets are never written.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, date
 from typing import Any, Protocol
@@ -43,6 +45,7 @@ from weaksquare.core.plan import (
     focus,
     general_task,
     plan_progress,
+    same_task,
     status_of,
     swap_choices,
     task_minutes,
@@ -342,6 +345,11 @@ class PlanService:
             attempts[t.id] = n + (attempts.get(source.id, 0) if source else 0)
             seconds[t.id] = round(ms / 1000)  # QA v0.12-B5: a copy keeps the progress, not the time spent
         swapped = sum(raw.get(i, (0, 0))[1] for i in self._plans.swapped_task_ids(plan.id))
+        # QA v0.12-B34: once a task has a copy the copy is the task, so an entry saved from the original counts for it.
+        entries = set(self._plans.entry_tasks(until))
+        for t in sorted(tasks, key=lambda x: x.id):
+            if t.carried_from in entries:
+                entries.add(t.id)
         retry_games = {int(t.params["game_id"]) for t in tasks if t.type == RETRY and isinstance(t.params.get("game_id"), int)}  # fmt: skip
         needed = {g: frozenset(self._review.retry_plies(g)) for g in retry_games}
         return Facts(
@@ -353,7 +361,7 @@ class PlanService:
             retry_tried=self._plans.retries_since(sorted(retry_games), plan.created_at, until),
             reviewed_tasks=self._passes.completed_tasks(until),
             reviewed_games=self._passes.completed_games(plan.created_at, until),
-            entry_tasks=self._plans.entry_tasks(until),
+            entry_tasks=frozenset(entries),
         )
 
     def _sync(self, plan: PlanRow) -> tuple[PlanRow, Facts]:
@@ -431,7 +439,8 @@ class PlanService:
         if not isinstance(done, bool):
             raise ValidationError("done must be true or false")
         self._place(task_id)
-        self._plans.set_manual(task_id, "done" if done else "undone", self._now())
+        # QA v0.12-B32: once a task has a copy the copy is the task, so one task can't be settled twice.
+        self._plans.set_manual(self._plans.live_copy(task_id), "done" if done else "undone", self._now())
 
     def skip(self, task_id: Any, skipped: Any = True) -> None:
         if not isinstance(skipped, bool):
@@ -447,25 +456,47 @@ class PlanService:
         ctx = self.context(report)
         old = Task(t.type, t.minutes, t.title, t.params, t.weakness_key)
         today = [Task(x.type, x.minutes, x.title, x.params, x.weakness_key) for x in place.day.tasks if x.id != t.id]
-        return self._swap_in(t.id, old, data, ctx, today)
+        return self._swap_in(t.id, place.plan_id, old, data, ctx, today)
 
-    def _swap_in(self, task_id: int, old: Task, data: Any, ctx: Context, today: list[Task]) -> int:
+    def _swap_in(self, task_id: int, plan_id: int, old: Task, data: Any, ctx: Context, today: list[Task]) -> int:
         """QA v0.12-B11, B22: what this slot has been counts, so Swap keeps moving on, and when it's been everything it
         starts over. Fitting can turn a task into another one, so the result is checked after that."""
         been = self._plans.swapped_away(task_id)
-
-        def same(x: Task, y: Task) -> bool:
-            return x.type == y.type and x.title == y.title
-
-        for t in swap_choices(old, data, ctx):
-            fitted = self.fit_task(t, ctx)
-            if not any(same(fitted, x) for x in [old, *today, *been]):
-                return int(self._plans.swap(task_id, fitted))
-        for t in swap_choices(old, data, ctx):
-            fitted = self.fit_task(t, ctx)
-            if not any(same(fitted, x) for x in [old, *today]):
-                return int(self._plans.swap(task_id, fitted))
+        spent = self._spent(plan_id, task_id)
+        fitted = [f for f in (self.fit_task(t, ctx) for t in swap_choices(old, data, ctx)) if not spent(f)]
+        for f in fitted:
+            if not any(same_task(f, x) for x in [old, *today, *been]):
+                return int(self._plans.swap(task_id, f))
+        # Starting over goes on from where this slot is in the list: from the top, it would bounce between two tasks.
+        at = max((i for i, f in enumerate(fitted) if same_task(f, old)), default=-1)
+        for f in [*fitted[at + 1 :], *fitted[: at + 1]]:
+            if not any(same_task(f, x) for x in [old, *today]):
+                return int(self._plans.swap(task_id, f))
         return int(self._plans.swap(task_id, old))  # nothing else fits a full day: it stays as it was
+
+    def _spent(self, plan_id: int, task_id: int) -> Callable[[Task], bool]:
+        """QA v0.12-B35: a game or lesson is used once per plan, and a game you've finished would tick itself at once."""
+        plan = self._plans.get(plan_id)
+        facts = self._facts(plan)
+        once = (RETRY, REVIEW, LESSON)
+        rest = [t for d in plan.days for t in d.tasks if t.id != task_id and t.type in once]
+        used = {(t.type, json.dumps(t.params, sort_keys=True)) for t in rest}
+
+        def spent(t: Task) -> bool:
+            if t.type not in once:
+                return False
+            if (t.type, json.dumps(t.params, sort_keys=True)) in used:
+                return True
+            gid = t.params.get("game_id")
+            if t.type == REVIEW:
+                return gid in facts.reviewed_games
+            if t.type == RETRY and isinstance(gid, int):
+                needed = frozenset(self._review.retry_plies(gid))
+                tried = self._plans.retries_since([gid], plan.created_at, plan.ended_at).get(gid, frozenset())
+                return bool(needed) and needed <= tried
+            return False
+
+        return spent
 
     def _report_for_plan(self, plan_id: int) -> Any:
         plan = self._plans.get(plan_id)
@@ -521,7 +552,7 @@ class PlanService:
     def lesson_opened(self, task_id: Any) -> None:
         """FR-10.64 (v0.12 planning): a lesson task ticks when you open one of its links or start its drill."""
         self._place(task_id)
-        self._plans.set_done([task_id], self._now())
+        self._plans.set_done([self._plans.live_copy(task_id)], self._now())  # QA v0.12-B34: the copy is the task
 
     def start_lesson_drill(self, task_id: Any, rated: bool = True) -> TaskAction:
         """Learn X from a task: its puzzles for this session only (FR-10.63), never through your filters."""

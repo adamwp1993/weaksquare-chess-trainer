@@ -38,7 +38,7 @@ function TaskRow({
         <Checkbox
           aria-label={t.title}
           checked={done}
-          disabled={readOnly}
+          disabled={readOnly || t.status === "carried"}
           data-no-tip="a task's own checkbox: its label is the task"
           onChange={(e) => run(api.setPlanTaskTick(t.id, e.currentTarget.checked))}
           data-testid={`plan-tick-${t.id}`}

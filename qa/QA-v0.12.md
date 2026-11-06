@@ -577,3 +577,15 @@ Everything from round 1's list still stands: the live test, AI plan quality, the
 - **Whether saving after closing the question should tick the task.**
 - **Your remaining calls from round 2:** the composer's game tag has no ply, what a plan-day tag should show, and whether 50 games are enough for Tag a game.
 - **Your dev database:** my `--dev` run opened it, so it's migrated to this version.
+
+# After round 3 (builder's note, not QA's)
+
+The builder fixed B31 to B39 after this report. Their xfail marks are gone, so they run as regression tests. **No QA round has re-verified these fixes.** ROADMAP allows 3 rounds, and the gate's QA condition was already met.
+
+- **A bug the fixes exposed:** with B35's smaller pool, `test_qa2_swap_chain_on_the_full_db_moves_on_and_never_doubles` showed that Swap, once it had been through everything, bounced between two tasks. Fixed, with `test_swap_keeps_cycling_once_it_has_been_everything_and_never_bounces_between_two`, which fails on the old behaviour.
+- **QA tests changed:**
+  - B31's test no longer counts a Commit-the-line task as the same task, because another mode is another task.
+  - The round 3 smoke test now expects the box on a moved row to be disabled (B32), and no longer waits or clicks around B37 and B38.
+  - Its search step now waits for the result instead of asserting at once.
+- **Still failing:** `test_ladder_preview_slow_branches_are_within_target[fork, promote 3->4]`, a v0.5 500 ms limit. It takes 499 to 523 ms on `main` (v0.11) on this PC, so v0.12 didn't cause it. The limit was left as it is.
+- **Seen once, not explained:** `test_qa_v011_whole_game_report_and_per_run_options` failed with `TargetClosedError` in one full smoke run. It then passed 4 of 4 alone and in the next full run (44 passed, 1 skipped). The failing line wasn't captured.

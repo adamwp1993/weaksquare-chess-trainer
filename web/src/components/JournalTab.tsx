@@ -2,7 +2,7 @@
 // newest first, with filters and search. Entries stay on this PC unless you turn on Include my journal for one AI run
 // (FR-10.71). Everything is plain React text, never HTML.
 import { Alert, Anchor, Badge, Button, Chip, Group, Paper, Select, Stack, Text, TextInput, Textarea, Title } from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { JournalFilters } from "../api/ApiClient";
 import type { DayLog, JournalEntry, JournalGame, JournalItem } from "../api/types";
@@ -180,8 +180,12 @@ export function JournalTab({
     api.getCurrentPlan().then((p) => setDayOptions((p?.days ?? []).map((d) => ({ value: String(d.id), label: `Week ${d.week} · ${dayLabel(d.date)}` }))), () => undefined); // prettier-ignore
   }, []);
 
+  // QA v0.12-B38: only the latest request may change the screen. The whole journal can take longer than a search.
+  const latest = useRef(0);
   const load = useCallback(() => {
+    const asked = ++latest.current;
     api.getJournal({ ...filters, query: query.trim() || undefined }).then((t) => {
+      if (asked !== latest.current) return;
       setItems(t.items);
       setWindowStart(t.window_start);
       setOlder(t.older);
@@ -192,7 +196,9 @@ export function JournalTab({
 
   const loadOlder = () => {
     if (!windowStart) return;
+    const asked = ++latest.current;
     api.getJournal({ ...filters, query: query.trim() || undefined, before: windowStart }).then((t) => {
+      if (asked !== latest.current) return;
       setItems([...items, ...t.items]);
       setWindowStart(t.window_start);
       setOlder(t.older);

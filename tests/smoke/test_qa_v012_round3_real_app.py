@@ -127,7 +127,9 @@ def test_qa3_the_round_2_fixes_together_in_the_real_app(pw, tmp_path: Path, fixt
             # A word from it, by search; and the badge after the plan is replaced.
             page.get_by_test_id("journal-search").fill("findme")
             entry.wait_for()
-            assert page.get_by_test_id("journal-log").count() == 0
+            expect(page.get_by_test_id("journal-log")).to_have_count(
+                0
+            )  # the entry was already there: wait for the search
             page.get_by_test_id("journal-search").fill("")
             _ok(_call(page, "create_plan", {"weeks": 1, "weekdays": EVERY_DAY, "minutes": 20}, True))
             page.get_by_test_id("coach-tab-report").click()
@@ -142,7 +144,7 @@ def test_qa3_the_round_2_fixes_together_in_the_real_app(pw, tmp_path: Path, fixt
             facts["new_plan_days"] = len(new_plan["days"])
             _shot(page, "badge-after-replacing")
 
-            # A day forward: the checkbox on the row that says "Moved to the next day" is live.
+            # A day forward: QA v0.12-B32, the row that says "Moved to the next day" has no live box, its copy does.
             _ok(_call(page, "set_time_offset", 1))
             moved_plan = _ok(_call(page, "get_current_plan"))
             first_day = moved_plan["days"][0]
@@ -152,9 +154,7 @@ def test_qa3_the_round_2_fixes_together_in_the_real_app(pw, tmp_path: Path, fixt
             page.get_by_test_id("coach-tab-report").click()
             scope = _open_plan(page, first_day["id"])
             box = scope.get_by_test_id(f"plan-tick-{moved['id']}")
-            expect(box).to_be_enabled()
-            box.click()
-            scope.locator(f'[data-testid="plan-task-{moved["id"]}"][data-status="done"]').wait_for()
+            expect(box).to_be_disabled()
             after = _ok(_call(page, "get_current_plan"))
             facts["hand_tick_on_moved"] = {
                 "original": next(t for t in _tasks(after) if t["id"] == moved["id"])["status"],
@@ -165,7 +165,6 @@ def test_qa3_the_round_2_fixes_together_in_the_real_app(pw, tmp_path: Path, fixt
 
             # A whole-game weakness that's gone, as the screen shows it: a real second report, its stored numbers set.
             _ok(_call(page, "set_time_offset", 0))
-            page.get_by_test_id("coach-tab-report").click()  # QA v0.12-B37: Send to Coach stays on the tab you left
             _report(page, gid)
             for _ in range(300):  # the old report stays on screen while the new run works
                 reports = _ok(_call(page, "list_coach_reports"))
@@ -290,7 +289,6 @@ def test_qa3_the_user_guide_sections_step_by_step_in_the_real_app(pw, tmp_path: 
             entry.get_by_role("button", name="Save").click()
             page.get_by_text("A word to look for, edited.").wait_for()
             expect(page.get_by_test_id("journal-log").first).to_contain_text("Daily log")
-            page.wait_for_timeout(1000)  # QA v0.12-B38: let the journal's answers land before asking for another
             page.get_by_test_id("journal-search").fill("edited")
             expect(page.get_by_test_id("journal-log")).to_have_count(0)
             page.get_by_test_id("journal-search").fill("")
@@ -348,7 +346,6 @@ def test_qa3_the_journal_shows_what_the_newest_search_asked_for(pw, tmp_path: Pa
         assert app.close() == 0
 
 
-@pytest.mark.xfail(strict=True, reason="QA v0.12-B38: a slow, older journal answer replaces the newer one on screen")
 def test_qa3_a_slow_older_answer_does_not_replace_the_search_you_asked_for(
     pw, tmp_path: Path, fixture_puzzles_db: Path
 ) -> None:  # type: ignore[no-untyped-def]

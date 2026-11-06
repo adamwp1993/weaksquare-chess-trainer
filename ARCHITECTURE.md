@@ -270,7 +270,7 @@ Entry format:
 
 ### 2026-11-05, v0.12: Review passes, not a single "reviewed" flag
 - Context: a review task ticks when you've visited every key moment and the final move (Adam, v0.12 planning), and the daily log counts games reviewed per day (FR-10.68). A game can be reviewed twice.
-- Decision: `review_passes` has one row per pass, with the plies visited. A new pass starts once the last was completed. `Api.mark_review_ply` is called as the cursor moves; `ReviewService.mark_visited` decides completion. `games.analyzed_at` records analysis time for the log. FR-10.68's "no extra tracking" was reworded: these are the two additions.
+- Decision: `review_passes` has one row per pass, with the plies visited. A new pass starts once the last was completed, and a new plan deletes unfinished passes, because moves looked at before a plan don't count towards it (`PlansRepo.add`). `Api.mark_review_ply` is called as the cursor moves; `ReviewService.mark_visited` decides completion. `games.analyzed_at` records analysis time for the log. FR-10.68's "no extra tracking" was reworded: these are the two additions.
 - Alternatives: `games.reviewed_at`, rejected because a second review would overwrite the first day's count, and a task couldn't tell a fresh pass from an old one.
 - Consequences: one bridge call per move viewed. Passes for games reviewed before v0.12 don't exist, so those days show none.
 
