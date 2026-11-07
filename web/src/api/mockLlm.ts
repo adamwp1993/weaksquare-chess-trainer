@@ -56,8 +56,8 @@ const ACTUAL_GAME = {
 } as const;
 export type GameKind = "game_move" | "game_narrative" | "coach_summary" | "coach_detailed";
 type Choice = "same" | LlmProvider;
-type Feature = "explain" | "game_review" | "coach";
-type Other = "game_review" | "coach";
+type Feature = "explain" | "game_review" | "coach" | "openings";
+type Other = "game_review" | "coach" | "openings";
 const featureOf = (kind: GameKind): Other => (kind.startsWith("coach") ? "coach" : "game_review");
 
 const cost = (p: LlmPrice, input: number, output: number) => {
@@ -94,9 +94,10 @@ export class MockLlm {
   // v0.9: Game Review's own choice (FR-1.15), its spend, and its results keyed like the backend's cache.
   private fs: Record<Other, { choice: Choice; model: string; reasoning: LlmSettings["reasoning"] }> = {
     game_review: { choice: "same", model: "", reasoning: "low" },
+    openings: { choice: "same", model: "", reasoning: "low" },
     coach: { choice: "same", model: "", reasoning: "low" },
   };
-  private spentBy: Record<Feature, number> = { explain: 0, game_review: 0, coach: 0 };
+  private spentBy: Record<Feature, number> = { explain: 0, game_review: 0, coach: 0, openings: 0 };
   private gameCache = new Map<string, Explanation | GameNarrative | CoachAiRun>();
   readonly calls: string[] = [];
 
@@ -150,7 +151,7 @@ export class MockLlm {
       spend: this.spend(),
       key_check: this.keyCheck,
       key_check_message: this.keyCheckMessage,
-      features: [this.feature("explain"), this.feature("game_review"), this.feature("coach")],
+      features: [this.feature("explain"), this.feature("game_review"), this.feature("coach"), this.feature("openings")],
     };
   }
 

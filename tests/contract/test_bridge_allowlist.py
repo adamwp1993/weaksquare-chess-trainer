@@ -146,6 +146,51 @@ ALLOWLIST = {
     "start_plan_lesson_drill",  # v0.12
     "open_plan_lesson",  # v0.12
     "mark_review_ply",  # v0.12: FR-10.64, 10.68
+    "get_opening_book_status",  # v0.13: the opening trainer (§18)
+    "start_opening_book_import",  # v0.13
+    "get_opening_families",  # v0.13
+    "get_opening_settings",  # v0.13
+    "set_opening_sources",  # v0.13: FR-12.2, 12.15
+    "get_opening_page",  # v0.13: FR-12.15
+    "get_opening_note",  # v0.13: FR-12.5-12.7
+    "get_opening_note_quote",  # v0.13
+    "start_opening_note",  # v0.13
+    "get_opening_moves_note_quote",  # v0.13: FR-12.8
+    "start_opening_moves_note",  # v0.13
+    "get_opening_overview_key",  # v0.13
+    "get_opening_prefetch_plan",  # v0.13: FR-12.7b
+    "start_opening_prefetch",  # v0.13
+    "export_opening_notes",  # v0.13
+    "get_opening_notes_deletion",  # v0.13
+    "delete_opening_notes",  # v0.13
+    "set_opening_settings",  # v0.13
+    "get_opening_lines",  # v0.13
+    "start_opening_extend",  # v0.13: FR-12.13
+    "analyze_opening_position",  # v0.13
+    "get_opening_deviation",  # v0.13: FR-12.8
+    "add_opening_deviation",  # v0.13
+    "start_repertoire_build",  # v0.13: FR-12.14
+    "get_repertoire_proposal",  # v0.13
+    "save_repertoire_proposal",  # v0.13
+    "discard_repertoire_proposal",  # v0.13
+    "get_practice_summary",  # v0.13: FR-12.9, 12.10
+    "get_practice_branches",  # v0.13: FR-12.10
+    "get_practice_tolerance",  # v0.13
+    "set_practice_tolerance",  # v0.13
+    "start_practice",  # v0.13
+    "play_practice_move",  # v0.13
+    "show_practice_answer",  # v0.13
+    "continue_practice",  # v0.13
+    "end_practice",  # v0.13
+    "set_practice_reason",  # v0.13
+    "get_opening_stats",  # v0.13: FR-12.11
+    "match_opening_family",  # v0.13: FR-10.58
+    "get_repertoire",  # v0.13: FR-12.4
+    "add_repertoire_lines",  # v0.13
+    "preview_repertoire_removal",  # v0.13
+    "remove_repertoire_move",  # v0.13
+    "set_repertoire_main",  # v0.13
+    "move_repertoire_move",  # v0.13
     "get_journal",  # v0.12: the journal (FR-10.67-10.70)
     "add_journal_entry",  # v0.12
     "edit_journal_entry",  # v0.12

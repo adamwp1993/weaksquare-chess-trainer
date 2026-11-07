@@ -100,6 +100,11 @@ def build_api(
         coach=services.coach,
         plan=services.plan,
         journal=services.journal,
+        openings=services.openings,
+        opening_sources=services.opening_sources,
+        opening_notes=services.opening_notes,
+        opening_practice=services.opening_practice,
+        repertoire=services.repertoire,
     )
 
 

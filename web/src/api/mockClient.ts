@@ -43,6 +43,7 @@ import type {
 import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
 import { MockCoach } from "./mockCoach";
+import { MockOpenings } from "./mockOpenings";
 import { MockPlan } from "./mockPlan";
 import { defaultFilters } from "../state/filters";
 import { gameNarrative, moveExplanation } from "./mockGameAi";
@@ -91,6 +92,7 @@ import type {
   ThemeGroup,
   UiSettings,
   UpdateOffer,
+  OpeningScope,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -349,6 +351,7 @@ export class MockClient implements ApiClient {
   private readonly games: MockGames;
   private readonly coach: MockCoach;
   private readonly plan: MockPlan;
+  private readonly openings = new MockOpenings();
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
@@ -851,7 +854,7 @@ export class MockClient implements ApiClient {
   }
 
   // ---- v0.9: a model per AI feature and Game Review AI ------------------------------------------
-  async setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
+  async setLlmFeature(feature: "game_review" | "coach" | "openings", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]) {
     return this.llm.setFeature(feature, choice, model, reasoning);
   }
 
@@ -1134,6 +1137,272 @@ export class MockClient implements ApiClient {
 
   async markReviewPly(gameId: number, ply: number) {
     return this.plan.markPly(gameId, ply);
+  }
+
+  // ---- v0.13: the opening trainer (REQUIREMENTS §18) ----
+  async getOpeningBookStatus() {
+    return this.openings.status();
+  }
+
+  async startOpeningBookImport() {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push("openingBookImport");
+    const kind = "opening_book_import";
+    this.emit({ id, kind, state: "running", progress: 0, message: "Reading the opening book…", error_code: null });
+    setTimeout(() => {
+      this.openings.importBook();
+      this.emit({ id, kind, state: "done", progress: 1, message: "Imported the opening book.", error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async getOpeningFamilies(query: string) {
+    return this.openings.families(query);
+  }
+
+  async getOpeningSettings() {
+    return this.openings.settings();
+  }
+
+  async setOpeningSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]) {
+    this.calls.push(`openingSources:${useWikibooks}:${source}:${ratings.join(",")}`);
+    return this.openings.setSources(useWikibooks, source, ratings);
+  }
+
+  async getOpeningPage(sans: string[]) {
+    this.calls.push(`openingPage:${sans.join(" ")}`);
+    return this.openings.page(sans);
+  }
+
+  async setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null) {
+    this.calls.push(`openingSettings:${preset}:${extend}`);
+    return this.openings.setSettings(preset, subLines, maxMoves, extend);
+  }
+
+  async getOpeningLines(family: string) {
+    return this.openings.lines(family, this.engine.state === "ready");
+  }
+
+  async getOpeningNote(positionKey: string, moveUci: string, kind: "overview" | "move") {
+    return this.openings.note(positionKey, moveUci, kind);
+  }
+
+  async getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    return this.openings.noteQuote(family, lineIndex, ply, regenerate, this.openingAi());
+  }
+
+  async startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    const quote = this.openings.noteQuote(family, lineIndex, ply, regenerate, this.openingAi());
+    if (quote.state === "cached") return null;
+    if (quote.state !== "ok") throw new ApiCallError({ code: quote.state, message: quote.message ?? "", retryable: false });
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingNote:${ply}:${regenerate}`);
+    const kind = "opening_note";
+    this.emit({ id, kind, state: "running", progress: null, message: "Asking the AI…", error_code: null });
+    setTimeout(() => {
+      this.openings.saveNote(family, lineIndex, ply);
+      this.emit({ id, kind, state: "done", progress: 1, message: "Saved.", error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async getOpeningMovesNoteQuote(moves: string[], regenerate: boolean) {
+    return this.openings.movesQuote(moves, regenerate, this.openingAi());
+  }
+
+  async startOpeningMovesNote(moves: string[], regenerate: boolean) {
+    const quote = this.openings.movesQuote(moves, regenerate, this.openingAi());
+    if (quote.state === "cached") return null;
+    if (quote.state !== "ok") throw new ApiCallError({ code: quote.state, message: quote.message ?? "", retryable: false });
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingMovesNote:${moves.join(" ")}`);
+    const kind = "opening_note";
+    this.emit({ id, kind, state: "running", progress: null, message: "Asking the AI…", error_code: null });
+    setTimeout(() => {
+      this.openings.saveMovesNote(moves);
+      this.emit({ id, kind, state: "done", progress: 1, message: "Saved.", error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async getOpeningOverviewKey(family: string) {
+    return this.openings.overviewKey(family);
+  }
+
+  private openingAi(): boolean {
+    return this.llm.settings().features.some((f) => f.feature === "explain" && f.model !== "");
+  }
+
+  async getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    this.calls.push("openingPrefetchPlan");
+    return this.openings.prefetchPlan(family, preset, subLines, maxMoves, extend, this.openingAi());
+  }
+
+  async startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingPrefetch:${preset}:${extend}`);
+    const kind = "opening_prefetch";
+    this.emit({ id, kind, state: "running", progress: 0.2, message: "Asking the AI (1 of 5)…", error_code: null });
+    setTimeout(() => {
+      if (this.jobs.get(id)?.state !== "running") return;
+      const saved = this.openings.savePrefetch(family, preset, subLines, maxMoves, extend);
+      this.emit({ id, kind, state: "done", progress: 1, message: `Saved ${saved} notes for $0.0312.`, error_code: null });
+    }, new URLSearchParams(window.location.search).get("prefetch") === "slow" ? 5000 : 300);
+    return id;
+  }
+
+  async exportOpeningNotes(family: string) {
+    this.calls.push(`openingExport:${family}`);
+    return this.openings.hasNotes() ? `C:\\mock\\exports\\${family.replace(/ /g, "-")}-notes.md` : null;
+  }
+
+  async getOpeningNotesDeletion() {
+    return this.openings.notesDeletion();
+  }
+
+  async deleteOpeningNotes(family: string) {
+    this.calls.push(`openingDelete:${family}`);
+    return this.openings.deleteNotes();
+  }
+
+  async startOpeningExtend(family: string) {
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to continue lines past the book.", retryable: false });
+    }
+    if (this.openings.lines(family, true).pending === 0) return null;
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`openingExtend:${family}`);
+    const kind = "opening_extend";
+    this.emit({ id, kind, state: "running", progress: null, message: "Stockfish has looked at 2 positions…", error_code: null });
+    setTimeout(() => {
+      this.openings.extendLines(family);
+      this.emit({ id, kind, state: "done", progress: 1, message: "Stockfish continued the lines.", error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black"): Promise<Analysis> {
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to analyze positions.", retryable: false });
+    }
+    this.calls.push(`analyzeOpening:${purpose}`);
+    await this.think();
+    return mockAnalysis(fen, player);
+  }
+
+  async getOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string) {
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to get replies to this move.", retryable: false });
+    }
+    this.calls.push(`openingDeviation:${theirMove}`);
+    return this.openings.deviation(color, moves, theirMove);
+  }
+
+  async addOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string, reply: string) {
+    this.calls.push(`openingDeviationAdd:${theirMove}:${reply}`);
+    return this.openings.addDeviation(color, moves, theirMove, reply);
+  }
+
+  async startRepertoireBuild(color: "white" | "black", family: string, limits: { max_moves: number; min_share: number; max_replies: number; max_positions: number }) {
+    const id = `job-${this.nextJob++}`;
+    this.calls.push(`repertoireBuild:${color}:${family}:${limits.max_moves}`);
+    const kind = "repertoire_build";
+    this.emit({ id, kind, state: "running", progress: null, message: "Looking at replies and answers…", error_code: null });
+    setTimeout(() => {
+      const proposal = this.openings.build(color, family);
+      this.emit({ id, kind, state: "done", progress: 1, message: proposal, error_code: null });
+    }, 100);
+    return id;
+  }
+
+  async getRepertoireProposal(proposalId: string) {
+    return this.openings.proposal(proposalId);
+  }
+
+  async saveRepertoireProposal(proposalId: string) {
+    this.calls.push("repertoireProposalSaved");
+    return this.openings.saveProposal(proposalId);
+  }
+
+  async discardRepertoireProposal(proposalId: string) {
+    this.openings.discardProposal(proposalId);
+  }
+
+  async getPracticeSummary(color: "white" | "black") {
+    return this.openings.practiceSummary(color);
+  }
+
+  async getPracticeTolerance() {
+    return this.openings.tolerance;
+  }
+
+  async setPracticeTolerance(on: boolean) {
+    this.openings.tolerance = on;
+    return on;
+  }
+
+  async getPracticeBranches(color: "white" | "black") {
+    return this.openings.practiceBranches(color);
+  }
+
+  async startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null, branch: string | null) {
+    this.calls.push(`practiceStart:${color}:${mode}:${openingId}${branch ? `:${branch}` : ""}`);
+    return this.openings.startPractice(color, mode);
+  }
+
+  async playPracticeMove(_sessionId: string, uci: string) {
+    this.calls.push(`practiceMove:${uci}`);
+    return this.openings.playPractice(uci);
+  }
+
+  async showPracticeAnswer() {
+    this.calls.push("practiceHelp");
+    return this.openings.showAnswer();
+  }
+
+  async continuePractice() {
+    return this.openings.continuePractice();
+  }
+
+  async endPractice() {
+    this.calls.push("practiceEnd");
+  }
+
+  async setPracticeReason(_attemptId: number, reason: ReasonKey, note: string | null) {
+    this.calls.push(`practiceReason:${reason}:${note}`);
+  }
+
+  async getOpeningStats(color: "white" | "black") {
+    return this.openings.stats(color);
+  }
+
+  async matchOpeningFamily(name: string) {
+    return this.openings.match(name);
+  }
+
+  async getRepertoire(color: "white" | "black") {
+    return this.openings.repertoire(color);
+  }
+
+  async addRepertoireLines(color: "white" | "black", family: string, lineIndices: number[]) {
+    this.calls.push(`repertoireAdd:${color}:${family}:${lineIndices.join(",")}`);
+    return this.openings.addLines(color, family, lineIndices);
+  }
+
+  async previewRepertoireRemoval(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.openings.previewRemoval(color, positionKey, moveUci);
+  }
+
+  async removeRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.openings.remove(color, positionKey, moveUci);
+  }
+
+  async setRepertoireMain(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.openings.setMain(color, positionKey, moveUci);
+  }
+
+  async moveRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string, direction: "up" | "down") {
+    return this.openings.move(color, positionKey, moveUci, direction);
   }
 
   async getJournal(filters: JournalFilters) {

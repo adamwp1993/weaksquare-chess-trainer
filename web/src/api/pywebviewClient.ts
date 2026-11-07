@@ -55,6 +55,23 @@ import type {
   Job,
   JournalEntry,
   JournalTimeline,
+  BookFamily,
+  OpeningBookStatus,
+  OpeningLines,
+  OpeningNote,
+  OpeningNoteQuote, OpeningNotesDeletion,
+  OpeningDeviation,
+  OpeningPrefetchPlan,
+  OpeningStat,
+  PracticeBranch,
+  PracticeState,
+  PracticeSummary,
+  RepertoireProposal,
+  OpeningPage,
+  OpeningScope,
+  OpeningSettings,
+  Repertoire,
+  RepertoireAdded,
   LadderPreview,
   LlmPrice,
   LlmSettings,
@@ -532,6 +549,187 @@ export class PywebviewClient implements ApiClient {
 
   listPuzzleSets() {
     return this.call<PuzzleSet[]>("list_puzzle_sets");
+  }
+
+  // ---- v0.13: the opening trainer (REQUIREMENTS §18) ----
+  getOpeningBookStatus() {
+    return this.call<OpeningBookStatus>("get_opening_book_status");
+  }
+
+  startOpeningBookImport() {
+    return this.call<string>("start_opening_book_import");
+  }
+
+  getOpeningFamilies(query: string) {
+    return this.call<BookFamily[]>("get_opening_families", query);
+  }
+
+  getOpeningSettings() {
+    return this.call<OpeningSettings>("get_opening_settings");
+  }
+
+  setOpeningSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]) {
+    return this.call<OpeningSettings>("set_opening_sources", useWikibooks, source, ratings);
+  }
+
+  getOpeningPage(sans: string[]) {
+    return this.call<OpeningPage>("get_opening_page", sans);
+  }
+
+  setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null) {
+    return this.call<OpeningSettings>("set_opening_settings", preset, subLines, maxMoves, extend);
+  }
+
+  getOpeningLines(family: string) {
+    return this.call<OpeningLines>("get_opening_lines", family);
+  }
+
+  getOpeningNote(positionKey: string, moveUci: string, kind: "overview" | "move") {
+    return this.call<OpeningNote | null>("get_opening_note", positionKey, moveUci, kind);
+  }
+
+  getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    return this.call<OpeningNoteQuote>("get_opening_note_quote", family, lineIndex, ply, regenerate);
+  }
+
+  startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean) {
+    return this.call<string | null>("start_opening_note", family, lineIndex, ply, regenerate);
+  }
+
+  getOpeningMovesNoteQuote(moves: string[], regenerate: boolean) {
+    return this.call<OpeningNoteQuote>("get_opening_moves_note_quote", moves, regenerate);
+  }
+
+  startOpeningMovesNote(moves: string[], regenerate: boolean) {
+    return this.call<string | null>("start_opening_moves_note", moves, regenerate);
+  }
+
+  getOpeningOverviewKey(family: string) {
+    return this.call<string>("get_opening_overview_key", family);
+  }
+
+  getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    return this.call<OpeningPrefetchPlan>("get_opening_prefetch_plan", family, preset, subLines, maxMoves, extend);
+  }
+
+  startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean) {
+    return this.call<string>("start_opening_prefetch", family, preset, subLines, maxMoves, extend);
+  }
+
+  exportOpeningNotes(family: string) {
+    return this.call<string | null>("export_opening_notes", family);
+  }
+
+  getOpeningNotesDeletion(family: string) {
+    return this.call<OpeningNotesDeletion>("get_opening_notes_deletion", family);
+  }
+
+  deleteOpeningNotes(family: string) {
+    return this.call<number>("delete_opening_notes", family);
+  }
+
+  startOpeningExtend(family: string) {
+    return this.call<string | null>("start_opening_extend", family);
+  }
+
+  analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black") {
+    return this.call<Analysis>("analyze_opening_position", fen, purpose, player);
+  }
+
+  getOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string) {
+    return this.call<OpeningDeviation>("get_opening_deviation", color, moves, theirMove);
+  }
+
+  addOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string, reply: string) {
+    return this.call<RepertoireAdded>("add_opening_deviation", color, moves, theirMove, reply);
+  }
+
+  startRepertoireBuild(color: "white" | "black", family: string, limits: { max_moves: number; min_share: number; max_replies: number; max_positions: number }) {
+    return this.call<string>("start_repertoire_build", color, family, limits);
+  }
+
+  getRepertoireProposal(proposalId: string) {
+    return this.call<RepertoireProposal>("get_repertoire_proposal", proposalId);
+  }
+
+  saveRepertoireProposal(proposalId: string) {
+    return this.call<RepertoireAdded>("save_repertoire_proposal", proposalId);
+  }
+
+  discardRepertoireProposal(proposalId: string) {
+    return this.call<void>("discard_repertoire_proposal", proposalId);
+  }
+
+  getPracticeSummary(color: "white" | "black") {
+    return this.call<PracticeSummary>("get_practice_summary", color);
+  }
+
+  getPracticeTolerance() {
+    return this.call<boolean>("get_practice_tolerance");
+  }
+
+  setPracticeTolerance(on: boolean) {
+    return this.call<boolean>("set_practice_tolerance", on);
+  }
+
+  getPracticeBranches(color: "white" | "black", openingId: number | null) {
+    return this.call<PracticeBranch[]>("get_practice_branches", color, openingId);
+  }
+
+  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null, branch: string | null) {
+    return this.call<PracticeState>("start_practice", color, mode, openingId, branch);
+  }
+
+  playPracticeMove(sessionId: string, uci: string) {
+    return this.call<PracticeState>("play_practice_move", sessionId, uci);
+  }
+
+  showPracticeAnswer(sessionId: string) {
+    return this.call<PracticeState>("show_practice_answer", sessionId);
+  }
+
+  continuePractice(sessionId: string) {
+    return this.call<PracticeState>("continue_practice", sessionId);
+  }
+
+  endPractice(sessionId: string) {
+    return this.call<void>("end_practice", sessionId);
+  }
+
+  setPracticeReason(attemptId: number, reason: ReasonKey, note: string | null) {
+    return this.call<void>("set_practice_reason", attemptId, reason, note);
+  }
+
+  getOpeningStats(color: "white" | "black") {
+    return this.call<OpeningStat[]>("get_opening_stats", color);
+  }
+
+  matchOpeningFamily(name: string) {
+    return this.call<string | null>("match_opening_family", name);
+  }
+
+  getRepertoire(color: "white" | "black") {
+    return this.call<Repertoire>("get_repertoire", color);
+  }
+
+  addRepertoireLines(color: "white" | "black", family: string, lineIndices: number[]) {
+    return this.call<RepertoireAdded>("add_repertoire_lines", color, family, lineIndices);
+  }
+
+  previewRepertoireRemoval(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.call<string[]>("preview_repertoire_removal", color, positionKey, moveUci);
+  }
+
+  removeRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.call<Repertoire>("remove_repertoire_move", color, positionKey, moveUci);
+  }
+
+  setRepertoireMain(color: "white" | "black", positionKey: string, moveUci: string) {
+    return this.call<Repertoire>("set_repertoire_main", color, positionKey, moveUci);
+  }
+
+  moveRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string, direction: "up" | "down") {
+    return this.call<Repertoire>("move_repertoire_move", color, positionKey, moveUci, direction);
   }
 
   // ---- v0.10 ---------------------------------------------------------------------------------------

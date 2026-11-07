@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -32,8 +33,10 @@ from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 class UsageRepo(Protocol):
     def append(
         self, ts: str, local_month: str, feature: str, provider: str, model: str, input_tokens: int,
-        output_tokens: int, cost_usd: float, status: str,
+        output_tokens: int, cost_usd: float, status: str, duration_ms: int | None = None,
     ) -> int: ...  # fmt: skip
+
+    def recent_seconds(self, provider: str, model: str, last: int = 20) -> float | None: ...
 
     def spent_in(self, local_month: str) -> float: ...
 
@@ -62,6 +65,24 @@ class Quote:
     model: str
     estimate: Estimate | None
     run_cap_usd: float
+
+
+@dataclass(frozen=True)
+class BatchQuote:
+    """Whether a run of several requests can start (v0.13, FR-12.7b). The per-run cap applies to the whole run."""
+
+    state: QuoteState
+    message: str | None
+    provider: str
+    model: str
+    requests: int
+    input_tokens: int
+    typical_output_tokens: int
+    typical_usd: float
+    worst_usd: float
+    run_cap_usd: float
+    budget_left_usd: float
+    per_request_worst: tuple[float, ...] = ()  # for splitting a run under the cap
 
 
 @dataclass(frozen=True)
@@ -103,8 +124,43 @@ class LlmUsageService:
         return Spend(month, spent, cfg.monthly_budget_usd, spend_level(spent, cfg.monthly_budget_usd),
                      self._usage.spent_by_feature(month))  # fmt: skip
 
-    def quote(self, kind: str, chars: int, cfg: LlmConfig | None = None) -> Quote:
-        """`cfg`, when given, must be the config of the kind's feature (callers pass it to avoid re-reading)."""
+    def recent_seconds(self, provider: str, model: str) -> float | None:
+        return self._usage.recent_seconds(provider, model)
+
+    def quote_batch(self, feature: str, requests: Sequence[tuple[str, int]]) -> BatchQuote:
+        """What a run of (kind, prompt characters) would cost, checked as **one run** (FR-12.7b): each request
+        may pass the cap alone while the run doesn't, so `quote` isn't enough."""
+        cfg = self._settings.config(feature)
+        spend = self.spend(cfg)
+        left = max(0.0, spend.budget_usd - spend.spent_usd)
+
+        def result(state: str, message: str | None, ests: Sequence[Estimate] = ()) -> BatchQuote:
+            return BatchQuote(
+                state, message, cfg.provider, cfg.model, len(requests), sum(e.input_tokens for e in ests),
+                sum(e.typical_output_tokens for e in ests), sum(e.typical_usd for e in ests),
+                sum(e.worst_usd for e in ests), cfg.run_cap_usd, left, tuple(e.worst_usd for e in ests),
+            )  # fmt: skip
+
+        if not cfg.configured:
+            return result("not_configured", BLOCK_MESSAGES["not_configured"])
+        if not cfg.model:
+            return result("no_model", BLOCK_MESSAGES["no_model"])
+        price = self._settings.price(cfg.provider, cfg.model)
+        if price is None:
+            return result("no_price", BLOCK_MESSAGES["no_price"].format(model=cfg.model))
+        ests = [estimate(kind, cfg.reasoning, chars, price) for kind, chars in requests]
+        worst = sum(e.worst_usd for e in ests)
+        verdict = check(worst, cfg.run_cap_usd, spend.spent_usd, spend.budget_usd)
+        if verdict == "ok":
+            return result("ok", None, ests)
+        message = BLOCK_MESSAGES[verdict].format(
+            spent=spend.spent_usd, budget=spend.budget_usd, worst=worst, cap=cfg.run_cap_usd
+        )
+        return result(verdict, message, ests)
+
+    def quote(self, kind: str, chars: int, cfg: LlmConfig | None = None, run_spent: float = 0.0) -> Quote:
+        """`cfg`, when given, must be the config of the kind's feature (callers pass it to avoid re-reading).
+        `run_spent` is what earlier requests of the same run cost: the cap covers the run (v0.13)."""
         cfg = cfg or self._settings.config(FEATURE_OF[kind])
         provider, model = cfg.provider, cfg.model
 
@@ -121,7 +177,7 @@ class LlmUsageService:
             return blocked("no_price")
         est = estimate(kind, cfg.reasoning, chars, price)
         spend = self.spend(cfg)
-        verdict = check(est.worst_usd, cfg.run_cap_usd, spend.spent_usd, spend.budget_usd)
+        verdict = check(est.worst_usd + run_spent, cfg.run_cap_usd, spend.spent_usd, spend.budget_usd)
         if verdict != "ok":
             return blocked(verdict, spent=spend.spent_usd, budget=spend.budget_usd, worst=est.worst_usd,
                            cap=cfg.run_cap_usd)  # fmt: skip
@@ -129,7 +185,7 @@ class LlmUsageService:
 
     def run(
         self, kind: str, system: str, user: str, schema_name: str, schema: dict[str, Any], *,
-        timeout_s: float | None = None,
+        timeout_s: float | None = None, run_spent: float = 0.0,
     ) -> RunResult:  # fmt: skip
         """Check, send and log one request of `kind` (logged under its feature). Raises AppError when it's
         blocked or the provider fails. `timeout_s` overrides the request's default (v0.11: the Coach's
@@ -137,7 +193,7 @@ class LlmUsageService:
         with self._lock:
             feature = FEATURE_OF[kind]
             cfg = self._settings.config(feature)
-            q = self.quote(kind, prompt_chars(system, user, schema), cfg)
+            q = self.quote(kind, prompt_chars(system, user, schema), cfg, run_spent)
             if q.state != "ok":
                 raise AppError(q.message or "The request was blocked.", code=str(q.state))
             key = self._settings.key(cfg.provider)
@@ -155,6 +211,7 @@ class LlmUsageService:
                 reasoning=cfg.reasoning,  # type: ignore[arg-type]
                 **({"timeout_s": timeout_s} if timeout_s is not None else {}),
             )
+            started = self._clock.now()
             try:
                 response = self._settings.provider(cfg.provider).generate(key, request)
             except LLMError as e:
@@ -167,5 +224,6 @@ class LlmUsageService:
             self._usage.append(
                 now.isoformat(), month_key(self._clock.local_date(now)), feature, cfg.provider, cfg.model,
                 response.input_tokens, response.output_tokens, cost, response.status,
+                round((now - started).total_seconds() * 1000),
             )  # fmt: skip
             return RunResult(response, cfg.provider, cfg.model, cost)

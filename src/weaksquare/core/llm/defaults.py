@@ -25,9 +25,9 @@ REASONING_MULTIPLIER = {"low": 1, "medium": 2, "high": 4}
 
 # FR-1.15 (v0.9): each AI feature has its own provider, model and reasoning level. The usage log records
 # the feature. A feature makes one or more kinds of request, each with its own limits.
-Feature = Literal["explain", "game_review", "coach"]
-FEATURES: tuple[Feature, ...] = ("explain", "game_review", "coach")  # coach: v0.10
-FEATURE_LABELS = {"explain": "Puzzle Explain", "game_review": "Game Review", "coach": "Coach"}
+Feature = Literal["explain", "game_review", "coach", "openings"]
+FEATURES: tuple[Feature, ...] = ("explain", "game_review", "coach", "openings")  # coach: v0.10, openings: v0.13
+FEATURE_LABELS = {"explain": "Puzzle Explain", "game_review": "Game Review", "coach": "Coach", "openings": "Openings"}
 # Request kind -> the feature it belongs to (and is logged under).
 FEATURE_OF: dict[str, Feature] = {
     "explain": "explain",
@@ -35,9 +35,17 @@ FEATURE_OF: dict[str, Feature] = {
     "game_narrative": "game_review",
     "coach_summary": "coach",
     "coach_detailed": "coach",
+    "opening_overview": "openings",
+    "opening_line": "openings",
+    "opening_move": "openings",
 }
 # The kind whose typical cost the feature's model dropdown shows.
-DROPDOWN_KIND: dict[Feature, str] = {"explain": "explain", "game_review": "game_narrative", "coach": "coach_summary"}
+DROPDOWN_KIND: dict[Feature, str] = {
+    "explain": "explain",
+    "game_review": "game_narrative",
+    "coach": "coach_summary",
+    "openings": "opening_line",
+}
 
 # FR-8.14: the hard max_tokens per request kind at Low reasoning.
 # The Coach's limits leave room for the AI's training plan, up to 112 tasks (FR-10.66; Adam, v0.12 planning).
@@ -47,6 +55,9 @@ MAX_TOKENS = {
     "game_narrative": 4000,
     "coach_summary": 7500,
     "coach_detailed": 10000,
+    "opening_overview": 2000,
+    "opening_line": 5000,  # up to 20 moves, each with its own explanation (FR-12.7)
+    "opening_move": 1000,
 }
 # A typical prompt's size in characters, for the per-model cost shown in the model dropdown (FR-1.3).
 # Explain my game is about 10k input tokens (FR-11.21).
@@ -56,6 +67,9 @@ TYPICAL_PROMPT_CHARS = {
     "game_narrative": 30000,
     "coach_summary": 18000,  # FR-10.5: about 5k input tokens
     "coach_detailed": 70000,  # about 20k
+    "opening_overview": 14000,  # with Wikibooks text (FR-12.15)
+    "opening_line": 18000,
+    "opening_move": 8000,
 }
 # The typical output of one call, shown as the "about" figure next to the worst case (actual usage is logged).
 TYPICAL_OUTPUT_TOKENS = {
@@ -64,6 +78,9 @@ TYPICAL_OUTPUT_TOKENS = {
     "game_narrative": 3000,
     "coach_summary": 2900,  # v0.12: with a default plan of 30 tasks
     "coach_detailed": 4400,
+    "opening_overview": 900,
+    "opening_line": 2500,
+    "opening_move": 400,
 }
 
 # v0.11 (FR-10.56): the "about N minutes" of an AI coaching run. A typical speed, not a measurement:

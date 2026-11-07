@@ -90,6 +90,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="with -m live: write scrubbed, anonymized copies of the real responses to tests/fixtures/http/lichess",
     )
     parser.addoption(
+        "--record-explorer",
+        action="store_true",
+        default=False,
+        help="with -m live: rewrite tests/fixtures/http/explorer/ from the real answers, scrubbed",
+    )
+    parser.addoption(
         "--record-games",
         action="store_true",
         default=False,

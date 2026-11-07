@@ -16,7 +16,7 @@ An open-source (AGPL-3.0-or-later), single-user Windows desktop app for chess ta
 - Game Review + Coach: Lichess + chess.com game import/fetchers, Stockfish analysis, lichess-puzzler tagger (AGPL-3.0)
 
 ## Build order (ROADMAP.md)
-- Build **one version at a time**, in order (v0.1 → v0.13 opening trainer → v1.0 → v1.1 macOS/Linux). Ask Adam which version is current if it's unclear.
+- Build **one version at a time**, in order (v0.1 → v0.13 opening trainer → v0.14 Lichess studies → v0.15 analysis board tab → v1.0 → v1.1 macOS/Linux). Ask Adam which version is current if it's unclear.
 - **Build only what the current version lists.** You may add an *interface* a later version will implement (ARCHITECTURE.md §4), but no placeholder code, no dead UI and no "while I'm here" features.
 - Follow the 9-step process in ROADMAP.md ("How every version is built and tested"): plan → build → self-check → **run the `qa-tester` subagent** → fix loop → tag `v0.x-rc1` + handoff → **stop** for Adam's manual test → fixes → Adam signs off → tag `v0.x`. Don't start the next version until Adam signs off.
 - Every bug fix (from QA or Adam) comes with a regression test.

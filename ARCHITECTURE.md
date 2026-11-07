@@ -87,6 +87,11 @@ weaksquare-chess-trainer/
 │  │  ├─ lessons.py            # lesson topics, the curated Lichess map, search links (v0.11)
 │  │  ├─ urls.py               # strip web addresses from notes and AI text (v0.11)
 │  │  ├─ plan.py               # the deterministic plan, ticks, carry-over and swap (v0.12)
+│  │  ├─ openings.py           # v0.13: the book, position keys, ranking, line selection and extension
+│  │  ├─ repertoire.py         # v0.13: the repertoire as edges between positions; removal by reachability
+│  │  ├─ opening_sources.py    # v0.13: Wikibooks titles, cleaning and limits; explorer parsing
+│  │  ├─ opening_explain.py    # v0.13: notes' prompts, schemas and validation
+│  │  ├─ opening_practice.py   # v0.13: the per-position schedule, what comes up, Build my repertoire's proposal
 │  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
 │  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
 │  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
@@ -105,6 +110,7 @@ weaksquare-chess-trainer/
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
 │  │                           #   v0.9: game_explain.py (Explain this move, Explain my game)
 │  │                           #   v0.12: plan.py (the training plan), journal.py (the journal, the daily log)
+│  │                           #   v0.13: openings.py, repertoire.py, opening_sources.py, opening_notes.py, opening_practice.py
 │  ├─ adapters/
 │  │  ├─ db/
 │  │  │  ├─ connection.py      # opens puzzles.db + user.db, ATTACH, pragmas
@@ -242,6 +248,36 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-06, v0.13: What building the opening trainer settled
+- Context: the plan left how notes, sessions and the builder fit the existing services open.
+- Decision:
+  - **Reading a screen never does I/O beyond the database.** `OpeningsService.lines` extends and ranks from stored engine and explorer results only. A job (`opening_extend`, prefetch) fills the store, so a line reads the same each time.
+  - **`LlmUsageService.quote_batch` and `run_spent`** make the per-run cap cover a whole run: `quote_batch` before it starts, `run_spent` on each request. Other features pass neither and behave as before.
+  - **A prefetch's split isn't stored.** Each run sends the first requests that fit under the cap, and what's saved drops out of the next plan, so the next run is simply the next plan.
+  - **`practice` sessions live in memory** and attempts in `opening_attempts`, its own table. Nothing joins it to `attempts`, so puzzle stats, ratings, sync and the Coach can't see it. Mistake reasons use `source = 'opening'`, which the puzzle and Coach queries already filter out.
+  - **`Target.reason`** decides what's recorded: a correct answer counts only when a position is due or new, so **All** and walking through a position leave the schedule alone. A miss always counts.
+  - **The bundled book needs `.gitattributes`** (`-text`), or Git on Windows rewrites its line endings and its SHA-256 pin fails on a fresh clone. It lives in `opening_book/`, because `.gitignore` has a `data/` rule.
+  - **`.ws-board` in `components/board.css`** sets board coordinates: chessground's theme colors don't suit ranks on the left edge.
+- Alternatives: a `parent_id` tree for the repertoire, rejected in planning. Asking the AI once per move in a prefetch, rejected by FR-12.7's one request per line.
+- Consequences: an explorer or engine answer stored today shapes lines until it's refreshed (30 days for the explorer). `LlmUsageService.run` still holds its lock across the network call, so a puzzle Explain may wait for one prefetch request.
+
+### 2026-11-06, v0.13 planning: Opening trainer data and sources
+- Context: the opening book has 3,865 lines, median 5 full moves, and no main-line marker. FR-12.4's `parent_id` couldn't hold a position reached by two paths. Adam chose to feed Wikibooks text (CC BY-SA 4.0) to the LLM, and that text is publicly editable.
+- Decision:
+  - The book is bundled and pinned, and imported into `user.db`, because `puzzles.db` is rebuilt on every import.
+  - Repertoire moves are edges keyed by a normalised position (`board.epd(en_passant="legal")`), with no parent column. Removal deletes what's no longer reachable.
+  - Lines are ranked by explorer popularity, otherwise by book lines under a move. Extending past the book is a setting.
+  - Wikibooks text is fetched at runtime, never shipped, and treated as untrusted. Notes record the pages and revisions they used, and show and export the attribution.
+  - Bulk jobs use the background engine, and a batch quote enforces the per-run cap across a run's requests.
+- Alternatives: keeping Wikibooks out of the prompt, which avoids the licence question, rejected by Adam for richer notes. Bundling Wikibooks text, rejected because it would put CC BY-SA content in the repo.
+- Consequences: a new remote host in the privacy section, and estimates count unfetched pages at the size limit, so they run high. Whether AI output based on the text must carry the licence hasn't been settled, so the app takes the cautious route. Fixtures use invented text.
+
+### 2026-11-06, planning: Lichess studies and an analysis board tab become v0.14 and v0.15
+- Context: Adam wants to browse Lichess studies, heart them and keep his place, and wants an analysis board as its own tab. The Lichess API can fetch a study by ID or list one author's, but can't browse or search all of them.
+- Decision: the order is v0.13 opening trainer → v0.14 Lichess studies (FR-13) → v0.15 analysis board tab (FR-14) → v1.0 → v1.1. Studies are found through a Lichess window inside the app, a browser plus a pasted link, or a starter list of links only. The window has no bridge, and is dropped if that can't be proven.
+- Alternatives: reading Lichess's study pages behind the scenes, rejected because it's undocumented, would break when the pages change, and breaks the documented-APIs-only rule. Bundling study content, rejected because authors keep their rights. Keeping studies in v0.13, rejected because of its size, its single QA run and the risk from the window.
+- Consequences: the window is the first remote website the app shows, so its isolation gets tested first. v1.0's fix tracking and Progress page move two versions later. The opening trainer's repertoire schema must allow `source = study`.
 
 ### 2026-11-06, planning: The opening trainer moves before v1.0, and checkpoints gain a schedule and a report
 - Context: Adam wants the opening trainer before the macOS and Linux port, and before v1.0. He also wants Coach reports generated automatically, by game count or on a schedule.

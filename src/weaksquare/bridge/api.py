@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
+import chess
+
 from weaksquare.adapters.desktop import Desktop
 from weaksquare.bridge import dto
 from weaksquare.bridge.dto import AppInfo, Job, PuzzleDbStatus
@@ -34,6 +36,7 @@ from weaksquare.core.llm.defaults import (
     TYPICAL_PROMPT_CHARS,
     PriceRow,
 )
+from weaksquare.core.opening_sources import LICENCE_NAME, LICENCE_URL, page_title, page_url, short_title
 from weaksquare.core.plan import PlanDraft
 from weaksquare.core.preset_suggestion import validate_coach_preset
 from weaksquare.core.reasons import REASONS
@@ -54,11 +57,17 @@ from weaksquare.services.lichess_history import HistoryService
 from weaksquare.services.llm_settings import LlmConfig, LlmSettingsService
 from weaksquare.services.llm_usage import LlmUsageService
 from weaksquare.services.mixer import MixerService
+from weaksquare.services.opening_notes import NoteView, OpeningNotesService
+from weaksquare.services.opening_practice import OpeningPracticeService
+from weaksquare.services.opening_practice import PracticeState as PracticeStateResult
+from weaksquare.services.opening_sources import OpeningSources
+from weaksquare.services.openings import OpeningsService
 from weaksquare.services.plan import PlanService
 from weaksquare.services.presets import Preset, PresetService
 from weaksquare.services.puzzle_db import PuzzleDbService
 from weaksquare.services.puzzle_import import PuzzleImportService
 from weaksquare.services.reasons import ReasonsService
+from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
@@ -115,7 +124,17 @@ class Api:
         coach: CoachService,
         plan: PlanService,
         journal: JournalService,
+        openings: OpeningsService,
+        opening_sources: OpeningSources,
+        opening_notes: OpeningNotesService,
+        opening_practice: OpeningPracticeService,
+        repertoire: RepertoireService,
     ) -> None:
+        self._opening_practice = opening_practice
+        self._opening_notes = opening_notes
+        self._opening_sources = opening_sources
+        self._openings = openings
+        self._repertoire = repertoire
         self._plan = plan
         self._journal = journal
         self._game_puzzles = game_puzzles
@@ -701,7 +720,7 @@ class Api:
     @bridge_call
     def set_llm_feature(
         self,
-        feature: Literal["game_review", "coach"],
+        feature: Literal["game_review", "coach", "openings"],
         provider: Literal["same", "anthropic", "openai"],
         model: str,
         reasoning: Literal["low", "medium", "high"],
@@ -1133,6 +1152,310 @@ class Api:
             a.kind, a.task_id, session, a.remaining, a.mode, a.game_id, lesson, a.prompt, a.weakness_key, a.plan_day_id
         )
 
+    # ---- v0.13: the opening trainer (REQUIREMENTS §18) ---------------------------------------------------
+    @bridge_call
+    def get_opening_book_status(self) -> dto.OpeningBookStatus:
+        s = self._openings.status()
+        return dto.OpeningBookStatus(s.ready, s.lines)
+
+    @bridge_call
+    def start_opening_book_import(self) -> str:
+        return self._openings.start_import()
+
+    @bridge_call
+    def get_opening_families(self, query: str = "") -> list[dto.BookFamily]:
+        return [dto.BookFamily(f.name, f.eco, f.lines) for f in self._openings.families(query)]
+
+    def _opening_scope_dto(self, s: Any) -> dto.OpeningScope:
+        return dto.OpeningScope(s.preset, s.sub_lines, s.max_moves)
+
+    def _opening_settings_dto(self) -> dto.OpeningSettings:
+        src = self._opening_sources
+        ex = src.explorer_settings()
+        return dto.OpeningSettings(
+            self._opening_scope_dto(self._openings.scope()), self._openings.extend_setting(), src.use_wikibooks(),
+            ex.source, list(ex.ratings), src.signed_in(),  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    @bridge_call
+    def get_opening_settings(self) -> dto.OpeningSettings:
+        return self._opening_settings_dto()
+
+    @bridge_call
+    def set_opening_sources(
+        self, use_wikibooks: bool, explorer_source: Literal["lichess", "masters"], explorer_ratings: list[int]
+    ) -> dto.OpeningSettings:
+        """FR-12.2, 12.15: where outside text and popular moves come from."""
+        self._opening_sources.set_use_wikibooks(use_wikibooks)
+        self._opening_sources.set_explorer_settings(explorer_source, explorer_ratings)
+        return self._opening_settings_dto()
+
+    @bridge_call
+    def get_opening_page(self, sans: list[str]) -> dto.OpeningPage:
+        """FR-12.15: the Wikibooks page for a line's moves so far. Only when you open the panel."""
+        moves = validated_sans(sans)
+        title = page_title(moves)
+        common = (short_title(title), LICENCE_NAME, LICENCE_URL)
+        url = page_url(title)
+        if not self._opening_sources.use_wikibooks():
+            return dto.OpeningPage("off", common[0], "", url, common[1], common[2])
+        page = self._opening_sources.fetch_page(title)
+        if page is None:
+            return dto.OpeningPage("unavailable", common[0], "", url, common[1], common[2])
+        return dto.OpeningPage(page.status, common[0], page.text, url, common[1], common[2])  # type: ignore[arg-type]
+
+    @bridge_call
+    def set_opening_settings(
+        self, preset: str, sub_lines: int | None = None, max_moves: int | None = None, extend: bool | None = None
+    ) -> dto.OpeningSettings:
+        self._openings.set_scope(preset, sub_lines, max_moves)
+        if extend is not None:
+            self._openings.set_extend(extend)
+        return self._opening_settings_dto()
+
+    @bridge_call
+    def get_opening_lines(self, family: str) -> dto.OpeningLines:
+        """FR-12.2, 12.13. Never runs the engine: lines grow past the book from stored results only."""
+        v = self._openings.lines(family)
+        lines = [
+            dto.OpeningLine(
+                ln.name, ln.eco, [dto.OpeningLineMove(m.uci, m.san, m.source, m.key_before) for m in ln.moves]
+            )
+            for ln in v.lines
+        ]
+        return dto.OpeningLines(
+            family, lines, v.extend, v.pending, v.engine_ready, self._opening_scope_dto(self._openings.scope())
+        )
+
+    @bridge_call
+    def start_opening_extend(self, family: str) -> str | None:
+        """Continue the lines past the book with Stockfish (FR-12.13). None when there's nothing to do."""
+        return self._openings.start_extend(family)
+
+    @bridge_call
+    def analyze_opening_position(
+        self, fen: str, purpose: Literal["start", "panel", "board"], player: Literal["white", "black"]
+    ) -> dto.Analysis:
+        return analysis_dto(self._openings.analyze(fen, purpose, player))
+
+    # FR-12.5-12.7: notes. Validated before they're stored, and they hold text and shapes, never a move to play.
+    @bridge_call
+    def get_opening_note(
+        self, position_key: str, move_uci: str, kind: Literal["overview", "move"]
+    ) -> dto.OpeningNote | None:
+        view = self._opening_notes.note(position_key, move_uci, kind)
+        return _opening_note_dto(view) if view is not None else None
+
+    @bridge_call
+    def get_opening_note_quote(
+        self, family: str, line_index: int, ply: int | None, regenerate: bool = False
+    ) -> dto.OpeningNoteQuote:
+        q = self._opening_notes.quote_note(family, line_index, ply, regenerate)
+        return dto.OpeningNoteQuote(q.state, q.message, q.typical_usd, q.worst_usd, q.provider, q.model)
+
+    @bridge_call
+    def start_opening_note(self, family: str, line_index: int, ply: int | None, regenerate: bool = False) -> str | None:
+        return self._opening_notes.start_note(family, line_index, ply, regenerate)
+
+    @bridge_call
+    def get_opening_moves_note_quote(self, moves: list[str], regenerate: bool = False) -> dto.OpeningNoteQuote:
+        """FR-12.8: Explain for a line that isn't in the book, such as your reply to a deviation."""
+        q = self._opening_notes.quote_moves_note(moves, regenerate)
+        return dto.OpeningNoteQuote(q.state, q.message, q.typical_usd, q.worst_usd, q.provider, q.model)
+
+    @bridge_call
+    def start_opening_moves_note(self, moves: list[str], regenerate: bool = False) -> str | None:
+        return self._opening_notes.start_moves_note(moves, regenerate)
+
+    @bridge_call
+    def get_opening_overview_key(self, family: str) -> str:
+        return self._openings.root(family).final_key
+
+    @bridge_call
+    def get_opening_prefetch_plan(
+        self, family: str, preset: str, sub_lines: int | None, max_moves: int | None, extend: bool
+    ) -> dto.OpeningPrefetchPlan:
+        p = self._opening_notes.plan(family, preset, sub_lines, max_moves, extend)
+        return dto.OpeningPrefetchPlan(
+            p.lines, p.positions, p.requests, p.stored, p.llm, p.state, p.message, p.input_tokens, p.output_tokens,
+            round(p.typical_usd, 6), round(p.worst_usd, 6), p.run_cap_usd, p.budget_share, p.this_run_requests, p.runs,
+            p.llm_seconds, p.engine_seconds, list(p.warn), p.blurb, self._opening_scope_dto(p.scope), p.extend,
+        )  # fmt: skip
+
+    @bridge_call
+    def start_opening_prefetch(
+        self, family: str, preset: str, sub_lines: int | None, max_moves: int | None, extend: bool
+    ) -> str:
+        """Called only after you Confirm the estimate (FR-8.11, 12.7b)."""
+        return self._opening_notes.start_prefetch(family, preset, sub_lines, max_moves, extend)
+
+    @bridge_call
+    def export_opening_notes(self, family: str) -> str | None:
+        """FR-12.7: a Markdown file in the data folder, which then opens. None when there are no notes."""
+        path = self._opening_notes.export(family)
+        if path is None:
+            return None
+        self._desktop.open_folder(path.parent)
+        return str(path)
+
+    @bridge_call
+    def get_opening_notes_deletion(self, family: str) -> dto.OpeningNotesDeletion:
+        return dto.OpeningNotesDeletion(*self._opening_notes.deletion(family))
+
+    @bridge_call
+    def delete_opening_notes(self, family: str) -> int:
+        return self._opening_notes.delete(family)
+
+    # FR-12.8: "What if they play…?"
+    @bridge_call
+    def get_opening_deviation(
+        self, color: Literal["white", "black"], moves: list[str], their_move: str
+    ) -> dto.OpeningDeviation:
+        d = self._repertoire.what_if(color, moves, their_move)
+        replies = [dto.OpeningDeviationReply(r.uci, r.san, r.score) for r in d.replies]
+        return dto.OpeningDeviation(d.their_uci, d.their_san, d.fen_after, replies, d.game_over)
+
+    @bridge_call
+    def add_opening_deviation(
+        self, color: Literal["white", "black"], moves: list[str], their_move: str, reply: str
+    ) -> dto.RepertoireAdded:
+        r = self._repertoire.add_deviation(color, moves, their_move, reply)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    # FR-12.14: Build my repertoire. The job's message is the proposal's id; nothing is saved before you add it.
+    @bridge_call
+    def start_repertoire_build(self, color: Literal["white", "black"], family: str, limits: dict) -> str:  # type: ignore[type-arg]
+        return self._repertoire.start_build(color, family, limits)
+
+    @bridge_call
+    def get_repertoire_proposal(self, proposal_id: str) -> dto.RepertoireProposal:
+        p = self._repertoire.proposal(proposal_id)
+        moves = [
+            dto.ProposedMove(m.position_key, m.move_uci, m.san, m.source, m.yours, m.depth, m.share, m.already_yours, list(m.flags))
+            for m in p.moves
+        ]  # fmt: skip
+        return dto.RepertoireProposal(p.id, p.color, p.family, moves)  # type: ignore[arg-type]
+
+    @bridge_call
+    def save_repertoire_proposal(self, proposal_id: str) -> dto.RepertoireAdded:
+        r = self._repertoire.save_proposal(proposal_id)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    @bridge_call
+    def discard_repertoire_proposal(self, proposal_id: str) -> None:
+        self._repertoire.discard_proposal(proposal_id)
+
+    # FR-12.9-12.11: Practice and stats. Their own table: nothing reaches a rating, sync or the Coach.
+    @bridge_call
+    def get_practice_summary(self, color: Literal["white", "black"]) -> dto.PracticeSummary:
+        return dto.PracticeSummary(**self._opening_practice.summary(color))
+
+    @bridge_call
+    def get_practice_tolerance(self) -> bool:
+        return self._opening_practice.tolerance_on()
+
+    @bridge_call
+    def set_practice_tolerance(self, on: bool) -> bool:
+        return self._opening_practice.set_tolerance(on)
+
+    @bridge_call
+    def get_practice_branches(
+        self, color: Literal["white", "black"], opening_id: int | None = None
+    ) -> list[dto.PracticeBranch]:
+        """FR-12.10: where a session can be limited to one branch."""
+        return [dto.PracticeBranch(b.position_key, b.label) for b in self._opening_practice.branches(color, opening_id)]
+
+    @bridge_call
+    def start_practice(
+        self,
+        color: Literal["white", "black"],
+        mode: Literal["due", "new", "all"],
+        opening_id: int | None = None,
+        branch: str | None = None,
+    ) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.start(color, opening_id=opening_id, branch=branch, mode=mode))
+
+    @bridge_call
+    def play_practice_move(self, session_id: str, uci: str) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.play(session_id, uci))
+
+    @bridge_call
+    def show_practice_answer(self, session_id: str) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.show_answer(session_id))
+
+    @bridge_call
+    def continue_practice(self, session_id: str) -> dto.PracticeState:
+        return _practice_dto(self._opening_practice.proceed(session_id))
+
+    @bridge_call
+    def end_practice(self, session_id: str) -> None:
+        self._opening_practice.end(session_id)
+
+    @bridge_call
+    def set_practice_reason(self, attempt_id: int, reason: str, note: str | None = None) -> None:
+        self._opening_practice.set_reason(attempt_id, reason, note)
+
+    @bridge_call
+    def get_opening_stats(self, color: Literal["white", "black"]) -> list[dto.OpeningStat]:
+        return [
+            dto.OpeningStat(
+                o.id, o.name, o.eco, o.positions, o.attempts, o.correct, o.due,
+                [dto.OpeningPositionStat(p.position_key, p.label, p.attempts, p.correct, p.due) for p in o.weakest],
+                [dto.OpeningLineStat(ln.name, ln.positions, ln.attempts, ln.correct, ln.due) for ln in o.lines],
+            )
+            for o in self._opening_practice.stats(color)
+        ]  # fmt: skip
+
+    @bridge_call
+    def match_opening_family(self, name: str) -> str | None:
+        """FR-10.58: the opening in the book for a name from one of your games, if there is one."""
+        return self._openings.match_family(name)
+
+    def _repertoire_dto(self, color: str) -> dto.Repertoire:
+        v = self._repertoire.view(color)
+        rows = [
+            dto.RepertoireRow(r.depth, r.edge.position_key, r.edge.move_uci, r.edge.san, r.edge.source, r.edge.is_main, r.yours, r.transposes)
+            for r in v.rows
+        ]  # fmt: skip
+        return dto.Repertoire(v.color, rows, [dto.RepertoireOpeningRow(o.id, o.name, o.eco) for o in v.openings])  # type: ignore[arg-type]
+
+    @bridge_call
+    def get_repertoire(self, color: Literal["white", "black"]) -> dto.Repertoire:
+        return self._repertoire_dto(color)
+
+    @bridge_call
+    def add_repertoire_lines(
+        self, color: Literal["white", "black"], family: str, line_indices: list[int]
+    ) -> dto.RepertoireAdded:
+        r = self._repertoire.add_lines(color, family, line_indices)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    @bridge_call
+    def preview_repertoire_removal(
+        self, color: Literal["white", "black"], position_key: str, move_uci: str
+    ) -> list[str]:
+        """FR-12.4: the moves removing this one would delete, as SAN."""
+        return [e.san for e in self._repertoire.removal_preview(color, position_key, move_uci)]
+
+    @bridge_call
+    def remove_repertoire_move(
+        self, color: Literal["white", "black"], position_key: str, move_uci: str
+    ) -> dto.Repertoire:
+        self._repertoire.remove(color, position_key, move_uci)
+        return self._repertoire_dto(color)
+
+    @bridge_call
+    def set_repertoire_main(self, color: Literal["white", "black"], position_key: str, move_uci: str) -> dto.Repertoire:
+        self._repertoire.set_main(color, position_key, move_uci)
+        return self._repertoire_dto(color)
+
+    @bridge_call
+    def move_repertoire_move(
+        self, color: Literal["white", "black"], position_key: str, move_uci: str, direction: Literal["up", "down"]
+    ) -> dto.Repertoire:
+        self._repertoire.move(color, position_key, move_uci, direction)
+        return self._repertoire_dto(color)
+
     # ---- v0.12: the journal (FR-10.67-10.70) ------------------------------------------------------
     @bridge_call
     def get_journal(self, filters: dict | None = None) -> dto.JournalTimeline:  # type: ignore[type-arg]
@@ -1520,6 +1843,47 @@ def idea_result(i: Any) -> dto.IdeaResult:
 
 def danger_reveal(d: Any) -> dto.DangerReveal:
     return dto.DangerReveal(d.candidate, d.is_safe, d.call, d.best_score, d.candidate_score, list(d.line))
+
+
+def _opening_note_dto(v: NoteView) -> dto.OpeningNote:
+    return dto.OpeningNote(
+        v.position_key, v.move_uci, v.kind,  # type: ignore[arg-type]
+        [dto.OpeningNoteSection(h, t) for h, t in v.note.sections],
+        [dto.ExplainAnnotation(a["kind"], a["orig"], a["dest"], a["color"]) for a in v.note.annotations],
+        v.provider, v.model, v.other_model, [dto.OpeningNoteSource(s.label, s.url) for s in v.sources], v.licence,
+        v.licence_url,
+    )  # fmt: skip
+
+
+def _practice_dto(s: PracticeStateResult) -> dto.PracticeState:
+    return dto.PracticeState(
+        s.session_id, s.state, s.fen, s.color, s.decisions, s.correct, s.wrong, s.lines_clean, s.lines_lost,  # type: ignore[arg-type]
+        s.remaining, s.target_reason, [list(m) for m in s.replies], [list(m) for m in s.correct_moves], s.attempt_id,
+        s.message, s.wrong_fen,
+        dto.ReasonPrompt(s.attempt_id, "opening", None, [dto.ReasonOption(r.key, r.label, r.gap) for r in REASONS])
+        if s.state == "wrong" and s.attempt_id is not None
+        else None,
+        s.position_key,
+        s.line_cut,
+    )  # fmt: skip
+
+
+def validated_sans(sans: Any) -> list[str]:
+    """FR-12.15: a page title is built only from a legal line, so nothing else can reach Wikimedia."""
+    board = chess.Board()
+    out: list[str] = []
+    if not isinstance(sans, list):
+        raise ValidationError("That isn't a line of moves.")
+    for san in sans:
+        try:
+            move = board.parse_san(san) if isinstance(san, str) else None
+        except ValueError:
+            move = None
+        if move is None:
+            raise ValidationError("That isn't a line of moves.")
+        out.append(board.san(move))
+        board.push(move)
+    return out
 
 
 def analysis_dto(a: AnalysisResult) -> dto.Analysis:

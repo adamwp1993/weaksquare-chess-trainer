@@ -35,6 +35,23 @@ import type {
   Job,
   JournalEntry,
   JournalTimeline,
+  BookFamily,
+  OpeningBookStatus,
+  OpeningLines,
+  OpeningNote,
+  OpeningNoteQuote, OpeningNotesDeletion,
+  OpeningDeviation,
+  OpeningPrefetchPlan,
+  OpeningStat,
+  PracticeBranch,
+  PracticeState,
+  PracticeSummary,
+  RepertoireProposal,
+  OpeningPage,
+  OpeningScope,
+  OpeningSettings,
+  Repertoire,
+  RepertoireAdded,
   LadderPreview,
   LlmPrice,
   LlmSettings,
@@ -345,7 +362,7 @@ export interface ApiClient {
   getExplanation(sessionId: number): Promise<Explanation | null>;
   // ---- v0.9: a model per AI feature (FR-1.15) and Game Review AI (§11.4) -----------------------
   /** Game Review's own provider and model, or "same" to follow Explain's; and its reasoning level. */
-  setLlmFeature(feature: "game_review" | "coach", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
+  setLlmFeature(feature: "game_review" | "coach" | "openings", choice: "same" | LlmProvider, model: string, reasoning: LlmSettings["reasoning"]): Promise<LlmSettings>;
   /** Can Explain this move run for one of your analyzed moves, and about what would it cost? */
   getGameMoveQuote(gameId: number, ply: number): Promise<GameAiQuote>;
   /** Explain this move (FR-11.17), as a job. Then call getGameMoveExplanation. */
@@ -439,6 +456,62 @@ export interface ApiClient {
   openPlanLesson(taskId: number, target: string): Promise<void>;
   /** You looked at this move in Game Review (FR-10.64, 10.68). */
   markReviewPly(gameId: number, ply: number): Promise<boolean>;
+  // ---- v0.13: the opening trainer (REQUIREMENTS §18) ----
+  getOpeningBookStatus(): Promise<OpeningBookStatus>;
+  startOpeningBookImport(): Promise<string>;
+  getOpeningFamilies(query: string): Promise<BookFamily[]>;
+  getOpeningSettings(): Promise<OpeningSettings>;
+  setOpeningSources(useWikibooks: boolean, source: "lichess" | "masters", ratings: number[]): Promise<OpeningSettings>;
+  /** FR-12.15: the Wikibooks page for a line's moves so far. Only when you open the panel. */
+  getOpeningPage(sans: string[]): Promise<OpeningPage>;
+  setOpeningSettings(preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean | null): Promise<OpeningSettings>;
+  /** FR-12.13: lines grow past the book only from stored results; this never runs the engine. */
+  getOpeningLines(family: string): Promise<OpeningLines>;
+  getOpeningNote(positionKey: string, moveUci: string, kind: "overview" | "move"): Promise<OpeningNote | null>;
+  /** `ply` null is the opening's overview. A saved note is free unless you're regenerating it. */
+  getOpeningNoteQuote(family: string, lineIndex: number, ply: number | null, regenerate: boolean): Promise<OpeningNoteQuote>;
+  startOpeningNote(family: string, lineIndex: number, ply: number | null, regenerate: boolean): Promise<string | null>;
+  /** FR-12.8: Explain the last move of a line outside the book. */
+  getOpeningMovesNoteQuote(moves: string[], regenerate: boolean): Promise<OpeningNoteQuote>;
+  startOpeningMovesNote(moves: string[], regenerate: boolean): Promise<string | null>;
+  getOpeningOverviewKey(family: string): Promise<string>;
+  getOpeningPrefetchPlan(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): Promise<OpeningPrefetchPlan>;
+  /** Only after you Confirm the estimate (FR-8.11, 12.7b). */
+  startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): Promise<string>;
+  exportOpeningNotes(family: string): Promise<string | null>;
+  /** What Delete notes would remove, so you can be asked first. */
+  getOpeningNotesDeletion(family: string): Promise<OpeningNotesDeletion>;
+  deleteOpeningNotes(family: string): Promise<number>;
+  /** Continue the lines with Stockfish in the background; null when there's nothing to do. */
+  startOpeningExtend(family: string): Promise<string | null>;
+  analyzeOpeningPosition(fen: string, purpose: "start" | "panel" | "board", player: "white" | "black"): Promise<Analysis>;
+  getOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string): Promise<OpeningDeviation>;
+  addOpeningDeviation(color: "white" | "black", moves: string[], theirMove: string, reply: string): Promise<RepertoireAdded>;
+  /** FR-12.14: the job's message is the proposal's id. Nothing is saved until saveRepertoireProposal. */
+  startRepertoireBuild(color: "white" | "black", family: string, limits: { max_moves: number; min_share: number; max_replies: number; max_positions: number }): Promise<string>;
+  getRepertoireProposal(proposalId: string): Promise<RepertoireProposal>;
+  saveRepertoireProposal(proposalId: string): Promise<RepertoireAdded>;
+  discardRepertoireProposal(proposalId: string): Promise<void>;
+  getPracticeSummary(color: "white" | "black"): Promise<PracticeSummary>;
+  getPracticeTolerance(): Promise<boolean>;
+  setPracticeTolerance(on: boolean): Promise<boolean>;
+  /** FR-12.10: what a session can be limited to. */
+  getPracticeBranches(color: "white" | "black", openingId: number | null): Promise<PracticeBranch[]>;
+  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null, branch: string | null): Promise<PracticeState>;
+  playPracticeMove(sessionId: string, uci: string): Promise<PracticeState>;
+  showPracticeAnswer(sessionId: string): Promise<PracticeState>;
+  continuePractice(sessionId: string): Promise<PracticeState>;
+  endPractice(sessionId: string): Promise<void>;
+  setPracticeReason(attemptId: number, reason: ReasonKey, note: string | null): Promise<void>;
+  getOpeningStats(color: "white" | "black"): Promise<OpeningStat[]>;
+  matchOpeningFamily(name: string): Promise<string | null>;
+  getRepertoire(color: "white" | "black"): Promise<Repertoire>;
+  addRepertoireLines(color: "white" | "black", family: string, lineIndices: number[]): Promise<RepertoireAdded>;
+  previewRepertoireRemoval(color: "white" | "black", positionKey: string, moveUci: string): Promise<string[]>;
+  removeRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string): Promise<Repertoire>;
+  setRepertoireMain(color: "white" | "black", positionKey: string, moveUci: string): Promise<Repertoire>;
+  moveRepertoireMove(color: "white" | "black", positionKey: string, moveUci: string, direction: "up" | "down"): Promise<Repertoire>;
+
   getJournal(filters: JournalFilters): Promise<JournalTimeline>;
   addJournalEntry(entry: JournalEntryInput): Promise<JournalEntry>;
   editJournalEntry(entryId: number, text: string, weaknessKey: string | null): Promise<JournalEntry>;

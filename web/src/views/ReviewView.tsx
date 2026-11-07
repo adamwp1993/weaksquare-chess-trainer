@@ -217,7 +217,7 @@ export function ReviewView({
         </Group>
         <Grid>
           <Grid.Col span={{ base: 12, md: 7 }}>
-            <Board fen={m.fen_before} orientation={m.mover} movable={result || busy ? null : m.mover} onMove={tryMove} coordinates={coordinates} shapes={shapes} maxWidth={560} />
+            <Board fen={m.fen_before} orientation={m.mover} movable={result || busy ? null : m.mover} onMove={tryMove} coordinates={coordinates} shapes={shapes} maxWidth={560} fitWindow />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 5 }}>
             <Stack>
@@ -403,6 +403,7 @@ export function ReviewView({
               coordinates={coordinates}
               shapes={shapes}
               maxWidth={560}
+              fitWindow
             />
             {free ? (
               <Stack gap="xs" data-testid="review-free">

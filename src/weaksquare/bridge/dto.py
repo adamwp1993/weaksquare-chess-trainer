@@ -299,7 +299,7 @@ class ReasonPrompt:
     """§7.3: why did you miss it? The chips are `reasons`, in order (keys 1–6)."""
 
     attempt_id: int
-    source: Literal["puzzle", "danger"]
+    source: Literal["puzzle", "danger", "opening"]
     suggested: ReasonKey | None  # pre-highlighted only; saved when you click (FR-5.9)
     reasons: list[ReasonOption]
 
@@ -565,7 +565,7 @@ class LlmFeature:
     """A model per AI feature (FR-1.15, v0.9). Explain's choice is `LlmSettings.provider` and the providers'
     models; every other feature can follow it ('same') or pick its own provider and model."""
 
-    feature: Literal["explain", "game_review", "coach"]
+    feature: Literal["explain", "game_review", "coach", "openings"]
     label: str
     choice: Literal["same", "anthropic", "openai", "none"]  # Explain: its provider; others: 'same' or their own
     model: str  # the feature's own model ('' when it follows Explain or none is picked)
@@ -927,6 +927,289 @@ class GameStats:
     retry_found: int
     retry_tried: int
     sources: list[SourceAccuracy]
+
+
+# ---- v0.13: the opening trainer (REQUIREMENTS §18) --------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OpeningBookStatus:
+    ready: bool
+    lines: int
+
+
+@dataclass(frozen=True)
+class BookFamily:
+    name: str
+    eco: str
+    lines: int
+
+
+@dataclass(frozen=True)
+class OpeningLineMove:
+    uci: str
+    san: str
+    source: str  # book / explorer / engine (FR-12.13)
+    position_key: str  # the position before it
+
+
+@dataclass(frozen=True)
+class OpeningLine:
+    name: str
+    eco: str
+    moves: list[OpeningLineMove]
+
+
+@dataclass(frozen=True)
+class OpeningScope:
+    preset: Literal["light", "standard", "deep", "all", "custom"]
+    sub_lines: int
+    max_moves: int
+
+
+@dataclass(frozen=True)
+class OpeningLines:
+    family: str
+    lines: list[OpeningLine]
+    extend: bool
+    pending: int  # lines that could still grow if Stockfish continued them
+    engine_ready: bool
+    scope: OpeningScope
+
+
+@dataclass(frozen=True)
+class OpeningSettings:
+    scope: OpeningScope
+    extend: bool
+    use_wikibooks: bool  # FR-12.15
+    explorer_source: Literal["lichess", "masters"]  # FR-12.2
+    explorer_ratings: list[int]
+    signed_in: bool  # the explorer needs a Lichess sign-in
+
+
+@dataclass(frozen=True)
+class OpeningPage:
+    """FR-12.15: a Wikibooks page as plain text. Links are built by the app from the title, never from the text."""
+
+    state: Literal["ok", "missing", "unavailable", "off"]
+    label: str
+    text: str
+    url: str
+    licence: str
+    licence_url: str
+
+
+@dataclass(frozen=True)
+class OpeningNoteSection:
+    heading: str
+    text: str
+
+
+@dataclass(frozen=True)
+class OpeningNoteSource:
+    label: str
+    url: str  # built by the app from the page title (FR-12.15)
+
+
+@dataclass(frozen=True)
+class OpeningNote:
+    position_key: str
+    move_uci: str  # empty for an overview
+    kind: Literal["overview", "move"]
+    sections: list[OpeningNoteSection]
+    annotations: list[ExplainAnnotation]
+    provider: str
+    model: str
+    other_model: bool  # saved under a model you've since changed from
+    sources: list[OpeningNoteSource]
+    licence: str
+    licence_url: str
+
+
+@dataclass(frozen=True)
+class OpeningNotesDeletion:
+    total: int
+    shared: int  # of those, the notes on positions other openings use too
+
+
+@dataclass(frozen=True)
+class OpeningNoteQuote:
+    # 'ok', 'cached' (free), or why not: 'not_configured', 'no_model', 'no_price', 'over_budget', 'over_cap'
+    state: str
+    message: str | None
+    typical_usd: float | None
+    worst_usd: float | None
+    provider: str
+    model: str
+
+
+@dataclass(frozen=True)
+class OpeningPrefetchPlan:
+    """FR-12.7b: what the prefetch dialog shows, for the scope it asked about."""
+
+    lines: int
+    positions: int
+    requests: int
+    stored: int  # notes already saved, and so free
+    llm: bool  # false: engine time only
+    state: str  # 'ok', 'split' (over the cap, runs can take it in parts), or why not
+    message: str | None
+    input_tokens: int
+    output_tokens: int
+    typical_usd: float
+    worst_usd: float
+    run_cap_usd: float
+    budget_share: float
+    this_run_requests: int
+    runs: int
+    llm_seconds: float
+    engine_seconds: float
+    warnings: list[str]
+    blurb: str
+    scope: OpeningScope
+    extend: bool
+
+
+@dataclass(frozen=True)
+class OpeningDeviationReply:
+    uci: str
+    san: str
+    score: str
+
+
+@dataclass(frozen=True)
+class OpeningDeviation:
+    """FR-12.8: their move, checked, and Stockfish's best replies."""
+
+    their_uci: str
+    their_san: str
+    fen_after: str
+    replies: list[OpeningDeviationReply]
+    game_over: str | None
+
+
+@dataclass(frozen=True)
+class ProposedMove:
+    position_key: str
+    move_uci: str
+    san: str
+    source: str
+    yours: bool
+    depth: int
+    share: float | None  # of the games at this position, for a popular reply
+    already_yours: bool
+    flags: list[str]  # engine_answer / few_games / bad_eval (FR-12.14)
+
+
+@dataclass(frozen=True)
+class RepertoireProposal:
+    """FR-12.14: nothing is saved until you add it."""
+
+    id: str
+    color: Literal["white", "black"]
+    family: str
+    moves: list[ProposedMove]
+
+
+@dataclass(frozen=True)
+class PracticeBranch:
+    """FR-12.10: a branch a session can be limited to."""
+
+    position_key: str
+    label: str
+
+
+@dataclass(frozen=True)
+class PracticeSummary:
+    due: int
+    new: int
+    positions: int
+
+
+@dataclass(frozen=True)
+class PracticeState:
+    session_id: str
+    state: Literal["your_move", "wrong", "helped", "line_end", "finished"]
+    fen: str
+    color: Literal["white", "black"]
+    decisions: int
+    correct: int
+    wrong: int
+    lines_clean: int
+    lines_lost: int
+    remaining: int
+    target_reason: str | None
+    replies: list[list[str]]  # the opponent's moves just played: [uci, san]
+    correct_moves: list[list[str]]  # [uci, san], only after a miss or help
+    attempt_id: int | None
+    message: str | None
+    wrong_fen: str | None
+    reason_prompt: ReasonPrompt | None  # §7.3, after a wrong move
+    position_key: str  # with correct_moves, finds a stored explanation (FR-12.9)
+    line_cut: bool  # at line_end: the session's limit stopped the line before its end
+
+
+@dataclass(frozen=True)
+class OpeningPositionStat:
+    position_key: str
+    label: str
+    attempts: int
+    correct: int
+    due: bool
+
+
+@dataclass(frozen=True)
+class OpeningLineStat:
+    name: str
+    positions: int
+    attempts: int
+    correct: int
+    due: int
+
+
+@dataclass(frozen=True)
+class OpeningStat:
+    id: int
+    name: str
+    eco: str
+    positions: int
+    attempts: int
+    correct: int
+    due: int
+    weakest: list[OpeningPositionStat]
+    lines: list[OpeningLineStat]
+
+
+@dataclass(frozen=True)
+class RepertoireRow:
+    depth: int
+    position_key: str
+    move_uci: str
+    san: str
+    source: str
+    is_main: bool
+    yours: bool  # your move, not the opponent's
+    transposes: bool  # reaches a position already listed through another move order
+
+
+@dataclass(frozen=True)
+class RepertoireOpeningRow:
+    id: int
+    name: str
+    eco: str
+
+
+@dataclass(frozen=True)
+class Repertoire:
+    color: Literal["white", "black"]
+    rows: list[RepertoireRow]
+    openings: list[RepertoireOpeningRow]
+
+
+@dataclass(frozen=True)
+class RepertoireAdded:
+    added: int
+    kept: int
 
 
 EXPORTED: list[type] = [
@@ -1618,4 +1901,32 @@ EXPORTED += [
     JournalGame,
     JournalTimeline,
     SuggestionView,
+    OpeningBookStatus,
+    BookFamily,
+    OpeningLineMove,
+    OpeningLine,
+    OpeningScope,
+    OpeningLines,
+    OpeningSettings,
+    OpeningPage,
+    OpeningNoteSection,
+    OpeningNoteSource,
+    OpeningNote,
+    OpeningNoteQuote,
+    OpeningNotesDeletion,
+    OpeningPrefetchPlan,
+    OpeningDeviationReply,
+    OpeningDeviation,
+    ProposedMove,
+    RepertoireProposal,
+    PracticeBranch,
+    PracticeSummary,
+    PracticeState,
+    OpeningPositionStat,
+    OpeningLineStat,
+    OpeningStat,
+    RepertoireRow,
+    RepertoireOpeningRow,
+    Repertoire,
+    RepertoireAdded,
 ]

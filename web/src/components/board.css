@@ -1,0 +1,45 @@
+/* Board coordinates, on every board: rank numbers in a strip down the left edge and file letters in a
+ * strip along the bottom, outside the squares.
+ *
+ * chessground's own labels sit inside the edge squares. Even made bold and dark (v0.13-rc1) they were
+ * small, competed with the pieces, and on Game Review the bottom row with the letters was often below
+ * the window, so Adam still saw no markers. Outside the board they use the page's text color, so they
+ * read the same in light and dark mode and nothing on the board can cover them.
+ */
+.ws-board-frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ws-board-frame-coords {
+  grid-template-columns: 1.4rem minmax(0, 1fr);
+  grid-template-rows: auto 1.4rem;
+}
+
+.ws-coords {
+  display: flex;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--mantine-color-text);
+  user-select: none;
+}
+
+.ws-coords span {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ws-coords-ranks {
+  grid-column: 1;
+  grid-row: 1;
+  flex-direction: column;
+}
+
+.ws-coords-files {
+  grid-column: 2;
+  grid-row: 2;
+  flex-direction: row;
+}

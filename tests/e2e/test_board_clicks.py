@@ -53,7 +53,8 @@ def test_click_near_square_corner_after_the_board_moves_down(page) -> None:  # t
     page.get_by_test_id("board").hover()  # chessground has measured the board here
     page.evaluate(
         """() => {
-            const wrap = document.querySelector('[data-testid="board"]').parentElement;
+            // The whole board with its coordinate strips (a grid: a spacer inside it would be a grid cell).
+            const wrap = document.querySelector('[data-testid="board"]').closest('.ws-board-frame');
             const spacer = document.createElement('div');
             spacer.style.height = '30px';
             wrap.parentElement.insertBefore(spacer, wrap);

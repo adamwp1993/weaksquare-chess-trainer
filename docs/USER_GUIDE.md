@@ -68,6 +68,10 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your Lichess puzzle dashboard:** with the **Puzzle history** or **Both** source and while you're signed in, the app reads your per-theme puzzle results for the last 30 days from lichess.org (`/api/puzzle/dashboard/30`). Nothing is sent but the request.
     - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
     - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
+  - **The opening trainer** (v0.13). The book ships with the app, and your repertoire stays in `user.db`:
+    - **Popular moves**, only while you're signed in: when you ask for lines to be continued, run **Build my repertoire**, or save notes with **Extend past the book** on, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
+    - **AI notes** go to your AI provider, as described under AI explanations below. They hold only opening data: the opening's name and ECO code, the line's moves in SAN, positions (FEN), Stockfish's evals and lines, and Wikibooks text. Nothing about you or your games.
+    - **Wikibooks**: opening **Read about this position**, or asking for an AI note, requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -994,6 +998,119 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 - Games analyzed before v0.12 aren't counted as analyzed on any day, because that wasn't recorded then. Games reviewed before v0.12 aren't counted either.
 - The notes you write when you say why you missed something ([mistake reasons](#mistake-reasons)) aren't part of the journal. **Include my notes** sends those.
 
+## The opening trainer
+*Added in v0.13.*
+
+Learn an opening line by line, and keep the lines you want in your own repertoire. **Openings** in the top bar opens it. The first time you open it, the app reads its opening book, which takes a few seconds and needs no internet.
+
+The moves always come from the opening book, from Stockfish, or from what's popular in real games on Lichess, and each one is labelled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
+
+![The opening trainer: an opening's lines, its overview and the board](img/opening-trainer.png)
+
+### Choosing an opening
+1. In the **Book** tab, search by name or ECO code, and pick an opening.
+2. Choose **As White** or **As Black**. The board turns to your side.
+3. Pick a line from the list. The first is the main line.
+
+The book doesn't say which lines matter most, so the app ranks them by how often each move is played when you're signed in to Lichess, and otherwise by how many book lines pass through it. *Main line* means the line that follows the top-ranked move at each step.
+
+| Option | What it does |
+|---|---|
+| **Lines: Light / Standard / Deep / Custom** | How many lines to show. Light is the main line and 1 sub-line, up to 8 moves. Standard is the main line and 3, up to 12. Deep is the main line and 6, up to 16. All is every line the book names under the opening, up to 20 moves: 26 lines cover the Vienna Game's 41 names, and 252 the Sicilian's 400. A name that marks a position partway along a longer line, or one reached by a different move order, doesn't get a line of its own. Custom is your own numbers: 0 to 10 sub-lines and 4 to 20 moves. A long list of lines scrolls in its own box. *All added in v0.13.* |
+| **After the book: Extend past the book / Stop at the book's end** | The book's lines are short, most around 5 moves. **Extend** continues them up to your moves per line, with the most-played move when you're signed in to Lichess and Stockfish's best otherwise. **Stop** uses only book moves, so lines stay short, and moves per line is just an upper limit. |
+| **Use Wikibooks** | On by default. See *Reading about a position*. |
+| **Popular moves from: Lichess games / Masters**, **Rating bands** | Signed in to Lichess only. Which games count when ranking lines and continuing them. Choose bands near your own, so you practise the replies you'll meet. |
+
+With **Extend**, **Continue with Stockfish** runs in the background, and you can keep using the app. What it works out is saved, so a line reads the same next time. Moves it added show a **Stockfish** or **Popular** label. Signed out and without Stockfish installed, lines stop at the book's end.
+
+### Learning a line
+- **Step through:** move forward and back with the buttons, or click a move in the list. The Stockfish panel shows the eval and top lines of the position on the board. If you've already looked at a position, its result is saved and appears straight away.
+- **Play along:** the app plays the other side and you make your side's moves. The moves still to come are hidden. If you play something else, the piece goes back and you get a nudge to try again. **Start again** returns to the first move. Nothing is scored.
+
+### Reading about a position
+**Read about this position** opens the page for your line's moves so far from *Chess Opening Theory* on English Wikibooks. It's fetched only when you open it, then saved on your PC, so it works offline next time. The credit and links under the text go to the page and its licence, CC BY-SA 4.0. Volunteers write these pages, so they vary: main openings have good explanations, and deeper lines may have a sentence or nothing. If Stockfish and the page disagree, trust Stockfish.
+
+A page is found by its exact moves, so a position you reached through another move order may have none, even if it has a page under the usual order.
+
+### AI notes
+With an AI provider set up (see [AI explanations and what they cost](#ai-explanations-and-what-they-cost)) and Stockfish installed:
+- **Get an overview** covers the opening's key ideas, plans for both sides, pawn structures, common traps and what to aim for.
+- **Explain this move** says why the next move is played, what it prepares and what happens if it isn't.
+- Each button shows about what it costs. A saved note is free from then on, works offline, and is reused wherever the same position and move come up, including through another move order.
+- **Regenerate** replaces a note, after showing the cost. A note saved under a model you've since changed from still shows, labelled, for free.
+
+The AI only explains moves that already exist. Nothing it writes can add a move to a line or to your repertoire. It's given the moves, Stockfish's figures and, when available, Wikibooks text, and it's told to go with Stockfish where they disagree.
+
+When a note used a Wikibooks page, it says so under the note, with links to the page and to its CC BY-SA 4.0 licence.
+
+**Save notes for this opening…** gets everything in one go. Choose how much, and before anything is sent you see the number of lines, positions and requests, how many are already saved, the tokens and cost, its share of your remaining budget, and the time. A yellow warning appears above 25% of your remaining budget or 10 minutes. If it's over your per-run cap, it goes in several runs, each under the cap: open the dialog again for the next one. The cap itself never changes.
+
+![Save notes for this opening: the scope, what it costs and how long it takes](img/opening-prefetch.png)
+
+**Confirm** starts it in the background, and you can keep using the app. Cancel at any time: what's finished stays saved. Without an AI provider, the dialog offers Stockfish's evals only. Estimates assume full Wikibooks pages, since none are fetched until you Confirm, so the cost usually comes in lower.
+
+**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes, including those past the book and on its first moves. Both cover the lines the opening shows at Light, Standard, Deep, All, the widest Custom and your current setting, even where a line runs through another opening's moves. A note belongs to a position, so another opening that shares those moves, such as 1. e4, loses it too and would have to ask for it again. **Delete notes** tells you how many notes it would remove and how many of those other openings use, and asks first. A broad opening reaches a long way: King's Knight Opening's lines cover most of the Italian Game's. A note from a line only an earlier, narrower Custom setting showed may be left out. Notes on replies you explained under **What if they play…?** aren't part of an opening, so both leave them out. A note that used no Wikibooks page says so under its text.
+
+Openings has its own model in **Settings → AI**.
+
+### What if they play…?
+On the other side's turn in **Step through**, play their move on the board or type it (`a6` or `a7a6`). The app checks it, and Stockfish gives your best replies with their evals, the best one selected. **Add to my repertoire** stores their move and your reply, along with the moves leading to them, and Practice drills it like any other line. Their move is labelled **You** and Stockfish's choice **Stockfish**. **Explain this reply** says why a reply works, with its cost shown first, and a saved explanation is free.
+
+### Your repertoire
+**Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.
+
+In the **My repertoire** tab:
+- **Bold** moves are yours; the others are the opponent's replies.
+- **Make main** marks the move to prefer at that position. The arrows change the order.
+- **Remove** first lists what it would delete. A position another line still reaches stays.
+- **transposes** marks a move that reaches a position already listed through another move order. It's the same position, so it's stored once.
+
+### Build my repertoire
+**Build my repertoire…** on an opening prepares you for the replies you're likely to meet, for the side you've chosen.
+
+| Option | What it does |
+|---|---|
+| **Moves** | How deep the tree goes, from the start of the game. Default 12. |
+| **Reply share (%)** | A reply must be played in at least this share of games. Default 5%. Lower adds rarer sidelines. |
+| **Replies per position** | The most replies to prepare for at each position. Default 3. |
+| **Positions** | The most positions in the tree. Default 60. It fills up from the opening outward. |
+
+Signed in to Lichess, the replies come from the explorer. Signed out, they come from the book, which covers fewer of them.
+
+Your answer at each position is, in order: one you already have, the book's move, the most-played move if it's within 50 centipawns of Stockfish's best, or Stockfish's best.
+
+It runs in the background, and **nothing is saved until you've looked it over**. Moves that need a look are flagged:
+- **No book or popular answer: Stockfish's best**: nobody's recommendation but the engine's.
+- **Few games to go on**: too few games here to trust what's popular.
+- **You're clearly worse here**: Stockfish doesn't like the position after your answer.
+
+![A proposed repertoire, with moves that need a look flagged](img/opening-build.png)
+
+**Add to my repertoire** saves it, and any move you already had stays as it was. **Discard** throws it away.
+
+### Practice
+**Practice** drills your repertoire. The app plays the other side, picking among your stored replies: toward popular moves if it knows them, otherwise toward your main moves. You play your side.
+
+1. Choose a side, and optionally one opening or one branch. **Branch** lists the moves where your lines split, and is empty until they do.
+2. Choose **Due, then a few new**, **New lines** or **All**.
+3. **Start practice**.
+
+Each session walks from the start of the game to a position that's due, so you see how you get there.
+
+- **Right:** a move stored as yours at that position. With **Accept moves close to the engine's best** on, a move within 30 centipawns also counts, and your line carries on with your stored move. It's off by default, because the point is to learn your line.
+- **Wrong:** you see your line's move, your saved explanation of it if you have one, and Stockfish's view of what you played, which **Step through it on the board** plays out one move at a time, and can say why you missed it. **Continue** plays your move and the line goes on. Practice never asks the AI, so it costs nothing.
+- **Show the answer** counts as missed, like any help.
+
+![Practice after a wrong move: your line, Stockfish's view and why you missed it](img/opening-practice.png)
+
+Each position has its own schedule, the same boxes as Spaced repetition (see [Training modes](#training-modes)): it starts the first time you get it right, moves up each time it's right when due, and goes back to the first box on a miss or help. After the last box it stops coming up, though **All** still includes it. Walking through a position on the way to another doesn't move it through the schedule.
+
+### Opening stats
+The **Stats** tab shows accuracy, positions due and your weakest positions, for each opening and each line. All of it stays on your PC. Nothing here goes to Lichess, affects any rating, or counts in your puzzle stats or Coach reports.
+
+### From the Coach
+**Study this opening** on an opening weakness in a Coach report opens it here. If the book has no opening by that name, it opens a search for it instead.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 
@@ -1012,7 +1129,7 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 
-**Board coordinates:** press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved.
+**Board coordinates:** the numbers run down the left edge of the board and the letters along the bottom, on every board in the app. To hide or show them, press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved. *Changed in v0.13: they sit just outside the board, larger and easier to read, and on Puzzles, Game Review and opening Practice the board shrinks to fit the window so the letters stay in view. On the Openings learn board, scroll down to see the whole board.*
 
 ## Finding out what an option does
 *Added in v0.12.*

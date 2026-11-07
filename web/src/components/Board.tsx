@@ -1,12 +1,13 @@
 import "chessground/assets/chessground.base.css";
 import "chessground/assets/chessground.brown.css";
 import "chessground/assets/chessground.cburnett.css";
+import "./board.css";
 import { Button, Group, Paper, Text } from "@mantine/core";
 import { Chess, type Square } from "chess.js";
 import { Chessground } from "chessground";
 import type { Api } from "chessground/api";
 import type { Key } from "chessground/types";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface BoardProps {
   fen: string;
@@ -21,6 +22,8 @@ export interface BoardProps {
   coordinates?: boolean;
   /** CSS max width; 560 px unless the filters panel is hidden (FR-1.14). */
   maxWidth?: number | string;
+  /** Shrink (to no less than 320 px) so the whole board and its file letters fit under its top edge in the window. */
+  fitWindow?: boolean;
   /** Arrows [from, to], e.g. the engine's best move on the analysis board. Callers check legality first. */
   arrows?: [string, string][];
   /** Explain's annotations (v0.7, FR-8.5): arrows and circles, already validated by the backend (FR-8.4). */
@@ -35,6 +38,8 @@ export interface BoardShape {
 
 const NO_ARROWS: [string, string][] = [];
 const NO_SHAPES: BoardShape[] = [];
+const RANKS = ["1", "2", "3", "4", "5", "6", "7", "8"];
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 const PROMOTIONS: { piece: string; label: string }[] = [
   { piece: "q", label: "Queen" },
@@ -53,6 +58,34 @@ function legalDests(chess: Chess): Map<Key, Key[]> {
   return dests;
 }
 
+const MIN_FIT_PX = 320;
+const FIT_MARGIN_PX = 12;
+
+/** The width at which a square frame starting where `frame` starts ends inside the window, or null when
+ * off. The frame is as tall as it is wide (the rank strip and the file strip are the same size), and what
+ * sits above it doesn't depend on its size, so measuring its top can't feed back into itself. */
+function useWindowFit(frame: RefObject<HTMLDivElement | null>, on: boolean): number | null {
+  const [fit, setFit] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!on || !frame.current) return;
+    const measure = () => {
+      if (!frame.current) return;
+      const top = frame.current.getBoundingClientRect().top + window.scrollY;
+      setFit(Math.max(MIN_FIT_PX, Math.floor(window.innerHeight - top - FIT_MARGIN_PX)));
+    };
+    measure();
+    // Content above the board (the side question, the Analyze panel, a notice) comes and goes.
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [frame, on]);
+  return on ? fit : null;
+}
+
 // The only chessground wrapper in the app (ARCHITECTURE §3 decision 11). It shows positions and
 // reports moves as UCI; whether a move is right is decided by the backend, never here.
 export function Board({
@@ -64,9 +97,12 @@ export function Board({
   hintSquare = null,
   coordinates = true,
   maxWidth = 560,
+  fitWindow = false,
   arrows = NO_ARROWS,
   shapes = NO_SHAPES,
 }: BoardProps) {
+  const frame = useRef<HTMLDivElement>(null);
+  const fit = useWindowFit(frame, fitWindow);
   const el = useRef<HTMLDivElement>(null);
   const cg = useRef<Api | null>(null);
   const onMoveRef = useRef(onMove);
@@ -79,7 +115,7 @@ export function Board({
   useEffect(() => {
     if (!el.current) return;
     cg.current = Chessground(el.current, {
-      coordinates,
+      coordinates: false, // drawn by us, outside the board (see board.css)
       animation: { enabled: true, duration: 250 },
       highlight: { lastMove: true, check: true },
       premovable: { enabled: false },
@@ -98,8 +134,7 @@ export function Board({
       cg.current?.destroy();
       cg.current = null;
     };
-    // Coordinates are drawn when chessground is created, so toggling them re-creates the board.
-  }, [coordinates]);
+  }, []);
 
   useEffect(() => {
     const chess = new Chess(fen);
@@ -132,12 +167,34 @@ export function Board({
         ],
       },
     });
-  }, [fen, orientation, movable, lastMove, hintSquare, coordinates, arrows, shapes]);
+  }, [fen, orientation, movable, lastMove, hintSquare, arrows, shapes]);
+
+  // Rank numbers down the left and file letters along the bottom, outside the squares, so no piece
+  // or square color can hide them (Adam, 2026-11-07: still missing on Game Review inside the board).
+  const white = orientation === "white";
+  const ranks = white ? [...RANKS].reverse() : RANKS;
+  const files = white ? FILES : [...FILES].reverse();
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth, aspectRatio: "1 / 1" }}>
+    <div
+      ref={frame}
+      className={coordinates ? "ws-board-frame ws-board-frame-coords" : "ws-board-frame"}
+      style={{
+        width: "100%",
+        maxWidth: fit === null ? maxWidth : `min(${typeof maxWidth === "number" ? `${maxWidth}px` : maxWidth}, ${fit}px)`,
+      }}
+    >
+      {coordinates && (
+        <div className="ws-coords ws-coords-ranks" data-testid="board-ranks" aria-hidden="true">
+          {ranks.map((r) => (
+            <span key={r}>{r}</span>
+          ))}
+        </div>
+      )}
+      <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1" }}>
       <div
         ref={el}
+        className="ws-board"
         data-testid="board"
         data-hint={hintSquare ?? ""}
         data-arrows={arrows.map(([a, b]) => a + b).join(" ")}
@@ -171,6 +228,14 @@ export function Board({
             ))}
           </Group>
         </Paper>
+      )}
+      </div>
+      {coordinates && (
+        <div className="ws-coords ws-coords-files" data-testid="board-files" aria-hidden="true">
+          {files.map((f) => (
+            <span key={f}>{f}</span>
+          ))}
+        </div>
       )}
     </div>
   );

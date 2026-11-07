@@ -755,6 +755,7 @@ export function TrainerView({
               arrows={arrow ? [arrow] : candidateArrow && !previewPos && !shown && !analysisPos ? [candidateArrow] : undefined}
               shapes={previewPos && linePreview?.shapes ? linePreview.shapes[linePreview.step] : undefined}
               maxWidth={wide ? WIDE_BOARD : 560}
+              fitWindow
             />
           )}
           {showReasons && reasonPrompt && (

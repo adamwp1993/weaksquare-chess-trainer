@@ -13,6 +13,29 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.13] - 2026-11-07
+
+Candidates: v0.13-rc1 (2026-11-07), v0.13-rc2 (2026-11-07), v0.13-rc3 (2026-11-07)
+
+### Added
+- **The opening trainer**: a new **Openings** page with the Lichess opening book. Search for an opening, choose your side and how many lines to show (up to **All**, every line the book has for it), and pick a line. [FR-12.1, FR-12.2, FR-12.7a]
+- **Learn a line** by stepping through it with Stockfish's evals, or switch to **Play along**: the app plays the other side and nudges you if you go wrong. Unscored. [FR-12.3, FR-12.6, FR-12.16]
+- **Extend past the book or stop at its end:** the book's lines are short, so you choose whether Stockfish continues them, in the background. Every move shows where it came from. [FR-12.13]
+- **Popular moves from the Lichess explorer**, when you're signed in: they rank an opening's lines and continue them past the book, from Lichess games in the rating bands you choose, or masters' games. Answers are saved on your PC. [FR-12.2, FR-12.13]
+- **Read about a position:** the Wikibooks *Chess Opening Theory* page for your line's moves, with its credit and licence. It's fetched when you open it and saved on your PC, and a setting turns it off. [FR-12.15]
+- **AI notes on openings:** an overview, and **Explain this move**, grounded in Stockfish and Wikibooks. A saved note is free from then on and works offline, and **Regenerate** replaces one after showing the cost. Export or delete an opening's notes. [FR-12.5, FR-12.6, FR-12.7, FR-12.15]
+- **Save notes for this opening:** prefetch with a scope, seeing the requests, tokens, cost, budget share and time before you Confirm. It runs in the background, can be cancelled, and goes in several runs if it's over your per-run cap. [FR-12.7a, FR-12.7b]
+- **Openings** has its own model in Settings → AI. [FR-1.15]
+- **"What if they play…?":** enter a move for the other side, get Stockfish's best replies, and add the branch to your repertoire. [FR-12.8]
+- **Build my repertoire:** adds the replies you're likely to meet, with one answer for you at each position, and flags what needs a look. Nothing is saved until you've reviewed it. [FR-12.14]
+- **Practice:** drill your repertoire with spaced repetition per position. The app plays the other side, and a miss shows your line and Stockfish's view. New positions come a few at a time. [FR-12.9, FR-12.10]
+- **Opening stats:** accuracy, due positions and weakest positions per opening and line. They stay on your PC and affect no rating. [FR-12.11]
+- **Study this opening** on an opening weakness in a Coach report opens the trainer. [FR-10.58]
+- **Your repertoire:** add lines for White or Black, mark main moves and reorder them. Removing a move keeps any position another line still reaches. [FR-12.4]
+
+### Fixed
+- **Board letters and numbers are readable on every board.** They were small and faint inside the edge squares, and on Game Review and Puzzles the letters were often below the window. They now sit just outside the board, and the Puzzles, Game Review and opening Practice boards fit the window.
+
 ## [v0.12] - 2026-11-06
 Candidates: v0.12-rc1 (2026-11-05), v0.12-rc2 (2026-11-06)
 

@@ -230,7 +230,7 @@ export interface ReasonOption {
 
 export interface ReasonPrompt {
   attempt_id: number;
-  source: "puzzle" | "danger";
+  source: "puzzle" | "danger" | "opening";
   suggested: "didntLook" | "missedResource" | "miscalculated" | "unknownPattern" | "rushed" | "misclick" | null;
   reasons: ReasonOption[];
 }
@@ -465,7 +465,7 @@ export interface LlmModelChoice {
 }
 
 export interface LlmFeature {
-  feature: "explain" | "game_review" | "coach";
+  feature: "explain" | "game_review" | "coach" | "openings";
   label: string;
   choice: "same" | "anthropic" | "openai" | "none";
   model: string;
@@ -1252,4 +1252,245 @@ export interface SuggestionView {
   pending: boolean;
   previous: Record<string, unknown> | null;
   active: boolean;
+}
+
+export interface OpeningBookStatus {
+  ready: boolean;
+  lines: number;
+}
+
+export interface BookFamily {
+  name: string;
+  eco: string;
+  lines: number;
+}
+
+export interface OpeningLineMove {
+  uci: string;
+  san: string;
+  source: string;
+  position_key: string;
+}
+
+export interface OpeningLine {
+  name: string;
+  eco: string;
+  moves: OpeningLineMove[];
+}
+
+export interface OpeningScope {
+  preset: "light" | "standard" | "deep" | "all" | "custom";
+  sub_lines: number;
+  max_moves: number;
+}
+
+export interface OpeningLines {
+  family: string;
+  lines: OpeningLine[];
+  extend: boolean;
+  pending: number;
+  engine_ready: boolean;
+  scope: OpeningScope;
+}
+
+export interface OpeningSettings {
+  scope: OpeningScope;
+  extend: boolean;
+  use_wikibooks: boolean;
+  explorer_source: "lichess" | "masters";
+  explorer_ratings: number[];
+  signed_in: boolean;
+}
+
+export interface OpeningPage {
+  state: "ok" | "missing" | "unavailable" | "off";
+  label: string;
+  text: string;
+  url: string;
+  licence: string;
+  licence_url: string;
+}
+
+export interface OpeningNoteSection {
+  heading: string;
+  text: string;
+}
+
+export interface OpeningNoteSource {
+  label: string;
+  url: string;
+}
+
+export interface OpeningNote {
+  position_key: string;
+  move_uci: string;
+  kind: "overview" | "move";
+  sections: OpeningNoteSection[];
+  annotations: ExplainAnnotation[];
+  provider: string;
+  model: string;
+  other_model: boolean;
+  sources: OpeningNoteSource[];
+  licence: string;
+  licence_url: string;
+}
+
+export interface OpeningNoteQuote {
+  state: string;
+  message: string | null;
+  typical_usd: number | null;
+  worst_usd: number | null;
+  provider: string;
+  model: string;
+}
+
+export interface OpeningNotesDeletion {
+  total: number;
+  shared: number;
+}
+
+export interface OpeningPrefetchPlan {
+  lines: number;
+  positions: number;
+  requests: number;
+  stored: number;
+  llm: boolean;
+  state: string;
+  message: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  typical_usd: number;
+  worst_usd: number;
+  run_cap_usd: number;
+  budget_share: number;
+  this_run_requests: number;
+  runs: number;
+  llm_seconds: number;
+  engine_seconds: number;
+  warnings: string[];
+  blurb: string;
+  scope: OpeningScope;
+  extend: boolean;
+}
+
+export interface OpeningDeviationReply {
+  uci: string;
+  san: string;
+  score: string;
+}
+
+export interface OpeningDeviation {
+  their_uci: string;
+  their_san: string;
+  fen_after: string;
+  replies: OpeningDeviationReply[];
+  game_over: string | null;
+}
+
+export interface ProposedMove {
+  position_key: string;
+  move_uci: string;
+  san: string;
+  source: string;
+  yours: boolean;
+  depth: number;
+  share: number | null;
+  already_yours: boolean;
+  flags: string[];
+}
+
+export interface RepertoireProposal {
+  id: string;
+  color: "white" | "black";
+  family: string;
+  moves: ProposedMove[];
+}
+
+export interface PracticeBranch {
+  position_key: string;
+  label: string;
+}
+
+export interface PracticeSummary {
+  due: number;
+  new: number;
+  positions: number;
+}
+
+export interface PracticeState {
+  session_id: string;
+  state: "your_move" | "wrong" | "helped" | "line_end" | "finished";
+  fen: string;
+  color: "white" | "black";
+  decisions: number;
+  correct: number;
+  wrong: number;
+  lines_clean: number;
+  lines_lost: number;
+  remaining: number;
+  target_reason: string | null;
+  replies: string[][];
+  correct_moves: string[][];
+  attempt_id: number | null;
+  message: string | null;
+  wrong_fen: string | null;
+  reason_prompt: ReasonPrompt | null;
+  position_key: string;
+  line_cut: boolean;
+}
+
+export interface OpeningPositionStat {
+  position_key: string;
+  label: string;
+  attempts: number;
+  correct: number;
+  due: boolean;
+}
+
+export interface OpeningLineStat {
+  name: string;
+  positions: number;
+  attempts: number;
+  correct: number;
+  due: number;
+}
+
+export interface OpeningStat {
+  id: number;
+  name: string;
+  eco: string;
+  positions: number;
+  attempts: number;
+  correct: number;
+  due: number;
+  weakest: OpeningPositionStat[];
+  lines: OpeningLineStat[];
+}
+
+export interface RepertoireRow {
+  depth: number;
+  position_key: string;
+  move_uci: string;
+  san: string;
+  source: string;
+  is_main: boolean;
+  yours: boolean;
+  transposes: boolean;
+}
+
+export interface RepertoireOpeningRow {
+  id: number;
+  name: string;
+  eco: string;
+}
+
+export interface Repertoire {
+  color: "white" | "black";
+  rows: RepertoireRow[];
+  openings: RepertoireOpeningRow[];
+}
+
+export interface RepertoireAdded {
+  added: number;
+  kept: number;
 }

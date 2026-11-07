@@ -311,14 +311,37 @@ class EngineService:
         over = game_over_text(board, player)
         if over is not None or not any(board.legal_moves):
             return Analysis(fen, (), over or "No legal moves")
+        lines = self.analyse_lines(board, multipv=multipv, key=key, gen=gen)
+        if lines is None:
+            return self.superseded(fen)
+        return Analysis(fen, tuple(self._line(board, line, player) for line in lines))
+
+    def analyse_lines(
+        self, board: chess.Board, *, multipv: int = MULTIPV, key: Any = None, gen: int | None = None
+    ) -> list[EngineLine] | None:
+        """Raw White-relative lines on the interactive engine (v0.13: the opening trainer stores them, so one
+        result serves either side's view). None when a newer request replaced this one. A finished position
+        returns no lines."""
+        if board.is_game_over(claim_draw=False) or not any(board.legal_moves):
+            return []
         if not board.is_valid():  # defence in depth: callers validate first (FR-7.6)
             raise ValidationError("That position isn't legal.")
         with self._engine_lock:
             if key is not None and gen is not None and not self._is_latest(key, gen):
-                return Analysis(fen, (), superseded=True)
+                return None
             client = self._client()
-            lines = client.analyse(board.copy(), self.settings().think_s, multipv)
-        return Analysis(fen, tuple(self._line(board, line, player) for line in lines))
+            return client.analyse(board.copy(), self.settings().think_s, multipv)
+
+    def analysis_of(self, board: chess.Board, lines: list[EngineLine], player: Color) -> Analysis:
+        """Stored raw lines as one side's view (v0.13)."""
+        over = game_over_text(board, player)
+        if over is not None or not any(board.legal_moves):
+            return Analysis(board.fen(), (), over or "No legal moves")
+        return Analysis(board.fen(), tuple(self._line(board, line, player) for line in lines))
+
+    @staticmethod
+    def superseded(fen: str) -> Analysis:
+        return Analysis(fen, (), superseded=True)
 
     @staticmethod
     def _line(board: chess.Board, line: EngineLine, player: Color) -> AnalysisLine:

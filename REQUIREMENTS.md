@@ -689,7 +689,7 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
 
 ## 14. Milestones → see ROADMAP.md
 
-The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.0, each a stop-and-test checkpoint. Code structure is in **ARCHITECTURE.md**. How the earlier milestones map onto the versions:
+The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.1, each a stop-and-test checkpoint. Code structure is in **ARCHITECTURE.md**. How the earlier milestones map onto the versions:
 
 | Earlier milestone | Versions |
 |---|---|
@@ -780,19 +780,19 @@ Estimated cost per request at these prices (my token estimates; actual usage get
 
 ## 18. Opening trainer (v0.13; moved from v2.0 by Adam, 2026-11-06)
 
-Learn an opening line by line with grounded explanations, build your own repertoire (including your answers to the opponent's sidelines), then drill it. **The moves always come from a book, the engine or you, never from the LLM.** The LLM only explains moves that already exist and have been validated, exactly as in §9.2.
+Learn an opening line by line with grounded explanations, build your own repertoire (including your answers to the opponent's sidelines), then drill it. **The moves always come from a book, the engine, real-game data from the Lichess explorer or you, never from the LLM.** The LLM only explains moves that already exist and have been validated, exactly as in §9.2.
 
 ### 18.1 Where the lines come from
-- **FR-12.1** **Opening book:** the Lichess `chess-openings` dataset (ECO code, name, PGN; about 3,500 named lines; CC0 public domain). It's bundled with the app or downloaded through `adapters/http.py` with a pinned hash, and imported into its own table. Every line is validated with python-chess at import. Lines are matched by **position (FEN)**, not move order, so transpositions are recognized.
-- **FR-12.2** **Main lines of an opening:** the named sub-lines under the chosen opening in the book. You can also add popularity data from the **Lichess opening explorer** (masters and Lichess games, the most common replies with their frequencies). The explorer API needs a Lichess token (it returns 401 without one, checked 2026-11-01). It's used only when you're signed in (§8.1), with responses cached locally, and the trainer still works without it. The prefetch scope is configurable (FR-12.7a).
-- **FR-12.3** **Engine:** Stockfish evaluates every position you study (the interactive engine, ARCHITECTURE §3 decision 12), and suggests replies to deviations (FR-12.8). All positions and move lists are validated before they're sent (FR-7.6).
+- **FR-12.1** **Opening book:** the Lichess `chess-openings` dataset (ECO code, name, PGN; 3,865 named lines when checked on 2026-11-06, median 5 full moves; CC0 public domain). It's bundled with the app, pinned by commit and SHA-256, and imported into its own table in `user.db`, on first opening the Openings page and again only when the bundled version changes. Every line is validated with python-chess at import. Lines are matched by **position**, not move order, so transpositions are recognized. The position key is the FEN without move counters, with an en passant square only if the capture is legal.
+- **FR-12.2** **Main lines of an opening:** the named sub-lines under the chosen opening in the book. You can also add popularity data from the **Lichess opening explorer** (masters and Lichess games, the most common replies with their frequencies). The book has no main-line marker, so lines are ranked by explorer popularity when available, otherwise by how many book lines sit under a move, then fewer moves, then name. The **main line** follows the top-ranked move at each step, and sub-lines are the next-ranked branches. The explorer API needs a Lichess token (it returns 401 without one, checked 2026-11-01). It's used only when you're signed in (§8.1), with responses cached locally, and the trainer still works without it. The prefetch scope is configurable (FR-12.7a).
+- **FR-12.3** **Engine:** Stockfish evaluates every position you study (the interactive engine, ARCHITECTURE §3 decision 12), and suggests replies to deviations (FR-12.8). Bulk jobs (prefetch, FR-12.7, and Build my repertoire, FR-12.14) use the background engine so they don't hold up the position you're looking at. All positions and move lists are validated before they're sent (FR-7.6).
 
 ### 18.2 Repertoire
-- **FR-12.4** **Your repertoire** is a tree of positions per color (White and Black). Each move records its **source**: book / engine / you. You pick openings and lines to add, and can remove, reorder or mark a move as "main" or "sideline". Stored in `user.db` (new migration): `repertoire_nodes(id, color, parent_id, fen_before, move_uci, san, source, is_main, created_at)`, unique per (color, fen_before, move). A transposition reuses the same position.
+- **FR-12.4** **Your repertoire** is a tree of positions per color (White and Black). Each move records its **source**: book / engine / explorer / you, plus study from v0.14 (FR-13.11). You pick openings and lines to add, and can remove, reorder or mark a move as "main" or "sideline". Stored in `user.db` (new migration): `repertoire_nodes(id, color, position_key, move_uci, san, source, is_main, sort_order, created_at)`, unique per (color, position_key, move). Moves are edges between positions, not a strict tree, so a transposition reuses the same position. Removing a line deletes only the moves no longer reachable from the starting position.
 
 ### 18.3 Learn mode (walks you through lines)
-- **FR-12.5** **Overview first:** opening a line starts with an overview of the opening: its key ideas, typical plans for both sides, pawn structures, common traps and what to aim for. It's generated by the LLM from grounded context (the opening name, ECO code, the line's SAN moves and the engine evaluations of its key positions). It's shown as escaped text (FR-8.7), and every square or move it mentions is validated before it's drawn (FR-8.4/8.5).
-- **FR-12.6** **Step through the line:** the board walks the moves one at a time, with forward and back controls. Each move has an **Explain** button: why this move, what it prepares, and what happens if you don't play it, grounded in the engine's top lines for that position. Without an LLM configured, the step-through still works with engine evals and lines only.
+- **FR-12.5** **Overview first:** opening a line starts with an overview of the opening: its key ideas, typical plans for both sides, pawn structures, common traps and what to aim for. It's generated by the LLM from grounded context (the opening name, ECO code, the line's SAN moves, the engine evaluations of its key positions, and Wikibooks text when available, FR-12.15). It's shown as escaped text (FR-8.7), and every square or move it mentions is validated before it's drawn (FR-8.4/8.5).
+- **FR-12.6** **Step through the line:** the board walks the moves one at a time, with forward and back controls. Each move has an **Explain** button: why this move, what it prepares, and what happens if you don't play it, grounded in the engine's top lines for that position and Wikibooks text when available (FR-12.15). Without an LLM configured, the step-through still works with engine evals, lines and the Wikibooks panel. A switch changes to play-along (FR-12.16).
 - **FR-12.7** **Store everything, ask once:** overviews and move explanations are saved in `opening_notes` in `user.db`, keyed by position (FEN), move, kind (overview / move), provider, model and prompt version. They're reused across lines and transpositions, and the LLM is never asked twice for the same thing.
   - **Prefetch when you start an opening:** the trainer offers to fetch the overview and every move explanation for its main lines in one go. Requests are batched one line per request to keep cost down. It shows the pre-run estimate with **Confirm**, and the per-run cap, monthly budget and hard `max_tokens` all apply (§9.3). Already-stored items are skipped and not charged.
   - **FR-12.7a** **Prefetch scope (configurable, with suggested presets):**
@@ -802,9 +802,10 @@ Learn an opening line by line with grounded explanations, build your own reperto
     | **Light** | main line + 1 | 8 | a quick look, lowest cost |
     | **Standard** (default) | main line + 3 | 12 | the usual choice |
     | **Deep** | main line + 6 | 16 | serious study of one opening |
+    | **All** | every book line of the opening | 20 | the whole book for one opening (Adam, 2026-11-07) |
     | **Custom** | 0–10 | 4–20 | your own numbers |
 
-    The global default is in the opening-trainer settings, and you can change it for each prefetch in the prefetch dialog.
+    The global default is in the opening-trainer settings, and you can change it for each prefetch in the prefetch dialog. Moves per line is an upper limit: few book lines reach 12 moves (FR-12.13), and the dialog shows the real counts. **All** shows Deep's lines, then every other book line named under the opening, so each name is on a line (a name partway along a longer line, or reached by transposition, isn't repeated). Only the opening's own names count, so a broad opening such as King's Pawn Game doesn't take in every 1. e4 line. A long list scrolls in its own box.
   - **FR-12.7b** **What it will cost and how long it takes:** the prefetch dialog updates as you change the scope. Before you confirm, it shows:
     - **How much:** the number of lines, positions and LLM requests, with how many are already stored (and so free).
     - **Usage:** estimated input and output tokens and cost, computed from the `llm_prices` table for your provider and model (never hard-coded), plus what share of the remaining monthly budget that is. It says plainly whether the run fits under the per-run cap (FR-8.12).
@@ -819,7 +820,7 @@ Learn an opening line by line with grounded explanations, build your own reperto
   - Stockfish gives your best replies (MultiPV, default top 3, with evals), and you pick one, by default the best.
   - **Explain** says why that reply works, the same way as FR-12.6.
   - The branch (their move, your reply, the engine evals and the explanation) is **stored** in your repertoire with `source = you` / `engine`, and is drilled in Practice like any other line.
-  - Engine results are cached by position and depth, so revisiting a branch costs nothing.
+  - Engine results are cached by position, think time and engine, so revisiting a branch costs nothing.
 
 ### 18.4 Practice mode (quizzes you on your lines)
 - **FR-12.9** **Drill your repertoire:** the app plays the opponent's moves from your repertoire, picking among the stored replies (weighted toward main lines, and by explorer popularity when it's available). You play your side.
@@ -830,4 +831,65 @@ Learn an opening line by line with grounded explanations, build your own reperto
 - **FR-12.11** **Stats:** per opening and per line, the accuracy, due count and weakest positions. All local, never synced to Lichess, and no effect on any rating.
 
 ### 18.5 Privacy and cost
-- **FR-12.12** The LLM receives only opening data: names, ECO codes, SAN moves of book or repertoire lines, engine evals and lines. It never receives anything about you or your games. Explorer requests send positions to Lichess with your token, to the documented API only, and appear in the User Guide's privacy section. Prefetch estimates reuse the §9.3 machinery. A typical opening (overview plus 4 lines of about 12 moves) is roughly 20–30k input tokens and 8–12k output tokens in total. The v0.13 plan replaces this with figures from the `llm_prices` table, never hard-coded.
+- **FR-12.12** The LLM receives only opening data: names, ECO codes, SAN moves of book or repertoire lines, engine evals and lines, and Wikibooks text (FR-12.15). It never receives anything about you or your games. Explorer requests send positions to Lichess with your token, to the documented API only, and Wikibooks requests send a line's moves to Wikimedia as a page title. Both appear in the User Guide's privacy section. Prefetch estimates reuse the §9.3 machinery. A typical opening (overview plus 4 lines of about 12 moves) is roughly 20–30k input tokens and 8–12k output tokens in total. The v0.13 plan replaces this with figures from the `llm_prices` table, never hard-coded.
+
+### 18.6 Added at v0.13 planning (Adam, 2026-11-06)
+- **FR-12.13** **Short book lines (configurable):** a setting, also on the prefetch dialog, with two choices.
+  - **Extend past the book** (default): after the book ends, continue with the explorer's most-played move, otherwise Stockfish's best, up to the preset length.
+  - **Stop at the book's end:** only book moves, and the preset length is an upper limit.
+  - Every move in a line shows its source.
+- **FR-12.14** **Build my repertoire:** a background job that takes a color, an opening and limits (default 12 moves, replies with at least 5% of games, up to 3 replies per position, up to 60 positions), all editable, and proposes a tree.
+  - **Opponent replies** come from the explorer when you're signed in, otherwise from the book.
+  - **Your answer** at each position, in order: one you already have, the book, the explorer's most-played if within 50 cp of the engine's best, the engine's best.
+  - **Gaps are flagged:** an answer that fell back to the engine, too few games, or a bad eval.
+  - You review the tree before anything is saved, and it never overwrites a move you stored.
+- **FR-12.15** **Wikibooks:** text from the *Chess Opening Theory* pages on English Wikibooks (CC BY-SA 4.0), found by the line's SAN path.
+  - **Fetching:** at runtime through `adapters/http.py`, saved locally, never bundled, and never before you Confirm a prefetch. A setting turns all use off.
+  - **In the prompt:** cut to a size limit per page and per request, with URLs and reference sections removed, and marked as untrusted reference text. The engine outranks it when they disagree. A missing page, an offline run or the setting turned off means engine-only grounding, and the note says so.
+  - **Shown to you:** a panel with the text as plain text, attributed and linked, so concepts work with no AI key.
+  - **Attribution:** a note records the pages and revisions it used and shows *Based in part on Wikibooks: page, CC BY-SA 4.0, may be adapted*, with links built by the app. Exported notes carry the same notice and are marked CC BY-SA 4.0.
+- **FR-12.16** **Play-along:** a switch in Learn mode. The app plays the other side and you make your moves, with a retry and a nudge if you go wrong. Nothing is scored. Lichess studies reuse this screen (FR-13.8).
+
+## 19. Lichess studies (v0.14; Adam, 2026-11-06)
+
+Find Lichess studies, work through them in the app and keep your place. The Lichess API has no way to browse or search all public studies, only to fetch one by ID or list one author's (checked 2026-11-06), so finding them uses the three ways below.
+
+### 19.1 The Studies tab and finding studies
+- **FR-13.1** **Studies tab:** two parts, **My studies** and **Find studies**. My studies lists everything you've added, with its title, author, your progress (such as "Chapter 3 of 8") and **Continue**, and can be filtered by favorites, in progress or finished.
+- **FR-13.2** **Three ways to find a study:** the Lichess window (FR-13.3), your browser and a pasted link (FR-13.5), and the starter list (FR-13.6).
+- **FR-13.3** **Lichess window:** opens the real `lichess.org/study` pages in a separate window inside the app, so you can browse and search them. This is the only place the app shows a remote website.
+  - It has **no bridge** and no access to your settings, tokens, database or files. A test proves it.
+  - It stays on `lichess.org`. Any other link opens in your normal browser.
+  - It's isolated from the app's own page, and the app never reads what you type in it.
+  - If this isolation can't be proven when v0.14 starts, the window is dropped and FR-13.5 and FR-13.6 remain. Adam decides what happens next.
+- **FR-13.4** **Add this study:** a button on the Lichess window, active only on a study page. The app takes only the study's ID from the address, then downloads it as in FR-13.7.
+- **FR-13.5** **Browser and paste:** **Open Lichess** opens the study list in your normal browser. You paste a study's link, or its ID, into the tab. Anything that isn't a Lichess study address gets a clear message and no request is made.
+- **FR-13.6** **Starter list:** a list that ships with the app, filterable by opening. It holds **only links, titles and authors, never study content**. A study is downloaded only when you pick it. It changes only with new app versions, and Adam approves its first contents.
+
+### 19.2 Your copy of a study
+- **FR-13.7** **Download and store:** `GET /api/study/{id}.pgn` through `adapters/http.py`, one request at a time, documented API only. Public studies need no sign-in; a private study of yours works only if your Lichess sign-in allows reading it, and otherwise says why it can't.
+  - Every move is validated with python-chess. An illegal chapter is rejected with a clear message and the rest are kept.
+  - Comments are untrusted: rendered as escaped plain text. An arrow or highlight naming an invalid square is dropped.
+  - The copy is stored in `user.db` (new migration), so a saved study works offline and stays if its author later deletes it.
+  - **Check for updates** downloads the latest version and shows what changed before replacing your copy. Your place is kept when that chapter still exists.
+  - **Rights:** the study's author keeps their rights. Study content is never bundled, shipped or shared by the app, and each copy stays on your PC. The study's title, author and a link back are always shown.
+
+### 19.3 Working through a study
+- **FR-13.8** **Play along:** using the same screen as Learn mode (§18.3). The chapter's text, arrows and highlighted squares appear as you go. In an interactive (`gamebook`) chapter you play the moves yourself; other chapters step forward and back. Alternative moves are shown as branches. Nothing here is scored or affects any rating, and how closely it matches the Lichess screen is decided at v0.14 planning, against Adam's test study.
+- **FR-13.9** **Hearts:** you can heart any of your studies and filter by them. They're stored only in the app, because the API has no way to like a study, so they never appear on Lichess.
+- **FR-13.10** **Your place:** the app saves your chapter and move in each study as you go. **Continue** returns you there, and you can restart a chapter or the study. Progress is local and never sent to Lichess.
+- **FR-13.11** **Add to my repertoire:** adds a chapter's or study's lines to your repertoire (FR-12.4) with `source = study`, for the color you choose. Positions are matched by FEN, so a transposition reuses its position. If a study's move conflicts with one you have there, you choose which stays. The added lines are drilled in Practice (FR-12.9).
+
+### 19.4 Privacy
+- **FR-13.12** Study text is never sent to an LLM. Requests to Lichess and everything the Lichess window loads appear in the User Guide's privacy section.
+
+## 20. Analysis board tab (v0.15; Adam, 2026-11-06)
+
+A board of its own for setting up positions, importing PGNs and exploring. It reuses the existing analysis board (FR-7.7, FR-11.34).
+
+- **FR-14.1** **The tab:** an **Analysis** tab that opens at the starting position and needs no puzzle or game.
+- **FR-14.2** **Set up a position:** drag pieces onto or off the board, choose the side to move and castling rights, or paste a FEN. An illegal or impossible position gets a clear message and never reaches Stockfish (FR-7.6).
+- **FR-14.3** **Import a PGN:** paste a PGN and step through it with the controls and keys Game Review uses. A bad PGN gets a clear message and changes nothing on the board. Comments show as escaped plain text. The game isn't added to your library.
+- **FR-14.4** **Explore:** move for either side, legal moves only, and the lines you try stay as branches you can move between. The interactive engine shows the eval, top 3 lines and an arrow for its best move. Popular replies come from the Lichess explorer (FR-12.2) when you're signed in, and are skipped cleanly otherwise.
+- **FR-14.5** **Nothing counts:** moves here are never scored, and never change puzzles, stats, your game library or Coach reports. Nothing here goes to an LLM.
+- **FR-14.6** **Open in Analysis tab:** a button on the existing analysis boards, in puzzles and Game Review, opens the current position in this tab.
