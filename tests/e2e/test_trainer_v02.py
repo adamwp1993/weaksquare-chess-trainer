@@ -133,7 +133,7 @@ def test_shortcut_list(page) -> None:  # type: ignore[no-untyped-def]
 
 def test_coordinates_toggle_by_key_and_menu_is_saved(page) -> None:  # type: ignore[no-untyped-def]
     start(page)
-    coords = page.locator("[data-testid=board] coords")
+    coords = page.locator("[data-testid=board-files]")
     assert coords.count() > 0
     page.keyboard.press("c")
     page.wait_for_timeout(200)

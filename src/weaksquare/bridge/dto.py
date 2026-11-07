@@ -962,7 +962,7 @@ class OpeningLine:
 
 @dataclass(frozen=True)
 class OpeningScope:
-    preset: Literal["light", "standard", "deep", "custom"]
+    preset: Literal["light", "standard", "deep", "all", "custom"]
     sub_lines: int
     max_moves: int
 

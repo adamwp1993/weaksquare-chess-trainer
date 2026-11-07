@@ -275,11 +275,12 @@ export function PrefetchDialog({
             size="xs"
             disabled={running}
             value={scope.preset}
-            onChange={(v) => setScope({ ...scope, preset: v as OpeningScope["preset"] })}
+            onChange={(v) => setScope({ ...scope, preset: v as OpeningScope["preset"], sub_lines: Math.min(scope.sub_lines, 10) })}
             data={[
               { value: "light", label: "Light" },
               { value: "standard", label: "Standard" },
               { value: "deep", label: "Deep" },
+              { value: "all", label: "All" },
               { value: "custom", label: "Custom" },
             ]}
             data-testid="prefetch-preset"

@@ -1016,7 +1016,7 @@ The book doesn't say which lines matter most, so the app ranks them by how often
 
 | Option | What it does |
 |---|---|
-| **Lines: Light / Standard / Deep / Custom** | How many lines to show. Light is the main line and 1 sub-line, up to 8 moves. Standard is the main line and 3, up to 12. Deep is the main line and 6, up to 16. Custom is your own numbers: 0 to 10 sub-lines and 4 to 20 moves. |
+| **Lines: Light / Standard / Deep / Custom** | How many lines to show. Light is the main line and 1 sub-line, up to 8 moves. Standard is the main line and 3, up to 12. Deep is the main line and 6, up to 16. All is every line the book names under the opening, up to 20 moves: 26 lines cover the Vienna Game's 41 names, and 252 the Sicilian's 400. A name that marks a position partway along a longer line, or one reached by a different move order, doesn't get a line of its own. Custom is your own numbers: 0 to 10 sub-lines and 4 to 20 moves. A long list of lines scrolls in its own box. *All added in v0.13.* |
 | **After the book: Extend past the book / Stop at the book's end** | The book's lines are short, most around 5 moves. **Extend** continues them up to your moves per line, with the most-played move when you're signed in to Lichess and Stockfish's best otherwise. **Stop** uses only book moves, so lines stay short, and moves per line is just an upper limit. |
 | **Use Wikibooks** | On by default. See *Reading about a position*. |
 | **Popular moves from: Lichess games / Masters**, **Rating bands** | Signed in to Lichess only. Which games count when ranking lines and continuing them. Choose bands near your own, so you practise the replies you'll meet. |
@@ -1049,7 +1049,7 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 
 **Confirm** starts it in the background, and you can keep using the app. Cancel at any time: what's finished stays saved. Without an AI provider, the dialog offers Stockfish's evals only. Estimates assume full Wikibooks pages, since none are fetched until you Confirm, so the cost usually comes in lower.
 
-**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes, including those past the book and on its first moves. Both cover the lines the opening shows at Light, Standard, Deep, the widest Custom and your current setting, even where a line runs through another opening's moves. A note belongs to a position, so another opening that shares those moves, such as 1. e4, loses it too and would have to ask for it again. **Delete notes** tells you how many notes it would remove and how many of those other openings use, and asks first. A broad opening reaches a long way: King's Knight Opening's lines cover most of the Italian Game's. A note from a line only an earlier, narrower Custom setting showed may be left out. Notes on replies you explained under **What if they play…?** aren't part of an opening, so both leave them out. A note that used no Wikibooks page says so under its text.
+**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes, including those past the book and on its first moves. Both cover the lines the opening shows at Light, Standard, Deep, All, the widest Custom and your current setting, even where a line runs through another opening's moves. A note belongs to a position, so another opening that shares those moves, such as 1. e4, loses it too and would have to ask for it again. **Delete notes** tells you how many notes it would remove and how many of those other openings use, and asks first. A broad opening reaches a long way: King's Knight Opening's lines cover most of the Italian Game's. A note from a line only an earlier, narrower Custom setting showed may be left out. Notes on replies you explained under **What if they play…?** aren't part of an opening, so both leave them out. A note that used no Wikibooks page says so under its text.
 
 Openings has its own model in **Settings → AI**.
 
@@ -1129,7 +1129,7 @@ The **Stats** tab shows accuracy, positions due and your weakest positions, for 
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 
-**Board coordinates:** the numbers run down the left edge of the board and the letters along the bottom, on every board in the app. To hide or show them, press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved. *Changed in v0.13: they're larger and easier to read.*
+**Board coordinates:** the numbers run down the left edge of the board and the letters along the bottom, on every board in the app. To hide or show them, press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved. *Changed in v0.13: they sit just outside the board, larger and easier to read, and on Game Review the board shrinks to fit the window so the letters stay in view.*
 
 ## Finding out what an option does
 *Added in v0.12.*

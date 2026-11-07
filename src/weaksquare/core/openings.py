@@ -30,7 +30,16 @@ MAX_LINE_PLIES = 40  # 20 moves, the highest Custom scope (FR-12.7a)
 
 
 # FR-12.7a: sub-lines besides the main line, and moves per line (an upper limit, FR-12.13).
-PRESETS: dict[str, tuple[int, int]] = {"light": (1, 8), "standard": (3, 12), "deep": (6, 16)}
+# All (Adam, 2026-11-07): every book line in the opening. No opening has this many branches (the Sicilian
+# has 278), so selection runs until the book has no move left to show. 20 moves holds the longest book line
+# (18 moves, in the Ruy Lopez).
+ALL_SUB_LINES = 1000
+PRESETS: dict[str, tuple[int, int]] = {
+    "light": (1, 8),
+    "standard": (3, 12),
+    "deep": (6, 16),
+    "all": (ALL_SUB_LINES, 20),
+}
 CUSTOM_SUB_LINES = (0, 10)
 CUSTOM_MOVES = (4, 20)
 
@@ -48,7 +57,7 @@ def validate_scope(preset: object, sub_lines: object = None, max_moves: object =
         subs, moves = PRESETS[str(preset)]
         return OpeningScope(str(preset), subs, moves)
     if preset != "custom":
-        raise ValidationError("Choose Light, Standard, Deep or Custom.")
+        raise ValidationError("Choose Light, Standard, Deep, All or Custom.")
     for value in (sub_lines, max_moves):
         if not isinstance(value, int) or isinstance(value, bool):
             raise ValidationError("Custom needs whole numbers for sub-lines and moves per line.")
@@ -328,6 +337,39 @@ def select_lines(
         used.update((m.key_before, m.uci) for m in full)
         chosen.append(full)
     return [Line(*_label(ix, ln, root), ln) for ln in chosen]
+
+
+def all_lines(
+    ix: BookIndex,
+    family_lines: Sequence[BookLine],
+    root: BookLine,
+    max_moves: int,
+    popularity: PopularityOf = _no_popularity,
+) -> list[Line]:
+    """All (Adam, 2026-11-07): Deep's lines first, in their order, then every other book line named in this
+    opening. A named line already shown, the start of a longer one, or reaching a shown position by another
+    move order is left out. Only the opening's own names count: King's Pawn Game's root is 1. e4, and every
+    line from there would be the whole 1. e4 book."""
+    deep_subs, _ = PRESETS["deep"]
+    shown = select_lines(ix, root, deep_subs, max_moves, popularity)
+    max_plies = min(MAX_LINE_PLIES, max(1, max_moves) * 2)
+    reached = {k for ln in shown for k in ln.keys}
+    starts = {tuple(m.uci for m in ln.moves[:i]) for ln in shown for i in range(len(ln.moves) + 1)}
+    own = sorted(family_lines, key=lambda b: (-len(b.moves), b.name, b.moves))  # longest first, so starts are skipped
+    extra: list[Line] = []
+    for book in own:
+        moves = tuple(book.moves[:max_plies])
+        if moves in starts or book.keys[len(moves)] in reached:
+            continue
+        line = tuple(
+            LineMove(uci, san, SOURCE_BOOK, key)
+            for uci, san, key in zip(moves, book.sans[:max_plies], book.keys, strict=False)
+        )
+        reached.update(book.keys[: len(moves) + 1])
+        starts.update(moves[:i] for i in range(len(moves) + 1))
+        extra.append(Line(*_label(ix, line, root), line))
+    extra.sort(key=lambda ln: tuple(m.san for m in ln.moves))  # related variations next to each other
+    return shown + extra
 
 
 def extend_line(line: Line, max_moves: int, next_move: NextMove) -> Line:

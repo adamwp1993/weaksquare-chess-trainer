@@ -1279,7 +1279,7 @@ export interface OpeningLine {
 }
 
 export interface OpeningScope {
-  preset: "light" | "standard" | "deep" | "custom";
+  preset: "light" | "standard" | "deep" | "all" | "custom";
   sub_lines: number;
   max_moves: number;
 }

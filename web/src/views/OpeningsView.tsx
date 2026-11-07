@@ -43,6 +43,7 @@ import { EnginePanel } from "../components/EnginePanel";
 import { NoteBlock, PrefetchDialog } from "../components/OpeningNotes";
 import { BuildDialog, OpeningStatsTab, PracticeTab, WhatIfPanel } from "../components/OpeningPractice";
 import { OptionInfo } from "../components/OptionInfo";
+import { useSteadyHeight } from "../components/useSteadyHeight";
 import { checkMove, linePositions, moveLabel, sideToMove, sourceLabel, START_FEN } from "../state/openingLine";
 import { useJob } from "../state/useJob";
 
@@ -131,6 +132,9 @@ function LearnBoard({
   const takeBoardMove = useCallback(() => setBoardMove(null), []);
   // A refused move leaves its piece where it was dropped: redrawing the board puts it back.
   const refuseBoardMove = useCallback(() => setRedraws((n) => n + 1), []);
+  // The panels below the step buttons change height as you step; keep the page still under the mouse.
+  const side = useRef<HTMLDivElement>(null);
+  useSteadyHeight(side, mode);
   return (
     <Group align="flex-start" gap="lg" wrap="wrap" data-testid="learn-board" data-tries={tries}>
       <div style={{ flex: "1 1 360px", maxWidth: 560 }}>
@@ -147,7 +151,7 @@ function LearnBoard({
           shapes={mode === "step" && note ? note.annotations.map((a) => ({ orig: a.orig, dest: a.dest, color: a.color as "green" })) : undefined}
         />
       </div>
-      <Stack gap="sm" style={{ flex: "1 1 300px", minWidth: 280 }}>
+      <Stack ref={side} gap="sm" data-testid="learn-side" style={{ flex: "1 1 300px", minWidth: 280 }}>
         <Group gap={6} data-option-group>
           <SegmentedControl
             size="xs"
@@ -434,6 +438,7 @@ function ScopeControls({
             { value: "light", label: "Light" },
             { value: "standard", label: "Standard" },
             { value: "deep", label: "Deep" },
+            { value: "all", label: "All" },
             { value: "custom", label: "Custom" },
           ]}
           data-testid="opening-preset"
@@ -623,21 +628,26 @@ function OpeningDetail({
       )}
       {view && (
         <Stack gap={4} data-testid="opening-lines">
-          {view.lines.map((ln, i) => (
-            <Group key={`${ln.name}-${i}`} gap="xs" justify="space-between" wrap="nowrap">
-              <UnstyledButton onClick={() => setSelected(i)} data-testid={`opening-line-${i}`} style={{ flex: 1, fontWeight: i === selected ? 700 : 400, fontSize: 14 }}>
-                {i === 0 ? "Main line: " : ""}
-                {ln.name}
-                <Text span size="xs" c="dimmed">
-                  {" "}
-                  ({Math.ceil(ln.moves.length / 2)} moves)
-                </Text>
-              </UnstyledButton>
-              <Button size="compact-xs" variant="subtle" onClick={() => add([i])} data-testid={`opening-add-${i}`}>
-                Add to my repertoire
-              </Button>
-            </Group>
-          ))}
+          {/* All can list hundreds of lines (the Sicilian has 278): they scroll in a box. */}
+          <ScrollArea.Autosize mah={360} type="auto" offsetScrollbars data-testid="opening-lines-scroll">
+            <Stack gap={4}>
+              {view.lines.map((ln, i) => (
+                <Group key={`${ln.name}-${i}`} gap="xs" justify="space-between" wrap="nowrap">
+                  <UnstyledButton onClick={() => setSelected(i)} data-testid={`opening-line-${i}`} style={{ flex: 1, fontWeight: i === selected ? 700 : 400, fontSize: 14 }}>
+                    {i === 0 ? "Main line: " : ""}
+                    {ln.name}
+                    <Text span size="xs" c="dimmed">
+                      {" "}
+                      ({Math.ceil(ln.moves.length / 2)} moves)
+                    </Text>
+                  </UnstyledButton>
+                  <Button size="compact-xs" variant="subtle" onClick={() => add([i])} data-testid={`opening-add-${i}`}>
+                    Add to my repertoire
+                  </Button>
+                </Group>
+              ))}
+            </Stack>
+          </ScrollArea.Autosize>
           <Button
             size="xs"
             variant="light"

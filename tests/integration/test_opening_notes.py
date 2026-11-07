@@ -353,6 +353,14 @@ def test_each_preset_changes_the_counts(api: Any, preset: str, lines: int) -> No
     assert plan(api, preset).lines == lines
 
 
+def test_all_plans_every_line_the_opening_shows_at_all(api: Any) -> None:
+    configure(api)
+    p = plan(api, "all")
+    assert p.scope.preset == "all"
+    shown = api._openings.lines(FAMILY, validate_scope("all"), extend=False).lines
+    assert p.lines > 7 and p.lines == len(shown)
+
+
 def test_custom_is_clamped_in_the_plan(api: Any) -> None:
     configure(api)
     p = plan(api, "custom", subs=99, moves=1)

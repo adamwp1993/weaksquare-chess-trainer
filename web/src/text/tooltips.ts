@@ -5,7 +5,7 @@ export const TOOLTIPS = {
   // ---- the opening trainer (v0.13) ----
   "ai.model.openings": "The model for the opening trainer's overviews and move explanations. Follow Puzzle Explain, or pick your own. A saved note is reused, so a cheaper model here costs little for a whole opening.",
   "openings.color": "Which side you're learning this opening for. The board turns to that side, and a repertoire is kept separately for White and Black.",
-  "openings.scope": "How many lines to show. Light: the main line and 1 sub-line, up to 8 moves. Standard: main line and 3, up to 12. Deep: main line and 6, up to 16. Custom: your own numbers. Few book lines are that long, so moves per line is an upper limit.",
+  "openings.scope": "How many lines to show. Light: the main line and 1 sub-line, up to 8 moves. Standard: main line and 3, up to 12. Deep: main line and 6, up to 16. All: every line in the book for this opening, up to 20. Custom: your own numbers. Few book lines are that long, so moves per line is an upper limit.",
   "openings.subLines": "Sub-lines besides the main line, from 0 to 10.",
   "openings.maxMoves": "The most moves a line can have, counted from the start of the game, from 4 to 20.",
   "openings.extend": "The opening book's lines are short, most around 5 moves. Extend past the book: Stockfish continues them up to your moves per line, and each move is labelled with where it came from. Stop at the book's end: only moves from the book, and lines stay short.",

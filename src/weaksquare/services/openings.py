@@ -21,6 +21,7 @@ from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineLine, EngineNotInstalled, validate_fen
 from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.openings import (
+    ALL_SUB_LINES,
     CUSTOM_MOVES,
     CUSTOM_SUB_LINES,
     MAX_LINE_PLIES,
@@ -32,6 +33,7 @@ from weaksquare.core.openings import (
     Family,
     Line,
     OpeningScope,
+    all_lines,
     board_of,
     build_index,
     extend_line,
@@ -269,7 +271,11 @@ class OpeningsService:
 
     def _book_lines(self, family: object, sub_lines: int, max_moves: int) -> list[Line]:
         root = self.root(family)
-        return select_lines(self._data()[1], root, sub_lines, max_moves, self._popularity)
+        book, ix = self._data()
+        if sub_lines >= ALL_SUB_LINES:
+            own = [ln for ln in book if ln.family == root.family]
+            return all_lines(ix, own, root, max_moves, self._popularity)
+        return select_lines(ix, root, sub_lines, max_moves, self._popularity)
 
     def lines(self, family: object, scope: OpeningScope | None = None, extend: bool | None = None) -> LinesView:
         s = scope or self.scope()

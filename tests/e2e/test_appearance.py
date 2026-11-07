@@ -35,7 +35,7 @@ CONTRAST_JS = r"""
     const text = n.textContent.trim();
     const el = n.parentElement;
     if (!text || !el || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-    if (el.closest("[disabled], [data-disabled], [aria-disabled='true'], cg-board, coords")) continue;
+    if (el.closest("[disabled], [data-disabled], [aria-disabled='true'], cg-board")) continue;
     const s = getComputedStyle(el);
     const fg = parse(s.color);
     const bg = bgOf(el);

@@ -802,9 +802,10 @@ Learn an opening line by line with grounded explanations, build your own reperto
     | **Light** | main line + 1 | 8 | a quick look, lowest cost |
     | **Standard** (default) | main line + 3 | 12 | the usual choice |
     | **Deep** | main line + 6 | 16 | serious study of one opening |
+    | **All** | every book line of the opening | 20 | the whole book for one opening (Adam, 2026-11-07) |
     | **Custom** | 0–10 | 4–20 | your own numbers |
 
-    The global default is in the opening-trainer settings, and you can change it for each prefetch in the prefetch dialog. Moves per line is an upper limit: few book lines reach 12 moves (FR-12.13), and the dialog shows the real counts.
+    The global default is in the opening-trainer settings, and you can change it for each prefetch in the prefetch dialog. Moves per line is an upper limit: few book lines reach 12 moves (FR-12.13), and the dialog shows the real counts. **All** shows Deep's lines, then every other book line named under the opening, so each name is on a line (a name partway along a longer line, or reached by transposition, isn't repeated). Only the opening's own names count, so a broad opening such as King's Pawn Game doesn't take in every 1. e4 line. A long list scrolls in its own box.
   - **FR-12.7b** **What it will cost and how long it takes:** the prefetch dialog updates as you change the scope. Before you confirm, it shows:
     - **How much:** the number of lines, positions and LLM requests, with how many are already stored (and so free).
     - **Usage:** estimated input and output tokens and cost, computed from the `llm_prices` table for your provider and model (never hard-coded), plus what share of the remaining monthly budget that is. It says plainly whether the run fits under the per-run cap (FR-8.12).

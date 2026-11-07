@@ -49,6 +49,24 @@ def test_presets_change_how_many_lines_show(page: Any) -> None:
     page.get_by_test_id("opening-sub-lines").wait_for()
 
 
+def test_all_shows_every_line_the_mock_has_in_a_scroll_box(page: Any) -> None:
+    """Adam (2026-11-07): "can we add all of them?" All lists every book line of the opening."""
+    openings(page)
+    pick(page, "Italian Game")
+    rows = page.get_by_test_id("opening-lines").locator("[data-testid^=opening-line-]")
+    standard = rows.count()
+    page.get_by_test_id("opening-preset").get_by_text("All", exact=True).click()
+    for _ in range(50):
+        if rows.count() > standard:
+            break
+        page.wait_for_timeout(100)
+    assert rows.count() > standard
+    box = page.get_by_test_id("opening-lines-scroll").bounding_box()
+    assert box is not None and box["height"] <= 361
+    page.get_by_test_id("opening-prefetch").click()
+    page.get_by_test_id("prefetch-preset").get_by_text("All", exact=True).wait_for()
+
+
 def test_extending_labels_stockfish_moves_and_stop_removes_them(page: Any) -> None:
     openings(page)
     pick(page, "Italian Game")
@@ -156,7 +174,7 @@ def test_every_option_has_a_tooltip(page: Any) -> None:
 def test_coordinates_show_here_too(page: Any) -> None:
     openings(page)
     pick(page, "Italian Game")
-    assert page.locator("[data-testid=board] coords").count() > 0
+    assert page.locator("[data-testid=board-files]").count() > 0
 
 
 # ---- Wikibooks and the explorer's settings (FR-12.2, 12.15) ---------------------------------------------

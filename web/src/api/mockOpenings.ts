@@ -25,7 +25,7 @@ import type {
 
 type Color = "white" | "black";
 
-const PRESETS: Record<"light" | "standard" | "deep", [number, number]> = { light: [1, 8], standard: [3, 12], deep: [6, 16] };
+const PRESETS: Record<"light" | "standard" | "deep" | "all", [number, number]> = { light: [1, 8], standard: [3, 12], deep: [6, 16], all: [1000, 20] };
 
 const ITALIAN = "e4 e5 Nf3 Nc6 Bc4";
 const CARO = "e4 c6";

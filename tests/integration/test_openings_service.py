@@ -89,6 +89,30 @@ def test_each_preset_gives_the_right_counts(book: Any, preset: str, subs: int, m
     assert all(len(ln.moves) <= moves * 2 for ln in lines)
 
 
+@pytest.mark.parametrize("family", ["Vienna Game", "Sicilian Defense", "Ruy Lopez", "King's Pawn Game"])
+def test_all_shows_every_book_line_of_the_opening(book: Any, services: Any, family: str) -> None:
+    """Adam (2026-11-07): Standard showed 4 Vienna lines, and the ones he studied elsewhere weren't there.
+    All shows every line the book has for the opening. A named line that transposes into another (the same
+    position by another move order) is reached there, so it's checked by position."""
+    scope = validate_scope("all")
+    assert scope.max_moves == 20
+    shown = book.lines(family, scope, extend=False).lines
+    reached = {k for ln in shown for k in ln.keys}
+    named = [ln for ln in OpeningBookRepo(services.db).lines() if ln.family == family]
+    assert named
+    for ln in named:
+        assert ln.final_key in reached, f"{ln.name} is missing"
+    moves = [tuple(m.uci for m in ln.moves) for ln in shown]
+    assert len(moves) == len(set(moves)), "a line is listed twice"
+
+
+def test_all_lists_far_more_than_deep(book: Any) -> None:
+    deep = book.lines("Vienna Game", validate_scope("deep"), extend=False).lines
+    every = book.lines("Vienna Game", validate_scope("all"), extend=False).lines
+    assert len(deep) == 7 and len(every) > 20
+    assert every[: len(deep)] == deep  # the same order: All only adds lines after Deep's
+
+
 def test_custom_is_clamped_to_its_limits() -> None:
     assert validate_scope("custom", 99, 99) == validate_scope("custom", 10, 20)
     low = validate_scope("custom", -3, 1)
