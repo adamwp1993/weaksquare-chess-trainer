@@ -21,6 +21,7 @@ from weaksquare.core.opening_practice import (
     Sources,
     parse_their_move,
     path_sources,
+    path_to,
     propose,
 )
 from weaksquare.core.openings import Line, position_key
@@ -55,6 +56,8 @@ class Repo(Protocol):
     def add_opening(
         self, color: str, name: str, eco: str, root_key: str, root_moves: Sequence[str], created_at: str
     ) -> None: ...
+
+    def delete_opening(self, opening_id: int) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -205,14 +208,33 @@ class RepertoireService:
         if reply is None or reply not in after_their.legal_moves:
             raise ValidationError("That reply isn't legal here.")
         ucis = [str(m) for m in moves]  # type: ignore[attr-defined]
-        pairs = path_sources(ucis, self._openings.is_book_move)
+        pairs = path_sources(ucis, self._openings.is_book_move, self._openings.stored_source)
         stored = self._openings.engine_lines(position_key(after_their), False) or []
         best = {ln.pv[0] for ln in stored if ln.pv}
         reply_source = "engine" if reply.uci() in best else "you"
         pairs.extend([(their.uci(), "you"), (reply.uci(), reply_source)])
         new = line_to_moves(pairs)
         added = self._repo.add_moves(c, new, self._now())
+        self._list_opening_of(c, [uci for uci, _ in pairs])
         return AddResult(added, len(new) - added)
+
+    def _list_opening_of(self, color: str, ucis: Sequence[str]) -> None:
+        """A branch belongs to the deepest opening the book names along it, so Stats and the Practice menu can show it."""
+        board = chess.Board()
+        on_path = {position_key(board)}
+        named = []
+        for uci in ucis:
+            board.push(chess.Move.from_uci(uci))
+            key = position_key(board)
+            on_path.add(key)
+            line = self._openings.name_of(key)
+            if line is not None:
+                named.append(line)
+        for line in reversed(named):
+            root = self._openings.root(line.family)
+            if root.final_key in on_path:
+                self._repo.add_opening(color, root.family, root.eco, root.final_key, root.moves, self._now())
+                return
 
     # ---- Build my repertoire (FR-12.14) ---------------------------------------------------------------------
 
@@ -331,7 +353,12 @@ class RepertoireService:
     def remove(self, color: object, key: object, move_uci: object) -> int:
         """Remove a move and whatever only it could reach (FR-12.4). Returns how many moves went."""
         gone = self.removal_preview(color, key, move_uci)
-        self._repo.delete(check_color(color), gone)
+        c = check_color(color)
+        self._repo.delete(c, gone)
+        left = self._repo.edges(c)
+        for opening in self._repo.openings(c):
+            if path_to(left, opening.root_key) is None:  # its moves have gone, so it's no longer in your repertoire
+                self._repo.delete_opening(opening.id)
         return len(gone)
 
     def set_main(self, color: object, key: object, move_uci: object) -> None:

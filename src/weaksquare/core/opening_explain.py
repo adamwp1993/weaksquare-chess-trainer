@@ -135,7 +135,9 @@ def _facts(f: PositionFacts) -> str:
 def _reference(text: str) -> str:
     if not text:
         return "No reference text is available. Use only the moves and engine figures."
-    clean = text.replace(REF_OPEN, "").replace(REF_CLOSE, "")
+    clean = text
+    while REF_OPEN in clean or REF_CLOSE in clean:  # again and again: taking one out can join the pieces of another
+        clean = clean.replace(REF_OPEN, "").replace(REF_CLOSE, "")
     return f"{REF_OPEN}\n{clean}\n{REF_CLOSE}"
 
 

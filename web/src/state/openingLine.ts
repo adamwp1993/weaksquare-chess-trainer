@@ -43,7 +43,6 @@ export function sourceLabel(source: string): string {
   if (source === "engine") return "Stockfish";
   if (source === "explorer") return "Popular";
   if (source === "you") return "You";
-  if (source === "study") return "Study";
   return "Book";
 }
 

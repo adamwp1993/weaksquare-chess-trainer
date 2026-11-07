@@ -1106,6 +1106,14 @@ class RepertoireProposal:
 
 
 @dataclass(frozen=True)
+class PracticeBranch:
+    """FR-12.10: a branch a session can be limited to."""
+
+    position_key: str
+    label: str
+
+
+@dataclass(frozen=True)
 class PracticeSummary:
     due: int
     new: int
@@ -1903,6 +1911,7 @@ EXPORTED += [
     OpeningDeviation,
     ProposedMove,
     RepertoireProposal,
+    PracticeBranch,
     PracticeSummary,
     PracticeState,
     OpeningPositionStat,

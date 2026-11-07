@@ -60,7 +60,12 @@ def finish(api: Any, job: str) -> None:
 
 def test_the_settings_list_both_features_with_their_models_and_spend(api: Any) -> None:
     s = ok(api.get_llm_settings())
-    assert [f["feature"] for f in s["features"]] == ["explain", "game_review", "coach", "openings"]  # coach: v0.10, openings: v0.13
+    assert [f["feature"] for f in s["features"]] == [
+        "explain",
+        "game_review",
+        "coach",
+        "openings",
+    ]  # coach: v0.10, openings: v0.13
     gr = s["features"][1]
     assert (gr["choice"], gr["provider"], gr["ready"]) == ("same", "none", False)
     configure(api)

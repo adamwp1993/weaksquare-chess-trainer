@@ -173,6 +173,7 @@ ALLOWLIST = {
     "save_repertoire_proposal",  # v0.13
     "discard_repertoire_proposal",  # v0.13
     "get_practice_summary",  # v0.13: FR-12.9, 12.10
+    "get_practice_branches",  # v0.13: FR-12.10
     "get_practice_tolerance",  # v0.13
     "set_practice_tolerance",  # v0.13
     "start_practice",  # v0.13

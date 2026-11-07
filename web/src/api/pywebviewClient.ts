@@ -63,6 +63,7 @@ import type {
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
+  PracticeBranch,
   PracticeState,
   PracticeSummary,
   RepertoireProposal,
@@ -667,8 +668,12 @@ export class PywebviewClient implements ApiClient {
     return this.call<boolean>("set_practice_tolerance", on);
   }
 
-  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null) {
-    return this.call<PracticeState>("start_practice", color, mode, openingId);
+  getPracticeBranches(color: "white" | "black", openingId: number | null) {
+    return this.call<PracticeBranch[]>("get_practice_branches", color, openingId);
+  }
+
+  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null, branch: string | null) {
+    return this.call<PracticeState>("start_practice", color, mode, openingId, branch);
   }
 
   playPracticeMove(sessionId: string, uci: string) {

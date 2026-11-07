@@ -61,6 +61,11 @@ export function NoteView({ note }: { note: OpeningNote }) {
           , <Anchor size="xs" href={note.licence_url} target="_blank" rel="noreferrer">{note.licence}</Anchor>, may be adapted.
         </Text>
       )}
+      {note.sources.length === 0 && (
+        <Text size="xs" c="dimmed" data-testid="opening-note-engine-only">
+          Based on Stockfish's figures only: no Wikibooks page was used.
+        </Text>
+      )}
     </Stack>
   );
 }

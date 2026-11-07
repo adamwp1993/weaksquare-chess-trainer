@@ -28,16 +28,24 @@ MAX_PAGE_CHARS = 8000  # what's kept and shown for one page
 MAX_PROMPT_PAGE_CHARS = 3000  # what one page may add to a prompt
 MAX_PROMPT_CHARS = 8000  # what all pages together may add to a prompt
 
-URL = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
+# Any scheme, a bare //, www., a domain with a path, or a domain on a common ending. A bare "word.word" isn't a link:
+# chess text has plenty, such as "1.e4" and "Nf3.Then".
+URL = re.compile(
+    r"(?:\b[a-z][a-z0-9+.-]*://|(?<![:\w/])//|\bwww\.)\S+"
+    r"|\b[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}/\S*"
+    r"|\b[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|edu|gov|info|io|co|uk)\b",
+    re.IGNORECASE,
+)
 HEADING = re.compile(r"^=+\s*(.+?)\s*=+\s*$")
 DROP_SECTIONS = ("theory table", "statistics", "references", "see also", "external links", "further reading", "notes")
 
 
 def page_title(sans: Sequence[str]) -> str:
-    """'Chess Opening Theory/1. e4/1...e5/2. Nf3', the book's own naming."""
+    """'Chess Opening Theory/1. e4/1...e5/2. Nf3', the book's own naming, which leaves out + and #."""
     parts = [WIKI_ROOT]
-    for i, san in enumerate(sans):
+    for i, raw in enumerate(sans):
         number = i // 2 + 1
+        san = raw.rstrip("+#")
         parts.append(f"{number}. {san}" if i % 2 == 0 else f"{number}...{san}")
     return "/".join(parts)
 

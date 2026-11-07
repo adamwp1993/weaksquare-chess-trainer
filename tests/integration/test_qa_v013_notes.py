@@ -91,10 +91,6 @@ def test_a_marker_in_the_page_is_removed() -> None:
     assert out.count(REF_CLOSE) == 1 and out.count(REF_OPEN) == 1
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B4: the markers are removed in one pass, so a nested one re-forms and closes the reference block early",
-    strict=True,
-)
 @pytest.mark.parametrize(
     "planted",
     [
@@ -125,11 +121,6 @@ def test_links_are_stripped_from_a_page(url: str) -> None:
     assert "evil" not in out.lower()
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B15: the URL filter knows only http(s):// and www., so ftp:// and bare domain links reach the prompt "
-    "and the panel (FR-12.15: URLs removed)",
-    strict=True,
-)
 @pytest.mark.parametrize("url", ["ftp://evil.example/x", "evil.example/landing", "//evil.example/x"])
 def test_other_forms_of_link_are_stripped_too(url: str) -> None:
     assert "evil" not in clean_page(f"Before {url} after")
@@ -163,11 +154,6 @@ def test_titles_and_links_for_moves_with_no_mark(sans: list[str], title: str) ->
     assert short_title(title).endswith(sans[-1])
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B20: Wikibooks names its pages without + or # (checked against the live API, 2026-11-06), so a title "
-    "with them finds no page, for that move and every move after it, and the credit link for Qh4# is a 403",
-    strict=True,
-)
 @pytest.mark.parametrize(
     ("sans", "title"),
     [
@@ -245,10 +231,6 @@ def test_regenerate_gets_the_newest_stored_note_and_credits_only_pages_it_used(a
     assert len(api._opening_notes.note(key, "", "overview").sources) == 1
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B16: the plan says Regenerate uses the latest text, but a page saved less than 30 days ago is reused",
-    strict=True,
-)
 def test_regenerate_uses_the_latest_wikibooks_text(api: Any) -> None:
     configure(api)
     api._openings.set_scope("custom", 0, 4)
@@ -270,11 +252,6 @@ def test_regenerate_uses_the_latest_wikibooks_text(api: Any) -> None:
 # ---- run-level money ----------------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B3: a truncated or refused answer is billed but left out of the run's spend: the job reports $0.0000 and "
-    "the run-level check counts nothing for it",
-    strict=True,
-)
 def test_a_truncated_answer_counts_in_what_the_run_spent(api: Any) -> None:
     configure(api)
     p = provider(api)
@@ -311,11 +288,6 @@ def test_a_provider_failure_mid_run_keeps_what_finished(api: Any) -> None:
     assert api._opening_notes.note(key, "", "overview") is not None
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B14: a run that keeps failing tells you its answers 'didn't come back in the expected form; asking again "
-    "costs only those', even when the provider refused the key or the network is down",
-    strict=True,
-)
 def test_a_provider_failure_says_what_went_wrong(api: Any) -> None:
     configure(api)
     p = provider(api)
@@ -387,11 +359,6 @@ def test_extend_on_a_run_sends_no_more_requests_than_the_dialog_said(api: Any) -
     assert len(provider(api).requests) <= p.this_run_requests
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B6: a book line that ends in mate can't grow, but Extend counts a request for it for ever, with a cost, "
-    "so the dialog never says All saved",
-    strict=True,
-)
 def test_when_everything_is_stored_the_plan_is_free_even_with_extend(api: Any) -> None:
     family = "Barnes Opening"
     configure(api)
@@ -485,11 +452,6 @@ def test_the_book_part_of_an_opening_exports_and_deletes(api: Any) -> None:
     assert plan(api, "light").stored == 0
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B2: Export and Delete cover only the book's positions, so notes past the book (the default Extend) are "
-    "left out of the export and survive Delete notes (FR-12.7)",
-    strict=True,
-)
 def test_export_includes_a_note_past_the_book(api: Any) -> None:
     _extended_note(api)
     path = api._opening_notes.export(FAMILY)
@@ -499,11 +461,6 @@ def test_export_includes_a_note_past_the_book(api: Any) -> None:
     assert path.read_text(encoding="utf-8").count("## ") == saved
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B2: Export and Delete cover only the book's positions, so notes past the book (the default Extend) are "
-    "left out of the export and survive Delete notes (FR-12.7)",
-    strict=True,
-)
 def test_delete_removes_a_note_past_the_book(api: Any) -> None:
     past = _extended_note(api)
     api._opening_notes.delete(FAMILY)
@@ -525,3 +482,38 @@ def test_export_never_holds_a_url_from_a_note_or_a_page(api: Any) -> None:
 def test_sans_in_the_prompt_are_only_the_lines_own(api: Any) -> None:
     moves = api._openings.lines(FAMILY, None, False).lines[0].moves
     assert sans_of(moves).startswith("1. e4 e5 2. Nf3 Nc6 3. Bc4")
+
+
+def test_a_page_thats_gone_keeps_its_stored_text_on_regenerate(api: Any) -> None:
+    """v0.13-B16: Regenerate asks for the latest, but losing a page isn't worse than having the older text."""
+    api._opening_sources.set_use_wikibooks(True)
+    sans = ["e4", "e5", "Nf3", "Nc6", "Bc4"]
+    title = wiki_page(api, sans, "Older invented text.", when=api._clock.now().isoformat())
+    api._opening_sources._wiki.fetch = lambda _t: {"query": {"pages": [{"missing": True}]}}
+    assert api._opening_sources.fetch_page(title, refresh=True).text == "Older invented text."
+
+
+def test_a_bad_key_stops_the_run_at_once(api: Any) -> None:
+    """v0.13-B14: asking again can't help, so it says so once and spends nothing more."""
+    configure(api)
+    p = provider(api)
+    for _ in range(4):
+        p.queue(LLMError("bad_key"))
+    st = finish(api, api._opening_notes.start_prefetch(FAMILY, "light", None, None, False))
+    assert "Stopped early" in st.message and len(p.requests) == 1
+
+
+def test_a_passing_failure_says_what_went_wrong_and_the_run_goes_on(api: Any) -> None:
+    configure(api)
+    p = provider(api)
+    p.queue(overview_json())
+    p.queue(LLMError("server"))
+    st = finish(api, api._opening_notes.start_prefetch(FAMILY, "light", None, None, False))
+    assert "1 request failed" in st.message and "expected form" not in st.message
+
+
+@pytest.mark.parametrize(
+    "text", ["1.e4 e5 2.Nf3 Nc6", "After 3...Nf6/Bc5 it's sharp.", "Nf3.Then Black plays d5", "e.g. the Italian"]
+)
+def test_chess_text_isnt_mistaken_for_a_link(text: str) -> None:
+    assert clean_page(text) == text

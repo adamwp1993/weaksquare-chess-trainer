@@ -196,3 +196,38 @@ def test_coach_link_matching_goes_through_the_check(api: Any) -> None:
     assert ok(api.match_opening_family("Italian Game: Giuoco Piano")) == FAMILY
     assert ok(api.match_opening_family("Nothing like this")) is None
     assert api.match_opening_family(None)["ok"] is False
+
+
+def test_a_session_limited_to_one_branch_goes_through_the_check(api: Any) -> None:
+    """v0.13-B17: FR-12.10's one branch reaches the bridge and limits what comes up."""
+    from weaksquare.core.openings import position_key
+    from weaksquare.core.repertoire import NewMove
+
+    def line(*ucis: str) -> list[NewMove]:
+        import chess
+
+        board = chess.Board()
+        out = []
+        for uci in ucis:
+            move = chess.Move.from_uci(uci)
+            out.append(NewMove(position_key(board), uci, board.san(move), "you"))
+            board.push(move)
+        return out
+
+    repo = api._repertoire._repo
+    repo.add_moves("white", line("e2e4", "e7e5", "g1f3"), "2026-11-01T12:00:00+00:00")
+    repo.add_moves("white", line("e2e4", "c7c5", "b1c3"), "2026-11-01T12:00:00+00:00")
+    found = api.get_practice_branches("white", None)
+    assert found["ok"]
+    labels = {b["label"]: b["position_key"] for b in found["data"]}
+    assert set(labels) == {"1. e4 e5", "1. e4 c5"}
+    started = api.start_practice("white", "all", None, labels["1. e4 c5"])
+    assert started["ok"] and started["data"]["remaining"] == 1
+    assert api.start_practice("white", "all", None, "not a position")["ok"] is False
+    assert api.get_practice_branches("white", 12345)["ok"] is False
+
+
+def test_a_line_with_no_split_offers_no_branch(api: Any) -> None:
+    api._openings.set_scope("custom", 0, 4)
+    api._repertoire.add_lines("white", FAMILY, [0])
+    assert api.get_practice_branches("white", None)["data"] == []

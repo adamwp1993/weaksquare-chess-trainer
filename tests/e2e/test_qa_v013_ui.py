@@ -63,11 +63,6 @@ def test_clear_puts_the_board_back_after_a_typed_move(page: Any) -> None:
     assert "a6" not in pieces(page) and "a7" in pieces(page)
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B1: a move played on the board is asked again whenever the page re-renders, so Clear brings its replies "
-    "straight back and the board stays on the preview",
-    strict=True,
-)
 def test_clear_puts_the_board_back_after_a_move_on_the_board(page: Any) -> None:
     openings(page)
     pick(page)
@@ -130,10 +125,6 @@ def test_switching_to_play_along_clears_a_preview(page: Any) -> None:
     assert fen(page).startswith("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w")
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B1: a move played on the board for What if? that the backend refuses leaves the piece on its new square",
-    strict=True,
-)
 def test_a_refused_what_if_on_the_board_puts_the_piece_back(page: Any) -> None:
     openings(page, "?openings=ready&engine=missing")  # no engine: the backend refuses every what-if
     pick(page)
@@ -144,11 +135,6 @@ def test_a_refused_what_if_on_the_board_puts_the_piece_back(page: Any) -> None:
     assert "a7" in pieces(page) and "a6" not in pieces(page)
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B1: a what-if played on the board is asked again whenever the page re-renders: adding it wipes the "
-    "'Added' message and resets the reply you chose",
-    strict=True,
-)
 def test_adding_a_board_played_what_if_keeps_the_message_and_your_reply(page: Any) -> None:
     openings(page)
     pick(page)
@@ -160,7 +146,7 @@ def test_adding_a_board_played_what_if_keeps_the_message_and_your_reply(page: An
     page.get_by_test_id("what-if-saved").wait_for()
     page.wait_for_timeout(500)
     assert page.get_by_test_id("what-if-saved").count() == 1
-    assert page.get_by_test_id("what-if-reply").nth(1).locator("input").is_checked()
+    assert page.get_by_test_id("what-if-reply").nth(1).is_checked()
 
 
 def test_adding_a_typed_what_if_keeps_the_message(page: Any) -> None:
@@ -176,11 +162,6 @@ def test_adding_a_typed_what_if_keeps_the_message(page: Any) -> None:
     assert page.get_by_test_id("what-if-saved").count() == 1
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B7: jumping two moves in the move list leaves What if? on the old position's replies, and Add would "
-    "store them under the new position",
-    strict=True,
-)
 def test_jumping_to_another_of_their_turns_drops_the_old_replies(page: Any) -> None:
     openings(page)
     pick(page)
@@ -237,11 +218,6 @@ def _start_practice(page: Any) -> None:
     page.get_by_test_id("practice-session").wait_for()
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B17: FR-12.10 says a session can be limited to one branch; only the service has it. The bridge's "
-    "start_practice takes no branch and the Practice tab offers none",
-    strict=True,
-)
 def test_a_session_can_be_limited_to_one_branch_from_the_screen(page: Any) -> None:
     openings(page)
     pick(page)
@@ -252,11 +228,6 @@ def test_a_session_can_be_limited_to_one_branch_from_the_screen(page: Any) -> No
     assert page.get_by_test_id("practice-branch").count() == 1
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B18: after a miss Practice shows only the eval of your move, not its refutation (FR-12.9: the same tools "
-    "as Game Review FR-11.14)",
-    strict=True,
-)
 def test_a_miss_shows_the_refutation_not_only_a_score(page: Any) -> None:
     openings(page)
     _start_practice(page)
@@ -266,10 +237,6 @@ def test_a_miss_shows_the_refutation_not_only_a_score(page: Any) -> None:
     assert any(ch in text for ch in "abcdefgh" if f"{ch}" and any(f"{ch}{n}" in text for n in "12345678"))
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B19: FR-12.15 says an engine-only note says so; a note with no Wikibooks page shows nothing about it",
-    strict=True,
-)
 def test_an_engine_only_note_says_so(page: Any) -> None:
     openings(page, AI)
     pick(page)

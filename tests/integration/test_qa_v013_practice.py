@@ -286,20 +286,12 @@ def test_limit_stops_a_session_between_lines(svc: Any) -> None:
     assert final.state == "finished"
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B11: a session's position limit is only checked between lines, so one line can run past it",
-    strict=True,
-)
 def test_a_session_never_asks_more_than_its_limit(svc: Any) -> None:
     store(svc, "white", [E4, E5, NF3, NC6, BC4, NF6, D4])
     final = run_session(svc, mode="all", limit=1)
     assert final.decisions <= 1
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B12: a target whose answer was removed mid-session is never taken off the list: Next repeats forever",
-    strict=True,
-)
 def test_a_position_whose_answer_was_removed_mid_session_doesnt_loop(svc: Any) -> None:
     """As Black, reaching it takes none of your moves, so the session's position limit never ends it either."""
     store(svc, "black", [E4, E5], [D4, D5])
@@ -391,10 +383,10 @@ def test_tolerance_uses_your_side_of_the_eval_as_black(svc: Any) -> None:
     practice.set_tolerance(True)
     cp = {key_after(E4): -10, key_after(E4, "f7f6"): 500, key_after(E4, "c7c5"): -5}
 
-    def lines(key: str, compute: bool) -> list[EngineLine]:
+    def lines(key: str, purpose: str) -> list[EngineLine]:
         return [EngineLine(cp[key], None, ("a2a3",))]
 
-    practice._openings.engine_lines = lines  # type: ignore[method-assign]
+    practice._openings.interactive_lines = lines  # type: ignore[method-assign]
     s = practice.start("black", mode="all")
     assert s.state == "your_move"
     good = practice.play(s.session_id, "c7c5")
@@ -435,11 +427,6 @@ def test_a_deviation_that_ends_the_game_has_no_replies_and_cant_be_added(svc: An
         svc.repertoire.add_deviation("white", moves, "d8h4", "a2a3")
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B10: a deviation off an extended line stores the moves leading to it as source 'you' though Stockfish "
-    "or the explorer chose them (FR-12.4: each move records its source)",
-    strict=True,
-)
 def test_the_moves_leading_to_a_deviation_keep_their_true_source(svc: Any) -> None:
     """Extend on, a line past the book: a move there came from the engine, and stays labelled so."""
     from weaksquare.jobs.runner import CancelToken
@@ -465,11 +452,6 @@ def test_the_moves_leading_to_a_deviation_keep_their_true_source(svc: Any) -> No
     assert stored[(line.moves[at].key_before, line.moves[at].uci)] == "engine"
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B9: a branch added with What if? to an opening you never added has no opening row, so its practice "
-    "shows nowhere in Stats (FR-12.11) and can't be chosen as one opening (FR-12.10)",
-    strict=True,
-)
 def test_a_deviation_shows_up_in_stats(svc: Any) -> None:
     svc.repertoire.add_deviation("white", [E4, E5, NF3, NC6, BC4], "a7a6", "d2d3")
     assert svc.opening_practice.summary("white")["positions"] > 0
@@ -576,10 +558,6 @@ def test_removing_a_line_keeps_a_position_another_line_still_reaches(svc: Any) -
     assert {e.move_uci for e in edges if e.position_key == shared} == {BC4, "b1c3"}
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B8: removing an opening's moves leaves its row: My repertoire and the Practice menu still list it",
-    strict=True,
-)
 def test_an_opening_with_no_moves_left_is_no_longer_listed(svc: Any) -> None:
     svc.openings.set_scope("custom", 0, 4)
     svc.repertoire.add_lines("white", FAMILY, [0])
@@ -595,11 +573,6 @@ def test_opening_attempts_stay_in_their_own_table(svc: Any, paths: Any) -> None:
     assert len(attempts(svc)) == 1
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B25: with Accept close moves on, Practice checks your move on the background engine, so a running prefetch "
-    "or Game Review holds up your move (ARCHITECTURE §3 decision 12, FR-12.3)",
-    strict=True,
-)
 def test_tolerance_in_practice_uses_the_interactive_engine(svc: Any) -> None:
     store(svc, "white", [E4, E5])
     svc.opening_practice.set_tolerance(True)
@@ -608,11 +581,6 @@ def test_tolerance_in_practice_uses_the_interactive_engine(svc: Any) -> None:
     assert svc.engine._bg is None
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B26: Stats count only positions after an opening's root, so a miss on the opening's own first moves (1. e4, "
-    "2. Nf3) shows nowhere, though Practice asks and schedules them (FR-12.11)",
-    strict=True,
-)
 def test_a_miss_on_an_openings_own_first_moves_shows_in_its_stats(svc: Any) -> None:
     svc.openings.set_scope("custom", 0, 4)
     svc.repertoire.add_lines("white", FAMILY, [0])

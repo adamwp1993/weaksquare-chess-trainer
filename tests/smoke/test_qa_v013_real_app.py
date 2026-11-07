@@ -173,7 +173,10 @@ def test_qa13_learn_what_if_repertoire_practice_and_stats_as_white(
         rows.locator("[data-testid=repertoire-row][data-san=e4]").filter(has_text="Main").wait_for()
         _shot(page, "repertoire")
         rep = _ok(_call(page, "get_repertoire", "white"))
-        assert {o["name"] for o in rep["openings"]} == {"Italian Game"}
+        assert {o["name"] for o in rep["openings"]} == {
+            "Italian Game",
+            "St. George Defense",
+        }  # v0.13-B9: What if?'s 1. e4 a6 is listed by its own name
 
         # Practice: real session, wrong move, real refutation, a reason, carry on to the end.
         page.get_by_test_id("openings-tab-practice").click()
@@ -331,11 +334,6 @@ def test_qa13_build_my_repertoire_as_black_reviews_then_saves_then_drills(
         assert page.errors == []
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B27: each change of scope reloads the lines with nothing to drop an older answer, and a longer list comes "
-    "back last: the list shows 7 lines while the setting says 1. Only the real client shows it: the mock answers in order",
-    strict=False,
-)
 def test_qa13_a_quick_second_change_of_scope_shows_its_own_lines(pw, tmp_path: Path, fixture_puzzles_db: Path) -> None:  # type: ignore[no-untyped-def]
     with _app(pw, _folder(tmp_path, fixture_puzzles_db)) as page:
         _openings(page)
@@ -360,11 +358,6 @@ def _dup_lines(page: Any) -> list[int]:
     return []
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B21: the Learn board's key is the line's name and length. Two different lines can share both (Caro-Kann, "
-    "Standard), so choosing the other keeps your step, mode and note",
-    strict=True,
-)
 def test_qa13_choosing_another_line_with_the_same_name_and_length_starts_it_over(
     pw, tmp_path: Path, fixture_puzzles_db: Path
 ) -> None:  # type: ignore[no-untyped-def]
@@ -381,10 +374,6 @@ def test_qa13_choosing_another_line_with_the_same_name_and_length_starts_it_over
         assert _fen(page).startswith(START)
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B22: at a line's end the last note's arrows stay on the board: nothing clears them once its panel closes",
-    strict=True,
-)
 def test_qa13_a_notes_arrows_leave_with_the_note(pw, tmp_path: Path, fixture_puzzles_db: Path) -> None:  # type: ignore[no-untyped-def]
     data_dir = _folder(tmp_path, fixture_puzzles_db)
     with _app(pw, data_dir) as page:

@@ -21,6 +21,7 @@ from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineLine, EngineNotInstalled, validate_fen
 from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.openings import (
+    MAX_LINE_PLIES,
     SOURCE_ENGINE,
     SOURCE_EXPLORER,
     BookIndex,
@@ -274,11 +275,11 @@ class OpeningsService:
         if not ext:
             return LinesView(tuple(book), False, 0, self._engine_ready())
         lines = [extend_line(ln, s.max_moves, self._next_stored) for ln in book]
-        pending = sum(1 for ln in lines if self._can_grow(ln, s.max_moves))
+        pending = sum(1 for ln in lines if self.can_grow(ln, s.max_moves))
         return LinesView(tuple(lines), True, pending, self._engine_ready())
 
     @staticmethod
-    def _can_grow(line: Line, max_moves: int) -> bool:
+    def can_grow(line: Line, max_moves: int) -> bool:
         if len(line.moves) >= max_moves * 2:
             return False
         board = chess.Board()
@@ -341,7 +342,7 @@ class OpeningsService:
             status = self._runner.status(running) if running else None
             if running is not None and status is not None and status.state == "running":
                 return running
-        if not any(self._can_grow(extend_line(ln, s.max_moves, self._next_stored), s.max_moves) for ln in book):
+        if not any(self.can_grow(extend_line(ln, s.max_moves, self._next_stored), s.max_moves) for ln in book):
             return None
 
         def run(progress: ProgressFn, token: CancelToken) -> str:
@@ -368,15 +369,29 @@ class OpeningsService:
         stored = self._stored(key)
         if stored is not None:
             return self._engine.analysis_of(board, stored, player)
-        ticket_key = ("openings", purpose)
-        lines = self._engine.analyse_lines(board, multipv=MULTIPV, key=ticket_key, gen=self._engine.ticket(ticket_key))
+        lines = self._analyse_now(board, str(purpose))
         if lines is None:
             return self._engine.superseded(board.fen())
+        return self._engine.analysis_of(board, lines, player)
+
+    def _analyse_now(self, board: chess.Board, purpose: str) -> list[EngineLine] | None:
+        """The interactive engine, keeping what it finds. None when a newer request replaced this one."""
+        ticket_key = ("openings", purpose)
+        lines = self._engine.analyse_lines(board, multipv=MULTIPV, key=ticket_key, gen=self._engine.ticket(ticket_key))
         if lines:
             self._cache.put(
-                key, self._think_ms(), MULTIPV, self._engine.engine_id(), lines, self._clock.now().isoformat()
-            )
-        return self._engine.analysis_of(board, lines, player)
+                position_key(board), self._think_ms(), MULTIPV, self._engine.engine_id(), lines,
+                self._clock.now().isoformat(),
+            )  # fmt: skip
+        return lines
+
+    def interactive_lines(self, key: str, purpose: str) -> list[EngineLine] | None:
+        """Stored lines, or the interactive engine's, for something you're waiting on (FR-12.3): your move in Practice,
+        or one note you asked for. Bulk jobs use `engine_lines`, so they don't hold you up."""
+        if not self._engine_ready():
+            return None
+        stored = self._stored(key)
+        return stored if stored is not None else self._analyse_now(board_of(key), purpose)
 
     # ---- for notes (FR-12.5–12.7) ----------------------------------------------------------------------------
 
@@ -402,7 +417,7 @@ class OpeningsService:
         grow = 0
         for line in lines:
             missing.update(m.key_before for m in line.moves if self._stored(m.key_before) is None)
-            if extend:
+            if extend and self.can_grow(line, max_moves):
                 grow += max(0, max_moves * 2 - len(line.moves))
         return (len(missing) + grow) * float(self._engine.settings().think_s)
 
@@ -415,10 +430,40 @@ class OpeningsService:
                 keys.update(ln.keys)
         return sorted(keys)
 
+    def tail_keys(self, family: object) -> set[str]:
+        """Positions from an opening's root on: its book lines, then as far as stored results continue them
+        (FR-12.13). Every line the opening could show at any scope ends in one of these."""
+        root = self.root(family)
+        keys: set[str] = {root.final_key}
+        for ln in self._data()[0]:
+            if ln.family != root.family:
+                continue
+            start = ln.keys.index(root.final_key) if root.final_key in ln.keys else len(ln.keys) - 1
+            keys.update(ln.keys[start:])
+            board = board_of(ln.final_key)
+            for _ply in range(len(ln.moves), MAX_LINE_PLIES):
+                if board.is_game_over(claim_draw=False):
+                    break
+                got = self._next_stored(board)
+                move = chess.Move.from_uci(got[0]) if got is not None else None
+                if move is None or move not in board.legal_moves:
+                    break
+                board.push(move)
+                key = position_key(board)
+                if key in keys:
+                    break
+                keys.add(key)
+        return keys
+
     # ---- for the repertoire (FR-12.8, 12.14) ------------------------------------------------------------------------
 
     def is_book_move(self, key: str, uci: str) -> bool:
         return (key, uci) in self._data()[1].through
+
+    def stored_source(self, board: chess.Board, uci: str) -> str | None:
+        """Where this position's continuation came from, if `uci` is it (FR-12.4: each move records its source)."""
+        got = self._next_stored(board)
+        return got[1] if got is not None and got[0] == uci else None
 
     def book_moves(self, board: chess.Board) -> list[str]:
         """The book's moves at this position, best first."""

@@ -125,6 +125,12 @@ class PracticeState:
 
 
 @dataclass(frozen=True)
+class Branch:
+    position_key: str
+    label: str
+
+
+@dataclass(frozen=True)
 class PositionStat:
     position_key: str
     label: str
@@ -168,6 +174,21 @@ def _reason_for(card: Card | None, today: Any) -> str:
 
 def _session_key(rng: random.Random) -> str:
     return f"p{rng.getrandbits(48):012x}"
+
+
+def _first_moves(opening: Any) -> list[str]:
+    """The positions of an opening's own first moves, before its root."""
+    board = chess.Board()
+    keys: list[str] = []
+    for uci in opening.root_moves:
+        keys.append(position_key(board))
+        board.push(chess.Move.from_uci(uci))
+    return keys
+
+
+def _opening_keys(edges: Sequence[Edge], opening: Any) -> set[str]:
+    """An opening's positions: its own first moves, and everything from its root on."""
+    return set(_first_moves(opening)) | subtree_positions(edges, opening.root_key)
 
 
 class OpeningPracticeService:
@@ -278,8 +299,27 @@ class OpeningPracticeService:
             return None
         for o in self._repertoire.openings(color):
             if o.id == opening_id:
-                return subtree_positions(edges, o.root_key)
+                return _opening_keys(edges, o)
         raise NotFoundError("That opening isn't in your repertoire.")
+
+    def branches(self, color: object, opening_id: object = None) -> list[Branch]:
+        """FR-12.10: what a session can be limited to: each move at a position where your repertoire splits, as long as
+        there's something of yours to answer after it."""
+        c = check_color(color)
+        edges = self._repertoire.edges(c)
+        within = self._limit(c, edges, opening_id, None)
+        mine = your_positions(edges, c)
+        found: dict[str, Branch] = {}
+        for moves in by_position(edges).values():
+            if len(moves) < 2:
+                continue
+            for e in moves:
+                to = after(e.position_key, e.move_uci)
+                if to in found or (within is not None and to not in within) or path_to(edges, to) is None:
+                    continue
+                if subtree_positions(edges, to) & set(mine):
+                    found[to] = Branch(to, self._label(edges, to))
+        return sorted(found.values(), key=lambda b: (len(path_to(edges, b.position_key) or []), b.label))
 
     def _get(self, session_id: object) -> _Session:
         with self._lock:
@@ -308,10 +348,11 @@ class OpeningPracticeService:
         s.message = None
         s.last_moves = ()
         s.wrong_uci = None
+        graph = by_position(edges)
         while s.targets and s.decisions < s.limit:
             target = s.targets[0]
             path = path_to(edges, target.position_key)
-            if path is None:
+            if path is None or not graph.get(target.position_key):  # removed since the session began
                 s.targets.pop(0)
                 continue
             s.target, s.path = target.position_key, path
@@ -329,7 +370,7 @@ class OpeningPracticeService:
         while True:
             key = position_key(s.board)
             if is_your_turn(key, s.color):
-                if graph.get(key):
+                if graph.get(key) and s.decisions < s.limit:
                     s.state = "your_move"
                     s.asked_at = self._clock.now()
                 else:
@@ -375,12 +416,12 @@ class OpeningPracticeService:
         """FR-12.9: off by default. With it on, a move within the engine tolerance also counts."""
         if not self.tolerance_on():
             return False
-        best = self._openings.engine_lines(position_key(s.board), True)
+        best = self._openings.interactive_lines(position_key(s.board), "practice")
         if not best:
             return False
         after_board = s.board.copy()
         after_board.push(move)
-        reply = self._openings.engine_lines(position_key(after_board), True)
+        reply = self._openings.interactive_lines(position_key(after_board), "practice")
         if not reply:
             return False
         return side_cp(best[0], s.color) - side_cp(reply[0], s.color) <= DEFAULT_TOLERANCE_CP
@@ -483,8 +524,9 @@ class OpeningPracticeService:
             out.append(f"{i // 2 + 1}. {e.san}" if i % 2 == 0 else e.san)
         return " ".join(out) or "Start of the game"
 
-    def _leaves(self, edges: Sequence[Edge], root: str) -> list[list[str]]:
-        """Each way from `root` to the end of a branch, as its positions. A position seen again ends the branch."""
+    def _leaves(self, edges: Sequence[Edge], root: str, first: Sequence[str] = ()) -> list[list[str]]:
+        """Each way from `root` to the end of a branch, as its positions, after `first`. A position seen again ends
+        the branch."""
         graph = by_position(edges)
         out: list[list[str]] = []
 
@@ -500,7 +542,7 @@ class OpeningPracticeService:
             for k in fresh:
                 walk(k, [*seen, key])
 
-        walk(root, [])
+        walk(root, list(first))
         return out
 
     def stats(self, color: object) -> list[OpeningStat]:
@@ -517,7 +559,7 @@ class OpeningPracticeService:
         for o in self._repertoire.openings(c):
             if not any(k == o.root_key for k, _ in live) and path_to(edges, o.root_key) is None:
                 continue
-            within = subtree_positions(edges, o.root_key)
+            within = _opening_keys(edges, o)
             mine = [k for k in cards if k in within]
             attempts, correct = _tally([r for k in mine for r in by_key.get(k, [])])
             due_keys = [k for k in mine if (card := cards[k]) is not None and is_due(card, today)]
@@ -528,7 +570,7 @@ class OpeningPracticeService:
                     stats.append(PositionStat(k, self._label(edges, k), n, good, k in due_keys))
             weakest = sorted((p for p in stats if p.correct < p.attempts), key=lambda p: (p.correct / p.attempts, -p.attempts, p.position_key))[:5]  # fmt: skip
             lines = []
-            for leaf in self._leaves(edges, o.root_key):
+            for leaf in self._leaves(edges, o.root_key, _first_moves(o)):
                 decision = [k for k in leaf if is_your_turn(k, c) and k in cards]
                 n, good = _tally([r for k in decision for r in by_key.get(k, [])])
                 named = next((b for k in reversed(leaf) if (b := self._openings.name_of(k)) is not None), None)

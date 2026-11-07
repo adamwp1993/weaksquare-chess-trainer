@@ -1355,10 +1355,21 @@ class Api:
         return self._opening_practice.set_tolerance(on)
 
     @bridge_call
+    def get_practice_branches(
+        self, color: Literal["white", "black"], opening_id: int | None = None
+    ) -> list[dto.PracticeBranch]:
+        """FR-12.10: where a session can be limited to one branch."""
+        return [dto.PracticeBranch(b.position_key, b.label) for b in self._opening_practice.branches(color, opening_id)]
+
+    @bridge_call
     def start_practice(
-        self, color: Literal["white", "black"], mode: Literal["due", "new", "all"], opening_id: int | None = None
+        self,
+        color: Literal["white", "black"],
+        mode: Literal["due", "new", "all"],
+        opening_id: int | None = None,
+        branch: str | None = None,
     ) -> dto.PracticeState:
-        return _practice_dto(self._opening_practice.start(color, opening_id=opening_id, mode=mode))
+        return _practice_dto(self._opening_practice.start(color, opening_id=opening_id, branch=branch, mode=mode))
 
     @bridge_call
     def play_practice_move(self, session_id: str, uci: str) -> dto.PracticeState:

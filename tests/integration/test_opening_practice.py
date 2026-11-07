@@ -445,7 +445,7 @@ def test_stats_per_opening_and_line(svc: Any, clock: Any) -> None:
     s = svc.opening_practice.play(s.session_id, "d2d4")
     stat = svc.opening_practice.stats("white")[0]
     assert stat.name == "Italian Game" and stat.positions >= 2
-    assert stat.attempts == 0  # the first move comes before the opening's own position
+    assert stat.attempts == 1 and stat.correct == 0  # v0.13-B26: its own first moves count
     assert stat.lines and all(ln.name.startswith("Italian Game") for ln in stat.lines)
 
 

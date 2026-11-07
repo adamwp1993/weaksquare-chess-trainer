@@ -43,6 +43,7 @@ import type {
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
+  PracticeBranch,
   PracticeState,
   PracticeSummary,
   RepertoireProposal,
@@ -492,7 +493,9 @@ export interface ApiClient {
   getPracticeSummary(color: "white" | "black"): Promise<PracticeSummary>;
   getPracticeTolerance(): Promise<boolean>;
   setPracticeTolerance(on: boolean): Promise<boolean>;
-  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null): Promise<PracticeState>;
+  /** FR-12.10: what a session can be limited to. */
+  getPracticeBranches(color: "white" | "black", openingId: number | null): Promise<PracticeBranch[]>;
+  startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null, branch: string | null): Promise<PracticeState>;
   playPracticeMove(sessionId: string, uci: string): Promise<PracticeState>;
   showPracticeAnswer(sessionId: string): Promise<PracticeState>;
   continuePractice(sessionId: string): Promise<PracticeState>;

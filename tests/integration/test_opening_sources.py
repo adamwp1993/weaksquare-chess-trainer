@@ -121,8 +121,10 @@ def test_a_title_follows_the_books_naming() -> None:
     assert page_url(TITLE) == "https://en.wikibooks.org/wiki/Chess_Opening_Theory/1._e4/1...e5/2._Nf3/2...Nc6/3._Bc4"
 
 
-def test_a_castling_or_check_title_is_encoded_in_the_link() -> None:
-    assert page_url(page_title(["e4", "Qh4+"])).endswith("/1._e4/1...Qh4%2B")
+def test_a_check_or_mate_mark_is_left_out_of_the_title_and_the_link() -> None:
+    """v0.13-B20: Wikibooks names its pages without them, so a title with one finds no page."""
+    assert page_url(page_title(["e4", "Qh4+"])).endswith("/1._e4/1...Qh4")
+    assert page_url(page_title(["f3", "e5", "g4", "Qh4#"])).endswith("/2...Qh4")
 
 
 def test_cleaning_drops_urls_and_reference_sections() -> None:

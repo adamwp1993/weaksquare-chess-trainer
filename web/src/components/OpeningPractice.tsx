@@ -18,10 +18,11 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
-import type { Analysis, OpeningDeviation, OpeningNote, OpeningStat, PracticeState, PracticeSummary, RepertoireOpeningRow, RepertoireProposal } from "../api/types";
+import type { Analysis, OpeningDeviation, OpeningNote, OpeningStat, PracticeBranch, PracticeState, PracticeSummary, RepertoireOpeningRow, RepertoireProposal } from "../api/types";
+import { pvToSan } from "../state/engine";
 import { sourceLabel } from "../state/openingLine";
 import { useJob } from "../state/useJob";
 import { Board } from "./Board";
@@ -42,6 +43,8 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
   const [mode, setMode] = useState<"due" | "new" | "all">("due");
   const [openings, setOpenings] = useState<RepertoireOpeningRow[]>([]);
   const [opening, setOpening] = useState<string | null>(null);
+  const [branches, setBranches] = useState<PracticeBranch[]>([]);
+  const [branch, setBranch] = useState<string | null>(null);
   const [summary, setSummary] = useState<PracticeSummary | null>(null);
   const [tolerance, setTolerance] = useState(false);
   const [s, setS] = useState<PracticeState | null>(null);
@@ -58,6 +61,16 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
     api.getPracticeTolerance().then(setTolerance, () => undefined);
   }, [color]);
   useEffect(refresh, [refresh, version]);
+  useEffect(() => {
+    let alive = true;
+    api.getPracticeBranches(color, opening ? Number(opening) : null).then(
+      (b) => alive && setBranches(b),
+      (e: unknown) => alive && setError(message(e)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [color, opening, version]);
 
   const apply = (next: PracticeState) => {
     setS(next);
@@ -103,6 +116,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
               onChange={(v) => {
                 setColor(v as Color);
                 setOpening(null);
+                setBranch(null);
               }}
               data={[
                 { value: "white", label: "White" },
@@ -139,8 +153,27 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
             placeholder="All my openings"
             data={openings.map((o) => ({ value: String(o.id), label: o.name }))}
             value={opening}
-            onChange={setOpening}
+            onChange={(v) => {
+              setOpening(v);
+              setBranch(null);
+            }}
             data-testid="practice-opening"
+          />
+          <Select
+            size="xs"
+            w={280}
+            clearable
+            disabled={branches.length === 0}
+            label={
+              <>
+                Branch <OptionInfo id="practice.branch" />
+              </>
+            }
+            placeholder={branches.length === 0 ? "Your lines don't split here" : "All of it"}
+            data={branches.map((b) => ({ value: b.position_key, label: b.label }))}
+            value={branch}
+            onChange={setBranch}
+            data-testid="practice-branch"
           />
         </Group>
         <Checkbox
@@ -171,7 +204,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
           style={{ alignSelf: "flex-start" }}
           disabled={!summary || summary.positions === 0}
           data-testid="practice-begin"
-          onClick={() => act(api.startPractice(color, mode, opening ? Number(opening) : null))}
+          onClick={() => act(api.startPractice(color, mode, opening ? Number(opening) : null, branch))}
         >
           Start practice
         </Button>
@@ -234,7 +267,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
               </Text>
               {refutation && !refutation.superseded && refutation.lines[0] && (
                 <Text size="sm" data-testid="practice-refutation">
-                  After your move, Stockfish says {refutation.lines[0].score}.
+                  After your move, Stockfish says {refutation.lines[0].score}: {pvToSan(refutation.fen, refutation.lines[0].pv)}
                 </Text>
               )}
               {stored && <NoteView note={stored} />}
@@ -382,13 +415,17 @@ export function WhatIfPanel({
   color,
   moves,
   boardMove,
+  onBoardMoveTaken,
+  onBoardMoveRefused,
   onPreview,
   onAdded,
 }: {
   color: Color;
   moves: string[];
-  /** Their move, played on the board. */
+  /** Their move, played on the board. It's taken once, so nothing that redraws the page asks again. */
   boardMove: string | null;
+  onBoardMoveTaken: () => void;
+  onBoardMoveRefused: () => void;
   onPreview: (fen: string | null) => void;
   onAdded: () => void;
 }) {
@@ -404,21 +441,34 @@ export function WhatIfPanel({
     return d.fen_after.split(" ").slice(0, 4).join(" ");
   }, [d]);
 
+  // The latest question: an answer to any other, or one arriving after this panel has gone, is dropped.
+  const asking = useRef(0);
+  useEffect(
+    () => () => {
+      asking.current = -1;
+    },
+    [],
+  );
+
   const ask = useCallback(
-    (move: string) => {
+    (move: string, onRefused?: () => void) => {
+      const id = ++asking.current;
       setError(null);
       setSaved(null);
       setBusy(true);
       api.getOpeningDeviation(color, moves, move).then(
         (next) => {
+          if (id !== asking.current) return;
           setD(next);
           setReply(next.replies[0]?.uci ?? null);
           onPreview(next.fen_after);
           setBusy(false);
         },
         (e: unknown) => {
+          if (id !== asking.current) return;
           setError(message(e));
           setBusy(false);
+          onRefused?.();
         },
       );
     },
@@ -426,9 +476,11 @@ export function WhatIfPanel({
   );
 
   useEffect(() => {
+    if (!boardMove) return;
+    onBoardMoveTaken();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- it starts a request; the board's move is its input
-    if (boardMove) ask(boardMove);
-  }, [boardMove, ask]);
+    ask(boardMove, onBoardMoveRefused);
+  }, [boardMove, ask, onBoardMoveTaken, onBoardMoveRefused]);
 
   return (
     <Paper withBorder p="sm" radius="md" data-testid="what-if">
@@ -493,9 +545,11 @@ export function WhatIfPanel({
               size="xs"
               variant="default"
               onClick={() => {
+                asking.current += 1;
                 setD(null);
                 setText("");
                 setSaved(null);
+                setBusy(false);
                 onPreview(null);
               }}
               data-testid="what-if-clear"

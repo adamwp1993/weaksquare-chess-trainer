@@ -172,12 +172,13 @@ class OpeningSources:
         hit = self._wiki_store.get(title)
         return hit[0] if hit is not None else None
 
-    def fetch_page(self, title: str) -> WikiPage | None:
-        """A page, from the store if it's fresh. None when the setting's off, or offline with nothing stored."""
+    def fetch_page(self, title: str, refresh: bool = False) -> WikiPage | None:
+        """A page, from the store if it's fresh, unless `refresh` asks for the latest. None when the setting's off, or
+        offline with nothing stored. A page that's gone keeps the text already stored."""
         if not self.use_wikibooks():
             return None
         hit = self._wiki_store.get(title)
-        if hit is not None and self._fresh(hit[1]):
+        if hit is not None and not refresh and self._fresh(hit[1]):
             return hit[0]
         try:
             page = parse_extract(title, self._wiki.fetch(title))
@@ -187,4 +188,5 @@ class OpeningSources:
             raise
         if page.status == "ok" or hit is None or hit[0].status != "ok":
             self._wiki_store.put(page, self._clock.now().isoformat())
-        return page
+            return page
+        return hit[0]

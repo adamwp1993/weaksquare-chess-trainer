@@ -1337,8 +1337,12 @@ export class MockClient implements ApiClient {
     return on;
   }
 
-  async startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null) {
-    this.calls.push(`practiceStart:${color}:${mode}:${openingId}`);
+  async getPracticeBranches(color: "white" | "black") {
+    return this.openings.practiceBranches(color);
+  }
+
+  async startPractice(color: "white" | "black", mode: "due" | "new" | "all", openingId: number | null, branch: string | null) {
+    this.calls.push(`practiceStart:${color}:${mode}:${openingId}${branch ? `:${branch}` : ""}`);
     return this.openings.startPractice(color, mode);
   }
 

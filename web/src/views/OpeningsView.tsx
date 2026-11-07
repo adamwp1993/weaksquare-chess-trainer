@@ -86,6 +86,7 @@ function LearnBoard({
   const [note, setNote] = useState<OpeningNote | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [boardMove, setBoardMove] = useState<string | null>(null);
+  const [redraws, setRedraws] = useState(0);
   const last = line.moves.length;
   const pos = positions[Math.min(step, last)];
   const analyze = useCallback(
@@ -121,14 +122,19 @@ function LearnBoard({
     /* eslint-disable react-hooks/set-state-in-effect */
     setPreview(null);
     setBoardMove(null);
+    setNote(null);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [step, mode]);
+  const movesSoFar = useMemo(() => line.moves.slice(0, step).map((m) => m.uci), [line, step]);
+  const takeBoardMove = useCallback(() => setBoardMove(null), []);
+  // A refused move leaves its piece where it was dropped: redrawing the board puts it back.
+  const refuseBoardMove = useCallback(() => setRedraws((n) => n + 1), []);
   return (
     <Group align="flex-start" gap="lg" wrap="wrap" data-testid="learn-board" data-tries={tries}>
       <div style={{ flex: "1 1 360px", maxWidth: 560 }}>
         {/* A wrong move snaps back: the key changes with each try, so the board redraws at the line's position. */}
         <Board
-          key={tries}
+          key={`${tries}:${redraws}`}
           fen={preview ?? pos.fen}
           orientation={color}
           movable={yourTurn ? color : theirTurn ? (color === "white" ? "black" : "white") : null}
@@ -248,9 +254,12 @@ function LearnBoard({
         )}
         {mode === "step" && sideToMove(pos.fen) !== color && (
           <WhatIfPanel
+            key={step}
             color={color}
-            moves={line.moves.slice(0, step).map((m) => m.uci)}
+            moves={movesSoFar}
             boardMove={boardMove}
+            onBoardMoveTaken={takeBoardMove}
+            onBoardMoveRefused={refuseBoardMove}
             onPreview={setPreview}
             onAdded={onRepertoireChanged}
           />
@@ -507,9 +516,17 @@ function OpeningDetail({
   const [notesMessage, setNotesMessage] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const job = useJob(extendJob);
+  const loading = useRef(0);
 
   const reload = useCallback(() => {
-    api.getOpeningLines(family).then(setView, (e: unknown) => setError(message(e)));
+    // The bridge can answer out of order: only the latest question's answer is shown.
+    const id = ++loading.current;
+    api.getOpeningLines(family).then(
+      (v) => {
+        if (id === loading.current) setView(v);
+      },
+      (e: unknown) => setError(message(e)),
+    );
   }, [family]);
 
   useEffect(() => {
@@ -694,7 +711,7 @@ function OpeningDetail({
       )}
       {line && (
         <LearnBoard
-          key={`${line.name}:${line.moves.length}:${color}`}
+          key={`${color}:${line.moves.map((m) => m.uci).join(" ")}`}
           family={family}
           lineIndex={Math.min(selected, (view?.lines.length ?? 1) - 1)}
           overviewKey={overviewKey}

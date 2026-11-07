@@ -518,6 +518,17 @@ export class MockOpenings {
     return replies;
   }
 
+  practiceBranches(color: Color): { position_key: string; label: string }[] {
+    const here = this.edges[color];
+    return here
+      .filter((e) => here.filter((o) => o.key === e.key).length > 1)
+      .map((e) => {
+        const chess = new Chess(`${e.key} 0 1`);
+        chess.move(e.san);
+        return { position_key: keyOf(chess), label: e.san };
+      });
+  }
+
   startPractice(color: Color, mode: "due" | "new" | "all"): PracticeState {
     const targets = mode === "all" ? this.yourPositions(color).length : this.practiceSummary(color).new;
     this.session = { color, chess: new Chess(), state: "your_move", correct: 0, wrong: 0, decisions: 0, clean: 0, targets, attempts: this.attempts[color], wrongFen: null };

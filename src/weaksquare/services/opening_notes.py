@@ -72,6 +72,16 @@ WARN_BUDGET_SHARE = 0.25  # FR-12.7b
 WARN_SECONDS = 600
 MAX_PAGES_PER_REQUEST = 3
 MAX_PAGE_LOOKUPS = 8
+RUN_STOPPERS = ("over_cap", "over_budget", "not_configured", "no_model", "no_price", "llm_bad_key", "llm_quota")
+ANSWER_FAILURES = ("llm_truncated", "llm_refused", "llm_bad_answer")
+
+
+class _Billed(AppError):
+    """The provider answered and charged for it, but there's nothing to save. A run still counts what it cost."""
+
+    def __init__(self, message: str, cost: float, *, code: str, retryable: bool = False) -> None:
+        super().__init__(message, code=code, retryable=retryable)
+        self.cost = cost
 
 
 class Repo(Protocol):
@@ -233,14 +243,21 @@ class OpeningNotesService:
             raise NotFoundError("That line isn't in this opening.")
         return lines[index]
 
-    def _facts(self, line: Line, plies: Sequence[int], compute: bool) -> list[PositionFacts]:
+    def _facts(self, line: Line, plies: Sequence[int], asked: bool) -> list[PositionFacts]:
+        """The engine's view of these moves. A note you asked for and are waiting on uses the interactive engine, and a
+        prefetch uses the background one (FR-12.3)."""
         out: list[PositionFacts] = []
         for ply in plies:
             move = line.moves[ply]
-            out.append(PositionFacts(ply, move, tuple(self._openings.engine_lines(move.key_before, compute) or ())))
+            found = (
+                self._openings.interactive_lines(move.key_before, "note")
+                if asked
+                else self._openings.engine_lines(move.key_before, True)
+            )
+            out.append(PositionFacts(ply, move, tuple(found or ())))
         return out
 
-    def _pages(self, line: Line, plies: Sequence[int]) -> tuple[str, tuple[WikiPage, ...]]:
+    def _pages(self, line: Line, plies: Sequence[int], refresh: bool) -> tuple[str, tuple[WikiPage, ...]]:
         """Reference text for these plies, nearest the end first: later pages are the specific ones. Network."""
         if not self._sources.use_wikibooks():
             return "", ()
@@ -249,15 +266,15 @@ class OpeningNotesService:
         for lookups, ply in enumerate(sorted(plies, reverse=True)):
             if lookups >= MAX_PAGE_LOOKUPS or len(found) >= MAX_PAGES_PER_REQUEST:
                 break
-            page = self._sources.fetch_page(page_title(sans[: ply + 1]))
+            page = self._sources.fetch_page(page_title(sans[: ply + 1]), refresh)
             if page is not None and page.status == "ok":
                 found.append(page)
         return prompt_text(found)
 
-    def _root_pages(self, line: Line, root_len: int) -> tuple[str, tuple[WikiPage, ...]]:
+    def _root_pages(self, line: Line, root_len: int, refresh: bool) -> tuple[str, tuple[WikiPage, ...]]:
         if not self._sources.use_wikibooks():
             return "", ()
-        page = self._sources.fetch_page(page_title([m.san for m in line.moves[:root_len]]))
+        page = self._sources.fetch_page(page_title([m.san for m in line.moves[:root_len]]), refresh)
         return prompt_text([page] if page is not None else [])
 
     # ---- sending ---------------------------------------------------------------------------------------------
@@ -274,37 +291,40 @@ class OpeningNotesService:
     def _send(self, kind: str, system: str, user: str, name: str, schema: dict[str, Any], run_spent: float) -> Any:
         result = self._usage.run(kind, system, user, name, schema, run_spent=run_spent)
         status = result.response.status
+        cost = float(result.cost_usd)
         if status == "truncated":
-            raise AppError(
+            raise _Billed(
                 "The answer was cut short (it hit the token limit), so nothing was saved. It was still billed. Try "
                 "Low reasoning for Openings in Settings → AI.",
-                code="llm_truncated", retryable=True,
+                cost, code="llm_truncated", retryable=True,
             )  # fmt: skip
         if status == "refused":
-            raise AppError("The model declined to explain this one. Try another model.", code="llm_refused")
+            raise _Billed("The model declined to explain this one. Try another model.", cost, code="llm_refused")
         return result
 
-    def _overview(self, family: object, run_spent: float = 0.0) -> float:
+    def _overview(self, family: object, run_spent: float = 0.0, asked: bool = False, refresh: bool = False) -> float:
         """Ask for an opening's overview and save it. Returns its cost."""
         root = self._openings.root(family)
         line = self._line(family, 0)
         plies = sorted({max(0, len(root.moves) - 1), max(0, len(line.moves) - 1)})
-        reference, pages = self._root_pages(line, len(root.moves))
-        prompt = build_overview_prompt(root.family, root.eco, line.moves, self._facts(line, plies, True), reference)
+        reference, pages = self._root_pages(line, len(root.moves), refresh)
+        prompt = build_overview_prompt(root.family, root.eco, line.moves, self._facts(line, plies, asked), reference)
         result = self._send(
             KIND_OVERVIEW, OVERVIEW_SYSTEM_PROMPT, prompt, OVERVIEW_SCHEMA_NAME, OVERVIEW_SCHEMA, run_spent
         )
         note = validate_overview(result.response.text)
         if note is None:
-            raise AppError("The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
-                           code="llm_bad_answer", retryable=True)  # fmt: skip
+            raise _Billed("The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
+                          float(result.cost_usd), code="llm_bad_answer", retryable=True)  # fmt: skip
         self._save(root.final_key, "", OVERVIEW, note, pages, result)
         return float(result.cost_usd)
 
-    def _explain_plies(self, line: Line, plies: Sequence[int], kind: str, run_spent: float) -> tuple[int, float]:
+    def _explain_plies(
+        self, line: Line, plies: Sequence[int], kind: str, run_spent: float, asked: bool = False, refresh: bool = False
+    ) -> tuple[int, float]:
         """Ask about these moves of a line, in one request. Returns how many notes were saved, and the cost."""
-        reference, pages = self._pages(line, plies)
-        facts = self._facts(line, plies, True)
+        reference, pages = self._pages(line, plies, refresh)
+        facts = self._facts(line, plies, asked)
         prompt = build_line_prompt(line.name, line.eco, line.moves, facts, reference)
         result = self._send(kind, LINE_SYSTEM_PROMPT, prompt, LINE_SCHEMA_NAME, LINE_SCHEMA, run_spent)
         notes = validate_line_notes(facts, result.response.text)
@@ -360,10 +380,12 @@ class OpeningNotesService:
             progress(None, "Asking the AI…")
             try:
                 if ply is None:
-                    cost = self._overview(family)
+                    cost = self._overview(family, asked=True, refresh=regenerate)
                 else:
                     assert isinstance(ply, int)
-                    saved, cost = self._explain_plies(self._line(family, index), [ply], KIND_MOVE, 0.0)
+                    saved, cost = self._explain_plies(
+                        self._line(family, index), [ply], KIND_MOVE, 0.0, asked=True, refresh=regenerate
+                    )
                     if not saved:
                         raise AppError("The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
                                        code="llm_bad_answer", retryable=True)  # fmt: skip
@@ -422,7 +444,9 @@ class OpeningNotesService:
         def job(progress: ProgressFn, token: CancelToken) -> str:
             progress(None, "Asking the AI…")
             try:
-                saved, cost = self._explain_plies(line, [len(line.moves) - 1], KIND_MOVE, 0.0)
+                saved, cost = self._explain_plies(
+                    line, [len(line.moves) - 1], KIND_MOVE, 0.0, asked=True, refresh=regenerate
+                )
                 if not saved:
                     raise AppError("The AI's answer wasn't in the expected form, so nothing is shown. Try again.",
                                    code="llm_bad_answer", retryable=True)  # fmt: skip
@@ -466,7 +490,7 @@ class OpeningNotesService:
                 else:
                     missing.append(ply)
             target = len(missing)
-            if extend:  # the job may grow the line first, up to the limit
+            if extend and self._openings.can_grow(line, scope.max_moves):  # the job may grow it first, up to the limit
                 target += max(0, scope.max_moves * 2 - len(line.moves))
             if missing or (extend and target):
                 chars = base + PER_MOVE_PROMPT_CHARS * target + unfetched_chars(MAX_PAGES_PER_REQUEST)
@@ -562,8 +586,9 @@ class OpeningNotesService:
         batch = self._usage.quote_batch(FEATURE, [(r.kind, r.chars) for r in requests])
         bins = _bins(batch.per_request_worst, batch.run_cap_usd)
         take = len(bins[0]) if bins else 0
-        spent, saved, failed = 0.0, 0, 0
+        spent, saved, failed, errors = 0.0, 0, 0, 0
         stop: str | None = None
+        trouble: str | None = None
         for i, req in enumerate(requests[:take]):
             token.raise_if_cancelled()
             progress(i / max(1, take), f"Asking the AI ({i + 1} of {take})…")
@@ -577,14 +602,23 @@ class OpeningNotesService:
                     saved += count
                     failed += len(req.plies) - count
             except AppError as e:
-                if e.code in ("over_cap", "over_budget", "not_configured", "no_model", "no_price"):
+                if isinstance(e, _Billed):
+                    spent += e.cost
+                if e.code in RUN_STOPPERS:
                     stop = e.message
                     break
-                failed += 1
+                if e.code in ANSWER_FAILURES:
+                    failed += 1
+                else:
+                    errors += 1
+                    trouble = e.message
         left = len(requests) - take
         parts = [f"Saved {saved} notes for ${spent:.4f}."]
         if failed:
             parts.append(f"{failed} didn't come back in the expected form; asking again costs only those.")
+        if errors:
+            noun = "request" if errors == 1 else "requests"
+            parts.append(f"{errors} {noun} failed: {trouble} Run it again to ask for those.")
         if stop:
             parts.append(f"Stopped early: {stop}")
         elif left > 0:
@@ -593,12 +627,17 @@ class OpeningNotesService:
 
     # ---- export and delete (FR-12.7) -------------------------------------------------------------------------------
 
+    def _note_keys(self, family: object) -> list[str]:
+        """An opening's positions, including past the book (FR-12.13). A note on a What if? reply is off its lines, and a
+        position doesn't say which opening it came from, so it stays."""
+        return sorted(self._openings.tail_keys(family).union(self._openings.family_keys(family)))
+
     def delete(self, family: object) -> int:
-        return self._repo.delete_positions(self._openings.family_keys(family))
+        return self._repo.delete_positions(self._note_keys(family))
 
     def export(self, family: object) -> Path | None:
         """A Markdown file of an opening's notes, with the credit for any page they drew on (FR-12.15)."""
-        rows = self._repo.for_positions(self._openings.family_keys(family))
+        rows = self._repo.for_positions(self._note_keys(family))
         if not rows:
             return None
         root = self._openings.root(family)

@@ -1401,6 +1401,11 @@ export interface RepertoireProposal {
   moves: ProposedMove[];
 }
 
+export interface PracticeBranch {
+  position_key: string;
+  label: string;
+}
+
 export interface PracticeSummary {
   due: number;
   new: number;

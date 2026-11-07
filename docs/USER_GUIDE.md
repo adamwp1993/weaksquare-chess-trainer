@@ -69,7 +69,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
     - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
   - **The opening trainer** (v0.13). The book ships with the app, and your repertoire stays in `user.db`:
-    - **Popular moves**, only while you're signed in: when you ask for lines to be continued, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
+    - **Popular moves**, only while you're signed in: when you ask for lines to be continued, run **Build my repertoire**, or save notes with **Extend past the book** on, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
     - **AI notes** go to your AI provider, as described under AI explanations below. They hold only opening data: the opening's name and ECO code, the line's moves in SAN, positions (FEN), Stockfish's evals and lines, and Wikibooks text. Nothing about you or your games.
     - **Wikibooks**: opening **Read about this position**, or asking for an AI note, requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
@@ -1049,7 +1049,7 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 
 **Confirm** starts it in the background, and you can keep using the app. Cancel at any time: what's finished stays saved. Without an AI provider, the dialog offers Stockfish's evals only. Estimates assume full Wikibooks pages, since none are fetched until you Confirm, so the cost usually comes in lower.
 
-**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes.
+**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes, including those past the book and on its first moves. Another opening that shares those first moves, such as 1. e4, would have to ask for them again. Notes on replies you explained under **What if they play…?** aren't part of an opening, so both leave them out. A note that used no Wikibooks page says so under its text.
 
 Openings has its own model in **Settings → AI**.
 
@@ -1091,13 +1091,13 @@ It runs in the background, and **nothing is saved until you've looked it over**.
 ### Practice
 **Practice** drills your repertoire. The app plays the other side, picking among your stored replies: toward popular moves if it knows them, otherwise toward your main moves. You play your side.
 
-1. Choose a side, and optionally one opening.
+1. Choose a side, and optionally one opening or one branch. **Branch** lists the moves where your lines split, and is empty until they do.
 2. Choose **Due, then a few new**, **New lines** or **All**.
 3. **Start practice**.
 
 Each session walks from the start of the game to a position that's due, so you see how you get there.
 
-- **Right:** a move stored as yours at that position. With **Accept moves close to the engine's best** on, a move within 30 centipawns also counts, and your line carries on with your own move. It's off by default, because the point is to learn your line.
+- **Right:** a move stored as yours at that position. With **Accept moves close to the engine's best** on, a move within 30 centipawns also counts, and your line carries on with your stored move. It's off by default, because the point is to learn your line.
 - **Wrong:** you see your line's move, your saved explanation of it if you have one, and Stockfish's view of what you played, and can say why you missed it. **Continue** plays your move and the line goes on. Practice never asks the AI, so it costs nothing.
 - **Show the answer** counts as missed, like any help.
 

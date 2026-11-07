@@ -332,12 +332,18 @@ def parse_their_move(board: chess.Board, text: object) -> chess.Move | None:
         return None
 
 
-def path_sources(moves: Sequence[str], is_book: Callable[[str, str], bool]) -> list[tuple[str, str]]:
-    """(uci, source) for the moves leading to a deviation, so what it hangs from is connected to the root."""
+def path_sources(
+    moves: Sequence[str],
+    is_book: Callable[[str, str], bool],
+    continued: Callable[[chess.Board, str], str | None] = lambda _b, _u: None,
+) -> list[tuple[str, str]]:
+    """(uci, source) for the moves leading to a deviation, so what it hangs from is connected to the root. `continued`
+    says where a move past the book came from, the explorer or the engine. Anything else was your own choice."""
     board = chess.Board()
     out: list[tuple[str, str]] = []
     for uci in moves:
         key = position_key(board)
-        out.append((uci, SOURCE_BOOK if is_book(key, uci) else SOURCE_YOU))
+        source = SOURCE_BOOK if is_book(key, uci) else continued(board, uci) or SOURCE_YOU
+        out.append((uci, source))
         board.push(chess.Move.from_uci(uci))
     return out
