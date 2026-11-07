@@ -122,7 +122,10 @@ def test_switching_to_play_along_clears_a_preview(page: Any) -> None:
     page.get_by_test_id("learn-mode").get_by_text("Play along").click()
     page.get_by_test_id("learn-play-status").wait_for()
     assert page.get_by_test_id("what-if").count() == 0
-    assert fen(page).startswith("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w")
+    # The preview is cleared by an effect just after this render, so wait for it (QA round 2: a full run caught it mid-way).
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=board]').dataset.fen.startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w')"
+    )
 
 
 def test_a_refused_what_if_on_the_board_puts_the_piece_back(page: Any) -> None:

@@ -1,4 +1,102 @@
-# QA report: v0.13 (Opening trainer), round 1
+# QA report: v0.13 (Opening trainer)
+
+# Round 2, 2026-11-06: re-verification at `1e6a0f9`
+
+Same rules as round 1. I changed only `tests/` and this report. No credentials, no `-m live`. Smoke runs were signed out, in temp data folders.
+
+## Verdict: **FAIL** (3 major, 4 minor; no blocker)
+
+25 of round 1's 28 bugs are fixed, and the What if? board, Practice and money fixes held up under pressure, including slow answers arriving late in the real window. The gate isn't met, because of these three:
+- **B2 (major, only partly fixed):** Export and Delete still miss notes on lines an opening really shows, when the line runs through another family's book positions. That's 56 of 149 families and 1349 moves, including King's Pawn Game and Queen's Gambit.
+- **B31 (major, new, from the B15 fix):** the wider URL pattern takes quadratic time on a long run like `a.a.a.`. 32 KB took 22 s. It also stopped another Python thread for the whole 12 s of a 24 KB run, so the backend can't answer meanwhile. Pages are cleaned before they're cut to size, and anyone can edit a page.
+- **B30 (major, new, from the B25 fix):** two notes asked for while the interactive engine is busy share one ticket, so the first is superseded. It's sent, billed and saved with no engine figures, and labelled "Based on Stockfish's figures only" if it used no page.
+
+**Severity calls worth a second look:** B31 needs someone to plant the text, and I measured the stall in a script, not the app. B30 needs two clicks within roughly a think time of each other (1 s by default). I rate both major because Wikibooks text is treated as untrusted and FR-12.6 requires engine grounding, and because each was introduced by a fix.
+
+## Open bugs
+
+| ID | Severity | Steps and expected | Actual | Evidence |
+|---|---|---|---|---|
+| **B2** | major | Catalan, Light: every move shown should be covered by `_note_keys` | Bd2 on the *Bogo-Indian: Retreat Variation* line isn't. `tail_keys` and `family_keys` read only `ln.family == root.family`, but `select_lines` walks the whole book's index. The past-the-book part of the fix works | `test_every_move_an_opening_shows_is_covered_by_its_notes[Catalan Opening]`, `[East Indian Defense]` |
+| **B30** | major | Hold the interactive engine, ask for two notes, release. Both prompts should have `engine:` lines | The first has none. `interactive_lines` uses the single ticket `("openings", "note")`, and `analyse_lines` returns None when superseded, which `_facts` turns into no facts | `test_two_notes_asked_together_both_keep_their_engine_figures` |
+| **B31** | major | `clean_page` on a long run should finish quickly | 8 KB 1.4 s, 32 KB 22 s (`a.`); 32 KB 31 s (`a-`). By the same growth, 300 KB would take about half an hour | `test_a_long_hostile_run_cleans_in_good_time`; stall measured with a throwaway script |
+| **B18** | minor (partly fixed) | FR-12.9 says the refutation uses "the same tools as Game Review FR-11.14", which you can step through | The line now shows in SAN, in the real window. There's no step-through. **My rating, as you asked: still short of FR-12.9, but minor**, because the information is there | Screenshot `qa-v013-real-r2-refutation.png`; no test for the step-through |
+| **B29** | minor (new, from the B11 fix) | A line cut off by the limit shouldn't count as finished clean | `lines_clean` goes up, and "That's the end of this line" shows mid-line | `test_a_line_cut_off_by_the_limit_isnt_counted_as_finished_clean` |
+| **B32** | minor | Prefetch dialog: Deep then Light at once should show Light's plan | "7 lines, 96 positions, 8 requests" stays while Confirm sends Light. The figures shown are too high here, and they could mislead the other way. It's B27's fix missing from the dialog; round 1 didn't test it | `test_qa13r2_a_quick_change_in_the_prefetch_dialog_shows_its_own_plan` (non-strict xfail: timing) |
+| **B13** | minor, **Adam to decide** | A miss in All resets a graduated position, against the plan | Unchanged. The tooltip now states the behavior | `test_all_leaves_a_graduated_position_on_the_schedule_it_had` |
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B1 | **FIXED** | Round 1 tests pass, plus in the real window: a slow answer after Clear is dropped, the same move works twice, a newer question beats a slower older one, and a refused move goes back, twice over |
+| B2 | **PARTLY** | Past-the-book notes pass. See above |
+| B3, B14 | **FIXED** | Billed answers count. A bad key stops after 1 request. `llm_quota` is in the stop list by reading, not by test |
+| B4 | **FIXED** | Nested to 50 levels: exactly one of each marker |
+| B5, B23, B24, B28 | **FIXED** | Read; `ruff format --check .` clean |
+| B6, B8, B10, B12, B16, B19, B21, B22, B25, B26, B27 | **FIXED** | Round 1 tests pass, with xfail markers removed. B8 also removes cleanly after practising: `opening_attempts` has no foreign key, and attempts stay. B25's separate engines are confirmed |
+| B7 | **FIXED** | The real window too: a slow answer with a jump between their turns leaves no trace |
+| B9 | **FIXED** | See below |
+| B11 | **FIXED**, with B29 | A miss and help both count toward the limit |
+| B15 | **FIXED**, with B31 | See below |
+| B17 | **FIXED** | Branch menu in the real window: disabled with one line, enabled after a split, real labels, and a session limited to fewer positions. The walk there isn't recorded |
+| B20 | **FIXED** | Live: the three titles that failed or needed a redirect now resolve directly. **Round 1 correction below** |
+
+## Your specific questions
+
+- **What if? notes left out of Export and Delete:** I don't rate this as a bug. They're off the opening's lines, and the guide says so. The cost is that those notes can't be exported or deleted anywhere, only regenerated, so Adam may want a way to do that.
+- **St. George Defense row:** I agree with changing my smoke assertion. The name is accurate, since 1...a6 leaves the Italian, and it does appear in Stats and can be practised alone. A What if? inside an opening stays under that opening. One thing to expect: a row you never chose appears in My repertoire.
+- **B15 false positives and negatives:**
+  - *False positives:* none in 22 real Wikibooks pages (95,503 characters, 0 matches, because the API's plain text had no links). Ordinary chess writing is untouched. Only text with a missing space is hit: `Bb5.Then/Or` and `Fischer.Spassky/1972` vanish, and `White.Net` loses its word.
+  - *False negatives:* `evil.xyz`, `bit.ly`, `192.168.0.1/x`, `mailto:a@evil.xyz` and `evil[.]com/x` stay. `user@evil.com` and `evil.com:8080/x` leave a fragment. None can become a link, because the app never makes one from page text. Not filed.
+- **B18:** see the table.
+
+## Tests you changed
+
+None is weakened.
+- `test_tolerance_uses_your_side_of_the_eval_as_black`: patches the method now used, and the assertions are unchanged.
+- `test_adding_a_board_played_what_if_keeps_the_message_and_your_reply`: `is_checked` still reads the real radio.
+- `test_stats_per_opening_and_line`: its old `attempts == 0` encoded B26, so the new value is right.
+- `test_a_check_or_mate_mark_is_left_out_of_the_title_and_the_link`: its old form was what B20 reported.
+
+## Commands at `1e6a0f9`
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **3438 passed, 1 skipped, 7 xfailed** (1220 s), rc 0. The xfails: B2 x2, B13, B29, B30, B31 x2 |
+| `uv run pytest -m e2e` | 461 passed, **1 failed** (901 s). The failure was **my own test**, not the app: `test_switching_to_play_along_clears_a_preview` read the board before an effect had cleared the preview. Passed 6 of 6 alone, then I changed it to wait, and it passed. **I didn't repeat the full e2e run after that** |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **59 passed, 1 skipped, 1 xfailed** (884 s), rc 0, the whole suite, which the builder hadn't re-run |
+| `-m engine` / `-m fulldb` / `-m docs_screenshots` | 19 passed / 76 passed, 3 xfailed (from earlier versions) / 50 passed. No image changed this time |
+| ruff check, ruff format, mypy, typecheck, lint, pre-commit, `check_docs.py --strict`, `make_icon.py --check`, `fetch_stockfish.py --dev` | all clean |
+
+The new xfails were run with `--runxfail` and fail on the assertion they're about. A test I'd drafted for a move overtaken by a refused typed one turned out to be unreachable, because **Find replies** is disabled while an answer is out, so I removed it and filed nothing.
+
+**Not re-run this round:** the setup and mock dev server rows; `gen_types.py` (the builder's types were committed, and `tsc` passes). Still not tested: a real LLM, signed-in paths in the window, the Coach link clicked in the real window, and CI.
+
+## Outside requests, disclosed
+
+Read-only, no credentials, no page text saved, none from a committed test:
+- 4 page requests to re-check the titles and the credit link.
+- 22 API requests to count what the URL filter removes. I printed only counts.
+- 6 page GETs comparing User-Agents.
+
+## Correction to round 1
+
+**My "credit link returns 403" under B20 was wrong.** The 403 came from the bare User-Agent in my script: with it, even `.../1._e4` returns 403. With a descriptive User-Agent, `...Qh4%23` returned 200, and so does `.../2...Qh4`. I didn't check what that 200 page shows. The rest of B20 stands, because it came from the API.
+
+## Tests added this round
+
+27 functions, plus one wait fixed in `tests/e2e/test_qa_v013_ui.py`.
+- **`tests/integration/test_qa_v013_round2.py` (21):** `test_every_move_an_opening_shows_is_covered_by_its_notes`, `test_every_move_past_the_book_is_covered_too`, `test_an_opening_you_have_practised_can_still_be_removed`, `test_removing_one_branch_keeps_an_opening_that_can_still_be_reached`, `test_what_if_lists_the_opening_it_leads_to_and_it_can_be_practised_alone`, `test_what_if_inside_an_opening_stays_listed_under_it`, `test_a_limited_session_never_asks_past_its_limit_whatever_you_do`, `test_a_line_cut_off_by_the_limit_isnt_counted_as_finished_clean`, `test_branches_list_each_side_of_a_split_and_limit_the_session`, `test_a_branch_with_nothing_of_yours_after_it_isnt_offered`, `test_branches_within_one_opening_stay_in_it`, `test_branches_stay_quick_on_the_largest_repertoire_a_build_can_make`, `test_a_session_for_one_opening_doesnt_take_another_openings_first_moves`, `test_two_notes_asked_together_both_keep_their_engine_figures`, `test_a_note_you_asked_for_and_a_prefetch_keep_to_their_own_engines`, `test_a_marker_nested_to_any_depth_cant_survive`, `test_ordinary_chess_writing_is_left_alone`, `test_the_wider_link_filter_catches_these`, `test_most_long_pages_clean_at_once`, `test_a_long_hostile_run_cleans_in_good_time`, `test_a_title_keeps_castling_and_promotion_and_drops_only_the_mark`
+- **`tests/smoke/test_qa_v013_round2_real_app.py` (6):** `test_qa13r2_a_slow_answer_after_clear_is_dropped_and_the_same_move_works_twice`, `test_qa13r2_a_slow_board_move_after_a_step_change_leaves_no_trace`, `test_qa13r2_a_newer_question_beats_a_slower_older_one`, `test_qa13r2_with_no_engine_a_refused_board_move_goes_back`, `test_qa13r2_a_quick_change_in_the_prefetch_dialog_shows_its_own_plan`, `test_qa13r2_the_branch_menu_limits_a_real_session`
+
+**A limit on one test:** `test_branches_stay_quick_on_the_largest_repertoire_a_build_can_make` builds through the fake engine and signed out, so its repertoire may be smaller than a real signed-in build. It says little about the worst case.
+
+**Small, not filed:** the Practice summary line ("13 new") doesn't narrow when you choose a Branch.
+
+---
+
+# Round 1
 
 Branch `v0.13` at `3519c35`. Run on 2026-11-06 by the independent `qa-tester`. I changed no product code, migrations, config or docs. New tests are under `tests/` only. `-m live` was **not** run: Adam ran `tests/live/test_explorer_live.py` himself (both passed, 2026-11-06). No real credentials were read or used. The smoke runs were signed out, in temp data folders, with a copy of the dev Stockfish.
 
@@ -177,7 +275,7 @@ No human-facing command uses a `.ps1` script, bare `npm`/`npx` or venv activatio
 **v0.13-B20: page titles keep `+` and `#`**
 - **Live check, 2026-11-06:**
   - `…/3. Bb5+`, `…/3...Qh4+` and `…/3...Bb4+` are **missing**; the same titles without `+` are **found** (2597, 343 and 534 characters).
-  - `…/2...Qh4#` is normalized by the API to `…/2...Qh4`, so the text arrives, but the credit link `…Qh4%23` returns **403**.
+  - `…/2...Qh4#` is normalized by the API to `…/2...Qh4`, so the text arrives, but the credit link `…Qh4%23` returns **403**. *(Wrong: see the correction in round 2.)*
 - **Effect:** 306 of 3865 book lines contain a check. From that move on, the panel says "Wikibooks has no page for this exact move order", which is false, and notes lose their grounding.
 - **Expected:** Titles as Wikibooks names them.
 - **Note for the fix:** `test_a_castling_or_check_title_is_encoded_in_the_link` encodes the wrong form and needs changing too.
