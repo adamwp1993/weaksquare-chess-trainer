@@ -13,7 +13,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
-Candidates: v0.13-rc1 (2026-11-07), v0.13-rc2 (2026-11-07)
+Candidates: v0.13-rc1 (2026-11-07), v0.13-rc2 (2026-11-07), v0.13-rc3 (2026-11-07)
 
 ### Added
 - **The opening trainer**: a new **Openings** page with the Lichess opening book. Search for an opening, choose your side and how many lines to show (up to **All**, every line the book has for it), and pick a line. [FR-12.1, FR-12.2, FR-12.7a]
@@ -32,7 +32,7 @@ Candidates: v0.13-rc1 (2026-11-07), v0.13-rc2 (2026-11-07)
 - **Your repertoire:** add lines for White or Black, mark main moves and reorder them. Removing a move keeps any position another line still reaches. [FR-12.4]
 
 ### Fixed
-- **Board letters and numbers are readable on every board.** They were small and faint inside the edge squares, and on Game Review the letters were often below the window. They now sit just outside the board, and the Game Review board fits the window.
+- **Board letters and numbers are readable on every board.** They were small and faint inside the edge squares, and on Game Review and Puzzles the letters were often below the window. They now sit just outside the board, and the Puzzles, Game Review and opening Practice boards fit the window.
 
 ## [v0.12] - 2026-11-06
 Candidates: v0.12-rc1 (2026-11-05), v0.12-rc2 (2026-11-06)

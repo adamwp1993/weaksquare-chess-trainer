@@ -199,3 +199,51 @@ def test_hiding_coordinates_still_hides_them(page: Any) -> None:
     page.keyboard.press("c")
     labels.first.wait_for()
     assert labels.count() == 2
+
+
+# ---- every other board (Adam, 2026-11-07: "puzzles doesnt have them") ----------------------------------------
+# The Puzzles board was a fixed 560 px under the session bar, so in a shorter window its file letters were
+# below the bottom edge, as on Game Review before. Every board at the top of its page now fits the window.
+
+
+@pytest.mark.parametrize("height", [600, 720, 1000])
+def test_puzzle_letters_are_in_the_window(page: Any, height: int) -> None:
+    page.set_viewport_size({"width": 1280, "height": height})
+    page.goto(page.base_url + "/")
+    start(page)
+    check_labels(page, "black", on_screen=True)
+
+
+@pytest.mark.parametrize("height", [600, 720])
+def test_puzzle_letters_are_in_the_window_with_filters_hidden(page: Any, height: int) -> None:
+    page.set_viewport_size({"width": 1280, "height": height})
+    page.goto(page.base_url + "/")
+    start(page)
+    page.get_by_test_id("hide-filters").click()
+    page.get_by_test_id("filters-strip").wait_for()
+    page.wait_for_timeout(300)
+    check_labels(page, "black", on_screen=True)
+
+
+@pytest.mark.parametrize("height", [600, 720])
+def test_opening_practice_letters_are_in_the_window(page: Any, height: int) -> None:
+    from tests.e2e.test_openings_ui import start_practice
+
+    page.set_viewport_size({"width": 1280, "height": height})
+    start_practice(page)
+    orientation = page.get_by_test_id("board").evaluate(
+        "(el) => el.classList.contains('orientation-black') ? 'black' : 'white'"
+    )
+    check_labels(page, orientation, on_screen=True)
+
+
+def test_opening_learn_board_has_the_labels_once_scrolled_to(page: Any) -> None:
+    """The learn board sits under the opening's lines, so you scroll to it; its labels are then all in view."""
+    from tests.e2e.test_openings_ui import openings, pick
+
+    page.set_viewport_size({"width": 1280, "height": 720})
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("board").scroll_into_view_if_needed()
+    page.get_by_test_id("board-files").scroll_into_view_if_needed()
+    check_labels(page, "white", on_screen=True)

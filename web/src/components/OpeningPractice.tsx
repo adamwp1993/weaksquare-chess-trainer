@@ -264,6 +264,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
           onMove={(uci) => act(api.playPracticeMove(s.session_id, uci))}
           coordinates={coordinates}
           maxWidth={560}
+          fitWindow
         />
       </div>
       <Stack gap="sm" style={{ flex: "1 1 300px", minWidth: 280 }}>

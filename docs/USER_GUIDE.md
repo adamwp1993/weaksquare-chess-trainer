@@ -1129,7 +1129,7 @@ The **Stats** tab shows accuracy, positions due and your weakest positions, for 
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 
-**Board coordinates:** the numbers run down the left edge of the board and the letters along the bottom, on every board in the app. To hide or show them, press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved. *Changed in v0.13: they sit just outside the board, larger and easier to read, and on Game Review the board shrinks to fit the window so the letters stay in view.*
+**Board coordinates:** the numbers run down the left edge of the board and the letters along the bottom, on every board in the app. To hide or show them, press **C**, choose **☰ → Hide board coordinates** / **Show board coordinates**, or use the switch in **Settings**. Your choice is saved. *Changed in v0.13: they sit just outside the board, larger and easier to read, and on Puzzles, Game Review and opening Practice the board shrinks to fit the window so the letters stay in view. On the Openings learn board, scroll down to see the whole board.*
 
 ## Finding out what an option does
 *Added in v0.12.*
