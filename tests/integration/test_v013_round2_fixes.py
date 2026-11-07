@@ -223,3 +223,32 @@ def test_a_note_keeps_its_figures_when_asked_during_a_board_analysis(api: Any) -
     from tests.integration.test_qa_v013_notes import provider
 
     assert "engine:" in provider(api).requests[-1].user
+
+
+# ---- QA round 3: B33 and B34 -------------------------------------------------------------------------------------------------
+
+
+def test_a_heading_that_was_only_a_link_doesnt_leave_a_mark() -> None:
+    assert clean_page("== https://evil.example/x ==\nText.").strip() == "Text."
+
+
+def test_a_reference_section_is_still_found_with_a_link_in_its_heading() -> None:
+    assert "Gone" not in clean_page("Kept.\n== References https://evil.example/x ==\nGone.")
+
+
+def test_delete_says_what_it_would_remove_before_it_does(api: Any) -> None:  # noqa: F811
+    """v0.13-B34: QA's example, deleting a parent opening, is counted up front and changes nothing."""
+    configure(api)
+    finish(api, api._opening_notes.start_prefetch(FAMILY, "standard", None, None, False))
+    parent = "King's Knight Opening"
+    got = api.get_opening_notes_deletion(parent)
+    assert got["ok"], got
+    total, shared = got["data"]["total"], got["data"]["shared"]
+    assert total > 0 and shared > 0 and shared <= total
+    assert api.get_opening_notes_deletion(parent)["data"]["total"] == total  # asking removed nothing
+    assert api.delete_opening_notes(parent)["data"] == total
+    assert api.get_opening_notes_deletion(parent)["data"] == {"total": 0, "shared": 0}
+
+
+def test_an_opening_with_no_notes_has_nothing_to_delete(api: Any) -> None:  # noqa: F811
+    assert api.get_opening_notes_deletion(FAMILY)["data"] == {"total": 0, "shared": 0}

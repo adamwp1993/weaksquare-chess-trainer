@@ -64,11 +64,6 @@ def test_ordinary_headings_read_as_before(line: str, kept: str) -> None:
     assert clean_page(line) == kept
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B33: a heading is kept without going through the URL filter, so a link planted in one reaches the prompt and "
-    "the panel (FR-12.15: URLs removed)",
-    strict=True,
-)
 def test_a_link_in_a_heading_is_removed_too() -> None:
     assert "evil" not in clean_page("== See https://evil.example/x now ==\nText.")
 
@@ -109,8 +104,8 @@ def test_working_out_what_an_opening_covers_stays_quick(api: Any, family: str) -
 
 
 @pytest.mark.xfail(
-    reason="v0.13-B34: covering the widest Custom makes Delete reach far into other openings with no warning: deleting King's "
-    "Knight Opening's notes removes most of the Italian's, though Italian is its own opening with its own paid-for notes",
+    reason="v0.13-B34: Delete still reaches other openings' notes, now after asking and giving the count. Narrowing "
+    "it would leave notes it showed undeletable, so that is Adam's decision",
     strict=True,
 )
 def test_deleting_a_parent_opening_leaves_another_openings_own_notes(api: Any) -> None:  # noqa: F811

@@ -13,6 +13,8 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+Candidates: v0.13-rc1 (2026-11-07)
+
 ### Added
 - **The opening trainer**: a new **Openings** page with the Lichess opening book. Search for an opening, choose your side and how many lines to show, and pick a line. [FR-12.1, FR-12.2, FR-12.7a]
 - **Learn a line** by stepping through it with Stockfish's evals, or switch to **Play along**: the app plays the other side and nudges you if you go wrong. Unscored. [FR-12.3, FR-12.6, FR-12.16]

@@ -632,6 +632,13 @@ class OpeningNotesService:
         position doesn't say which opening it came from, so it stays."""
         return sorted(self._openings.tail_keys(family).union(self._openings.family_keys(family)))
 
+    def deletion(self, family: object) -> tuple[int, int]:
+        """What Delete would remove: its notes, and how many of them other openings use too (FR-12.7). A note belongs to
+        a position, not an opening, so those openings lose them as well."""
+        rows = self._repo.for_positions(self._note_keys(family))
+        others = self._openings.other_openings_keys(family)
+        return len(rows), sum(1 for row in rows if row.position_key in others)
+
     def delete(self, family: object) -> int:
         return self._repo.delete_positions(self._note_keys(family))
 

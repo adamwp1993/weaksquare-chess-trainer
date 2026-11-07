@@ -134,11 +134,6 @@ def test_qa13r3_stepping_through_as_black_keeps_your_side_of_the_board(
         assert page.errors == []
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B35: a late answer about an earlier miss is ignored on screen, but it still replaces the answer about this "
-    "one, so this miss loses its refutation and its step-through (FR-12.9)",
-    strict=True,
-)
 def test_qa13r3_a_late_answer_about_an_earlier_miss_leaves_this_ones(
     pw, tmp_path: Path, fixture_puzzles_db: Path
 ) -> None:  # type: ignore[no-untyped-def]

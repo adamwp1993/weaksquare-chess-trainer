@@ -3,6 +3,7 @@
 // the engine, the explorer or you. All text is plain React text.
 import {
   Alert,
+  Modal,
   Anchor,
   Badge,
   Button,
@@ -24,6 +25,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
+  OpeningNotesDeletion,
   EngineStatus,
   BookFamily,
   OpeningLine,
@@ -513,6 +515,7 @@ function OpeningDetail({
   const [overviewKey, setOverviewKey] = useState<string | null>(null);
   const [prefetching, setPrefetching] = useState(false);
   const [notesVersion, setNotesVersion] = useState(0);
+  const [deleting, setDeleting] = useState<OpeningNotesDeletion | null>(null);
   const [notesMessage, setNotesMessage] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const job = useJob(extendJob);
@@ -677,10 +680,10 @@ function OpeningDetail({
           color="red"
           data-testid="opening-delete-notes"
           onClick={() =>
-            api.deleteOpeningNotes(family).then(
-              (n) => {
-                setNotesMessage(`Deleted ${n} ${n === 1 ? "note" : "notes"}.`);
-                setNotesVersion((v) => v + 1);
+            api.getOpeningNotesDeletion(family).then(
+              (d) => {
+                if (d.total === 0) setNotesMessage("There are no notes to delete yet.");
+                else setDeleting(d);
               },
               (e: unknown) => setError(message(e)),
             )
@@ -694,6 +697,43 @@ function OpeningDetail({
           </Text>
         )}
       </Group>
+      {deleting && (
+        <Modal opened onClose={() => setDeleting(null)} title="Delete these notes?" data-testid="opening-delete-dialog">
+          <Stack gap="sm">
+            <Text size="sm" data-testid="opening-delete-count">
+              This removes {deleting.total} saved {deleting.total === 1 ? "note" : "notes"}, and there's no undo.
+            </Text>
+            {deleting.shared > 0 && (
+              <Text size="sm" c="yellow.8" data-testid="opening-delete-shared">
+                {deleting.shared} of them {deleting.shared === 1 ? "is" : "are"} on moves other openings use too. They'd lose {deleting.shared === 1 ? "it" : "them"} as well, and asking again
+                costs money if you use an AI.
+              </Text>
+            )}
+            <Group justify="flex-end" gap="xs">
+              <Button size="xs" variant="default" onClick={() => setDeleting(null)} data-testid="opening-delete-keep">
+                Keep them
+              </Button>
+              <Button
+                size="xs"
+                color="red"
+                data-testid="opening-delete-confirm"
+                onClick={() => {
+                  setDeleting(null);
+                  api.deleteOpeningNotes(family).then(
+                    (n) => {
+                      setNotesMessage(`Deleted ${n} ${n === 1 ? "note" : "notes"}.`);
+                      setNotesVersion((v) => v + 1);
+                    },
+                    (e: unknown) => setError(message(e)),
+                  );
+                }}
+              >
+                Delete
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+      )}
       {building && settings && (
         <BuildDialog family={family} color={color} signedIn={settings.signed_in} onClose={() => setBuilding(false)} onSaved={onRepertoireChanged} />
       )}
@@ -737,7 +777,14 @@ function RepertoireTab({ version }: { version: number }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getRepertoire(color).then(setRep, (e: unknown) => setError(message(e)));
+    let alive = true;
+    api.getRepertoire(color).then(
+      (r) => alive && setRep(r),
+      (e: unknown) => alive && setError(message(e)),
+    );
+    return () => {
+      alive = false;
+    };
   }, [color, version]);
 
   const act = (p: Promise<Repertoire>) => p.then(setRep, (e: unknown) => setError(message(e)));
@@ -903,7 +950,15 @@ export function OpeningsView({
 
   useEffect(() => {
     if (!ready) return;
-    api.getOpeningFamilies(query).then(setFound, (e: unknown) => setError(message(e)));
+    // A slower answer to what you typed earlier mustn't replace this one.
+    let alive = true;
+    api.getOpeningFamilies(query).then(
+      (f) => alive && setFound(f),
+      (e: unknown) => alive && setError(message(e)),
+    );
+    return () => {
+      alive = false;
+    };
   }, [ready, query]);
 
   if (error && !ready) {

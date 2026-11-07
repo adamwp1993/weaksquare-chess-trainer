@@ -441,6 +441,11 @@ class OpeningsService:
                 keys.update(ln.keys)
         return sorted(keys)
 
+    def other_openings_keys(self, family: object) -> set[str]:
+        """Positions on any other family's book lines."""
+        root = self.root(family)
+        return {key for ln in self._data()[0] if ln.family != root.family for key in ln.keys}
+
     def _shown_lines(self, family: object) -> list[Line]:
         """The lines an opening shows at each preset, at the widest Custom and at your scope. A line can run through
         another family's book positions, as the Catalan's does through the Bogo-Indian."""

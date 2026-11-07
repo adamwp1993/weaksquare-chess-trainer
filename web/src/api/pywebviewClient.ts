@@ -59,7 +59,7 @@ import type {
   OpeningBookStatus,
   OpeningLines,
   OpeningNote,
-  OpeningNoteQuote,
+  OpeningNoteQuote, OpeningNotesDeletion,
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
@@ -618,6 +618,10 @@ export class PywebviewClient implements ApiClient {
 
   exportOpeningNotes(family: string) {
     return this.call<string | null>("export_opening_notes", family);
+  }
+
+  getOpeningNotesDeletion(family: string) {
+    return this.call<OpeningNotesDeletion>("get_opening_notes_deletion", family);
   }
 
   deleteOpeningNotes(family: string) {

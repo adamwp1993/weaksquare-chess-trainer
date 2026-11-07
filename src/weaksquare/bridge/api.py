@@ -1299,6 +1299,10 @@ class Api:
         return str(path)
 
     @bridge_call
+    def get_opening_notes_deletion(self, family: str) -> dto.OpeningNotesDeletion:
+        return dto.OpeningNotesDeletion(*self._opening_notes.deletion(family))
+
+    @bridge_call
     def delete_opening_notes(self, family: str) -> int:
         return self._opening_notes.delete(family)
 

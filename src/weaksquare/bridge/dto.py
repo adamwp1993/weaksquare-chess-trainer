@@ -1027,6 +1027,12 @@ class OpeningNote:
 
 
 @dataclass(frozen=True)
+class OpeningNotesDeletion:
+    total: int
+    shared: int  # of those, the notes on positions other openings use too
+
+
+@dataclass(frozen=True)
 class OpeningNoteQuote:
     # 'ok', 'cached' (free), or why not: 'not_configured', 'no_model', 'no_price', 'over_budget', 'over_cap'
     state: str
@@ -1907,6 +1913,7 @@ EXPORTED += [
     OpeningNoteSource,
     OpeningNote,
     OpeningNoteQuote,
+    OpeningNotesDeletion,
     OpeningPrefetchPlan,
     OpeningDeviationReply,
     OpeningDeviation,

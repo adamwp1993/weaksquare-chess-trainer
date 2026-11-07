@@ -324,7 +324,16 @@ def test_export_and_delete(page: Any) -> None:
     page.get_by_test_id("opening-export").click()
     page.get_by_test_id("opening-notes-message").filter(has_text="notes.md").wait_for()
     page.get_by_test_id("opening-delete-notes").click()
+    page.get_by_test_id("opening-delete-count").filter(has_text="1 saved note").wait_for()
+    page.get_by_test_id("opening-delete-shared").wait_for()
+    page.get_by_test_id("opening-delete-keep").click()  # v0.13-B34: asks first, and keeping them keeps them
+    page.get_by_test_id("opening-delete-dialog").wait_for(state="detached")
+    page.get_by_test_id("overview-note").get_by_test_id("opening-note").wait_for()
+    page.get_by_test_id("opening-delete-notes").click()
+    page.get_by_test_id("opening-delete-confirm").click()
     page.get_by_test_id("overview-note-button").wait_for()
+    page.get_by_test_id("opening-delete-notes").click()
+    page.get_by_test_id("opening-notes-message").filter(has_text="no notes to delete").wait_for()
 
 
 def test_the_dialogs_options_have_tooltips(page: Any) -> None:

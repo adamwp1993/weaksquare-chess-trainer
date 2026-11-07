@@ -336,6 +336,10 @@ export class MockOpenings {
     return this.notes.size > 0;
   }
 
+  notesDeletion(): { total: number; shared: number } {
+    return { total: this.notes.size, shared: Math.min(1, this.notes.size) };
+  }
+
   deleteNotes(): number {
     const n = this.notes.size;
     this.notes.clear();

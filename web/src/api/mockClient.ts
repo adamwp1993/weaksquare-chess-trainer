@@ -1256,6 +1256,10 @@ export class MockClient implements ApiClient {
     return this.openings.hasNotes() ? `C:\\mock\\exports\\${family.replace(/ /g, "-")}-notes.md` : null;
   }
 
+  async getOpeningNotesDeletion() {
+    return this.openings.notesDeletion();
+  }
+
   async deleteOpeningNotes(family: string) {
     this.calls.push(`openingDelete:${family}`);
     return this.openings.deleteNotes();

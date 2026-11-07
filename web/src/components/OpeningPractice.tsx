@@ -69,9 +69,17 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
   const [asked, setAsked] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshing = useRef(0);
   const refresh = useCallback(() => {
-    api.getPracticeSummary(color).then(setSummary, (e: unknown) => setError(message(e)));
-    api.getRepertoire(color).then((r) => setOpenings(r.openings), (e: unknown) => setError(message(e)));
+    const mine = ++refreshing.current; // a slower answer about the other side mustn't replace this one
+    api.getPracticeSummary(color).then(
+      (next) => mine === refreshing.current && setSummary(next),
+      (e: unknown) => mine === refreshing.current && setError(message(e)),
+    );
+    api.getRepertoire(color).then(
+      (r) => mine === refreshing.current && setOpenings(r.openings),
+      (e: unknown) => mine === refreshing.current && setError(message(e)),
+    );
     api.getPracticeTolerance().then(setTolerance, () => undefined);
   }, [color]);
   useEffect(refresh, [refresh, version]);
@@ -86,7 +94,10 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
     };
   }, [color, opening, version]);
 
+  // The latest state's question: an answer about an earlier miss can arrive after this one's.
+  const askedAbout = useRef(0);
   const apply = (next: PracticeState) => {
+    const mine = ++askedAbout.current;
     setS(next);
     setError(null);
     setRefutation(null);
@@ -96,11 +107,15 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
     setNote("");
     setAsked(true);
     if (next.state === "wrong" && next.wrong_fen) {
-      api.analyzeOpeningPosition(next.wrong_fen, "board", next.color as Color).then(setRefutation, () => undefined);
+      api.analyzeOpeningPosition(next.wrong_fen, "board", next.color as Color).then((a) => {
+        if (mine === askedAbout.current) setRefutation(a);
+      }, () => undefined);
     }
     if ((next.state === "wrong" || next.state === "helped") && next.correct_moves[0]) {
       // FR-12.9: its stored explanation, if you've saved one. This never asks the AI.
-      api.getOpeningNote(next.position_key, next.correct_moves[0][0], "move").then(setStored, () => undefined);
+      api.getOpeningNote(next.position_key, next.correct_moves[0][0], "move").then((n) => {
+        if (mine === askedAbout.current) setStored(n);
+      }, () => undefined);
     }
     if (next.state === "finished") refresh();
   };
@@ -234,8 +249,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
 
   const yourTurn = s.state === "your_move";
   const missed = s.state === "wrong" || s.state === "helped";
-  // An answer about an earlier miss isn't this one's.
-  const refuted = s.state === "wrong" && refutation && !refutation.superseded && refutation.fen === s.wrong_fen ? refutation.lines[0] : undefined;
+  const refuted = s.state === "wrong" && refutation && !refutation.superseded ? refutation.lines[0] : undefined;
   const steps = refuted ? linePositions(refutation!.fen, refuted.pv) : [];
   const stepping = step !== null ? steps[step] : undefined;
   return (
@@ -368,7 +382,14 @@ export function OpeningStatsTab({ version }: { version: number }) {
   const [stats, setStats] = useState<OpeningStat[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    api.getOpeningStats(color).then(setStats, (e: unknown) => setError(message(e)));
+    let alive = true;
+    api.getOpeningStats(color).then(
+      (next) => alive && setStats(next),
+      (e: unknown) => alive && setError(message(e)),
+    );
+    return () => {
+      alive = false;
+    };
   }, [color, version]);
   return (
     <Stack gap="sm" data-testid="opening-stats">

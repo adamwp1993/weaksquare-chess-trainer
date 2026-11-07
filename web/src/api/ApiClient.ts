@@ -39,7 +39,7 @@ import type {
   OpeningBookStatus,
   OpeningLines,
   OpeningNote,
-  OpeningNoteQuote,
+  OpeningNoteQuote, OpeningNotesDeletion,
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
@@ -479,6 +479,8 @@ export interface ApiClient {
   /** Only after you Confirm the estimate (FR-8.11, 12.7b). */
   startOpeningPrefetch(family: string, preset: OpeningScope["preset"], subLines: number | null, maxMoves: number | null, extend: boolean): Promise<string>;
   exportOpeningNotes(family: string): Promise<string | null>;
+  /** What Delete notes would remove, so you can be asked first. */
+  getOpeningNotesDeletion(family: string): Promise<OpeningNotesDeletion>;
   deleteOpeningNotes(family: string): Promise<number>;
   /** Continue the lines with Stockfish in the background; null when there's nothing to do. */
   startOpeningExtend(family: string): Promise<string | null>;

@@ -91,7 +91,7 @@ def clean_page(text: str) -> str:
             if dropping_level and level > dropping_level:
                 continue
             dropping_level = 0
-            kept.append(name)
+            kept.append(_no_links(name).strip())
             continue
         if dropping_level:
             continue
