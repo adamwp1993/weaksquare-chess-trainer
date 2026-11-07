@@ -1,5 +1,98 @@
 # QA report: v0.13 (Opening trainer)
 
+# Round 3, 2026-11-06: re-verification at `e6a12e7`
+
+Same rules as before. I changed only `tests/` and this report. No credentials, no `-m live`. Smoke runs were signed out, in temp data folders.
+
+## Verdict: **PASS WITH ISSUES** (no blocker, no major, 4 minor)
+
+All round 2 majors are fixed, and the gate (minor issues only) is met. **One call decides that, and Adam should see it:** I rate B34 minor, not major.
+- **B34:** fixing B2 made **Delete notes** reach far into other openings. Deleting King's Knight Opening's notes removed **49 of the Italian's 56** paid-for notes past its root, with no confirmation and no undo.
+- **Why minor:** the guide says so, the notes can be bought again for a small cost, and it takes deleting a broader parent opening to reach this far.
+- **If Adam treats paid-for notes as data to protect, it's major**, and the verdict becomes FAIL.
+
+## Open bugs (all minor)
+
+| ID | Steps and expected | Actual | Evidence |
+|---|---|---|---|
+| **B34 (new, from the B2 fix)** | Save the Italian's notes at Standard, then Delete notes on King's Knight Opening. The Italian's own notes should stay | 7 of 56 are left. By book positions at Standard, King's Knight Opening reaches 54 of the Italian's 62 and 48 of the Ruy Lopez's 53; King's Pawn Game reaches 49 of the Sicilian's 63; deleting the Italian reaches 23 of the Scotch's 57. The button has no confirmation | `test_deleting_a_parent_opening_leaves_another_openings_own_notes` |
+| **B33 (not new)** | `== See https://evil.example/x now ==` should lose its link | The heading keeps it, because headings skip the URL filter. It reaches the prompt and the panel as plain text. This falls short of the *Done when* line "URLs never reach the prompt", and round 1 missed it | `test_a_link_in_a_heading_is_removed_too` |
+| **B35 (new, from the B18 fix)** | Miss, Continue, miss again, with the first answer arriving last. The second miss should keep its refutation | The late answer replaces the right one, and the fen check then hides it: no line and no **Step through**. It needs the second answer to come first, as a saved position's does | `test_qa13r3_a_late_answer_about_an_earlier_miss_leaves_this_ones` |
+| **B13** | A miss in All resets a graduated position, against the plan | Unchanged, **for Adam to decide** | `test_all_leaves_a_graduated_position_on_the_schedule_it_had` |
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B2 | **FIXED**, with B34 | Catalan and East Indian pass. Sicilian, King's Pawn Game and Queen's Gambit pass at 4 Custom settings. A line grown at a setting you've since left is covered (tested on the Italian) |
+| B18 | **FIXED**, with B35 | **Real window, real Stockfish, as White and Black.** See below |
+| B29 | **FIXED** | Real window: at 15 decisions the text names the limit, only on the last line, and the finish says "0 right, 15 missed… 0 clean lines" |
+| B30 | **FIXED** | Round 2's test passes unmarked. A tolerance check held behind a busy engine, with newer tickets taken, still gets its answer |
+| B31 | **FIXED** | See below |
+| B32 | **FIXED** | Real window with answers held back: Confirm stays disabled until the latest choice's plan arrives, Deep's late answer is dropped, and Confirm sends Light. By reading only: if the plan call fails, Confirm enables with the older plan showing |
+
+Round 1's other fixes still pass as regressions in the full run.
+
+## Your specific questions
+
+**The B2 trade-off.** Your stated limit is the right one to accept, because it barely exists: across all 149 families, a sample of 24 Custom settings left out **0 of 118,302** book moves (book only, signed out; explorer popularity could reorder lines). You were right not to take every line through the root. The cost is on the other side: covering the widest Custom pulls in lines the user may never have seen, which is B34. Two options for Adam:
+- Show the count and ask before deleting, which is small and keeps today's coverage.
+- Delete only the opening's own lines plus the current setting, and accept that some notes are left.
+
+**Other slow input in the cleaner.** None found. Time now grows in step with the page. At 2 MB, about the largest MediaWiki page:
+
+| Input | Time |
+|---|---|
+| 100-character words of `a-` (the worst) | 6.2 s |
+| 100-character words of `a.` | 4.6 s |
+| Newlines | 1.0 s |
+| Everything else tried (runs of `=`, spaces, control characters, line ends, no-break spaces, dots, slashes, `www.`, colons, lines of `=`, repeated headings) | under 1 s |
+
+`_reference` on markers nested as deep as a prompt allows takes under 1 ms, and 0.8 s at 200 KB, which a prompt can't reach. The worst case still holds the backend for several seconds, by round 2's stall measurement, on a planted maximum-size page. I don't file that. From reading, the same pattern on an AI answer is capped at 1800 characters by `_clean`.
+
+**The step-through in the real window** works. As White and as Black:
+- The piece goes back until you ask, and Start is the position after your move.
+- Every step forward is one legal move on, 8 of 8 in the shot I checked, and the drawn pieces match.
+- Back returns the same way, and a reason can be chosen while stepping without moving the board.
+- **Back to the position** and **Continue** from part-way both put the board right, and the side stays yours.
+
+`linePositions`' stop before an illegal engine move wasn't exercised, because real Stockfish gave none.
+
+**Tests you changed.** `test_cleaning_caps_a_long_page_and_drops_control_characters` isn't weakened: it still proves the cap, using words the new limit keeps. A single word over 100 characters is now dropped, and 22 real pages had a longest word of 24.
+
+## Commands at `e6a12e7`
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **3518 passed, 1 skipped, 3 xfailed** (1366 s), rc 0. The xfails: B13, B33, B34 |
+| `uv run pytest -m e2e` | **463 passed** (912 s), rc 0 |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | 63 passed, 1 skipped, 1 xfailed (B35), **1 failed** (1009 s). See below |
+| `-m engine` / `-m fulldb` / `-m docs_screenshots` | 19 passed / 76 passed, 3 xfailed (from earlier versions) / 50 passed |
+| ruff check, ruff format, mypy, typecheck, lint, pre-commit, `check_docs.py --strict`, `make_icon.py --check` | all clean |
+
+**The smoke failure, `tests/smoke/test_qa_v04_real_app.py::test_engine_flow_in_the_real_app`:** I don't count it as a v0.13 bug.
+- **What failed:** the test's log check found `ERROR pywebview: Error occurred in script`, from `evaluate_js` raising `ObjectDisposedException` on a disposed WebView2 during shutdown.
+- **Evidence:** passed 3 of 3 alone. v0.12's QA saw the same log error from another test. It comes from pywebview's script call, not from v0.13 code.
+- **Limit:** it's still a real intermittent failure in the suite, and I haven't fixed its cause.
+
+`docs/img/stats-reasons.png` changed again on the screenshot run. I restored it without comparing pixels.
+
+The new xfails were run with `--runxfail` and fail on the assertion they're about. After the full runs I made one small test edit: I removed a tautological clause from `test_qa13r3_stepping_through_as_black_keeps_your_side_of_the_board` and one weak test from the round 3 integration file. I re-ran the Black test and the integration file alone, not the full suites.
+
+**Not re-run:** the setup and mock dev server rows; `gen_types.py`. **Still not tested, for Adam's manual test:** a real LLM, including whether Deep truncates; signed-in paths in the window; the Coach link clicked in the real window; the Wikibooks panel opened in the app; and CI.
+
+## Outside requests, disclosed
+
+22 read-only Wikibooks API requests, no credentials, no text saved, none from a committed test. The script printed only counts: 95,503 characters, 16,498 words, longest word 24, 0 over the limit, 0 URL matches.
+
+## Tests added this round
+
+17 functions.
+- **`tests/integration/test_qa_v013_round3.py` (12):** `test_the_largest_hostile_page_takes_seconds_at_most`, `test_markers_nested_as_deep_as_a_prompt_allows_are_quick_and_gone`, `test_ordinary_headings_read_as_before`, `test_a_link_in_a_heading_is_removed_too`, `test_a_link_in_a_dropped_section_goes_with_it`, `test_a_custom_setting_youve_since_left_is_covered_in_the_book`, `test_a_line_grown_at_a_setting_youve_since_left_is_still_covered`, `test_working_out_what_an_opening_covers_stays_quick`, `test_deleting_a_parent_opening_leaves_another_openings_own_notes`, `test_the_notes_own_opening_can_still_delete_them_all`, `test_a_cut_line_with_a_clean_finish_elsewhere_counts_only_the_finished_one`, `test_a_tolerance_check_waits_its_turn_and_isnt_called_wrong`
+- **`tests/smoke/test_qa_v013_round3_real_app.py` (5):** `test_qa13r3_stepping_through_stockfishs_answer_on_the_real_board`, `test_qa13r3_stepping_through_as_black_keeps_your_side_of_the_board`, `test_qa13r3_a_late_answer_about_an_earlier_miss_leaves_this_ones`, `test_qa13r3_the_session_limit_says_so_in_the_real_window`, `test_qa13r3_the_prefetch_dialog_with_answers_out_of_order`
+
+---
+
 # Round 2, 2026-11-06: re-verification at `1e6a0f9`
 
 Same rules as round 1. I changed only `tests/` and this report. No credentials, no `-m live`. Smoke runs were signed out, in temp data folders.
