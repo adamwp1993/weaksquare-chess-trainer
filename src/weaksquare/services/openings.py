@@ -21,7 +21,10 @@ from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineLine, EngineNotInstalled, validate_fen
 from weaksquare.core.errors import NotFoundError, ValidationError
 from weaksquare.core.openings import (
+    CUSTOM_MOVES,
+    CUSTOM_SUB_LINES,
     MAX_LINE_PLIES,
+    PRESETS,
     SOURCE_ENGINE,
     SOURCE_EXPLORER,
     BookIndex,
@@ -375,23 +378,31 @@ class OpeningsService:
         return self._engine.analysis_of(board, lines, player)
 
     def _analyse_now(self, board: chess.Board, purpose: str) -> list[EngineLine] | None:
-        """The interactive engine, keeping what it finds. None when a newer request replaced this one."""
+        """For the board: the interactive engine, keeping what it finds. None when a newer request replaced this one,
+        because only the position you're now looking at matters."""
         ticket_key = ("openings", purpose)
         lines = self._engine.analyse_lines(board, multipv=MULTIPV, key=ticket_key, gen=self._engine.ticket(ticket_key))
-        if lines:
-            self._cache.put(
-                position_key(board), self._think_ms(), MULTIPV, self._engine.engine_id(), lines,
-                self._clock.now().isoformat(),
-            )  # fmt: skip
+        self._keep(position_key(board), lines)
         return lines
 
-    def interactive_lines(self, key: str, purpose: str) -> list[EngineLine] | None:
+    def _keep(self, key: str, lines: list[EngineLine] | None) -> None:
+        if lines:
+            self._cache.put(
+                key, self._think_ms(), MULTIPV, self._engine.engine_id(), lines, self._clock.now().isoformat()
+            )
+
+    def interactive_lines(self, key: str) -> list[EngineLine] | None:
         """Stored lines, or the interactive engine's, for something you're waiting on (FR-12.3): your move in Practice,
-        or one note you asked for. Bulk jobs use `engine_lines`, so they don't hold you up."""
+        or one note you asked for. Bulk jobs use `engine_lines`, so they don't hold you up. Each answer is needed, so
+        none can replace another: they wait their turn, and a note always has its figures (FR-12.6)."""
         if not self._engine_ready():
             return None
         stored = self._stored(key)
-        return stored if stored is not None else self._analyse_now(board_of(key), purpose)
+        if stored is not None:
+            return stored
+        lines = self._engine.analyse_lines(board_of(key), multipv=MULTIPV)
+        self._keep(key, lines)
+        return lines
 
     # ---- for notes (FR-12.5–12.7) ----------------------------------------------------------------------------
 
@@ -430,18 +441,36 @@ class OpeningsService:
                 keys.update(ln.keys)
         return sorted(keys)
 
+    def _shown_lines(self, family: object) -> list[Line]:
+        """The lines an opening shows at each preset, at the widest Custom and at your scope. A line can run through
+        another family's book positions, as the Catalan's does through the Bogo-Indian."""
+        s = self.scope()
+        sizes = {*PRESETS.values(), (CUSTOM_SUB_LINES[1], CUSTOM_MOVES[1]), (s.sub_lines, s.max_moves)}
+        return [line for subs, moves in sizes for line in self._book_lines(family, subs, moves)]
+
     def tail_keys(self, family: object) -> set[str]:
-        """Positions from an opening's root on: its book lines, then as far as stored results continue them
-        (FR-12.13). Every line the opening could show at any scope ends in one of these."""
+        """Positions from an opening's root on: its own book lines and the lines it shows, then as far as stored results
+        continue them (FR-12.13). The whole book isn't included: every 1. e4 line runs through King's Pawn Game's root,
+        and deleting that opening's notes shouldn't remove them all."""
         root = self.root(family)
         keys: set[str] = {root.final_key}
+        ends: dict[str, tuple[chess.Board, int]] = {}
         for ln in self._data()[0]:
-            if ln.family != root.family:
-                continue
-            start = ln.keys.index(root.final_key) if root.final_key in ln.keys else len(ln.keys) - 1
-            keys.update(ln.keys[start:])
-            board = board_of(ln.final_key)
-            for _ply in range(len(ln.moves), MAX_LINE_PLIES):
+            if ln.family == root.family:
+                start = ln.keys.index(root.final_key) if root.final_key in ln.keys else len(ln.keys) - 1
+                keys.update(ln.keys[start:])
+                ends[ln.final_key] = (board_of(ln.final_key), len(ln.moves))
+        for line in self._shown_lines(family):
+            board = chess.Board()
+            for ply, m in enumerate(line.moves):
+                if ply >= len(root.moves):
+                    keys.add(m.key_before)
+                board.push(chess.Move.from_uci(m.uci))
+            final = position_key(board)
+            keys.add(final)
+            ends[final] = (board, len(line.moves))
+        for board, plies in ends.values():
+            for _ply in range(plies, MAX_LINE_PLIES):
                 if board.is_game_over(claim_draw=False):
                     break
                 got = self._next_stored(board)

@@ -96,6 +96,7 @@ class _Session:
     lines_clean: int = 0
     lines_lost: int = 0
     line_lost: bool = False
+    line_cut: bool = False  # the session's limit stopped this line before its end
     asked_at: datetime | None = None
     last_attempt: int | None = None
     last_moves: tuple[tuple[str, str], ...] = ()  # the opponent's reply just played: (uci, san)
@@ -122,6 +123,7 @@ class PracticeState:
     message: str | None
     wrong_fen: str | None
     position_key: str
+    line_cut: bool
 
 
 @dataclass(frozen=True)
@@ -338,13 +340,14 @@ class OpeningPracticeService:
         return PracticeState(
             s.id, s.state, s.board.fen(), s.color, s.decisions, s.correct, s.wrong, s.lines_clean, s.lines_lost,
             len(s.targets), reason, s.last_moves, tuple(correct), s.last_attempt, s.message, wrong_fen,
-            position_key(s.board),
+            position_key(s.board), s.state == "line_end" and s.line_cut,
         )  # fmt: skip
 
     def _next_line(self, s: _Session, edges: Sequence[Edge]) -> None:
         """Start the next due or new position from the beginning of the game, or finish."""
         s.board = chess.Board()
         s.line_lost = False
+        s.line_cut = False
         s.message = None
         s.last_moves = ()
         s.wrong_uci = None
@@ -374,6 +377,7 @@ class OpeningPracticeService:
                     s.state = "your_move"
                     s.asked_at = self._clock.now()
                 else:
+                    s.line_cut = bool(graph.get(key))
                     self._line_over(s)
                 break
             moves = graph.get(key, [])
@@ -398,7 +402,7 @@ class OpeningPracticeService:
         s.state = "line_end"
         if s.line_lost:
             s.lines_lost += 1
-        else:
+        elif not s.line_cut:
             s.lines_clean += 1
 
     def _record(self, s: _Session, played: chess.Move | None, san: str | None, outcome: str) -> int:
@@ -416,12 +420,12 @@ class OpeningPracticeService:
         """FR-12.9: off by default. With it on, a move within the engine tolerance also counts."""
         if not self.tolerance_on():
             return False
-        best = self._openings.interactive_lines(position_key(s.board), "practice")
+        best = self._openings.interactive_lines(position_key(s.board))
         if not best:
             return False
         after_board = s.board.copy()
         after_board.push(move)
-        reply = self._openings.interactive_lines(position_key(after_board), "practice")
+        reply = self._openings.interactive_lines(position_key(after_board))
         if not reply:
             return False
         return side_cp(best[0], s.color) - side_cp(reply[0], s.color) <= DEFAULT_TOLERANCE_CP

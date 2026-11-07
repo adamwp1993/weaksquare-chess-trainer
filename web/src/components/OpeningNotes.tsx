@@ -223,11 +223,27 @@ export function PrefetchDialog({
   const job = useJob(jobId);
 
   const custom = scope.preset === "custom";
+  // FR-12.7b: only the latest choice's plan is shown, and Confirm waits for it, so the figures are always what it sends.
+  const asked = useRef(0);
+  const [answered, setAnswered] = useState<string | null>(null);
+  const wanted = JSON.stringify([family, scope.preset, custom ? scope.sub_lines : null, custom ? scope.max_moves : null, extend]);
+  const pending = answered !== wanted;
   const reload = useCallback(() => {
-    api
-      .getOpeningPrefetchPlan(family, scope.preset, custom ? scope.sub_lines : null, custom ? scope.max_moves : null, extend)
-      .then(setPlan, (e: unknown) => setError(message(e)));
-  }, [family, scope, custom, extend]);
+    const mine = ++asked.current;
+    api.getOpeningPrefetchPlan(family, scope.preset, custom ? scope.sub_lines : null, custom ? scope.max_moves : null, extend).then(
+      (next) => {
+        if (mine !== asked.current) return;
+        setPlan(next);
+        setError(null);
+        setAnswered(wanted);
+      },
+      (e: unknown) => {
+        if (mine !== asked.current) return;
+        setError(message(e));
+        setAnswered(wanted);
+      },
+    );
+  }, [family, scope, custom, extend, wanted]);
   useEffect(reload, [reload]);
 
   // Once per job: `onFinished` re-renders the parent, so it can't be what triggers this.
@@ -390,7 +406,7 @@ export function PrefetchDialog({
               </Button>
               <Button
                 size="xs"
-                disabled={!plan || blocked || nothing}
+                disabled={!plan || pending || blocked || nothing}
                 data-testid="prefetch-confirm"
                 onClick={() => {
                   setError(null);

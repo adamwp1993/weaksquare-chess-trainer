@@ -540,3 +540,30 @@ def test_a_miss_shows_your_saved_explanation(page: Any) -> None:
     page.get_by_test_id("practice-your-move").wait_for()
     play(page, "d2d4", "white")
     page.get_by_test_id("practice-missed").get_by_test_id("opening-note").wait_for()
+
+
+def test_a_miss_steps_through_stockfishs_answer_on_the_board(page: Any) -> None:
+    """v0.13-B18: FR-12.9's refutation works as Game Review's does (FR-11.14)."""
+    openings(page)
+    pick(page, "Italian Game")
+    page.get_by_test_id("opening-add-0").click()
+    page.get_by_test_id("opening-added").wait_for()
+    page.get_by_test_id("openings-tab-practice").click()
+    page.get_by_test_id("practice-begin").click()
+    page.get_by_test_id("practice-your-move").wait_for()
+    play(page, "d2d4", "white")
+    page.get_by_test_id("practice-refutation-step").click()
+    assert page.get_by_test_id("answer-step").inner_text() == "Start"
+    board = page.locator(".cg-wrap").first
+    at_start = board.inner_html()
+    player = page.get_by_test_id("answer-player")
+    player.get_by_role("button", name="Forward").click()
+    page.locator("[data-testid=answer-step]").filter(has_text="1/").wait_for()
+    page.wait_for_timeout(400)
+    assert board.inner_html() != at_start
+    player.get_by_role("button", name="Back").click()
+    page.locator("[data-testid=answer-step]").filter(has_text="Start").wait_for()
+    page.get_by_test_id("practice-refutation-close").click()
+    page.get_by_test_id("practice-refutation-step").wait_for()
+    page.get_by_test_id("practice-continue").click()
+    page.get_by_test_id("practice-refutation-step").wait_for(state="detached")

@@ -482,6 +482,7 @@ export class MockOpenings {
       message: null,
       wrong_fen: s.wrongFen,
       position_key: keyOf(s.chess),
+      line_cut: false,
       reason_prompt:
         s.state === "wrong"
           ? {

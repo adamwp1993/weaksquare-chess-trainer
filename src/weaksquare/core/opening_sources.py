@@ -36,7 +36,10 @@ URL = re.compile(
     r"|\b[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|edu|gov|info|io|co|uk)\b",
     re.IGNORECASE,
 )
-HEADING = re.compile(r"^=+\s*(.+?)\s*=+\s*$")
+WORD = re.compile(r"\S+")
+MAX_WORD_CHARS = (
+    100  # a longer run with no space isn't prose: dropping it whole keeps URL's time bounded on hostile text
+)
 DROP_SECTIONS = ("theory table", "statistics", "references", "see also", "external links", "further reading", "notes")
 
 
@@ -59,27 +62,40 @@ def short_title(title: str) -> str:
     return title.removeprefix(WIKI_ROOT).lstrip("/").replace("/", " ") or WIKI_ROOT
 
 
+def _no_links(line: str) -> str:
+    """URL can't cross a space, so it runs word by word, and anyone can edit a page: it must stay quick on any text."""
+    return WORD.sub(lambda m: "" if len(m[0]) > MAX_WORD_CHARS else URL.sub("", m[0]), line)
+
+
+def _heading(line: str) -> tuple[int, str] | None:
+    """'== Name ==' as its level and name. Plain string work, because a pattern backtracks badly on a long run of '='."""
+    s = line.strip()
+    if not (s.startswith("=") and s.endswith("=")):
+        return None
+    name = s.strip("=").strip()
+    return (len(s) - len(s.lstrip("=")), name) if name else None
+
+
 def clean_page(text: str) -> str:
     """Plain text ready to keep: no URLs, no control characters, no reference sections, capped."""
     kept: list[str] = []
     dropping_level = 0
     for raw in text.replace("\r\n", "\n").split("\n"):
         line = CONTROL.sub("", raw)
-        heading = HEADING.match(line.strip())
+        heading = _heading(line)
         if heading:
-            level = len(line.strip()) - len(line.strip().lstrip("="))
-            name = heading.group(1).strip().lower()
-            if any(name.startswith(d) for d in DROP_SECTIONS):
+            level, name = heading
+            if any(name.lower().startswith(d) for d in DROP_SECTIONS):
                 dropping_level = level
                 continue
             if dropping_level and level > dropping_level:
                 continue
             dropping_level = 0
-            kept.append(heading.group(1).strip())
+            kept.append(name)
             continue
         if dropping_level:
             continue
-        kept.append(URL.sub("", line).rstrip())
+        kept.append(_no_links(line).rstrip())
     out = re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
     return out[:MAX_PAGE_CHARS].rstrip()
 

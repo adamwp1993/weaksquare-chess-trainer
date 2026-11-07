@@ -25,6 +25,7 @@ import type { Analysis, OpeningDeviation, OpeningNote, OpeningStat, PracticeBran
 import { pvToSan } from "../state/engine";
 import { sourceLabel } from "../state/openingLine";
 import { useJob } from "../state/useJob";
+import { AnswerPlayer, answerPositions, type AnswerPosition } from "./AnswerPlayer";
 import { Board } from "./Board";
 import { NoteBlock, NoteView } from "./OpeningNotes";
 import { OptionInfo } from "./OptionInfo";
@@ -38,6 +39,18 @@ function message(e: unknown): string {
 
 // ---- Practice (FR-12.9, 12.10) --------------------------------------------------------------------------------------
 
+/** An engine line's positions. Engine output is untrusted, so it stops before the first move that isn't legal. */
+function linePositions(fen: string, pv: string[]): AnswerPosition[] {
+  for (let n = Math.min(pv.length, 8); n > 0; n--) {
+    try {
+      return answerPositions(fen, pv.slice(0, n));
+    } catch {
+      // try it without its last move
+    }
+  }
+  return [];
+}
+
 export function PracticeTab({ coordinates, version }: { coordinates: boolean; version: number }) {
   const [color, setColor] = useState<Color>("white");
   const [mode, setMode] = useState<"due" | "new" | "all">("due");
@@ -49,6 +62,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
   const [tolerance, setTolerance] = useState(false);
   const [s, setS] = useState<PracticeState | null>(null);
   const [refutation, setRefutation] = useState<Analysis | null>(null);
+  const [step, setStep] = useState<number | null>(null); // on the board: where you are in the refutation
   const [stored, setStored] = useState<OpeningNote | null>(null);
   const [reason, setReason] = useState<ReasonKey | null>(null);
   const [note, setNote] = useState("");
@@ -76,6 +90,7 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
     setS(next);
     setError(null);
     setRefutation(null);
+    setStep(null);
     setStored(null);
     setReason(null);
     setNote("");
@@ -219,12 +234,17 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
 
   const yourTurn = s.state === "your_move";
   const missed = s.state === "wrong" || s.state === "helped";
+  // An answer about an earlier miss isn't this one's.
+  const refuted = s.state === "wrong" && refutation && !refutation.superseded && refutation.fen === s.wrong_fen ? refutation.lines[0] : undefined;
+  const steps = refuted ? linePositions(refutation!.fen, refuted.pv) : [];
+  const stepping = step !== null ? steps[step] : undefined;
   return (
     <Group align="flex-start" gap="lg" wrap="wrap" data-testid="practice-session" data-state={s.state}>
       <div style={{ flex: "1 1 360px", maxWidth: 560 }}>
         <Board
           key={`${s.decisions}:${s.state}`}
-          fen={s.fen}
+          fen={stepping?.fen ?? s.fen}
+          lastMove={stepping?.lastMove ?? undefined}
           orientation={s.color as Color}
           movable={yourTurn ? (s.color as Color) : null}
           onMove={(uci) => act(api.playPracticeMove(s.session_id, uci))}
@@ -265,11 +285,24 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
                   {s.correct_moves.map((m) => m[1]).join(" or ")}
                 </Text>
               </Text>
-              {refutation && !refutation.superseded && refutation.lines[0] && (
+              {refuted && (
                 <Text size="sm" data-testid="practice-refutation">
-                  After your move, Stockfish says {refutation.lines[0].score}: {pvToSan(refutation.fen, refutation.lines[0].pv)}
+                  After your move, Stockfish says {refuted.score}: {pvToSan(refutation!.fen, refuted.pv)}
                 </Text>
               )}
+              {steps.length > 1 &&
+                (step === null ? (
+                  <Button size="compact-xs" variant="light" style={{ alignSelf: "flex-start" }} onClick={() => setStep(0)} data-testid="practice-refutation-step">
+                    Step through it on the board
+                  </Button>
+                ) : (
+                  <Stack gap={4}>
+                    <AnswerPlayer positions={steps} step={step} onStep={setStep} />
+                    <Button size="compact-xs" variant="subtle" style={{ alignSelf: "flex-start" }} onClick={() => setStep(null)} data-testid="practice-refutation-close">
+                      Back to the position
+                    </Button>
+                  </Stack>
+                ))}
               {stored && <NoteView note={stored} />}
               {s.state === "wrong" && s.reason_prompt && asked && (
                 <ReasonChips
@@ -293,7 +326,9 @@ export function PracticeTab({ coordinates, version }: { coordinates: boolean; ve
         )}
         {s.state === "line_end" && (
           <Stack gap={6} data-testid="practice-line-end">
-            <Text size="sm">That's the end of this line.</Text>
+            <Text size="sm" data-testid="practice-line-end-text">
+              {s.line_cut ? "That's this session's limit, so the line stops here." : "That's the end of this line."}
+            </Text>
             <Button size="xs" style={{ alignSelf: "flex-start" }} onClick={() => act(api.continuePractice(s.session_id))} data-testid="practice-next-line">
               Next
             </Button>

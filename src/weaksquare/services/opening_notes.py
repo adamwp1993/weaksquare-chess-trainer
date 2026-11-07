@@ -250,7 +250,7 @@ class OpeningNotesService:
         for ply in plies:
             move = line.moves[ply]
             found = (
-                self._openings.interactive_lines(move.key_before, "note")
+                self._openings.interactive_lines(move.key_before)
                 if asked
                 else self._openings.engine_lines(move.key_before, True)
             )

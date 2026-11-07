@@ -47,20 +47,13 @@ def key_after(*moves: str) -> str:
 # ---- B2: Export and Delete cover every line an opening shows ------------------------------------------------------------
 
 
-B2_OPEN = pytest.mark.xfail(
-    reason="v0.13-B2: a shown line can pass through another family's book positions (Catalan: Bogo-Indian). Export and Delete "
-    "take only the family's own lines, so those notes are left out: 56 of 149 families, 1349 moves",
-    strict=True,
-)
-
-
 @pytest.mark.parametrize(
     "family",
     [
         "Italian Game",
         "Caro-Kann Defense",
-        pytest.param("Catalan Opening", marks=B2_OPEN),
-        pytest.param("East Indian Defense", marks=B2_OPEN),
+        "Catalan Opening",
+        "East Indian Defense",
     ],
 )
 def test_every_move_an_opening_shows_is_covered_by_its_notes(api: Any, family: str) -> None:  # noqa: F811
@@ -139,11 +132,6 @@ def test_a_limited_session_never_asks_past_its_limit_whatever_you_do(api: Any) -
     assert p.proceed(s.session_id).state == "finished"
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B29: a line cut off by the session's limit counts as a clean line, though you never reached its end "
-    "(the finish message says '1 clean line')",
-    strict=True,
-)
 def test_a_line_cut_off_by_the_limit_isnt_counted_as_finished_clean(api: Any) -> None:  # noqa: F811
     store(api, "white", [E4, E5, NF3, NC6, BC4])
     p = api._opening_practice
@@ -214,11 +202,6 @@ def test_a_session_for_one_opening_doesnt_take_another_openings_first_moves(api:
 # ---- B25: the interactive engine for a note you asked for ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B30: two notes asked for while the interactive engine is busy share one ticket, so the first is superseded, "
-    "and it's sent and billed with no engine figures (FR-12.6: grounded in the engine's top lines)",
-    strict=True,
-)
 def test_two_notes_asked_together_both_keep_their_engine_figures(api: Any) -> None:  # noqa: F811
     from tests.fakes.engine import FakeEngine
 
@@ -319,11 +302,6 @@ def test_most_long_pages_clean_at_once(unit: str) -> None:
     assert _clean_seconds(unit) < 3.0
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B31: the wider URL pattern takes quadratic time on one long run like 'a.a.a.' or 'a-a-a-' (32 KB: 22 s, so "
-    "300 KB: about half an hour), and pages are cleaned before they're cut to size. Anyone can edit a page",
-    strict=True,
-)
 @pytest.mark.parametrize("unit", ["a.", "a-"])
 def test_a_long_hostile_run_cleans_in_good_time(unit: str) -> None:
     assert _clean_seconds(unit) < 3.0

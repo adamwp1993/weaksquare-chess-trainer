@@ -135,7 +135,7 @@ def test_cleaning_drops_urls_and_reference_sections() -> None:
 
 
 def test_cleaning_caps_a_long_page_and_drops_control_characters() -> None:
-    assert len(clean_page("x" * (MAX_PAGE_CHARS + 500))) == MAX_PAGE_CHARS
+    assert len(clean_page(("x" * 10 + " ") * 1000)) == MAX_PAGE_CHARS
     assert "\x07" not in clean_page("a\x07b")
 
 

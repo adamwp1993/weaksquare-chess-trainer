@@ -1049,7 +1049,7 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 
 **Confirm** starts it in the background, and you can keep using the app. Cancel at any time: what's finished stays saved. Without an AI provider, the dialog offers Stockfish's evals only. Estimates assume full Wikibooks pages, since none are fetched until you Confirm, so the cost usually comes in lower.
 
-**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes, including those past the book and on its first moves. Another opening that shares those first moves, such as 1. e4, would have to ask for them again. Notes on replies you explained under **What if they play…?** aren't part of an opening, so both leave them out. A note that used no Wikibooks page says so under its text.
+**Export notes** writes a Markdown file to the `exports` folder in your data folder, with the Wikibooks credit if any note used a page. **Delete notes** removes this opening's notes, including those past the book and on its first moves. Both cover the lines the opening shows at Light, Standard, Deep, the widest Custom and your current setting, even where a line runs through another opening's moves. Another opening that shares those moves, such as 1. e4, would have to ask for them again. A note from a line only an earlier, narrower Custom setting showed may be left out. Notes on replies you explained under **What if they play…?** aren't part of an opening, so both leave them out. A note that used no Wikibooks page says so under its text.
 
 Openings has its own model in **Settings → AI**.
 
@@ -1098,7 +1098,7 @@ It runs in the background, and **nothing is saved until you've looked it over**.
 Each session walks from the start of the game to a position that's due, so you see how you get there.
 
 - **Right:** a move stored as yours at that position. With **Accept moves close to the engine's best** on, a move within 30 centipawns also counts, and your line carries on with your stored move. It's off by default, because the point is to learn your line.
-- **Wrong:** you see your line's move, your saved explanation of it if you have one, and Stockfish's view of what you played, and can say why you missed it. **Continue** plays your move and the line goes on. Practice never asks the AI, so it costs nothing.
+- **Wrong:** you see your line's move, your saved explanation of it if you have one, and Stockfish's view of what you played, which **Step through it on the board** plays out one move at a time, and can say why you missed it. **Continue** plays your move and the line goes on. Practice never asks the AI, so it costs nothing.
 - **Show the answer** counts as missed, like any help.
 
 ![Practice after a wrong move: your line, Stockfish's view and why you missed it](img/opening-practice.png)

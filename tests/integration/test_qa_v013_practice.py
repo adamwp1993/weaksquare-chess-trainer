@@ -383,7 +383,7 @@ def test_tolerance_uses_your_side_of_the_eval_as_black(svc: Any) -> None:
     practice.set_tolerance(True)
     cp = {key_after(E4): -10, key_after(E4, "f7f6"): 500, key_after(E4, "c7c5"): -5}
 
-    def lines(key: str, purpose: str) -> list[EngineLine]:
+    def lines(key: str) -> list[EngineLine]:
         return [EngineLine(cp[key], None, ("a2a3",))]
 
     practice._openings.interactive_lines = lines  # type: ignore[method-assign]

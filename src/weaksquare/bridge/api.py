@@ -1860,6 +1860,7 @@ def _practice_dto(s: PracticeStateResult) -> dto.PracticeState:
         if s.state == "wrong" and s.attempt_id is not None
         else None,
         s.position_key,
+        s.line_cut,
     )  # fmt: skip
 
 

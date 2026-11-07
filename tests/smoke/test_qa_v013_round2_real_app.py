@@ -146,11 +146,6 @@ def test_qa13r2_with_no_engine_a_refused_board_move_goes_back(pw, tmp_path: Path
         assert page.errors == []
 
 
-@pytest.mark.xfail(
-    reason="v0.13-B32: B27's guard wasn't given to the prefetch dialog: a quick change of scope shows the older, bigger plan, "
-    "with its cost, while Confirm sends the newer one (FR-12.7b)",
-    strict=False,
-)
 def test_qa13r2_a_quick_change_in_the_prefetch_dialog_shows_its_own_plan(
     pw, tmp_path: Path, fixture_puzzles_db: Path
 ) -> None:  # type: ignore[no-untyped-def]

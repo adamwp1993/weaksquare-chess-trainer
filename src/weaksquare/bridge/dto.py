@@ -1140,6 +1140,7 @@ class PracticeState:
     wrong_fen: str | None
     reason_prompt: ReasonPrompt | None  # §7.3, after a wrong move
     position_key: str  # with correct_moves, finds a stored explanation (FR-12.9)
+    line_cut: bool  # at line_end: the session's limit stopped the line before its end
 
 
 @dataclass(frozen=True)
