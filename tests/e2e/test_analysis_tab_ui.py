@@ -292,3 +292,16 @@ def test_analysis_options_have_tooltips(page: Any) -> None:
     page.get_by_test_id("analysis-import-pgn").click()
     page.get_by_test_id("analysis-pgn-text").wait_for()
     _assert_all_have_tips(page, "Import a PGN")
+
+
+def test_a_narrow_window_keeps_the_header_on_one_line(page: Any) -> None:
+    """Self-check regression: the Analysis button made the nav wrap below the 56 px header at 900 px, where it covered
+    the Coach's tabs (test_qa_a_narrow_window_keeps_the_new_screens_usable)."""
+    page.set_viewport_size({"width": 900, "height": 650})
+    analysis(page)
+    header = page.locator("header")
+    inner = header.locator("> div").first
+    assert inner.evaluate("e => e.scrollHeight <= e.clientHeight + 1")
+    for nav in ("puzzles", "games", "coach", "openings", "studies", "analysis"):
+        box = page.get_by_test_id(f"nav-{nav}").bounding_box()
+        assert box is not None and box["y"] + box["height"] <= 56

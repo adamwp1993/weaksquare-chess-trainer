@@ -656,11 +656,20 @@ export function App() {
   return (
     <AppShell header={{ height: 56 }} padding="md">
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Title order={3}>WeakSquare Chess Trainer</Title>
-          <Group gap="sm">
+        {/* v0.15: one line, whatever the width. With the Analysis button the nav no longer fits beside the full title in
+            a narrow window and wrapped under the header, covering the page; the title shortens and truncates instead. */}
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Title order={3} style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <Text span inherit visibleFrom="lg">
+              WeakSquare Chess Trainer
+            </Text>
+            <Text span inherit hiddenFrom="lg">
+              WeakSquare
+            </Text>
+          </Title>
+          <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
             {ready && (
-              <Group gap={4}>
+              <Group gap={4} wrap="nowrap">
                 <Button
                   size="xs"
                   variant={page.kind === "trainer" ? "light" : "subtle"}
