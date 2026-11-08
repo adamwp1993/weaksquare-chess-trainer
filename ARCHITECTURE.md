@@ -42,6 +42,7 @@ weaksquare-chess-trainer/
 ├─ src/weaksquare/
 │  ├─ __main__.py              # python -m weaksquare
 │  ├─ app.py                   # composition root + pywebview window
+│  ├─ lichess_window.py        # v0.14: the Lichess window, its own process (bare WebView2, no bridge; §7)
 │  ├─ config.py                # paths (platformdirs → %LOCALAPPDATA%\WeakSquare), defaults
 │  ├─ engine_manifest.json     # pinned Stockfish release: tag, asset, URL, SHA-256   (v0.4)
 │  ├─ bridge/
@@ -92,6 +93,7 @@ weaksquare-chess-trainer/
 │  │  ├─ opening_sources.py    # v0.13: Wikibooks titles, cleaning and limits; explorer parsing
 │  │  ├─ opening_explain.py    # v0.13: notes' prompts, schemas and validation
 │  │  ├─ opening_practice.py   # v0.13: the per-position schedule, what comes up, Build my repertoire's proposal
+│  │  ├─ study_links.py        # v0.14: study and chapter links, IDs, which pages the Lichess window may show
 │  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
 │  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
 │  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
@@ -131,6 +133,7 @@ weaksquare-chess-trainer/
 │  │  ├─ lichess.py            # LichessHttp (v0.3); lichess_games.py, chesscom.py (v0.8: serial lock, ETags)
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
+│  │  ├─ lichess_window.py     # v0.14: starts the Lichess window process, reads its JSON lines, re-checks IDs
 │  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)
 │  ├─ jobs/runner.py           # background jobs: queue, progress, cancel
 │  └─ vendor/lichess_puzzler/  # Lichess's tagger (cook.py, util.py, model.py), AGPL-3.0, pinned; README.md
@@ -248,6 +251,19 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-07, v0.14 step 0: The Lichess window is a separate process with a bare WebView2
+- Context: FR-13.3 shows real lichess.org pages, the only remote website in the app, and needs proof that they can't reach the bridge, settings, tokens or files. pywebview's `edgechromium.py` turns on WebView2 web messaging and injects its JS bridge into **every** window on each navigation, even one created with no `js_api`, and messages from any window go to `js_bridge_call`. A second pywebview window in the app's process isn't isolated.
+- Decision:
+  - **`weaksquare/lichess_window.py`** runs as its own process (`python -m weaksquare.lichess_window`), started and stopped by **`adapters/lichess_window.py`**. It hosts a bare WebView2 control in a WinForms form through **pythonnet**, using the WebView2 assemblies pywebview ships; no pywebview window is created. pythonnet is already installed as pywebview's Windows dependency, so `pyproject.toml` is unchanged.
+  - It imports only the standard library, pythonnet and `core.study_links`. A unit test runs the import in a fresh interpreter and checks the module list.
+  - A **temporary profile**, deleted on close (after waiting for the browser process), so you're signed out of Lichess there each time and nothing the app has (cookies, storage) is shared. Web messaging, host objects, autofill, password saving, downloads and every permission request are off. It never subscribes to `WebMessageReceived`.
+  - Top-level navigation and new windows are limited to `https://lichess.org` (`core.study_links.is_lichess_page`). Anything else is cancelled; http(s) links go to the system browser and other schemes are dropped.
+  - **Add this study** is a native WinForms button above the page. The window sends the app only study and chapter IDs (never an address, which on a search page holds what you typed) and the scheme and host of refused pages, as JSON lines on stdout. The app re-checks each ID on its own (`ref_from_ids`).
+  - It strips inherited `WEBVIEW2_*` variables, so the smoke harness's debugging port can't leak in. Tests open their own port only with `--test-cdp-port`, and widen the allowed pages only with `--test-origin http://127.0.0.1:<port>`.
+  - Two bugs found while proving it, each with a regression test: its stdio handles are made non-inheritable (a program it started inherited the blocking stdin pipe and hung until the window closed), and links handed to the browser are serialized (webbrowser's first-use setup publishes an empty list before filling it, so a second concurrent call silently did nothing).
+- Alternatives: a second pywebview window, rejected as above. Dropping the window (FR-13.3's fallback) wasn't needed: `tests/smoke/test_lichess_window_isolation.py` proves the isolation in the real window, and Chromium refuses a jump to `file:` before WebView2 even sees it.
+- Consequences: one extra process while the window is open. The window depends on pywebview's file layout for the WebView2 assemblies, which a pywebview upgrade could move; the smoke test catches that. You can't stay signed in to Lichess there, so private studies come through the app's own sign-in (FR-13.7).
 
 ### 2026-11-06, v0.13: What building the opening trainer settled
 - Context: the plan left how notes, sessions and the builder fit the existing services open.
