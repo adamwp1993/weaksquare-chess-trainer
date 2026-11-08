@@ -286,10 +286,12 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v0.1
 ## v0.14: Lichess studies
 **Goal:** find Lichess studies, work through them inside the app with your place saved, and add what you learn to your repertoire (REQUIREMENTS §19). It needs v0.13's repertoire, Practice and play-along screen. Split from v0.13 by Adam, 2026-11-06.
 
-- **Find:** real Lichess in a window inside the app with **Add this study** (FR-13.3, 13.4), open in your browser and paste a link (FR-13.5), and a built-in starter list (FR-13.6). Test the window's isolation first. If it can't be proven, the window is dropped and the other two ways remain.
-- **Your studies:** the Studies tab, saved copies with **Check for updates** (FR-13.1, 13.7), hearts and a saved place in each study (FR-13.9, 13.10).
-- **Work through them:** play along with the text, arrows and highlights (FR-13.8), then **Add to my repertoire** (FR-13.11).
-- **Docs:** a User Guide chapter for Lichess studies, including what the window loads and what's requested from Lichess (FR-13.12).
+Built in internal steps, each committed and ticked off in `plans/v0.14.md`. QA runs once, at the end.
+- **Find:** real Lichess in a window inside the app with **Add this study** (FR-13.3, 13.4), open in your browser and paste a link or a chapter link (FR-13.5), **studies by author** (FR-13.5a), and a built-in starter list (FR-13.6). Test the window's isolation first, as a separate process (pywebview injects its bridge into every window of its own process). If it can't be proven, the window is dropped and the other three ways remain.
+- **Your studies:** the Studies tab, saved copies with **Check for updates** (FR-13.1, 13.7), hearts and a saved place in each study (FR-13.9, 13.10). Private studies you own or belong to, through the new `study:read` scope (FR-6.1, 13.7). Text-only chapters on decorative boards are kept (FR-13.7).
+- **Work through them:** step through normal chapters with nested branches, play along with gamebook chapters, with the text, arrows and highlights (FR-13.8), then **Add to my repertoire**, main line by default (FR-13.11).
+- **Game Review in three parts** (FR-11.36, Adam, 2026-11-07): Summary, What to improve and What you did well, grounded in the engine analysis and working with no AI key. Explain my game explains only the listed strengths.
+- **Docs:** a User Guide chapter for Lichess studies, including what the window loads and what's requested from Lichess (FR-13.12); the Game Review section and the sign-in step updated.
 
 **Done when:**
 - A test proves the Lichess window has no access to the bridge, your settings or your tokens, and can't navigate away from lichess.org.
@@ -303,14 +305,24 @@ Built in internal steps, like v0.1, each committed and ticked off in `plans/v0.1
 - **Add to my repertoire** stores `source = study`, a transposition reuses its position, and the added lines are drilled in Practice.
 - A test proves study text never reaches the LLM.
 - Recorded study fixtures are scrubbed and anonymized.
+- Study links, chapter links and bare IDs parse; anything else makes no request.
+- A text chapter is kept and shown; a chapter with moves from an invalid position is rejected and the rest are kept.
+- A public study never sends the token; after a 403, a token without `study:read` gets the sign-in-again message.
+- Studies by author lists titles and adds the one picked; an unknown user and offline get clear messages.
+- **Add to my repertoire** takes the main line only unless Include side lines is on.
+- Study text containing a URL renders as plain text, never a link.
+- Each strength rule (FR-11.36) has positive and negative tests on fixture analysis; a game with none says so plainly; the three parts work with no AI key; the Explain my game prompt carries only the computed strengths, and its cache key changed.
 
 **Adam's manual test:**
 1. Find a study in the Lichess window, add it, and check the app kept it.
-2. Open Lichess in your browser, paste `https://lichess.org/study/ZCPaIb70`, and work through 2 chapters. Compare the text, arrows and play-along with the same chapters on Lichess.
-3. Close the app in the middle of a chapter, reopen it, and check **Continue** returns you to that move.
-4. Add a study from the starter list, heart it, and filter by favorites.
-5. Add a study's lines to your repertoire and drill them in Practice.
-6. Turn off your network and open a saved study.
+2. Open Lichess in your browser, paste `https://lichess.org/study/ZCPaIb70`, and play along with 2 gamebook chapters. Compare the text, arrows and play-along with the same chapters on Lichess.
+3. Add `https://lichess.org/study/nq1GGbNO` and step through "Vienna Gambit: 3...d5 crushing attack!" using its branches; compare with Lichess. Add its main line to your White repertoire and drill it in Practice.
+4. Add `https://lichess.org/study/swkkeUJZ`: its text-only chapters show as text, and the 39-chapter list scrolls.
+5. Paste the private `https://lichess.org/study/RVTx2uvp/AT2Sw8JB`, sign in again when asked, and check it opens at that chapter.
+6. Search for an author's studies, add a study from the starter list, heart it, and filter by favorites.
+7. Close the app in the middle of a chapter, reopen it, and check **Continue** returns you to that move.
+8. Turn off your network and open a saved study.
+9. Review a strong game of yours and check each item under **What you did well** against the moves.
 
 ---
 

@@ -241,7 +241,7 @@ Habit tags (FR-10.27) and themes describe **what** went wrong. Mistake reasons r
 ## 8. Lichess integration
 
 ### 8.1 Authentication: OAuth 2.0 with PKCE
-- **FR-6.1** Authorize at `GET https://lichess.org/oauth` with `response_type=code`, an arbitrary unique `client_id` (Lichess supports unregistered public clients), `redirect_uri`, `code_challenge_method=S256`, `code_challenge = BASE64URL(SHA256(code_verifier))`, `scope=puzzle:read puzzle:write`, and a random `state`.
+- **FR-6.1** Authorize at `GET https://lichess.org/oauth` with `response_type=code`, an arbitrary unique `client_id` (Lichess supports unregistered public clients), `redirect_uri`, `code_challenge_method=S256`, `code_challenge = BASE64URL(SHA256(code_verifier))`, `scope=puzzle:read puzzle:write study:read`, and a random `state`. *(Adam, v0.14 planning: `study:read` was added so the app can read private studies you own or belong to (FR-13.7). It's read-only. A token granted before v0.14 lacks it and keeps working for everything else; the first time a private study is refused, the app asks you to sign in again.)*
 - **FR-6.1a** The authorization URL opens in the user's **default system browser**, never inside the app window, so their password manager and 2FA work (the native-app pattern in RFC 8252). The callback page tells them to return to the app, and the app brings its window to the front.
 - **FR-6.2** `redirect_uri` is a **temporary loopback listener** at `http://127.0.0.1:<random port>/callback`. It accepts exactly one request, verifies `state`, and shuts down after the callback or a 5-minute timeout.
 - **FR-6.3** Exchange the code at `POST https://lichess.org/api/token` with `grant_type=authorization_code`, `code`, `code_verifier`, `redirect_uri` and `client_id`.
@@ -611,6 +611,18 @@ The Coach looks at your games the way a tutor would: tactics, but also strategy,
 - **FR-11.34** **Analyze from here** (Adam, 2026-11-04, after v0.9; built in **v0.10**). From any position in Game Review, open a free analysis board where you can play any moves, both sides, away from the game. It reuses the analysis board (FR-7.7) with the **interactive** engine (never the background one, ARCHITECTURE §3 decision 12): eval and top lines for the position on the board, with Back / Forward and **Back to the game**. Nothing you play there changes the game, its analysis or any stats. It respects **Show best moves** (FR-11.35): with it off, the engine's eval and lines stay hidden until you turn it on.
 - **FR-11.35** **Show best moves** (Adam, 2026-11-04, after v0.9; built in **v0.10**). A toggle on the Review screen, **off by default**, saved in `user.db` through the bridge (never browser storage) and kept across games and restarts. While it's off, Game Review hides everything that gives the better move away, so you can try to find it first: the best-move arrow, the engine lines (FR-11.14), "Better was X" at a move, "better was Y" on the key moments (FR-11.13), and the AI's better lines and arrows (FR-11.18). The eval graph, the eval number, the ?! ? ?? symbols, the refutation of the move you played ("why it fails") and the AI's text stay visible. Turning it on shows them at once. Retry mode (FR-11.15) is unchanged.
 - **FR-11.16** **Save as puzzle:** any key moment can be saved to `custom_puzzles` (position, best line, tags) and drilled through the "My puzzles" source (FR-3.15), including Spaced repetition. It stores the position, the best line and (from v0.10) tags; it is solved with the 30 cp tolerance (FR-10.43). These puzzles never sync to Lichess.
+- **FR-11.36** **Review in three parts** (Adam, 2026-11-07; built in **v0.14**). A review that lists only faults reads as criticism even after a strong game, so the Review screen has three parts, all computed from the stored engine analysis and all working with no AI key:
+  1. **Summary:** the result, your accuracy and average centipawn loss, the turning point (the largest eval swing), and how each phase went.
+  2. **What to improve:** the key moments (FR-11.13), unchanged.
+  3. **What you did well:** only things the engine data backs up, each linked to its move:
+     - **only move found:** you played the best move, and the engine's second choice was at least 150 cp worse
+     - **mistake punished:** after an opponent's mistake or blunder, your reply stayed within the inaccuracy threshold
+     - **hard defence:** from an eval of −150 or worse you played a Best or Good move
+     - **conversion:** you reached +200 or better and won without dropping below +100
+     - **clean phase:** at least 8 of your moves in a phase with no mistakes or blunders
+     - Positions already decided (beyond ±500 cp) don't count. With nothing that qualifies, it says so plainly and invents no praise.
+  - **Explain my game** (FR-11.18) receives this list as grounded context and adds a short "what you did well" part. It may explain only the listed strengths, never add its own. Its cache key includes a new prompt version, so earlier narratives aren't reused.
+  - The rules respect **Show best moves** (FR-11.35): an only-move item names your move, never the engine's alternative.
 
 ### 11.4 AI explanations (optional)
 - **FR-11.17** **Explain this move:** on demand, for a key moment or any of **your** moves (every move when you review both sides; Adam, v0.9 planning). Its grounded context: position, played move, best move and its line, refutation of the played move, eval swing, top engine lines, attack/defense facts, tags. Output, validation and board annotations work exactly like FR-8.3 to FR-8.5.
@@ -852,33 +864,35 @@ Learn an opening line by line with grounded explanations, build your own reperto
 
 ## 19. Lichess studies (v0.14; Adam, 2026-11-06)
 
-Find Lichess studies, work through them in the app and keep your place. The Lichess API has no way to browse or search all public studies, only to fetch one by ID or list one author's (checked 2026-11-06), so finding them uses the three ways below.
+Find Lichess studies, work through them in the app and keep your place. The Lichess API has no way to browse or search all public studies, only to fetch one by ID or list one author's (checked 2026-11-06), so finding them uses the four ways below.
 
 ### 19.1 The Studies tab and finding studies
 - **FR-13.1** **Studies tab:** two parts, **My studies** and **Find studies**. My studies lists everything you've added, with its title, author, your progress (such as "Chapter 3 of 8") and **Continue**, and can be filtered by favorites, in progress or finished.
-- **FR-13.2** **Three ways to find a study:** the Lichess window (FR-13.3), your browser and a pasted link (FR-13.5), and the starter list (FR-13.6).
+- **FR-13.2** **Four ways to find a study:** the Lichess window (FR-13.3), your browser and a pasted link (FR-13.5), studies by author (FR-13.5a, Adam, v0.14 planning), and the starter list (FR-13.6).
 - **FR-13.3** **Lichess window:** opens the real `lichess.org/study` pages in a separate window inside the app, so you can browse and search them. This is the only place the app shows a remote website.
   - It has **no bridge** and no access to your settings, tokens, database or files. A test proves it.
   - It stays on `lichess.org`. Any other link opens in your normal browser.
   - It's isolated from the app's own page, and the app never reads what you type in it.
   - If this isolation can't be proven when v0.14 starts, the window is dropped and FR-13.5 and FR-13.6 remain. Adam decides what happens next.
 - **FR-13.4** **Add this study:** a button on the Lichess window, active only on a study page. The app takes only the study's ID from the address, then downloads it as in FR-13.7.
-- **FR-13.5** **Browser and paste:** **Open Lichess** opens the study list in your normal browser. You paste a study's link, or its ID, into the tab. Anything that isn't a Lichess study address gets a clear message and no request is made.
+- **FR-13.5** **Browser and paste:** **Open Lichess** opens the study list in your normal browser. You paste a study's link, a link to one of its chapters (`lichess.org/study/{id}/{chapterId}`), or its ID, into the tab. A chapter link opens that chapter once the study is added. Anything that isn't a Lichess study address gets a clear message and no request is made.
+- **FR-13.5a** **Studies by author** (Adam, v0.14 planning): type a Lichess username to list that author's public studies with `GET /api/study/by/{username}`, which returns only each study's ID, name and dates (checked 2026-11-06). Picking one downloads it as in FR-13.7. An unknown user, no studies and offline each get a clear message.
 - **FR-13.6** **Starter list:** a list that ships with the app, filterable by opening. It holds **only links, titles and authors, never study content**. A study is downloaded only when you pick it. It changes only with new app versions, and Adam approves its first contents.
 
 ### 19.2 Your copy of a study
-- **FR-13.7** **Download and store:** `GET /api/study/{id}.pgn` through `adapters/http.py`, one request at a time, documented API only. Public studies need no sign-in; a private study of yours works only if your Lichess sign-in allows reading it, and otherwise says why it can't.
+- **FR-13.7** **Download and store:** `GET /api/study/{id}.pgn` through `adapters/http.py`, one request at a time, documented API only. Public studies need no sign-in. The request is first made **without** your token. Only if Lichess refuses it (403) and your sign-in has `study:read` (FR-6.1) is it retried with the token, so a private study you own or belong to works. A sign-in from before v0.14 lacks that scope, so the app says *Sign in again to allow reading your private studies*. A study you can't read even when signed in says so plainly.
   - Every move is validated with python-chess. An illegal chapter is rejected with a clear message and the rest are kept.
-  - Comments are untrusted: rendered as escaped plain text. An arrow or highlight naming an invalid square is dropped.
+  - **Text chapters** (Adam, v0.14 planning): a chapter with **no moves** whose position python-chess calls invalid (a decorative board, such as an empty board or pawn art with no kings) is kept as a text chapter. Its text and board are shown as-is, with no engine, play-along or Add to repertoire. A chapter that has moves from an invalid position is rejected.
+  - Comments and chapter titles are untrusted: rendered as escaped plain text and never turned into links, even when they contain a web address. An arrow or highlight naming an invalid square is dropped.
   - The copy is stored in `user.db` (new migration), so a saved study works offline and stays if its author later deletes it.
   - **Check for updates** downloads the latest version and shows what changed before replacing your copy. Your place is kept when that chapter still exists.
   - **Rights:** the study's author keeps their rights. Study content is never bundled, shipped or shared by the app, and each copy stays on your PC. The study's title, author and a link back are always shown.
 
 ### 19.3 Working through a study
-- **FR-13.8** **Play along:** using the same screen as Learn mode (§18.3). The chapter's text, arrows and highlighted squares appear as you go. In an interactive (`gamebook`) chapter you play the moves yourself; other chapters step forward and back. Alternative moves are shown as branches. Nothing here is scored or affects any rating, and how closely it matches the Lichess screen is decided at v0.14 planning, against Adam's test study.
+- **FR-13.8** **Play along:** using the same screen as Learn mode (§18.3). The chapter's text, arrows and highlighted squares appear as you go. In an interactive (`gamebook`) chapter you play the moves yourself; other chapters step forward and back. Alternative moves are shown as branches. Nothing here is scored or affects any rating. *(v0.14 planning: most real chapters are normal analysis chapters with deep branching, e.g. up to 120 side moves in one chapter of Adam's Vienna study, so the move list shows nested branches you can click, with Back, Forward and Back to main line. How closely the screen matches Lichess is checked against Adam's test studies during the build and recorded here.)*
 - **FR-13.9** **Hearts:** you can heart any of your studies and filter by them. They're stored only in the app, because the API has no way to like a study, so they never appear on Lichess.
 - **FR-13.10** **Your place:** the app saves your chapter and move in each study as you go. **Continue** returns you there, and you can restart a chapter or the study. Progress is local and never sent to Lichess.
-- **FR-13.11** **Add to my repertoire:** adds a chapter's or study's lines to your repertoire (FR-12.4) with `source = study`, for the color you choose. Positions are matched by FEN, so a transposition reuses its position. If a study's move conflicts with one you have there, you choose which stays. The added lines are drilled in Practice (FR-12.9).
+- **FR-13.11** **Add to my repertoire:** adds a chapter's or study's lines to your repertoire (FR-12.4) with `source = study`, for the color you choose. By default only each chapter's **main line** is added, because side lines mix the opponent's alternatives with the author's analysis of other moves for your side. An **Include side lines** switch adds them too (Adam, v0.14 planning). You review what will be added before anything is saved. Positions are matched by FEN, so a transposition reuses its position. If a study's move conflicts with one you have there, you choose which stays. The added lines are drilled in Practice (FR-12.9).
 
 ### 19.4 Privacy
 - **FR-13.12** Study text is never sent to an LLM. Requests to Lichess and everything the Lichess window loads appear in the User Guide's privacy section.
