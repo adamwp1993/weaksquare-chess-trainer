@@ -200,6 +200,8 @@ def test_qa13r2_the_branch_menu_limits_a_real_session(pw, tmp_path: Path, fixtur
         page.locator("[data-testid=practice-session][data-state=wrong]").wait_for()
         text = page.get_by_test_id("practice-refutation")
         text.wait_for(timeout=30_000)
-        assert re.search(r"for you: .*[a-hKQRBNO]", text.inner_text()), text.inner_text()
+        # v0.14 build: real Stockfish sometimes calls the position exactly level after 1. a3, and the app then says
+        # "0.0 (level)" instead of "for you"; both are right (the test was flaky, 1 of 2 runs).
+        assert re.search(r"(for you|\(level\)): .*[a-hKQRBNO]", text.inner_text()), text.inner_text()
         _shot(page, "r2-refutation")
         assert page.errors == []
