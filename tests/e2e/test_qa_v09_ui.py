@@ -62,7 +62,7 @@ def test_qa_user_guide_explain_my_game_steps_and_screens(page) -> None:  # type:
     for tid in ("review-ai-summary", "narrative-turning-point", "review-improve-summary", "narrative-train",
                 "moment-note-6", "moment-note-8"):  # fmt: skip
         page.get_by_test_id(tid).wait_for()
-    assert "Practise:" in page.get_by_test_id("narrative-practise").inner_text()
+    assert "Suggested training" in page.get_by_test_id("suggested-training").inner_text()
     shot(page, "narrative")
     page.get_by_test_id("moment-show-8").click()
     page.get_by_test_id("review-show-note").wait_for()

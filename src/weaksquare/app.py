@@ -631,6 +631,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         height=860,
         min_size=(1000, 700),
         background_color=window_background(scheme, system_prefers_dark()),
+        # pywebview blocks selecting text unless asked (Adam, v0.15 manual test: copy text out of the app). The board
+        # keeps its own user-select: none; Ctrl+C copies. The right-click menu stays off: its Reload would drop state.
+        text_select=True,
     )
     if window is None:  # pragma: no cover - pywebview returns None only if creation failed
         raise RuntimeError("could not create the window")

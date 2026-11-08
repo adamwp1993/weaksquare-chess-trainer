@@ -734,7 +734,7 @@ After about half a minute, the AI's words appear in the review's [three parts](#
 2. **What to improve:** a short summary of what your mistakes had in common, then the key moments. Each key moment gets a note on what went wrong, why the better move is better and what to look for next time, with **Show on the board** for its arrows and the better line. Under the note, **Train:** tags the puzzle themes that practise that kind of moment, for example *Hanging piece*.
 3. **What you did well:** a short summary of your strengths, then, under up to three of the items on the list, why each was good. The AI may only explain items on that list, never add its own; with nothing on the list, it adds nothing here.
 
-At the end of What to improve there's often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
+What to improve usually ends with a **Suggested training** box: the puzzle themes that practice what went wrong, for example *Hanging piece* and *Fork*, rated 1200–1700. **Train these puzzles** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
 
 The game then shows **AI-reviewed** in My games.
 
@@ -1264,6 +1264,7 @@ On the analysis board after a puzzle, and under **Analyze from here** in Game Re
 | **S** / **U** | Danger spotting: call the highlighted move Safe or Unsafe (v0.6) |
 | **1**–**6** | After a failed puzzle: pick why you missed it (v0.6) |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
+| **Ctrl+C** | Copy the text you've selected (v0.15). Select it with the mouse, as in a browser: an AI explanation, a summary, a FEN. The board itself can't be selected, so dragging pieces never highlights anything. There's no right-click menu |
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 

@@ -24,8 +24,10 @@ Candidates: v0.15-rc1 (2026-11-08)
 
 ### Changed
 - **Explain my game** now fills the review's three parts instead of adding a block of its own. **Summary** gets a general summary of the game rather than an opening summary. **What to improve** opens with a short summary of what your mistakes had in common, and each key moment is tagged with the puzzle themes that train it. **What you did well** opens with a short summary, and the AI's words sit under the strengths they're about. A game explained before needs a new run for the new version. [FR-11.18, FR-11.36]
+- **Suggested training**: the puzzles Explain my game recommends now have their own box at the end of What to improve, with a **Train these puzzles** button, instead of a small "Practise:" line. [FR-11.36]
 
 ### Fixed
+- **Copying text**: you can now select text in the app with the mouse and copy it with Ctrl+C. The board still can't be selected. [NFR-8b]
 - **Lichess studies**: a chapter containing a null move (`--`) was accepted when the study was added, then showed as damaged when opened. It's now listed as **Can't be used** with the reason, and the rest of the study works. Re-add the study, or use **Check for updates**, to see it. [FR-13.7]
 
 ## [v0.14] - 2026-11-08

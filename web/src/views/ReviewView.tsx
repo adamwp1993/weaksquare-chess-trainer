@@ -25,7 +25,7 @@ import { answerPositions, AnswerPlayer } from "../components/AnswerPlayer";
 import { Board, type BoardShape } from "../components/Board";
 import { EvalGraph } from "../components/EvalGraph";
 import { showMeFor } from "../components/ExplainPanel";
-import { GameNarrativePanel, MomentNote, MoveExplain, NarrativePractise, PartSummary, TurningPoint } from "../components/GameAiPanel";
+import { GameNarrativePanel, MomentNote, MoveExplain, PartSummary, SuggestedTraining, TurningPoint } from "../components/GameAiPanel";
 import { GameNotes } from "../components/GameNotes";
 import { ReasonChips } from "../components/ReasonChips";
 import { CLASS_COLOR, PLATFORM_LABEL, cap, gameDate, gamePrompt, moveLabel, resultLabel } from "../state/games";
@@ -626,7 +626,7 @@ export function ReviewView({
                   );
                 })}
                 {saved && <Text size="xs" c="dimmed" data-testid="saved-note">{saved}</Text>}
-                {narrative?.preset && <NarrativePractise preset={narrative.preset} onTrain={(p) => onTrain?.(p)} />}
+                {narrative?.preset && <SuggestedTraining preset={narrative.preset} onTrain={(p) => onTrain?.(p)} />}
               </Stack>
             )}
             {review.analyzed && review.stories.length > 0 && (

@@ -290,21 +290,34 @@ export function TurningPoint({ x, onJump }: { x: GameNarrative; onJump: (ply: nu
   );
 }
 
-/** The recommended preset, at the end of What to improve, and its Train these confirmation (FR-11.18). */
-export function NarrativePractise({ preset, onTrain }: { preset: SuggestedPreset; onTrain: (p: SuggestedPreset) => void }) {
+/** Suggested training, the last part of What to improve (v0.15, Adam): the recommended puzzle set, set off in its own
+ * box so it's seen, with a button that takes you to those puzzles after a confirmation (FR-11.18). */
+export function SuggestedTraining({ preset, onTrain }: { preset: SuggestedPreset; onTrain: (p: SuggestedPreset) => void }) {
   const [train, setTrain] = useState(false);
   const range = preset.rating_min !== null || preset.rating_max !== null;
   return (
     <>
-      <Group gap="xs" data-testid="narrative-practise">
-        <Text size="sm">
-          Practise: {preset.names.join(", ")}
-          {range ? ` (${preset.rating_min ?? "any"}–${preset.rating_max ?? "any"})` : ""}
-        </Text>
-        <Button size="compact-xs" variant="light" onClick={() => setTrain(true)} data-testid="narrative-train">
-          Train these
-        </Button>
-      </Group>
+      <Paper withBorder p="sm" bg="var(--mantine-color-indigo-light)" data-testid="suggested-training">
+        <Stack gap={6}>
+          <Text fw={600}>Suggested training</Text>
+          <Text size="sm">Puzzles that practice what went wrong in this game:</Text>
+          <Group gap={6}>
+            {preset.names.map((name) => (
+              <Badge key={name} variant="filled" color="indigo" style={{ textTransform: "none" }} data-testid="suggested-theme">
+                {name}
+              </Badge>
+            ))}
+            {range && (
+              <Text size="sm" c="dimmed" data-testid="suggested-range">
+                rated {preset.rating_min ?? "any"}–{preset.rating_max ?? "any"}
+              </Text>
+            )}
+          </Group>
+          <Button color="indigo" w="fit-content" onClick={() => setTrain(true)} data-testid="narrative-train">
+            Train these puzzles
+          </Button>
+        </Stack>
+      </Paper>
       <Modal opened={train} onClose={() => setTrain(false)} title="Train these?" data-testid="train-confirm">
         <Stack>
           <Text size="sm">
