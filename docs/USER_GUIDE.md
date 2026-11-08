@@ -1238,7 +1238,7 @@ The **Stockfish** panel shows the eval and the top three lines for the position 
 
 ### Importing a PGN
 1. Click **Import PGN** and paste a game in PGN format, from Lichess, chess.com, a book or another app.
-2. Click **Import**. A PGN with several games lists them by players, date and result: pick one and click **Open**. Games that can't be used (an illegal move, another variant such as Crazyhouse) are listed with the reason.
+2. Click **Import**. A PGN with several games lists them by players, date and result: pick one and click **Open**. Games that can't be used (an illegal move, a null move written as `--`, another variant such as Crazyhouse) are listed with the reason.
 3. The game opens at its starting position, with its side lines and comments. Step through it with **Forward**, the arrow keys, or by clicking moves, and play your own moves wherever you like: they become new lines.
 
 Comments are shown as plain text, and a web address in one is never a link. Headers, clocks and evals written in the PGN are left out. If the PGN can't be read, you're told why and the board doesn't change. To keep a game and have Stockfish review it, use **Import game** instead: that adds it to My games.

@@ -104,7 +104,7 @@ def test_without_stockfish_it_says_install(api: Any) -> None:
 def test_a_pasted_pgn_lists_its_games_and_sends_one_tree(api: Any) -> None:
     listed = ok(api.import_analysis_pgn(PGN))
     assert (
-        listed["games"] == [{"index": 0, "label": "Player A – Player B", "move_count": 4}] and listed["skipped"] == []
+        listed["games"] == [{"index": 0, "label": "Player A – Player B", "move_count": 3}] and listed["skipped"] == []
     )
     g = ok(api.get_analysis_pgn_game(PGN, 0))
     moves = g["moves"]

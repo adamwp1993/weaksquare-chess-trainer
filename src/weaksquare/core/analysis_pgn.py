@@ -17,7 +17,7 @@ import chess
 import chess.pgn
 
 from weaksquare.core.games import MAX_PGN_BYTES, GameError
-from weaksquare.core.study_pgn import LimitedBuilder, Node, TooBig, clean_text, convert_game, walk
+from weaksquare.core.study_pgn import LimitedBuilder, Node, TooBig, clean_text, convert_game, has_null_move, mainline
 
 MAX_GAMES = 200  # listed to pick from; a bigger file says so
 
@@ -31,7 +31,8 @@ class AnalysisGame:
 
     @property
     def move_count(self) -> int:
-        return len(walk(self.root)) - 1
+        """Half-moves on the main line, for the pick list (side lines aren't counted: QA v0.15-B5)."""
+        return len(mainline(self.root))
 
 
 def parse_analysis_pgn(text: object) -> tuple[list[AnalysisGame], list[str]]:
@@ -89,6 +90,8 @@ def _problem(n: int, game: chess.pgn.Game) -> str | None:
     if game.errors:
         msg = clean_text(str(game.errors[0]).split(" in ", 1)[0], 80) or "unknown error"
         return f"Game {n + 1} has an illegal or unreadable move ({msg})."
+    if has_null_move(game):
+        return f"Game {n + 1} has a null move (--), which isn't a real move."
     return None
 
 

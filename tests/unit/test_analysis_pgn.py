@@ -31,7 +31,7 @@ def test_a_game_keeps_its_main_line_side_lines_comments_and_glyphs() -> None:
     assert e4.comment == "A good start. See https://example.org"  # plain text; the UI never makes it a link
     assert "clk" not in e4.comment
     assert mainline(g.root)[2].nags == [1]
-    assert g.move_count == 8 and g.label == "Player A – Player B, 2026.10.01 (1-0)"
+    assert g.move_count == 4 and g.label == "Player A – Player B, 2026.10.01 (1-0)"
 
 
 def test_headers_and_clocks_are_nowhere_in_the_tree() -> None:
@@ -85,3 +85,17 @@ def test_a_pgn_with_nothing_usable_raises_one_clear_message(text: str, says: str
 def test_a_file_with_too_many_games_says_so() -> None:
     games, skipped = parse_analysis_pgn("1. e4 *\n\n" * (MAX_GAMES + 5))
     assert len(games) == MAX_GAMES and "more than" in skipped[-1]
+
+
+def test_qa_b1_a_study_chapter_with_a_null_move_is_rejected_and_the_rest_kept() -> None:
+    """QA v0.15-B1: python-chess accepts "--" even while in check; the shared converter must never pass one on."""
+    from weaksquare.core.study_pgn import parse_study
+
+    pgn = (
+        '[Event "S: One"]\n[ChapterName "One"]\n\n1. e4 e5 2. Qh5 Nc6 3. Qxf7+ -- 4. Qxe8 *\n\n'
+        '[Event "S: Two"]\n[ChapterName "Two"]\n\n1. d4 d5 (1... --) *\n\n'
+        '[Event "S: Three"]\n[ChapterName "Three"]\n\n1. c4 *\n'
+    )
+    chapters = parse_study("AbCd1234", pgn).chapters
+    assert [c.rejected is not None for c in chapters] == [True, True, False]
+    assert "null move" in (chapters[0].rejected or "") and "null move" in (chapters[1].rejected or "")

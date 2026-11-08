@@ -237,7 +237,12 @@ export function Board({
         color={color}
         tool={editor.tool}
         onTool={editor.onTool}
-        onDrag={(role, e) => cg.current?.dragNewPiece({ color, role }, e, true)}
+        onDrag={(role, e) => {
+          // The palette above the board moves it down when set-up opens, and chessground still has the old position
+          // until a press on the board itself: forget it, or a dragged piece lands a rank low (QA v0.15-B2).
+          cg.current?.state.dom.bounds.clear();
+          cg.current?.dragNewPiece({ color, role }, e, true);
+        }}
         indent={coordinates}
       />
     );

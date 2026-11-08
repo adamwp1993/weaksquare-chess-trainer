@@ -663,7 +663,11 @@ export function TrainerView({
   const puzzleLine = (a: AnalysisState): AnalysisLine => {
     const history: { start: string; ucis: string[] }[] = [];
     const orient = view?.player_color ?? "white";
-    if (played.current) history.push({ start: played.current.start, ucis: [...played.current.ucis] });
+    if (played.current) {
+      // Commit the line keeps your line in `entry` until Submit (QA v0.15-B3).
+      if (entry.length) history.push({ start: played.current.start, ucis: [...played.current.ucis, ...entry] });
+      history.push({ start: played.current.start, ucis: [...played.current.ucis] });
+    }
     if (view && answer) {
       const shown = answer.positions.slice(1).map((p) => uciOf(p.lastMove, p.san) ?? "");
       const opp = view.opponent_move;

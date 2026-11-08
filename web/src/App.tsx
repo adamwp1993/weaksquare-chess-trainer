@@ -659,13 +659,10 @@ export function App() {
         {/* v0.15: one line, whatever the width. With the Analysis button the nav no longer fits beside the full title in
             a narrow window and wrapped under the header, covering the page; the title shortens and truncates instead. */}
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Title order={3} style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <Text span inherit visibleFrom="lg">
-              WeakSquare Chess Trainer
-            </Text>
-            <Text span inherit hiddenFrom="lg">
-              WeakSquare
-            </Text>
+          {/* QA v0.15-B4: below 1200 px even "WeakSquare" was cut to "W…", so the name is left out there. The window's own
+              title bar still names the app. */}
+          <Title order={3} visibleFrom="lg" style={{ whiteSpace: "nowrap" }}>
+            WeakSquare Chess Trainer
           </Title>
           <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
             {ready && (

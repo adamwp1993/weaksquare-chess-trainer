@@ -189,6 +189,8 @@ def parse_chapter(index: int, game: chess.pgn.Game) -> Chapter:
         return _with_reason(base, f"is a {h.get('Variant')} chapter; only standard chess is supported")
     if game.errors:
         return _with_reason(base, f"has an illegal or unreadable move ({_first_error(game.errors)})")
+    if has_null_move(game):  # QA v0.15-B1: python-chess accepts "--", even out of check
+        return _with_reason(base, "has a null move (--), which isn't a real move")
     has_moves = bool(game.variations)
     if not board.is_valid():
         if has_moves:
@@ -219,6 +221,18 @@ def convert_game(game: chess.pgn.Game) -> Node:
             nxt.push(child.move)
             stack.append((child, node, nxt))
     return root
+
+
+def has_null_move(game: chess.pgn.Game) -> bool:
+    """Whether any move in the tree, side lines included, is a null move (`--`). Looked for in a loop (B1 of v0.14)."""
+    stack: list[chess.pgn.GameNode] = [game]
+    while stack:
+        node = stack.pop()
+        for child in node.variations:
+            if not child.move:
+                return True
+            stack.append(child)
+    return False
 
 
 def _chapter_id(url: str) -> str | None:
