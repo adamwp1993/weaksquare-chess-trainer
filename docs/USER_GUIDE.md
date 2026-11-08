@@ -20,6 +20,8 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   The Coach ................................................... v0.10, v0.11, v0.12
   Your training plan .......................................... v0.12
   Your training journal ....................................... v0.12
+  The opening trainer ......................................... v0.13
+  Lichess studies ............................................. v0.14
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
   The About screen ............................................ v0.1
@@ -48,7 +50,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Explain** sends one puzzle: its position (FEN), the solution moves, its themes, the moves you played, Stockfish's lines and its answer to your wrong move, and facts about which pieces attack and defend which squares. In Danger spotting it also sends the highlighted move and your call. It never sends the puzzle's ID or rating, your Lichess name, your settings or anything about other puzzles. OpenAI requests ask it not to keep the response for later retrieval (`store: false`); each provider's own data policy applies.
     - **Test key**, and the silent check of a saved key at start-up, only ask the provider whether the model exists. That's free and sends no puzzle.
     - **Explain this move** (v0.9) sends one move of one of your games: the position before it (FEN), the move you played and its grade, Stockfish's evals before and after it, its best line and top lines from that position, its reply to your move, the game phase and move number, and the attack and defence facts. Nothing else about the game.
-    - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
+    - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. *From v0.14* it also sends the game's **What you did well** list, as the sentences shown on the Review screen. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
     - **Get AI coaching** (v0.10, the Coach) sends one report: its numbers (how often each weakness happened per 10 games, how much it cost, your mistake-reason counts, the puzzles-vs-games table, your puzzle accuracy per theme) and 12 example positions (20 at **Detailed**), each as a position (FEN), the move played, Stockfish's best line and its themes, labelled E1, E2 and so on. **No player names or usernames, no dates, links, clocks, game IDs or PGNs** are sent, whoever the report is about. It also sends the list of puzzle themes the model may recommend from.
       - *From v0.11*, a **standard run** on a report with games also sends the whole-game measures and one summary per game, labelled G1, G2…: which color you played, the result, the opening's name and ECO code, the number of moves, when each side castled, your development by move 10, the pawn structure at move 15, trades made while ahead or behind, the eval at move 15, mistakes per phase, the endgame type, whether you held +2 or −2, your mistakes under 10% of your clock, and 3 key moments (5 at **Detailed**), each as a position (FEN), the move with its number and the best move in SAN, the evals, the grade, Missed or Allowed, its Lichess themes, the reason you picked for it (for example *didn't look*), and your clock as a **percentage** of your starting time, never the clock itself. The report's numbers still include the puzzles-vs-games table. Example positions carry their game label and move number. It also sends the list of lesson topics the AI may pick from. Still no names, usernames, ratings, dates, links, raw clocks, comments, game IDs or PGNs.
       - *From v0.12*, on your own reports, it also sends **how your plan is going**, as numbers only: tasks done and skipped per type and weakness, minutes, and puzzle accuracy per theme. It sends your plan's shape (weeks, days a week, minutes a day). On any report with an earlier one, it also sends **Since last report**, as numbers only: weakness keys and their rates per report, labelled *this report*, *1 report ago* and so on, with the days between them. No games, positions or text from earlier reports. The AI's plan is checked task by task on your PC.
@@ -72,6 +74,11 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Popular moves**, only while you're signed in: when you ask for lines to be continued, run **Build my repertoire**, or save notes with **Extend past the book** on, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
     - **AI notes** go to your AI provider, as described under AI explanations below. They hold only opening data: the opening's name and ECO code, the line's moves in SAN, positions (FEN), Stockfish's evals and lines, and Wikibooks text. Nothing about you or your games.
     - **Wikibooks**: opening **Read about this position**, or asking for an AI note, requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
+  - **Lichess studies** (v0.14). Your copies, your place, hearts and progress stay in `user.db`. Nothing about them is ever sent to Lichess or to an AI.
+    - **Adding a study, or Check for updates**, downloads that one study from lichess.org (`/api/study/<id>.pgn`), without your sign-in. Only if Lichess refuses because the study is private, and your sign-in allows reading studies, is it asked again with your sign-in.
+    - **Studies by author** asks lichess.org for that username's public studies (`/api/study/by/<name>`). If that list is empty, it also asks whether the user exists (`/api/user/<name>`), so it can tell you about a typo. Nothing else is sent.
+    - **The Lichess window** loads lichess.org pages, and whatever those pages load, like a browser would, in its own temporary profile with no sign-in. WeakSquare never reads what you type there. It learns only which study is on screen, so **Add this study** works. Links to other sites open in your usual browser.
+    - **Open Lichess in your browser** and **Open on Lichess** open lichess.org in your usual browser, like any link.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -121,7 +128,7 @@ The app opens on a startup page every time.
 
 ### Signing in
 1. Click **Sign in with Lichess**. Lichess opens **in your usual web browser**, not inside WeakSquare, so your password manager and two-factor sign-in work as normal.
-2. Sign in to Lichess if you aren't already, and approve WeakSquare. It asks only to read and record your puzzle activity (`puzzle:read` and `puzzle:write`).
+2. Sign in to Lichess if you aren't already, and approve WeakSquare. It asks to read and record your puzzle activity (`puzzle:read` and `puzzle:write`) and, from v0.14, to read your studies (`study:read`), so you can add private studies you own or belong to. It never changes your studies. *Changed in v0.14.*
 3. The browser says *"Signed in. You can close this tab and return to WeakSquare."* The app comes back to the front and shows **Signed in as *your name***.
 
 While you're in the browser, the app shows *Waiting for you in your browser…* with **Cancel**. After 5 minutes it stops waiting and you can try again. If it fails, the reason is shown (for example *Sign-in failed: Lichess refused the request*). You can always continue without signing in.
@@ -661,6 +668,19 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 - **At any move,** with **Show best moves** on, a green arrow shows Stockfish's best move, and **Engine lines here** lists its top three lines. Click a line to step through it. After a bad move, **Why … fails: show me** steps through the punishment.
 - **Key moments** are your biggest mistakes (five by default). Each one reads *Played X*, and with **Show best moves** on, *better was Y*. Click it to go there.
 
+#### Summary, What to improve and What you did well
+*Added in v0.14.* A review that only lists faults reads like criticism even after a good game, so the review comes in three parts. All three come from Stockfish's analysis on your PC, so they work without an AI key.
+1. **Summary**, at the top: the result, your accuracy (when the platform gave one) and average loss, how many inaccuracies, mistakes and blunders Stockfish found in your moves, the turning point (the biggest mistake or blunder of the game, by either side), and how each phase went.
+2. **What to improve: key moments**, as above.
+3. **What you did well**, below the key moments. Only things Stockfish's numbers back up, each naming a move you played; click one to go to it:
+   - **The only good move:** you played Stockfish's best move, and its next choice was at least 1.5 pawns worse.
+   - **Punishing a mistake:** right after your opponent's mistake or blunder, you kept what it gave you.
+   - **A good defensive move:** from −1.5 or worse, you still found a best or good move.
+   - **Converting:** you reached +2 or better and won without dropping below +1 again.
+   - **A clean phase:** at least 8 of your moves in the opening, middlegame or endgame with no mistake or blunder.
+
+   Positions that were already decided (beyond ±5) don't count, and you get at most three of each kind. If nothing qualifies, it says so plainly; it never makes up praise. Like everything else here, it names your move, never Stockfish's alternative, so **Show best moves** stays meaningful.
+
 ### Show best moves and Analyze from here
 *Added in v0.10.*
 
@@ -706,6 +726,7 @@ After about half a minute you get:
 - a short summary of the **opening**,
 - the **turning point** (click it to jump there),
 - the **recurring themes** of your mistakes and 2–3 **takeaways**,
+- **What you did well** (v0.14): for up to three items from the Review screen's [What you did well](#summary-what-to-improve-and-what-you-did-well) list, why each was good. The AI may only explain items on that list, never add its own; with nothing on the list, this part is left out,
 - a note on **each key moment** in the Key moments list, with **Show on the board** for its arrows and the better line,
 - often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
 
@@ -1110,6 +1131,71 @@ The **Stats** tab shows accuracy, positions due and your weakest positions, for 
 
 ### From the Coach
 **Study this opening** on an opening weakness in a Coach report opens it here. If the book has no opening by that name, it opens a search for it instead.
+
+## Lichess studies
+*Added in v0.14.*
+
+A Lichess study is a set of chapters someone wrote on lichess.org: an opening explained move by move, a set of traps, annotated games. WeakSquare keeps your own copy of the studies you add, so you can work through them here, offline, with your place saved.
+
+**Studies** in the top bar opens it, with two tabs: **My studies** and **Find studies**.
+
+![Lichess studies: My studies and Find studies](img/studies.png)
+
+### Adding a study
+The quickest way: on **Find studies**, paste the study's address into the **Paste a study link** box at the top and click **Add**. All of these work:
+- `https://lichess.org/study/AbCd1234` (a study)
+- `https://lichess.org/study/AbCd1234/EfGh5678` (one of its chapters: the study opens at that chapter)
+- `AbCd1234` (just its 8-character ID)
+
+Anything else gets *That isn't a Lichess study link*, and nothing is requested. The study downloads in the background, every move is checked, and it opens. Adding a study you already have just opens it; to get the author's latest version, use **Check for updates**.
+
+The other ways to find one:
+- **Open Lichess in your browser** opens lichess.org's study list in your usual browser. Find a study there, copy its address and paste it.
+- **Browse Lichess in a window** opens the real lichess.org study pages in a separate window. When a study is on screen, click **Add this study** at the top of that window, or **Add it** back in WeakSquare. The window shows only lichess.org: any other link opens in your usual browser. It runs separately from WeakSquare and can't see your settings, your games or your sign-in. You're signed out of Lichess in that window every time, and nothing you do there is kept when you close it.
+- **Studies by author:** type a Lichess username (or paste their profile link) and click **Search** to list their public studies, then **Add** one. Lichess sends only each study's name.
+- **Starter list:** a list of opening studies that comes with WeakSquare, with the opening each covers. **Opening** narrows it. It holds only links, titles and authors; a study is downloaded only when you add it.
+
+**Private studies.** A study that's private on Lichess can only be added if it's yours or you're a member, and you're signed in with Lichess. If you signed in before v0.14, WeakSquare asks you to **Sign in again**, because older sign-ins can't read studies. Approve in your browser, then add the study again. Someone else's private study can't be added: ask its author to make it public or unlisted.
+
+### What gets checked
+Every move of every chapter is checked. A chapter with an illegal move, or one for another variant such as Crazyhouse, is listed as **Can't be used** with the reason, and the rest of the study works. A chapter that's only text on a decorative board (an empty board, or pictures drawn with pawns) is kept as a **Text** chapter: you read it, and there's nothing to play.
+
+Comments and titles are shown as plain text. A web address in a comment is just text, never a link: WeakSquare's only links are the ones it builds, such as **Open on Lichess**.
+
+### Working through a study
+On **My studies**, each study shows its author and your progress, for example *1 of 8 chapters done · at "Classical Variation"*. **Continue** takes you back to the chapter and move where you left off; **Start** begins a new one.
+
+On a study's page, its chapters are listed on the left. Click one to open it.
+- **Step-through chapters** (most studies): use **Forward** and **Back**, the arrow keys, or click any move in the move list. Side lines are indented under the move they replace, as on Lichess; click into one and **Back to main line** returns you. You can also play a move on the board: if it's in the chapter, you go there.
+- **Play-along chapters** (Lichess calls them *interactive* or *gamebook* chapters): you play the side the board faces and the app plays the other. The moves still to come are hidden. If you play a move the author wrote about, you see what they said about it; otherwise *Not this one. Try again.* After two tries you can ask for a **Hint** or **Show the move**.
+- The author's text, arrows and highlighted squares appear as you go.
+
+Nothing here is scored or affects any rating. Reaching the end of a chapter's main line marks it done (✓), and **Next chapter** moves on. A chapter with no moves, such as an introduction or a text chapter, is done as soon as you open it.
+
+Your place is saved as you go, so closing the app and choosing **Continue** brings you back to the same move. **More → Restart this chapter** or **Restart the study** starts again; restarting the study also clears the ✓ marks.
+
+### Adding a study's lines to your repertoire
+On a study's page, **More → Add to my repertoire…** puts its moves into your repertoire from the opening trainer, so you can drill them in **Openings → Practice**.
+
+1. Choose **My White repertoire** or **My Black repertoire**. It starts on the side the chapter is played from. You get your side's moves to learn, and the other side's replies to practise against.
+2. Choose **This chapter** or **Whole study**.
+3. **Include side lines** is off at first, so only each chapter's main line is added. Turn it on to add the side lines too. Side lines mix the other side's alternatives with the author's ideas for your own side, so this can give you more than one move at a position.
+4. Read the preview: how many moves it adds for you and for the other side, how many you already have, and anything skipped.
+5. If the study plays a different move from yours somewhere, it's listed, for example *After 1. e4 e5: you play Nf3, the study plays Nc3*. Choose **Keep mine** (the default) or **Use the study's**: the study's move becomes your main move there, and yours stays as a sideline. Nothing of yours is deleted either way.
+6. Click **Add to my repertoire**. Nothing is saved before this.
+
+Added moves show **Study** as their source in your repertoire. Your repertoire starts from the first move, so a chapter that starts from a set position is added only if your repertoire already reaches that position; the preview tells you how many moves were skipped. Text chapters and chapters that can't be used add nothing.
+
+### Hearts, filters, updates and deleting
+- **♡ / ♥** hearts a study. Hearts stay in WeakSquare; they're never sent to Lichess.
+- **All / Favorites / In progress / Finished** filters My studies.
+- **More → Check for updates** downloads the study's latest version and shows what changed: new, removed and changed chapters. Your copy changes only if you click **Update my copy**. Your place is kept if its chapter is still there.
+- **More → Delete from My studies** deletes your copy, your place and your progress from this PC, after asking. The study on Lichess isn't touched.
+- **Open on Lichess** opens the study in your browser. The study's author keeps their rights: your copy stays on this PC, and WeakSquare never shares it.
+
+### Gotchas
+- A study you've added keeps working if its author changes it or deletes it, or if you're offline. Only **Check for updates** fetches it again.
+- Study text is never sent to an AI.
 
 ## Keyboard shortcuts
 *Added in v0.2.*

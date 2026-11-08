@@ -33,7 +33,7 @@ def test_authorize_url_has_every_required_parameter() -> None:
         "redirect_uri": "http://127.0.0.1:5555/callback",
         "code_challenge_method": "S256",
         "code_challenge": RFC_CHALLENGE,
-        "scope": "puzzle:read puzzle:write",
+        "scope": "puzzle:read puzzle:write study:read",
         "state": "st4te",
     }
     assert RFC_VERIFIER not in url  # only the challenge leaves the app

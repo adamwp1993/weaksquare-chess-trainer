@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import chess
 
@@ -40,6 +41,8 @@ from weaksquare.core.opening_sources import LICENCE_NAME, LICENCE_URL, page_titl
 from weaksquare.core.plan import PlanDraft
 from weaksquare.core.preset_suggestion import validate_coach_preset
 from weaksquare.core.reasons import REASONS
+from weaksquare.core.study_links import STUDY_LIST_URL, StudyRef, ref_from_ids
+from weaksquare.core.study_pgn import Node as StudyNode
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
@@ -71,6 +74,7 @@ from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
+from weaksquare.services.studies import ChapterRow, StudiesService, StudyRow
 from weaksquare.services.sync import RatingInfo, SyncService
 from weaksquare.services.ui_settings import UiSettingsService
 
@@ -129,7 +133,11 @@ class Api:
         opening_notes: OpeningNotesService,
         opening_practice: OpeningPracticeService,
         repertoire: RepertoireService,
+        studies: StudiesService,
+        lichess_window: Any,
     ) -> None:
+        self._studies = studies
+        self._lichess_window = lichess_window
         self._opening_practice = opening_practice
         self._opening_notes = opening_notes
         self._opening_sources = opening_sources
@@ -1456,6 +1464,170 @@ class Api:
         self._repertoire.move(color, position_key, move_uci, direction)
         return self._repertoire_dto(color)
 
+    # ---- v0.14: Lichess studies (REQUIREMENTS §19) ----------------------------------------------------------------
+    # Study text is never sent to an LLM (FR-13.12): none of these methods reach an AI service.
+    @bridge_call
+    def add_study(self, text: str) -> str:
+        """FR-13.5: a pasted link, chapter link or ID. Anything else is refused before any request. Returns a job."""
+        return self._studies.add_text(text)
+
+    @bridge_call
+    def add_study_by_id(self, study_id: str, chapter_id: str | None = None) -> str:
+        """FR-13.5a, 13.6: from Studies by author or the starter list. Returns a job."""
+        return self._studies.add_ids(study_id, chapter_id)
+
+    @bridge_call
+    def get_study_add_result(self, job_id: str) -> dto.StudyAddResult | None:
+        r = self._studies.add_result(job_id)
+        return dto.StudyAddResult(r.study_id, r.chapter_key, r.already_saved) if r else None
+
+    @bridge_call
+    def find_author_studies(self, username: str) -> list[dto.AuthorStudy]:
+        return [
+            dto.AuthorStudy(s["study_id"], s["name"], s["updated_ms"], s["saved"])
+            for s in self._studies.studies_by(username)
+        ]
+
+    @bridge_call
+    def get_study_starter_list(self) -> list[dto.StarterStudy]:
+        saved = {r.id for r in self._studies.list_studies()}
+        return [
+            dto.StarterStudy(e.study_id, e.title, e.author, e.opening, StudyRef(e.study_id).url, e.study_id in saved)
+            for e in self._studies.starter_list()
+        ]
+
+    @bridge_call
+    def list_studies(
+        self, which: Literal["all", "favorites", "in_progress", "finished"] = "all"
+    ) -> list[dto.StudySummary]:
+        if which not in ("all", "favorites", "in_progress", "finished"):
+            raise ValidationError("bad filter")
+        return [self._study_summary(r) for r in self._studies.list_studies(which)]
+
+    @bridge_call
+    def get_study(self, study_id: str) -> dto.StudyDetail:
+        row, chapters = self._studies.get(study_id)
+        return dto.StudyDetail(self._study_summary(row, chapters), [_chapter_info(c) for c in chapters])
+
+    @bridge_call
+    def get_study_chapter(self, study_id: str, chapter_key: str) -> dto.StudyChapter:
+        row, tree = self._studies.chapter(study_id, chapter_key)
+        return dto.StudyChapter(study_id, _chapter_info(row), row.start_fen, _flatten_study_tree(tree, row.start_fen))
+
+    @bridge_call
+    def set_study_place(self, study_id: str, chapter_key: str, path: list[str]) -> None:
+        """FR-13.10: your place, saved as you go. Local only; nothing is sent to Lichess."""
+        if not isinstance(path, list) or not all(isinstance(m, str) for m in path):
+            raise ValidationError("bad path")
+        self._studies.set_place(study_id, chapter_key, " ".join(path))
+
+    @bridge_call
+    def get_study_continue(self, study_id: str) -> dto.StudyPlace:
+        key, path = self._studies.continue_target(study_id)
+        return dto.StudyPlace(key, path.split())
+
+    @bridge_call
+    def set_study_chapter_done(self, study_id: str, chapter_key: str, done: bool) -> None:
+        self._studies.set_done(study_id, chapter_key, bool(done))
+
+    @bridge_call
+    def restart_study(self, study_id: str) -> None:
+        self._studies.restart(study_id)
+
+    @bridge_call
+    def heart_study(self, study_id: str, hearted: bool) -> None:
+        """FR-13.9: stored only in the app; the API has no way to like a study."""
+        self._studies.heart(study_id, bool(hearted))
+
+    @bridge_call
+    def delete_study(self, study_id: str) -> None:
+        self._studies.delete(study_id)
+
+    @bridge_call
+    def preview_study_repertoire(
+        self, study_id: str, chapter_key: str | None, color: Literal["white", "black"], side_lines: bool
+    ) -> dto.StudyRepertoirePreview:
+        """FR-13.11: what Add to my repertoire would add (one chapter, or the whole study with no chapter)."""
+        p = self._studies.repertoire_preview(study_id, chapter_key, color, side_lines)
+        conflicts = [dto.StudyRepertoireConflict(c.position_key, c.path, c.yours, c.study) for c in p.conflicts]
+        return dto.StudyRepertoirePreview(
+            p.id, p.color, p.side_lines, p.chapters, p.skipped, p.yours, p.theirs, p.already, p.unreachable, conflicts,  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    @bridge_call
+    def save_study_repertoire(self, preview_id: str, choices: dict[str, str]) -> dto.RepertoireAdded:
+        """FR-13.11: store the previewed moves with source = study; each conflict keeps your move unless you chose the study's."""
+        r = self._studies.repertoire_save(preview_id, choices)
+        return dto.RepertoireAdded(r.added, r.kept)
+
+    @bridge_call
+    def discard_study_repertoire(self) -> None:
+        self._studies.discard_repertoire_preview()
+
+    @bridge_call
+    def check_study_updates(self, study_id: str) -> str:
+        """FR-13.7: downloads the latest version in a job; your copy changes only through apply_study_update."""
+        return self._studies.check_updates(study_id)
+
+    @bridge_call
+    def get_study_update(self, study_id: str) -> dto.StudyUpdate | None:
+        p = self._studies.pending_update(study_id)
+        if p is None:
+            return None
+        row, _ = self._studies.get(study_id)
+        d = p.diff
+        return dto.StudyUpdate(
+            study_id, p.study.title, p.study.title != row.title, d.added, d.removed, d.changed, d.unchanged
+        )
+
+    @bridge_call
+    def apply_study_update(self, study_id: str) -> None:
+        self._studies.apply_update(study_id)
+
+    @bridge_call
+    def discard_study_update(self, study_id: str) -> None:
+        self._studies.discard_update(study_id)
+
+    @bridge_call
+    def open_study_on_lichess(self, study_id: str, chapter_key: str | None = None) -> None:
+        """FR-13.7: the link back to the study, built by the app from its IDs."""
+        chapter = chapter_key if chapter_key and not chapter_key.startswith("idx:") else None
+        ref = ref_from_ids(study_id, chapter)
+        if ref is None:
+            raise ValidationError("bad study id")
+        self._desktop.open_in_browser(ref.url)
+
+    @bridge_call
+    def open_lichess_studies_in_browser(self) -> None:
+        """FR-13.5: Open Lichess, in your normal browser."""
+        self._desktop.open_in_browser(STUDY_LIST_URL)
+
+    @bridge_call
+    def open_lichess_window(self) -> bool:
+        """FR-13.3: the isolated Lichess window (its own process, no bridge). True if a new window opened."""
+        return bool(self._lichess_window.open())
+
+    @bridge_call
+    def close_lichess_window(self) -> None:
+        self._lichess_window.close()
+
+    @bridge_call
+    def is_lichess_window_open(self) -> bool:
+        return bool(self._lichess_window.is_open())
+
+    def _study_summary(self, r: StudyRow, chapters: list[ChapterRow] | None = None) -> dto.StudySummary:
+        place_title = None
+        if r.place_key is not None:
+            rows = chapters if chapters is not None else self._studies.get(r.id)[1]
+            place_title = next((c.title for c in rows if c.key == r.place_key), None)
+        status: dto.StudyStatus = (
+            "finished" if r.playable and r.done >= r.playable else "in_progress" if r.place_key or r.done else "new"
+        )
+        return dto.StudySummary(
+            r.id, r.title, r.author, StudyRef(r.id).url, r.hearted, r.private, r.chapters, r.playable, r.done, status,
+            r.place_key, place_title, r.added_at, r.updated_at, r.checked_at,
+        )  # fmt: skip
+
     # ---- v0.12: the journal (FR-10.67-10.70) ------------------------------------------------------
     @bridge_call
     def get_journal(self, filters: dict | None = None) -> dto.JournalTimeline:  # type: ignore[type-arg]
@@ -1626,6 +1798,7 @@ class Api:
         return dto.GameReview(
             game_summary(v.game), v.start_fen, [review_move(m) for m in v.moves], v.analyzed, v.current,
             [side_summary(s) for s in v.summaries], list(v.key_moments), list(v.retry_plies), v.ask_reasons,
+            [_story_dto(st) for st in v.stories],
         )  # fmt: skip
 
     @bridge_call
@@ -1825,7 +1998,7 @@ def _narrative_dto(v: NarrativeView) -> dto.GameNarrative:
     preset = dto.SuggestedPreset(list(p.themes), list(p.names), p.rating_min, p.rating_max) if p else None
     return dto.GameNarrative(v.game_id, v.n, list(v.moments), n.opening_summary, n.turning_point, list(n.themes),
                              list(n.takeaways), moments, preset, n.discarded, v.provider, v.model,
-                             round(v.cost_usd, 6), v.cached)  # fmt: skip
+                             round(v.cost_usd, 6), v.cached, [dto.GameDidWell(f, t) for f, t in n.did_well])  # fmt: skip
 
 
 def _price_dto(p: PriceRow) -> dto.LlmPrice:
@@ -1963,3 +2136,48 @@ def side_summary(s: Any) -> dto.SideSummary:
               for p, x in s.by_phase.items()]  # fmt: skip
     return dto.SideSummary(s.color, s.moves, s.inaccuracies, s.mistakes, s.blunders, s.avg_cp_loss,
                            s.platform_accuracy, phases, s.low_clock_errors)  # fmt: skip
+
+
+def _chapter_info(c: ChapterRow) -> dto.StudyChapterInfo:
+    return dto.StudyChapterInfo(
+        c.key, c.idx, c.title, "gamebook" if c.mode == "gamebook" else "normal",
+        "black" if c.orientation == "black" else "white", c.text_only, c.rejected, c.move_count, c.done,
+    )  # fmt: skip
+
+
+def _flatten_study_tree(root: StudyNode, start_fen: str) -> list[dto.StudyMove]:
+    """A chapter's checked tree as a flat list (FR-13.8): ids in pre-order, the root first, each with its position.
+    A text chapter's board can be invalid, so its root keeps the start FEN as given and has no moves. A loop, not a
+    recursion per move (QA v0.14-B1)."""
+    out: list[dto.StudyMove] = []
+    kids: list[list[int]] = []
+    try:
+        root_board: chess.Board | None = chess.Board(start_fen)
+    except ValueError:
+        root_board = None
+    stack: list[tuple[StudyNode, int | None, chess.Board | None, int]] = [(root, None, root_board, 0)]
+    while stack:
+        node, parent, board, ply = stack.pop()
+        my_id = len(out)
+        if parent is not None:
+            kids[parent].append(my_id)
+        shapes = [dto.StudyShape(s.orig, s.dest, cast(Any, s.color)) for s in node.shapes]  # checked by parse_shapes
+        fen = board.fen() if board is not None else start_fen
+        out.append(
+            dto.StudyMove(my_id, parent, node.san, node.uci, fen, ply, node.comment, shapes, list(node.nags), [])
+        )
+        kids.append([])
+        for child in reversed(node.children):
+            nb = None
+            if board is not None:
+                nb = board.copy(stack=False)
+                nb.push_uci(child.uci or "")
+            stack.append((child, my_id, nb, ply + 1))
+    return [replace(m, children=k) for m, k in zip(out, kids, strict=True)]
+
+
+def _story_dto(st: Any) -> dto.GameStoryView:
+    """FR-11.36: a side's Summary and What you did well."""
+    return dto.GameStoryView(
+        st.color, st.result, list(st.summary), [dto.GameStrength(x.kind, x.ply, x.text) for x in st.strengths]
+    )

@@ -9,7 +9,7 @@ For cp loss, scores are clamped to ±1000 and a mate counts as ±1000 (plan v0.8
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
@@ -317,3 +317,187 @@ def side_summary(rows: Sequence[MoveRow], color: str, platform_accuracy: float |
             sum(1 for r in clocked if r.low_clock and r.classification in ("mistake", "blunder")) if clocked else None
         ),
     )
+
+
+# ---- v0.14: the review in three parts (FR-11.36) --------------------------------------------------------------------
+# Summary and What you did well, from the stored analysis only (no engine run, no AI), so they work with no AI key.
+# Every strength names a move you played and a fact the engine measured; nothing is praised that the numbers don't show.
+ONLY_MOVE_GAP = 150  # the engine's second choice is at least this much worse (cp, from your side)
+HARD_DEFENCE = -150  # an eval this bad or worse before your move
+CONVERT_FROM = 200  # reached this...
+CONVERT_KEEP = 100  # ...and never fell below this afterwards
+CLEAN_PHASE_MOVES = 8
+MAX_PER_KIND = 3
+MAX_STRENGTHS = 8
+
+StrengthKind = Literal["only_move", "punished", "defence", "conversion", "clean_phase"]
+
+
+@dataclass(frozen=True)
+class Strength:
+    kind: StrengthKind
+    ply: int | None  # the move it's about (None for a whole phase)
+    text: str
+
+
+@dataclass(frozen=True)
+class GameStory:
+    color: str
+    result: str  # won / lost / drawn / unfinished, from your side
+    summary: tuple[str, ...]  # plain sentences
+    strengths: tuple[Strength, ...]
+
+
+def move_label(ply: int, san: str, start_fullmove: int = 1, black_first: bool = False) -> str:
+    """'12. Nf3' or '12... Nf3' for 0-based `ply` in a game starting at `start_fullmove`."""
+    offset = ply + (1 if black_first else 0)
+    number = start_fullmove + offset // 2
+    return f"{number}. {san}" if offset % 2 == 0 else f"{number}... {san}"
+
+
+def _result_for(result: str, color: str) -> str:
+    if result == "1/2-1/2":
+        return "drawn"
+    if result in ("1-0", "0-1"):
+        return "won" if (result == "1-0") == (color == "white") else "lost"
+    return "unfinished"
+
+
+def _line_value(line: EngineLine, mover: str) -> int:
+    v = (CLAMP if line.mate > 0 else -CLAMP) if line.mate is not None else max(-CLAMP, min(CLAMP, line.cp or 0))
+    return v if mover == "white" else -v
+
+
+def _yours_after(r: MoveRow, color: str) -> int:
+    """The eval after this move from `color`'s side."""
+    v = r.eval_after.value()
+    return v if r.mover == color else -v
+
+
+def _pawns(cp: int) -> str:
+    return f"{cp / 100:.1f}"
+
+
+def _count(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+def game_story(
+    rows: Sequence[MoveRow],
+    color: str,
+    result: str,
+    platform_accuracy: float | None = None,
+    th: Thresholds = DEFAULT_THRESHOLDS,
+    label: Callable[[int, str], str] | None = None,
+) -> GameStory:
+    """FR-11.36: Summary and What you did well for `color`. `label(ply, san)` writes a move ('12... Nf3')."""
+    lab = label or move_label
+    outcome = _result_for(result, color)
+    summary = side_summary(rows, color, platform_accuracy)
+    lines: list[str] = []
+    verb = {"won": "You won", "lost": "You lost", "drawn": "You drew", "unfinished": "The game wasn't finished"}[
+        outcome
+    ]
+    detail = []
+    if platform_accuracy is not None:
+        detail.append(f"accuracy {platform_accuracy:.0f}%")
+    if summary.avg_cp_loss is not None:
+        detail.append(f"an average loss of {summary.avg_cp_loss:.0f} centipawns a move")
+    lines.append(verb + (f", with {' and '.join(detail)}." if detail else "."))
+    lines.append(
+        f"Stockfish found {_count(summary.inaccuracies, 'inaccuracy', 'inaccuracies')}, "
+        f"{_count(summary.mistakes, 'mistake', 'mistakes')} and {_count(summary.blunders, 'blunder', 'blunders')} "
+        "in your moves."
+    )
+    swings = [r for r in rows if r.classification in ("mistake", "blunder")]
+    if swings:
+        t = max(swings, key=lambda r: (r.cp_loss, -r.ply))
+        who = "your" if t.mover == color else "your opponent's"
+        lines.append(
+            f"The turning point: {lab(t.ply, t.move_san)}, {who} {t.classification}, which cost {_pawns(t.cp_loss)}."
+        )
+    else:
+        lines.append("No big swings: neither side made a mistake or a blunder.")
+    verdicts = []
+    for phase in ("opening", "middlegame", "endgame"):
+        ps = summary.by_phase.get(phase)
+        if not ps or not ps.moves:
+            continue
+        if ps.blunders:
+            verdicts.append(f"the {phase} had {_count(ps.blunders, 'blunder', 'blunders')}")
+        elif ps.mistakes:
+            verdicts.append(f"the {phase} had {_count(ps.mistakes, 'mistake', 'mistakes')}")
+        else:
+            verdicts.append(f"the {phase} was clean")
+    if verdicts:
+        text = ", ".join(verdicts)
+        lines.append(text[0].upper() + text[1:] + ".")
+    return GameStory(color, outcome, tuple(lines), tuple(_strengths(rows, color, outcome, th, lab)))
+
+
+def _strengths(
+    rows: Sequence[MoveRow], color: str, outcome: str, th: Thresholds, lab: Callable[[int, str], str]
+) -> list[Strength]:
+    by_ply = {r.ply: r for r in rows}
+    only: list[tuple[int, Strength]] = []
+    punished: list[tuple[int, Strength]] = []
+    defence: list[tuple[int, Strength]] = []
+    for r in rows:
+        if r.mover != color:
+            continue
+        before = r.eval_before.value()
+        live = -th.decided < before < th.decided
+        # Only move found: you played the engine's best, and its second choice was much worse.
+        if live and r.best_move == r.move_uci and len(r.lines) >= 2:
+            gap = _line_value(r.lines[0], color) - _line_value(r.lines[1], color)
+            if gap >= ONLY_MOVE_GAP:
+                text = (
+                    f"{lab(r.ply, r.move_san)}: you found the only good move. "
+                    f"Anything else was at least {_pawns(gap)} worse."
+                )
+                only.append((gap, Strength("only_move", r.ply, text)))
+        # Mistake punished: right after your opponent's mistake or blunder, you kept what it gave you.
+        prev = by_ply.get(r.ply - 1)
+        if (
+            prev is not None
+            and prev.mover != color
+            and prev.classification in ("mistake", "blunder")
+            and -th.decided < prev.eval_before.value() < th.decided
+            and r.cp_loss < th.inaccuracy
+        ):
+            text = (
+                f"{lab(r.ply, r.move_san)}: you punished your opponent's {prev.classification} "
+                f"{lab(prev.ply, prev.move_san)} straight away."
+            )
+            punished.append((prev.cp_loss, Strength("punished", r.ply, text)))
+        # Hard defence: a bad position, and you still found a best or good move.
+        if -th.decided < before <= HARD_DEFENCE and r.classification in ("best", "good"):
+            text = f"{lab(r.ply, r.move_san)}: a good defensive move in a difficult position ({_pawns(before)})."
+            defence.append((-before, Strength("defence", r.ply, text)))
+    out: list[Strength] = []
+    for found in (only, punished, defence):
+        out += [s for _, s in sorted(found, key=lambda x: -x[0])[:MAX_PER_KIND]]
+    # Conversion: you reached a clear advantage and won without letting it slip.
+    if outcome == "won":
+        values = [_yours_after(r, color) for r in rows]
+        for i, r in enumerate(rows):
+            if r.mover == color and values[i] >= CONVERT_FROM and min(values[i:]) >= CONVERT_KEEP:
+                text = (
+                    f"From {lab(r.ply, r.move_san)} you were clearly better, and you converted it "
+                    "without letting the advantage slip."
+                )
+                out.append(Strength("conversion", r.ply, text))
+                break
+    # Clean phase: enough moves with no mistake or blunder.
+    phases: dict[str, list[MoveRow]] = {}
+    for r in rows:
+        if r.mover == color:
+            phases.setdefault(r.phase, []).append(r)
+    for phase in ("opening", "middlegame", "endgame"):
+        mine = phases.get(phase, [])
+        if len(mine) >= CLEAN_PHASE_MOVES and not any(r.classification in ("mistake", "blunder") for r in mine):
+            out.append(
+                Strength("clean_phase", None, f"A clean {phase}: {len(mine)} moves without a mistake or blunder.")
+            )
+    out.sort(key=lambda s: s.ply if s.ply is not None else 10_000)
+    return out[:MAX_STRENGTHS]

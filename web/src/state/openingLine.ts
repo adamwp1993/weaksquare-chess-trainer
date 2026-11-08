@@ -43,6 +43,7 @@ export function sourceLabel(source: string): string {
   if (source === "engine") return "Stockfish";
   if (source === "explorer") return "Popular";
   if (source === "you") return "You";
+  if (source === "study") return "Study"; // v0.14 (FR-13.11): added from a Lichess study
   return "Book";
 }
 

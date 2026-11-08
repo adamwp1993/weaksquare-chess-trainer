@@ -25,6 +25,7 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 MIGRATIONS_DIR = PACKAGE_DIR / "adapters" / "db" / "migrations"
 ENGINE_MANIFEST = PACKAGE_DIR / "engine_manifest.json"  # pinned Stockfish release (FR-7.5)
 OPENING_BOOK_DIR = PACKAGE_DIR / "opening_book"  # the bundled chess-openings files, pinned (FR-12.1)
+STUDY_STARTER_FILE = PACKAGE_DIR / "study_starter.json"  # v0.14: the starter list, links and titles only (FR-13.6)
 REPO_ROOT = PACKAGE_DIR.parent.parent
 WEB_DIST = REPO_ROOT / "web" / "dist"
 ICON_FILE = REPO_ROOT / "assets" / "icon" / "weaksquare.ico"  # built by scripts/make_icon.py (NFR-8a)

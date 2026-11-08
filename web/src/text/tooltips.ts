@@ -2,6 +2,13 @@
 // User Guide. It says what the option does and, for a choice, what each choice means and costs. Add an entry for every
 // option a later version adds. The Playwright walk in tests/e2e/test_v012_tooltips.py fails on a control without one.
 export const TOOLTIPS = {
+  // ---- Lichess studies (v0.14) ----
+  "studies.filter": "Which of your studies to list. All: every study you've added. Favorites: the ones you've hearted (hearts stay in WeakSquare and never reach Lichess). In progress: started but not finished. Finished: every chapter you can use is done.",
+  "studies.starterOpening": "Show only starter studies about this opening. The starter list comes with the app and holds only links, titles and authors. A study is downloaded only when you add it.",
+  "studies.sideLines": "Off: only each chapter's main line goes into your repertoire. On: its side lines too. Side lines mix the other side's alternatives with the author's ideas for your own side, so this can add several moves for you at one position. You review everything before it's saved.",
+  "studies.repertoireScope": "This chapter: only the chapter you have open. Whole study: every chapter that has moves. Text chapters and chapters that can't be used add nothing.",
+  "studies.conflict": "Keep mine: your move stays, and the study's move here (and what follows it) isn't added. Use the study's: the study's move becomes your main move here, and yours stays as a sideline. Nothing of yours is deleted either way.",
+  "studies.repertoireColor":"Which of your repertoires the moves go into. You get your side's moves from the study to learn, and the other side's replies to practise against.",
   // ---- the opening trainer (v0.13) ----
   "ai.model.openings": "The model for the opening trainer's overviews and move explanations. Follow Puzzle Explain, or pick your own. A saved note is reused, so a cheaper model here costs little for a whole opening.",
   "openings.color": "Which side you're learning this opening for. The board turns to that side, and a repertoire is kept separately for White and Black.",

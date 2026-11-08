@@ -13,6 +13,23 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.14] - 2026-11-08
+
+Candidates: v0.14-rc1 (2026-11-08)
+
+### Added
+- **Lichess studies**: a new **Studies** page. Paste a study's link (or a chapter's link, or its ID) under **Find studies** and it's downloaded, checked move by move and kept on your PC, so it works offline and stays if its author deletes it. [FR-13.1, FR-13.5, FR-13.7]
+- **Four ways to find a study**: paste a link, open Lichess in your browser, browse lichess.org in a separate window with **Add this study** (it can't see WeakSquare, your settings or your sign-in), **Studies by author**, and a starter list of opening studies (links, titles and authors only). [FR-13.2, FR-13.3, FR-13.4, FR-13.5a, FR-13.6]
+- **Work through a study**: step through chapters and their side lines with the author's text, arrows and highlights, or play along with interactive chapters. Your place is saved, **Continue** returns to it, and finished chapters are ticked. Nothing is scored. [FR-13.8, FR-13.10]
+- **Hearts and filters** for My studies (All, Favorites, In progress, Finished); hearts stay in WeakSquare. **Check for updates** shows what changed in a study before you replace your copy. [FR-13.1, FR-13.7, FR-13.9]
+- **Add to my repertoire** from a study: a chapter's or the whole study's main line (side lines if you want them), for White or Black, with a preview first. Where the study's move differs from yours, you choose which is your main move; nothing of yours is deleted. The moves are drilled in Practice. [FR-13.11]
+- Chapters that are only text on a decorative board are kept as **Text** chapters; a chapter with an illegal move is listed with the reason and the rest of the study works. [FR-13.7]
+
+- **Game Review in three parts**: a **Summary** of how the game went, **What to improve** (the key moments) and **What you did well**: only moves Stockfish's numbers back up (the only good move, punishing a mistake, a good defence, converting an advantage, a clean phase), each linked to its move. Works without an AI key, and never makes up praise. [FR-11.36]
+- **Explain my game** adds a short *What you did well*, explaining only items from that list. An explanation saved before v0.14 isn't reused: asking again makes a new one, at the usual cost. [FR-11.18, FR-11.36]
+### Changed
+- **Signing in with Lichess** now also asks to read your studies (`study:read`), so you can add private studies you own or belong to. Sign-ins from before v0.14 keep working for everything else; adding a private study asks you to sign in again. [FR-6.1, FR-13.7]
+
 ## [v0.13] - 2026-11-07
 
 Candidates: v0.13-rc1 (2026-11-07), v0.13-rc2 (2026-11-07), v0.13-rc3 (2026-11-07)

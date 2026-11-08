@@ -25,6 +25,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+import chess
+
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import AppError, NotFoundError, ValidationError
 from weaksquare.core.explain import (
@@ -47,7 +49,7 @@ from weaksquare.core.game_explain import (
     move_input,
     validate_narrative,
 )
-from weaksquare.core.game_review import ERRORS, MoveRow
+from weaksquare.core.game_review import ERRORS, MoveRow, game_story, move_label
 from weaksquare.core.games import GameRow, parse_single_pgn
 from weaksquare.core.llm.cost import Estimate
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
@@ -306,11 +308,29 @@ class GameExplainService:
         parsed = parse_single_pgn(game.pgn)
         color = str(game.user_color)
         inp = NarrativeInput(parsed.start_fen, parsed.moves, tuple(rows), color, game.user_result,
-                             top_moments(rows, color, count))  # fmt: skip
+                             top_moments(rows, color, count), self._strengths(game, rows, parsed.start_fen, color))  # fmt: skip
         return game, inp, count
 
+    def _strengths(self, game: GameRow, rows: list[MoveRow], start_fen: str, color: str) -> tuple[str, ...]:
+        """FR-11.36: the same What you did well the Review screen shows, as the facts the AI may explain."""
+        start = chess.Board(start_fen)
+        black_first = start.turn == chess.BLACK
+
+        def label(ply: int, san: str) -> str:
+            return move_label(ply, san, start.fullmove_number, black_first)
+
+        sides = ("white", "black") if color == "both" else (color,) if color in ("white", "black") else ()
+        thresholds = self._prefs.settings().thresholds
+        out: list[str] = []
+        for side in sides:
+            prefix = f"As {side.capitalize()}: " if color == "both" else ""
+            story = game_story(rows, side, game.result, None, thresholds, label)
+            out += [prefix + x.text for x in story.strengths]
+        return tuple(out)
+
     def _narrative_what(self, inp: NarrativeInput, n: int) -> tuple[Any, ...]:
-        return ("narrative", n, ",".join(str(p) for p in inp.moments))
+        # v0.14: "strengths" (FR-11.36), so a narrative cached before the prompt listed them isn't reused.
+        return ("narrative", "strengths", n, ",".join(str(p) for p in inp.moments))
 
     def quote_narrative(self, game_id: object, n: object = None) -> GameQuote:
         game, inp, count = self._narrative_input(game_id, n)

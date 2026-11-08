@@ -14,7 +14,9 @@ from weaksquare.core.errors import AppError
 
 LICHESS_OAUTH_URL = "https://lichess.org/oauth"
 CLIENT_ID = "weaksquare-chess-trainer"  # Lichess accepts unregistered public clients
-SCOPES = "puzzle:read puzzle:write"
+# FR-6.1. `study:read` (v0.14) lets the app read private studies you own or belong to (FR-13.7). Lichess's token
+# response doesn't say what was granted, so the account service records these at each sign-in.
+SCOPES = "puzzle:read puzzle:write study:read"
 # RFC 7636: 43–128 characters from the unreserved set.
 _VERIFIER = re.compile(r"^[A-Za-z0-9\-._~]{43,128}$")
 

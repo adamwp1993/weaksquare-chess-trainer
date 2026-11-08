@@ -103,6 +103,15 @@ import type {
   TrainingPlan,
   UiSettings,
   UpdateOffer,
+  AuthorStudy,
+  StarterStudy,
+  StudyAddResult,
+  StudyChapter,
+  StudyDetail,
+  StudyPlace,
+  StudySummary,
+  StudyUpdate,
+  StudyRepertoirePreview,
 } from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -879,6 +888,111 @@ export class PywebviewClient implements ApiClient {
 
   dismissSuggestion() {
     return this.call<SuggestionView | null>("dismiss_suggestion");
+  }
+
+  // v0.14: Lichess studies
+  addStudy(text: string) {
+    return this.call<string>("add_study", text);
+  }
+
+  addStudyById(studyId: string, chapterId: string | null) {
+    return this.call<string>("add_study_by_id", studyId, chapterId);
+  }
+
+  getStudyAddResult(jobId: string) {
+    return this.call<StudyAddResult | null>("get_study_add_result", jobId);
+  }
+
+  findAuthorStudies(username: string) {
+    return this.call<AuthorStudy[]>("find_author_studies", username);
+  }
+
+  getStudyStarterList() {
+    return this.call<StarterStudy[]>("get_study_starter_list");
+  }
+
+  listStudies(which: "all" | "favorites" | "in_progress" | "finished") {
+    return this.call<StudySummary[]>("list_studies", which);
+  }
+
+  getStudy(studyId: string) {
+    return this.call<StudyDetail>("get_study", studyId);
+  }
+
+  getStudyChapter(studyId: string, chapterKey: string) {
+    return this.call<StudyChapter>("get_study_chapter", studyId, chapterKey);
+  }
+
+  setStudyPlace(studyId: string, chapterKey: string, path: string[]) {
+    return this.call<void>("set_study_place", studyId, chapterKey, path);
+  }
+
+  getStudyContinue(studyId: string) {
+    return this.call<StudyPlace>("get_study_continue", studyId);
+  }
+
+  setStudyChapterDone(studyId: string, chapterKey: string, done: boolean) {
+    return this.call<void>("set_study_chapter_done", studyId, chapterKey, done);
+  }
+
+  restartStudy(studyId: string) {
+    return this.call<void>("restart_study", studyId);
+  }
+
+  heartStudy(studyId: string, hearted: boolean) {
+    return this.call<void>("heart_study", studyId, hearted);
+  }
+
+  deleteStudy(studyId: string) {
+    return this.call<void>("delete_study", studyId);
+  }
+
+  previewStudyRepertoire(studyId: string, chapterKey: string | null, color: "white" | "black", sideLines: boolean) {
+    return this.call<StudyRepertoirePreview>("preview_study_repertoire", studyId, chapterKey, color, sideLines);
+  }
+
+  saveStudyRepertoire(previewId: string, choices: Record<string, "mine" | "study">) {
+    return this.call<RepertoireAdded>("save_study_repertoire", previewId, choices);
+  }
+
+  discardStudyRepertoire() {
+    return this.call<void>("discard_study_repertoire");
+  }
+
+  checkStudyUpdates(studyId: string) {
+    return this.call<string>("check_study_updates", studyId);
+  }
+
+  getStudyUpdate(studyId: string) {
+    return this.call<StudyUpdate | null>("get_study_update", studyId);
+  }
+
+  applyStudyUpdate(studyId: string) {
+    return this.call<void>("apply_study_update", studyId);
+  }
+
+  discardStudyUpdate(studyId: string) {
+    return this.call<void>("discard_study_update", studyId);
+  }
+
+  openStudyOnLichess(studyId: string, chapterKey: string | null) {
+    return this.call<void>("open_study_on_lichess", studyId, chapterKey);
+  }
+
+  openLichessStudiesInBrowser() {
+    return this.call<void>("open_lichess_studies_in_browser");
+  }
+
+  openLichessWindow() {
+    return this.call<boolean>("open_lichess_window");
+  }
+
+  closeLichessWindow() {
+    return this.call<void>("close_lichess_window");
+  }
+
+  isLichessWindowOpen() {
+    return this.call<boolean>("is_lichess_window_open");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

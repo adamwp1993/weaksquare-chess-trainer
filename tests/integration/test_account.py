@@ -227,3 +227,29 @@ def test_cancel_right_after_sign_in_is_never_lost() -> None:
         job = h.svc.start_sign_in()
         h.svc.cancel_sign_in()  # immediately: usually before the job has made its listener
         assert h.run(job).state == "cancelled"
+
+
+def test_v014_sign_in_records_study_read_and_old_sign_ins_lack_it() -> None:
+    """FR-6.1, FR-13.7 (v0.14): Lichess doesn't report a token's scopes, so the sign-in records what it asked for. A
+    sign-in from before v0.14 has nothing recorded and so lacks study:read; sign-out and expiry clear it."""
+    from weaksquare.services.account import SCOPES_KEY
+
+    h = Harness()
+    assert h.svc.has_scope("study:read") is False  # signed out
+    h.run(h.svc.start_sign_in())
+    assert "scope=puzzle%3Aread+puzzle%3Awrite+study%3Aread" in h.browser.opened[0]
+    assert h.settings[SCOPES_KEY] == "puzzle:read puzzle:write study:read"
+    assert h.svc.has_scope("study:read") and h.svc.has_scope("puzzle:write")
+    assert not h.svc.has_scope("study:write")
+
+    h.settings[SCOPES_KEY] = None  # what a v0.13 sign-in looks like: a token, no record
+    assert h.svc.has_scope("study:read") is False
+    assert h.svc.has_scope("puzzle:read") is False
+
+    h.settings[SCOPES_KEY] = "puzzle:read puzzle:write study:read"
+    h.svc.mark_expired()
+    assert h.settings[SCOPES_KEY] is None and not h.svc.has_scope("study:read")
+
+    h.run(h.svc.start_sign_in())
+    h.svc.sign_out()
+    assert h.settings[SCOPES_KEY] is None and not h.svc.has_scope("study:read")

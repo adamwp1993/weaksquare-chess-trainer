@@ -313,6 +313,16 @@ function NarrativeView({ x, onJump, onTrain }: { x: GameNarrative; onJump: (ply:
           ))}
         </List>
       )}
+      {x.did_well.length > 0 && (
+        <Stack gap={2} data-testid="narrative-did-well">
+          <Text size="sm" fw={600}>What you did well</Text>
+          {x.did_well.map((d, i) => (
+            <Text key={i} size="sm">
+              <b>{d.fact}</b> {d.text}
+            </Text>
+          ))}
+        </Stack>
+      )}
       {x.preset && (
         <Group gap="xs">
           <Text size="sm">

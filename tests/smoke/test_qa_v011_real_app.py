@@ -95,8 +95,17 @@ def test_qa_v011_whole_game_report_and_per_run_options(pw, tmp_path: Path, fixtu
     finally:
         assert app.close() == 0
     with sqlite3.connect(data_dir / "user.db") as conn:
-        blob = repr(conn.execute("SELECT key, value FROM settings").fetchall())
-        assert "advanced" not in blob and "include_notes" not in blob and "game_cap" not in blob
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+
+        # QA v0.14 round 2: the old check looked for the bare word "advanced" anywhere, which also matches the puzzle
+        # theme `advancedPawn` in the Coach's suggested mix (its themes depend on real Stockfish), and it failed once in
+        # a full smoke run. Look for the per-run options themselves: a key, or a JSON field, and name the offending rows.
+        def leaks(key: str, value: str) -> bool:
+            return "advanced" in key.lower() or any(w in key or f'"{w}"' in value for w in ("advanced", "include_notes",
+                                                                                          "game_cap"))  # fmt: skip
+
+        bad = [r for r in rows if leaks(str(r[0]), str(r[1]))]
+        assert bad == [], bad
         assert conn.execute("SELECT COUNT(*) FROM llm_usage").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM coach_ai_runs").fetchone()[0] == 0
     app = launch_app(data_dir, free_port())

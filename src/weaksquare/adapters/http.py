@@ -182,6 +182,32 @@ class HttpClient:
 
         return self._with_retry(url, go)
 
+    def get_text_limited(
+        self,
+        url: str,
+        *,
+        max_bytes: int,
+        token: str | None = None,
+        params: dict[str, Any] | None = None,
+        accept: str = "*/*",
+    ) -> str:
+        """A text download with a size cap (v0.14: a study's PGN). Over the cap raises HttpError (not retryable).
+        `token` works as in the JSON calls: a per-request header, never logged. 403 and 404 aren't retried."""
+
+        def go() -> str:
+            with self._client.stream("GET", url, headers={"Accept": accept, **self._auth(token)}, params=params) as r:
+                self._check(r, url)
+                chunks: list[bytes] = []
+                size = 0
+                for chunk in r.iter_bytes(CHUNK):
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise HttpError(f"{url} is larger than {max_bytes // 1_000_000} MB", retryable=False)
+                    chunks.append(chunk)
+                return b"".join(chunks).decode(r.encoding or "utf-8", errors="replace")
+
+        return self._with_retry(url, go, retry_429=False)
+
     # ---- JSON APIs (Lichess) --------------------------------------------------------------------
     # `token` becomes a per-request Authorization header; it's never a client default, never in a URL,
     # and never in an error message (SR-7). 429 is not retried here (the caller backs off).

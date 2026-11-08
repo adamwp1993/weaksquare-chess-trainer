@@ -13,6 +13,8 @@ The answer is **untrusted** (CLAUDE.md): every move, line and square is checked 
 - **Explain my game** (FR-11.18): a moment must be one of the key moments sent and name the move played
   there; its better line must start with the engine's best move and be legal; annotations need valid
   squares. The recommended preset goes through `preset_suggestion.validate_preset`.
+- **What you did well** (v0.14, FR-11.36): the prompt lists the strengths `core.game_review.game_story` computed from
+  the analysis, as S1, S2…; the model may explain only those, by id. An id that wasn't sent is dropped.
 """
 
 from __future__ import annotations
@@ -49,6 +51,7 @@ from weaksquare.core.puzzle import NO_PREMOVE, Color
 MAX_MOMENTS = 10  # FR-11.18: default 5, max 10
 MAX_SUMMARY, MAX_TAKEAWAY, MAX_TAKEAWAYS, MAX_THEMES = 800, 300, 3, 4
 MAX_BETTER_LINE = 6
+MAX_DID_WELL, MAX_DID_WELL_TEXT = 3, 300
 ENGINE_LINES = 3  # top lines per key moment in the prompt
 
 
@@ -141,12 +144,29 @@ _ANNOTATION = {
 NARRATIVE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["opening_summary", "turning_point_ply", "recurring_themes", "takeaways", "moments", "preset"],
+    "required": [
+        "opening_summary",
+        "turning_point_ply",
+        "recurring_themes",
+        "takeaways",
+        "did_well",
+        "moments",
+        "preset",
+    ],
     "properties": {
         "opening_summary": {"type": "string"},
         "turning_point_ply": {"type": ["integer", "null"]},
         "recurring_themes": {"type": "array", "items": {"type": "string"}},
         "takeaways": {"type": "array", "items": {"type": "string"}},
+        "did_well": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["id", "text"],
+                "properties": {"id": {"type": "string"}, "text": {"type": "string"}},
+            },
+        },
         "moments": {
             "type": "array",
             "items": {
@@ -185,6 +205,9 @@ Rules:
 - "turning_point_ply": the ply number of the key moment where the game turned, or null.
 - "recurring_themes": 1–{MAX_THEMES} short phrases for patterns across the key moments (for example "missed forks", "king safety").
 - "takeaways": 2–{MAX_TAKEAWAYS} concrete lessons, one sentence each.
+- "did_well": up to {MAX_DID_WELL} of the strengths listed under "What you did well", each with its "id" exactly as
+  given (S1, S2…) and 1–2 sentences on why it was good. Praise ONLY what that list contains: never add a strength
+  of your own. If the list says none, return [].
 - "moments": one entry per key moment, in order. "ply" and "played" exactly as given. "text": 2–4
   sentences on what went wrong and why the better move is better. "annotations": up to 4 arrows or circles
   in the position before the move (an arrow has "from" and "to"; a circle has its square in "from" and
@@ -203,6 +226,7 @@ class NarrativeInput:
     user_color: str  # white / black / both
     result: str | None  # win / loss / draw from your side; None when unknown
     moments: tuple[int, ...]  # the plies of the top-N key moments (FR-11.13), in game order
+    strengths: tuple[str, ...] = ()  # v0.14 (FR-11.36): computed by core.game_review.game_story; sent as S1, S2…
 
 
 def san_moves(start_fen: str, moves: Sequence[str]) -> str:
@@ -273,6 +297,11 @@ def build_narrative_prompt(inp: NarrativeInput) -> str:
         f"Your errors (Stockfish): {counts['inaccuracy']} inaccuracies, {counts['mistake']} mistakes, "
         f"{counts['blunder']} blunders."
     )
+    lines += ["", "What you did well (computed from Stockfish's numbers; explain only these, by id):"]
+    if inp.strengths:
+        lines += [f"- S{i + 1}: {text}" for i, text in enumerate(inp.strengths)]
+    else:
+        lines.append("- none")
     lines += ["", "Key moments (evals from the mover's side):"]
     by_ply = {r.ply: r for r in inp.rows}
     for ply in inp.moments:
@@ -300,6 +329,7 @@ class GameNarrative:
     moments: tuple[MomentNote, ...]
     preset: SuggestedPreset | None
     discarded: int = 0  # dropped by validation (FR-8.4's note)
+    did_well: tuple[tuple[str, str], ...] = ()  # v0.14: (the computed strength, why it was good), only listed ones
 
     def to_json(self) -> str:
         return json.dumps(
@@ -317,6 +347,7 @@ class GameNarrative:
                 ],
                 "preset": self.preset.to_json() if self.preset else None,
                 "discarded": self.discarded,
+                "did_well": [list(x) for x in self.did_well],
             },
             separators=(",", ":"),
         )  # fmt: skip
@@ -331,8 +362,9 @@ class GameNarrative:
             for m in d["moments"]
         )  # fmt: skip
         preset = SuggestedPreset.from_json(d["preset"]) if d.get("preset") else None
+        did_well = tuple((str(a), str(b)) for a, b in d.get("did_well", []))  # absent before v0.14
         return cls(d["opening_summary"], d["turning_point"], tuple(d["themes"]), tuple(d["takeaways"]), moments,
-                   preset, int(d["discarded"]))  # fmt: skip
+                   preset, int(d["discarded"]), did_well)  # fmt: skip
 
 
 def _better_line(row: MoveRow, raw: Any) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
@@ -416,5 +448,24 @@ def validate_narrative(inp: NarrativeInput, text: str) -> GameNarrative | None:
                                 sans, ucis)  # fmt: skip
     preset, d3 = validate_preset(data.get("preset"))
     discarded += d3
+    did_well, d4 = _did_well(inp, data.get("did_well"))
+    discarded += d4
     return GameNarrative(summary, turning, tuple(themes), tuple(takeaways), tuple(notes[k] for k in sorted(notes)),
-                         preset, discarded)  # fmt: skip
+                         preset, discarded, did_well)  # fmt: skip
+
+
+def _did_well(inp: NarrativeInput, raw: Any) -> tuple[tuple[tuple[str, str], ...], int]:
+    """FR-11.36: only strengths that were sent, each once, at most MAX_DID_WELL. Returns them with the computed text,
+    so what's shown always starts from the engine's fact, not the model's wording of it."""
+    ids = {f"S{i + 1}": t for i, t in enumerate(inp.strengths)}
+    items = raw if isinstance(raw, list) else []
+    kept: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for item in items:
+        sid = item.get("id") if isinstance(item, dict) else None
+        text = clean_text(item.get("text"), MAX_DID_WELL_TEXT) if isinstance(item, dict) else None
+        if not isinstance(sid, str) or sid not in ids or sid in seen or not text or len(kept) >= MAX_DID_WELL:
+            continue
+        seen.add(sid)
+        kept.append((ids[sid], text))
+    return tuple(kept), len(items) - len(kept)

@@ -27,10 +27,13 @@ from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.game_review import (
     ERRORS,
     SYMBOLS,
+    GameStory,
     MoveRow,
     Score,
     SideSummary,
+    game_story,
     key_moments,
+    move_label,
     saved_line,
     side_summary,
     white_eval,
@@ -137,6 +140,7 @@ class ReviewView:
     key_moments: tuple[int, ...]  # plies (FR-11.13)
     retry_plies: tuple[int, ...]  # your mistakes and blunders (FR-11.15)
     ask_reasons: bool  # the FR-5.8 setting allows asking in Game Review
+    stories: tuple[GameStory, ...] = ()  # v0.14 (FR-11.36): Summary and What you did well, per reviewed side
 
 
 @dataclass(frozen=True)
@@ -304,7 +308,19 @@ class ReviewService:
             if analyzed
             else ()
         )
+        stories: list[GameStory] = []
+        if analyzed:
+            start = chess.Board(parsed.start_fen)
+            black_first = start.turn == chess.BLACK
+
+            def label(ply: int, san: str) -> str:
+                return move_label(ply, san, start.fullmove_number, black_first)
+
+            for c in colors:
+                accuracy = game.accuracy_white if c == "white" else game.accuracy_black
+                stories.append(game_story(rows, c, game.result, accuracy, st.thresholds, label))
         return ReviewView(
+            stories=tuple(stories),
             game=game,
             start_fen=parsed.start_fen,
             moves=tuple(moves),
