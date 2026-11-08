@@ -1,5 +1,54 @@
 # QA report: v0.15 (Analysis board tab)
 
+# Round 2, 2026-11-08: re-verification at `b067918` (fixes for B1-B5)
+
+Same rules as round 1: I changed only `tests/` and this report. No credentials, no `-m live`, no request to lichess.org.
+
+## Verdict: **PASS WITH ISSUES** (1 new minor, doc only; no blocker or major)
+
+All five round 1 bugs are fixed. B2 is also fixed in the real WebView2 window with real mouse drags. I found no
+regressions. One new minor: the B1 fix changes v0.14 studies, and the CHANGELOG has no **Fixed** line for that (B6).
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B1 (minor) | **FIXED** | Round 1's four tests pass unmarked (unit x2, integration, real app: the PGN is refused with *has a null move (--)*). New tests: a null move is refused on the main line out of check, in a side line, in a nested side line, and spelled `Z0`. In a 3-game file, only the game with `--` is skipped, with its reason. `--` inside a comment isn't a null move. Studies use the same check (`has_null_move` in `parse_chapter`; the builder's `test_qa_b1_a_study_chapter_with_a_null_move_is_rejected_and_the_rest_kept`) |
+| B2 (major) | **FIXED** | Round 1's mock test passes unmarked at 1280x900 with no board press first. New mock tests: the first drag, then a drag from the other row, at 1280x900 (white and flipped), 1920x1080, 1024x768 and 900x700 (stacked layout, palette scrolled into view), and after the window is resized while setting up. **Real app (WebView2, `page.mouse`):** after **Clear board**, which is a button and not a board press, dragging the white king to d4, the black king to f6 and a queen to a1 gives `8/8/5k2/8/3K4/8/8/Q7`, and **Done** accepts it |
+| B3 (minor) | **FIXED** | Round 1's test passes: a solved committed line brings the opponent's move and your line. New: a *failed* committed line (`h7h6`) brings its moves too, and **Back** steps through them |
+| B4 (minor) | **FIXED** | Below 1200 px the title is left out; from 1200 px the full name shows. New test at 900, 1000, 1199, 1200, 1280 and 1440 px: the header doesn't overflow, the title is either whole (not truncated, and not overlapping the nav) or absent, and every nav button is inside the header and the window. Round 1's B4 test now passes trivially because the title is hidden, so the new test is the one that counts |
+| B5 (minor) | **FIXED** | Round 1's test passes: the count is main-line half-moves. New: a game from a set position with Black to move and a side line counts 2. The builder changed its own tests to 4 and 3, which matches |
+
+## New bug
+
+| ID | Severity | Steps | Expected | Actual | Evidence |
+|---|---|---|---|---|---|
+| **v0.15-B6** | minor | Read CHANGELOG `[Unreleased]` | A **Fixed** line for the change to signed-off v0.14 behaviour (CHANGELOG rules: "Fixed is for bugs in a version Adam already signed off") | None. The B1 fix also changes Lichess studies: a chapter with a null move is now listed as **Can't be used** when the study is added or updated. In v0.14 it was accepted, stored, and then read back as damaged, because `node_from_json` refuses `0000` as *illegal stored move* (checked at `b067918`: `convert_game` → `node_to_json` → `node_from_json` raises `ValueError`). The User Guide's Studies section (*Every move of every chapter is checked…*) doesn't mention null moves either, though its wording already covers them loosely | `CHANGELOG.md`, `docs/USER_GUIDE.md` line 1168; doc-only, so no test |
+
+## Notes
+- Two mock drags started within the same frame lose the second piece. With 300 ms between them (still faster than a person can manage) both land, and the real app with 300 ms pauses is correct. Not filed.
+- The mock's `checkBoardPosition` doesn't count pieces, so a mock test can place a 17th white piece that the real app refuses (*White has more than 16 pieces*). That's how I noticed my own first real-app drag test was wrong. Not a product bug.
+
+## Tests added this round
+- `tests/unit/test_qa_v015_round2.py`: null move refused in 4 forms, only the bad game skipped, `--` in a comment, half-move count from a set position.
+- `tests/e2e/test_qa_v015_round2_ui.py`: B2 at 5 sizes and orientations, plus after a resize; B3 on a failed line; B4 at 6 widths.
+- `tests/smoke/test_qa_real_app_v015.py::test_qa_r2_b2_a_palette_drag_lands_on_its_square_in_the_real_window`.
+
+## Commands at `b067918`
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **3892 passed**, 1 skipped, 2 xfailed (24:47), round 1 QA files included. My round 2 unit file ran separately: **7 passed** |
+| `uv run pytest -m e2e` | **555 passed** (17:37), my round 1 and round 2 files included |
+| `uv run pytest -m smoke` (`web/dist` built by the builder) | 82 passed, 1 skipped, **1 failed**: `test_qa_v04_real_app.py::test_engine_flow_in_the_real_app`, a 20 s `wait_for_function` timeout. Re-run alone: **passed**. It runs no v0.15 code path, so I count it as a timing flake. My 3 v0.15 smoke tests pass |
+| `uv run ruff check .` / `uv run ruff format --check .` | clean / 513 files formatted |
+| `uv run mypy src` | no issues in 155 source files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | clean / clean |
+| `uv run pre-commit run --all-files` | all hooks passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 1 warning (the version bump, as in round 1) |
+
+---
+
 # Round 1, 2026-11-08, at `476ea51` (branch `v0.15`)
 
 I changed only `tests/` and this report. No credentials, no `-m live`, no request to lichess.org. I didn't run

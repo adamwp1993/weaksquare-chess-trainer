@@ -83,3 +83,47 @@ def test_qa_b1_a_null_move_in_check_never_puts_an_impossible_position_on_the_boa
             assert chess.Board(fen).is_valid(), f"the board shows an impossible position: {fen}"
     finally:
         app.close()
+
+
+def test_qa_r2_b2_a_palette_drag_lands_on_its_square_in_the_real_window(  # type: ignore[no-untyped-def]
+    pw, tmp_path: Path, fixture_puzzles_db: Path
+) -> None:
+    """Round 2: real mouse drags in WebView2 from both palette rows, before any press on the board (v0.15-B2)."""
+    data_dir = tmp_path / "app-data"
+    data_dir.mkdir()
+    shutil.copyfile(fixture_puzzles_db, data_dir / "puzzles.db")
+    app = launch_app(data_dir, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            page.get_by_test_id("nav-analysis").click()
+            view = page.get_by_test_id("analysis-view")
+            view.wait_for()
+            page.get_by_test_id("analysis-setup").click()
+            page.get_by_test_id("analysis-setup-panel").wait_for()
+            page.get_by_test_id("setup-clear").click()  # a button, not a press on the board
+
+            def drag(testid: str, file: int, rank: int) -> None:
+                spare = page.get_by_test_id(testid)
+                spare.scroll_into_view_if_needed()
+                s = spare.bounding_box()
+                box = view.get_by_test_id("board").bounding_box()
+                assert s is not None and box is not None
+                size = box["width"] / 8
+                to = (box["x"] + (file + 0.5) * size, box["y"] + (8 - rank + 0.5) * size)
+                page.mouse.move(s["x"] + s["width"] / 2, s["y"] + s["height"] / 2)
+                page.mouse.down()
+                page.mouse.move((s["x"] + to[0]) / 2, (s["y"] + to[1]) / 2, steps=5)
+                page.mouse.move(*to, steps=5)
+                page.mouse.up()
+                page.wait_for_timeout(300)
+
+            drag("spare-white-king", 3, 4)  # d4, the first drag
+            drag("spare-black-king", 5, 6)  # f6, from the other row
+            drag("spare-white-queen", 0, 1)  # a1
+            assert view.get_by_test_id("board").get_attribute("data-fen") == "8/8/5k2/8/3K4/8/8/Q7"
+            page.get_by_test_id("setup-done").click()
+            page.get_by_test_id("analysis-setup-panel").wait_for(state="detached")
+            assert view.get_by_test_id("board").get_attribute("data-fen") == "8/8/5k2/8/3K4/8/8/Q7 w - - 0 1"
+    finally:
+        app.close()

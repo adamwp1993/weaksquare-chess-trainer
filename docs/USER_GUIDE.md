@@ -1165,7 +1165,7 @@ The other ways to find one:
 **Private studies.** A study that's private on Lichess can only be added if it's yours or you're a member, and you're signed in with Lichess. If you signed in before v0.14, WeakSquare asks you to **Sign in again**, because older sign-ins can't read studies. Approve in your browser, then add the study again. Someone else's private study can't be added: ask its author to make it public or unlisted.
 
 ### What gets checked
-Every move of every chapter is checked. A chapter with an illegal move, or one for another variant such as Crazyhouse, is listed as **Can't be used** with the reason, and the rest of the study works. A chapter that's only text on a decorative board (an empty board, or pictures drawn with pawns) is kept as a **Text** chapter: you read it, and there's nothing to play.
+Every move of every chapter is checked. A chapter with an illegal move (*from v0.15*, a null move written as `--` counts as one), or one for another variant such as Crazyhouse, is listed as **Can't be used** with the reason, and the rest of the study works. A chapter that's only text on a decorative board (an empty board, or pictures drawn with pawns) is kept as a **Text** chapter: you read it, and there's nothing to play.
 
 Comments and titles are shown as plain text. A web address in a comment is just text, never a link: WeakSquare's only links are the ones it builds, such as **Open on Lichess**.
 
