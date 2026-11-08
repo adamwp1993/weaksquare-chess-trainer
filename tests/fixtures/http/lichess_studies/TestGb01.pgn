@@ -1,0 +1,32 @@
+[Event "Invented gamebook: Welcome"]
+[Site "https://lichess.org/study/TestGb01/Chap0001"]
+[Result "*"]
+[Variant "Standard"]
+[ECO "?"]
+[Opening "?"]
+[Annotator "https://lichess.org/@/player_author"]
+[StudyName "Invented gamebook"]
+[ChapterName "Welcome"]
+[ChapterURL "https://lichess.org/study/TestGb01/Chap0001"]
+[Orientation "black"]
+[ChapterMode "gamebook"]
+
+{ Play the moves for Black. [%csl Ge5] } 1. e4 { White takes the centre. } 1... c6 { Prepare d5. [%cal Gd7d5] } (1... e5 { That's a different opening. Try again. }) 2. d4 d5 { Now the centre is contested. } *
+
+
+[Event "Invented gamebook: The plan"]
+[Site "https://lichess.org/study/TestGb01/Chap0002"]
+[Result "*"]
+[Variant "Standard"]
+[ECO "?"]
+[Opening "?"]
+[Annotator "https://lichess.org/@/player_author"]
+[StudyName "Invented gamebook"]
+[ChapterName "The plan"]
+[ChapterURL "https://lichess.org/study/TestGb01/Chap0002"]
+[Orientation "black"]
+[ChapterMode "gamebook"]
+
+1. e4 c6 2. d4 d5 3. e5 { The pawn chain. } 3... Bf5 { Develop the bishop outside the chain first. [%cal Gc8f5] } *
+
+

@@ -707,6 +707,15 @@ class GameNarrative:
     model: str
     cost_usd: float  # 0 when cached
     cached: bool
+    did_well: list[GameDidWell] = field(default_factory=list)  # v0.14 (FR-11.36): only the computed strengths
+
+
+@dataclass(frozen=True)
+class GameDidWell:
+    """FR-11.36: one computed strength (`fact`, from the engine's numbers) and the AI's words on why it was good."""
+
+    fact: str
+    text: str
 
 
 # ---- v0.8: game library, Game Review, your own puzzles -------------------------------------------
@@ -870,6 +879,27 @@ class GameReview:
     key_moments: list[int]  # plies (FR-11.13)
     retry_plies: list[int]  # your mistakes and blunders (FR-11.15)
     ask_reasons: bool  # FR-5.8
+    stories: list[GameStoryView]  # v0.14 (FR-11.36): one per side you reviewed
+
+
+@dataclass(frozen=True)
+class GameStrength:
+    """FR-11.36: one thing you did well, backed by the engine's numbers. `ply` is the move it's about, or None for a
+    whole phase. It names your move, never the engine's better one (FR-11.35)."""
+
+    kind: Literal["only_move", "punished", "defence", "conversion", "clean_phase"]
+    ply: int | None
+    text: str
+
+
+@dataclass(frozen=True)
+class GameStoryView:
+    """FR-11.36: Summary and What you did well for one side, computed from the analysis (no AI)."""
+
+    color: Literal["white", "black"]
+    result: Literal["won", "lost", "drawn", "unfinished"]
+    summary: list[str]
+    strengths: list[GameStrength]
 
 
 @dataclass(frozen=True)
@@ -1212,6 +1242,171 @@ class RepertoireAdded:
     kept: int
 
 
+# ---- v0.14: Lichess studies (REQUIREMENTS §19) ---------------------------------------------------------------------
+StudyStatus = Literal["new", "in_progress", "finished"]
+
+
+@dataclass(frozen=True)
+class StudySummary:
+    """FR-13.1: one study in My studies. `url` is built by the app; the title and author are shown as plain text."""
+
+    id: str
+    title: str
+    author: str | None
+    url: str
+    hearted: bool
+    private: bool  # Lichess only gave it to your sign-in (FR-13.7)
+    chapters: int
+    playable: int  # chapters that weren't rejected
+    done: int
+    status: StudyStatus
+    place_chapter_key: str | None
+    place_chapter_title: str | None
+    added_at: str
+    updated_at: str
+    checked_at: str | None
+
+
+@dataclass(frozen=True)
+class StudyChapterInfo:
+    key: str
+    index: int
+    title: str
+    mode: Literal["normal", "gamebook"]
+    orientation: Literal["white", "black"]
+    text_only: bool  # a decorative board: text only (FR-13.7)
+    rejected: str | None  # why it can't be used, e.g. "has an illegal or unreadable move (...)"
+    move_count: int
+    done: bool
+
+
+@dataclass(frozen=True)
+class StudyDetail:
+    summary: StudySummary
+    chapters: list[StudyChapterInfo]
+
+
+@dataclass(frozen=True)
+class StudyShape:
+    """An arrow (`dest` set) or a highlighted square, already checked (FR-13.7)."""
+
+    orig: str
+    dest: str | None
+    color: Literal["green", "red", "yellow", "blue"]
+
+
+@dataclass(frozen=True)
+class StudyMove:
+    """One node of a chapter's move tree, flattened: `moves[0]` is the start position (no move). `children[0]` is the
+    main line, the rest side lines. `fen` is the position after the move. Comments are plain text (FR-13.7)."""
+
+    id: int
+    parent: int | None
+    san: str | None
+    uci: str | None
+    fen: str
+    ply: int
+    comment: str
+    shapes: list[StudyShape]
+    nags: list[int]
+    children: list[int]
+
+
+@dataclass(frozen=True)
+class StudyChapter:
+    study_id: str
+    info: StudyChapterInfo
+    start_fen: str
+    moves: list[StudyMove]
+
+
+@dataclass(frozen=True)
+class StudyAddResult:
+    study_id: str
+    chapter_key: str | None  # the chapter a chapter link named, when it exists
+    already_saved: bool
+
+
+@dataclass(frozen=True)
+class AuthorStudy:
+    """FR-13.5a: one of an author's public studies (Lichess sends only the ID, name and dates)."""
+
+    study_id: str
+    name: str
+    updated_ms: int | None
+    saved: bool
+
+
+@dataclass(frozen=True)
+class StudyUpdate:
+    """FR-13.7: what Check for updates found; nothing changes until you accept it."""
+
+    study_id: str
+    new_title: str
+    title_changed: bool
+    added: list[str]
+    removed: list[str]
+    changed: list[str]
+    unchanged: int
+
+
+@dataclass(frozen=True)
+class StudyPlace:
+    """FR-13.10: where Continue goes."""
+
+    chapter_key: str
+    path: list[str]
+
+
+@dataclass(frozen=True)
+class StarterStudy:
+    """FR-13.6: a starter-list entry. Only a link, title, author and opening tag: never study content."""
+
+    study_id: str
+    title: str
+    author: str
+    opening: str
+    url: str
+    saved: bool
+
+
+@dataclass(frozen=True)
+class StudyRepertoireConflict:
+    """FR-13.11: a position where the study plays another move for your side than you do."""
+
+    position_key: str
+    path: list[str]  # SAN from the start, to say where it is
+    yours: list[str]
+    study: list[str]
+
+
+@dataclass(frozen=True)
+class StudyRepertoirePreview:
+    """FR-13.11: what Add to my repertoire would add, before anything is saved."""
+
+    id: str
+    color: Literal["white", "black"]
+    side_lines: bool
+    chapters: list[str]
+    skipped: list[str]
+    yours: int
+    theirs: int
+    already: int
+    unreachable: int
+    conflicts: list[StudyRepertoireConflict]
+
+
+@dataclass(frozen=True)
+class StudyWindowEvent:
+    """Pushed as `study_window` (FR-13.3, 13.4): a study added from the Lichess window, the study on screen there, or
+    the window closed. IDs only, never an address."""
+
+    kind: Literal["added", "page", "closed"]
+    study_id: str | None
+    chapter_id: str | None
+    job_id: str | None
+
+
 EXPORTED: list[type] = [
     ApiError,
     AppInfo,
@@ -1277,6 +1472,7 @@ EXPORTED: list[type] = [
     GameAiQuote,
     GameMoment,
     SuggestedPreset,
+    GameDidWell,
     GameNarrative,
     ReviewThresholds,
     GamesSettings,
@@ -1929,4 +2125,20 @@ EXPORTED += [
     RepertoireOpeningRow,
     Repertoire,
     RepertoireAdded,
+    StudySummary,
+    StudyChapterInfo,
+    StudyDetail,
+    StudyShape,
+    StudyMove,
+    StudyChapter,
+    StudyAddResult,
+    AuthorStudy,
+    StudyUpdate,
+    StudyPlace,
+    StarterStudy,
+    StudyWindowEvent,
+    StudyRepertoireConflict,
+    StudyRepertoirePreview,
+    GameStrength,
+    GameStoryView,
 ]

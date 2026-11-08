@@ -85,6 +85,16 @@ import type {
   TrainingPlan,
   UiSettings,
   UpdateOffer,
+  AuthorStudy,
+  StarterStudy,
+  StudyAddResult,
+  StudyChapter,
+  StudyDetail,
+  StudyPlace,
+  StudySummary,
+  StudyUpdate,
+  StudyWindowEvent,
+  StudyRepertoirePreview,
 } from "./types";
 
 /** v0.10: one Coach run's settings (FR-10.2–10.5). `player` null means you. */
@@ -171,7 +181,8 @@ export interface LlmPriceChange {
 export type BackendEvent =
   | { name: "job"; payload: Job }
   | { name: "account"; payload: AccountStatus }
-  | { name: "sync"; payload: SyncEvent };
+  | { name: "sync"; payload: SyncEvent }
+  | { name: "study_window"; payload: StudyWindowEvent };
 
 /** The settings the UI may write, and the value each one takes (validated again in Python). */
 export interface SettingValues {
@@ -521,6 +532,41 @@ export interface ApiClient {
   getSuggestion(): Promise<SuggestionView | null>;
   applySuggestion(): Promise<SuggestionView>;
   dismissSuggestion(): Promise<SuggestionView | null>;
+  // v0.14: Lichess studies (REQUIREMENTS §19). Study text never goes to an LLM (FR-13.12).
+  /** FR-13.5: a pasted link, chapter link or ID; anything else is refused before any request. Returns a job. */
+  addStudy(text: string): Promise<string>;
+  /** FR-13.5a, 13.6: from Studies by author or the starter list. Returns a job. */
+  addStudyById(studyId: string, chapterId: string | null): Promise<string>;
+  getStudyAddResult(jobId: string): Promise<StudyAddResult | null>;
+  findAuthorStudies(username: string): Promise<AuthorStudy[]>;
+  getStudyStarterList(): Promise<StarterStudy[]>;
+  listStudies(which: "all" | "favorites" | "in_progress" | "finished"): Promise<StudySummary[]>;
+  getStudy(studyId: string): Promise<StudyDetail>;
+  getStudyChapter(studyId: string, chapterKey: string): Promise<StudyChapter>;
+  /** FR-13.10: local only. */
+  setStudyPlace(studyId: string, chapterKey: string, path: string[]): Promise<void>;
+  getStudyContinue(studyId: string): Promise<StudyPlace>;
+  setStudyChapterDone(studyId: string, chapterKey: string, done: boolean): Promise<void>;
+  restartStudy(studyId: string): Promise<void>;
+  /** FR-13.9: stored only in the app. */
+  heartStudy(studyId: string, hearted: boolean): Promise<void>;
+  deleteStudy(studyId: string): Promise<void>;
+  /** FR-13.11: nothing is saved until saveStudyRepertoire. A null chapter means the whole study. */
+  previewStudyRepertoire(studyId: string, chapterKey: string | null, color: "white" | "black", sideLines: boolean): Promise<StudyRepertoirePreview>;
+  /** Each conflict keeps your move unless its position maps to "study". */
+  saveStudyRepertoire(previewId: string, choices: Record<string, "mine" | "study">): Promise<RepertoireAdded>;
+  discardStudyRepertoire(): Promise<void>;
+  /** FR-13.7: a job; your copy changes only through applyStudyUpdate. */
+  checkStudyUpdates(studyId: string): Promise<string>;
+  getStudyUpdate(studyId: string): Promise<StudyUpdate | null>;
+  applyStudyUpdate(studyId: string): Promise<void>;
+  discardStudyUpdate(studyId: string): Promise<void>;
+  openStudyOnLichess(studyId: string, chapterKey: string | null): Promise<void>;
+  openLichessStudiesInBrowser(): Promise<void>;
+  /** FR-13.3: the isolated Lichess window. True if a new window opened. */
+  openLichessWindow(): Promise<boolean>;
+  closeLichessWindow(): Promise<void>;
+  isLichessWindowOpen(): Promise<boolean>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

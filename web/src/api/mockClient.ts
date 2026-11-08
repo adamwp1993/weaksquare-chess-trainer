@@ -44,6 +44,7 @@ import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient
 import { mockAnalysis } from "./mockEngine";
 import { MockCoach } from "./mockCoach";
 import { MockOpenings } from "./mockOpenings";
+import { MockStudies } from "./mockStudies";
 import { MockPlan } from "./mockPlan";
 import { defaultFilters } from "../state/filters";
 import { gameNarrative, moveExplanation } from "./mockGameAi";
@@ -93,6 +94,7 @@ import type {
   UiSettings,
   UpdateOffer,
   OpeningScope,
+  StudyAddResult,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -352,6 +354,9 @@ export class MockClient implements ApiClient {
   private readonly coach: MockCoach;
   private readonly plan: MockPlan;
   private readonly openings = new MockOpenings();
+  private readonly studies = new MockStudies();
+  private studyResults = new Map<string, StudyAddResult>();
+  private lichessWindowOpen = false;
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
@@ -2144,6 +2149,158 @@ export class MockClient implements ApiClient {
         danger_safe: 6, danger_safe_right: 5, danger_blunder: 6, danger_blunder_right: 3,
       },
     }; // prettier-ignore
+  }
+
+  // ---- v0.14: Lichess studies -------------------------------------------------------------------
+  private studyJob(kind: string, run: () => { ok: true; message: string } | { ok: false; code: string; message: string }) {
+    const id = `job-${this.nextJob++}`;
+    this.emit({ id, kind, state: "running", progress: null, message: "Downloading the study from Lichess…", error_code: null });
+    setTimeout(() => {
+      const r = run();
+      if (r.ok) this.emit({ id, kind, state: "done", progress: 1, message: r.message, error_code: null });
+      else this.emit({ id, kind, state: "failed", progress: null, message: r.message, error_code: r.code });
+    }, 80);
+    return id;
+  }
+
+  private startAdd(studyId: string, chapterId: string | null) {
+    let jobId = "";
+    jobId = this.studyJob("study_add", () => {
+      const r = this.studies.add(studyId, chapterId);
+      if (r.ok) this.studyResults.set(jobId, { study_id: r.studyId, chapter_key: r.chapterKey, already_saved: r.already });
+      return r;
+    });
+    return jobId;
+  }
+
+  async addStudy(text: string) {
+    const ref = this.studies.parse(text);
+    this.calls.push(`addStudy:${ref.id}`);
+    return this.startAdd(ref.id, ref.chapter);
+  }
+
+  async addStudyById(studyId: string, chapterId: string | null) {
+    this.studies.checkIds(studyId, chapterId);
+    this.calls.push(`addStudyById:${studyId}`);
+    return this.startAdd(studyId, chapterId);
+  }
+
+  async getStudyAddResult(jobId: string) {
+    return this.studyResults.get(jobId) ?? null;
+  }
+
+  async findAuthorStudies(username: string) {
+    this.calls.push(`findAuthorStudies:${username}`);
+    return this.studies.byAuthor(username);
+  }
+
+  async getStudyStarterList() {
+    return this.studies.starter();
+  }
+
+  async listStudies(which: "all" | "favorites" | "in_progress" | "finished") {
+    return this.studies.list(which);
+  }
+
+  async getStudy(studyId: string) {
+    return this.studies.detail(studyId);
+  }
+
+  async getStudyChapter(studyId: string, chapterKey: string) {
+    return this.studies.chapter(studyId, chapterKey);
+  }
+
+  async setStudyPlace(studyId: string, chapterKey: string, path: string[]) {
+    this.calls.push(`studyPlace:${studyId}:${chapterKey}:${path.join(" ")}`);
+    this.studies.setPlace(studyId, chapterKey, path);
+  }
+
+  async getStudyContinue(studyId: string) {
+    return this.studies.continueTarget(studyId);
+  }
+
+  async setStudyChapterDone(studyId: string, chapterKey: string, done: boolean) {
+    this.calls.push(`studyDone:${studyId}:${chapterKey}:${done}`);
+    this.studies.setDone(studyId, chapterKey, done);
+  }
+
+  async restartStudy(studyId: string) {
+    this.calls.push(`studyRestart:${studyId}`);
+    this.studies.restart(studyId);
+  }
+
+  async heartStudy(studyId: string, hearted: boolean) {
+    this.calls.push(`studyHeart:${studyId}:${hearted}`);
+    this.studies.heart(studyId, hearted);
+  }
+
+  async deleteStudy(studyId: string) {
+    this.calls.push(`studyDelete:${studyId}`);
+    this.studies.remove(studyId);
+  }
+
+  async previewStudyRepertoire(studyId: string, chapterKey: string | null, color: "white" | "black", sideLines: boolean) {
+    this.calls.push(`studyRepPreview:${studyId}:${chapterKey ?? "all"}:${color}:${sideLines}`);
+    return this.studies.repertoirePreview(studyId, chapterKey, color, sideLines);
+  }
+
+  async saveStudyRepertoire(previewId: string, choices: Record<string, "mine" | "study">) {
+    this.calls.push(`studyRepSave:${previewId}:${JSON.stringify(choices)}`);
+    const r = this.studies.repertoireSave(previewId, choices);
+    this.openings.addStudyMoves(r.color, r.ucis);
+    return { added: r.added, kept: r.kept };
+  }
+
+  async discardStudyRepertoire() {
+    this.studies.discardRepertoirePreview();
+  }
+
+  async checkStudyUpdates(studyId: string) {
+    this.calls.push(`studyCheck:${studyId}`);
+    return this.studyJob("study_update", () => ({ ok: true, message: this.studies.check(studyId) }));
+  }
+
+  async getStudyUpdate(studyId: string) {
+    return this.studies.update(studyId);
+  }
+
+  async applyStudyUpdate(studyId: string) {
+    this.calls.push(`studyApply:${studyId}`);
+    this.studies.apply(studyId);
+  }
+
+  async discardStudyUpdate(studyId: string) {
+    this.studies.discard(studyId);
+  }
+
+  async openStudyOnLichess(studyId: string, chapterKey: string | null) {
+    this.calls.push(`openStudyOnLichess:${studyId}:${chapterKey ?? ""}`);
+  }
+
+  async openLichessStudiesInBrowser() {
+    this.calls.push("openLichessStudiesInBrowser");
+  }
+
+  async openLichessWindow() {
+    this.calls.push("openLichessWindow");
+    if (this.lichessWindowOpen) return false;
+    this.lichessWindowOpen = true;
+    return true;
+  }
+
+  async closeLichessWindow() {
+    this.lichessWindowOpen = false;
+    this.listeners.forEach((l) => l({ name: "study_window", payload: { kind: "closed", study_id: null, chapter_id: null, job_id: null } }));
+  }
+
+  async isLichessWindowOpen() {
+    return this.lichessWindowOpen;
+  }
+
+  /** Mock only (Playwright): what the Lichess window would send when you click Add this study there. */
+  mockLichessWindowAdd(studyId: string) {
+    const job = this.startAdd(studyId, null);
+    this.listeners.forEach((l) => l({ name: "study_window", payload: { kind: "added", study_id: studyId, chapter_id: null, job_id: job } }));
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

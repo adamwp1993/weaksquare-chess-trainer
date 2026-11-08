@@ -50,6 +50,7 @@ import { ReviewView } from "./views/ReviewView";
 import { ImportView } from "./views/ImportView";
 import { MixerView } from "./views/MixerView";
 import { OpeningsView } from "./views/OpeningsView";
+import { StudiesView } from "./views/StudiesView";
 import { sounds as soundPlayer } from "./sound/player";
 import { SettingsModal } from "./views/SettingsModal";
 import { StartupView } from "./views/StartupView";
@@ -76,6 +77,7 @@ export function App() {
     | { kind: "games" }
     | { kind: "coach" }
     | { kind: "openings"; family?: string; query?: string }
+    | { kind: "studies" }
     | {
         kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" | "trainer";
         retry?: boolean; hideBest?: boolean;
@@ -404,6 +406,7 @@ export function App() {
             }}
           />
         )}
+        {page.kind === "studies" && <StudiesView coordinates={coordinates} />}
         {page.kind === "openings" && <OpeningsView key={`${page.family ?? ""}:${page.query ?? ""}`} initialFamily={page.family ?? null} initialQuery={page.query ?? ""} coordinates={coordinates} />}
         {page.kind === "coach" && (
           <CoachView
@@ -657,6 +660,14 @@ export function App() {
                   data-testid="nav-openings"
                 >
                   Openings
+                </Button>
+                <Button
+                  size="xs"
+                  variant={page.kind === "studies" ? "light" : "subtle"}
+                  onClick={() => setPage({ kind: "studies" })}
+                  data-testid="nav-studies"
+                >
+                  Studies
                 </Button>
                 <Button
                   size="xs"

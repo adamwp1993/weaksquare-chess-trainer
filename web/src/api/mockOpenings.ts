@@ -645,6 +645,21 @@ export class MockOpenings {
     return { added, kept };
   }
 
+  /** v0.14 (FR-13.11), mock only: a study's main line arriving in the repertoire with source "study". */
+  addStudyMoves(color: Color, ucis: string[]): number {
+    const chess = new Chess();
+    let added = 0;
+    for (const uci of ucis) {
+      const key = keyOf(chess);
+      const played = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+      const here = this.edges[color].filter((e) => e.key === key);
+      if (here.some((e) => e.uci === uci)) continue;
+      this.edges[color].push({ key, uci, san: played.san, source: "study", isMain: here.length === 0 });
+      added++;
+    }
+    return added;
+  }
+
   private next(edge: Edge): string {
     const chess = new Chess(`${edge.key} 0 1`);
     chess.move({ from: edge.uci.slice(0, 2), to: edge.uci.slice(2, 4), promotion: edge.uci[4] });

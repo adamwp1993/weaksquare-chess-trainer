@@ -266,3 +266,58 @@ def test_both_sides_review_counts_every_move_as_yours() -> None:
     prompt = build_narrative_prompt(_narrative_input("both"))
     assert "reviewing both sides" in prompt
     assert chess.Board().fen() not in prompt  # a standard start isn't repeated as a FEN
+
+
+# ---- v0.14: What you did well (FR-11.36) -----------------------------------------------------------------------
+def _with_strengths(*texts: str) -> NarrativeInput:
+    from dataclasses import replace
+
+    return replace(_narrative_input(), strengths=tuple(texts))
+
+
+def _did_well_answer(did_well: object) -> str:
+    return json.dumps({
+        "opening_summary": "You got a normal position.", "turning_point_ply": None, "recurring_themes": [],
+        "takeaways": ["Check your opponent's threats."], "did_well": did_well, "moments": [],
+        "preset": {"themes": [], "rating_min": None, "rating_max": None},
+    })  # fmt: skip
+
+
+def test_the_prompt_lists_only_the_computed_strengths_by_id() -> None:
+    prompt = build_narrative_prompt(_with_strengths("2... Nc6: a good defensive move in a difficult position (-0.6)."))
+    assert "What you did well (computed from Stockfish's numbers; explain only these, by id):" in prompt
+    assert "- S1: 2... Nc6: a good defensive move in a difficult position (-0.6)." in prompt
+    assert "- none" in build_narrative_prompt(_with_strengths())
+    assert "Praise ONLY what that list contains" in NARRATIVE_SYSTEM_PROMPT
+    assert "did_well" in NARRATIVE_SCHEMA["required"]
+
+
+def test_did_well_keeps_only_sent_ids_once_and_at_most_three() -> None:
+    inp = _with_strengths("fact one", "fact two", "fact three", "fact four")
+    n = validate_narrative(inp, _did_well_answer([
+        {"id": "S2", "text": "Because it held."},
+        {"id": "S9", "text": "Invented praise."},  # not sent
+        {"id": "S2", "text": "Again."},  # repeat
+        {"id": "S1", "text": ""},  # empty
+        {"id": "S1", "text": "Good."},
+        {"id": "S3", "text": "Fine."},
+        {"id": "S4", "text": "Too many."},
+        "junk",
+    ]))  # fmt: skip
+    assert n is not None
+    assert n.did_well == (("fact two", "Because it held."), ("fact one", "Good."), ("fact three", "Fine."))
+    assert n.discarded >= 5
+
+
+def test_did_well_with_nothing_sent_stays_empty() -> None:
+    n = validate_narrative(_with_strengths(), _did_well_answer([{"id": "S1", "text": "You played brilliantly."}]))
+    assert n is not None and n.did_well == ()
+
+
+def test_a_narrative_cached_before_v014_still_loads() -> None:
+    n = validate_narrative(_with_strengths("fact"), _did_well_answer([{"id": "S1", "text": "Why."}]))
+    assert n is not None
+    stored = json.loads(n.to_json())
+    assert stored["did_well"] == [["fact", "Why."]]
+    del stored["did_well"]
+    assert GameNarrative.from_json(json.dumps(stored)).did_well == ()

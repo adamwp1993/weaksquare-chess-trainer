@@ -137,22 +137,29 @@ export function Board({
   }, []);
 
   useEffect(() => {
-    const chess = new Chess(fen);
-    const turn = chess.turn() === "w" ? "white" : "black";
+    // v0.14 (FR-13.7): a study's text chapter can show a decorative board (no kings, pawn art) that chess.js
+    // refuses. Draw it as given, read-only.
+    let chess: Chess | null = null;
+    try {
+      chess = new Chess(fen);
+    } catch {
+      chess = null;
+    }
+    const turn = chess?.turn() === "b" ? "black" : "white";
     cg.current?.set({
       fen,
       orientation,
       turnColor: turn,
-      check: chess.inCheck(),
+      check: chess?.inCheck() ?? false,
       lastMove: (lastMove as Key[] | undefined) ?? undefined,
       movable: {
         free: false,
-        color: movable ?? undefined,
-        dests: movable === turn || movable === "both" ? legalDests(chess) : new Map(),
+        color: chess ? (movable ?? undefined) : undefined,
+        dests: chess && (movable === turn || movable === "both") ? legalDests(chess) : new Map(),
         showDests: true,
         events: {
           after: (from, to) => {
-            const piece = chess.get(from as Square);
+            const piece = chess?.get(from as Square);
             const lastRank = to[1] === "8" || to[1] === "1";
             if (piece?.type === "p" && lastRank) setPromotion({ from, to });
             else onMoveRef.current?.(`${from}${to}`);

@@ -23,6 +23,8 @@ import type {
   ReviewMove,
   SavedPuzzle,
   SideSummary,
+  GameStoryView,
+  GameStrength,
 } from "./types";
 
 type Cls = ReviewMove["classification"];
@@ -395,6 +397,35 @@ export class MockGames {
       }; // prettier-ignore
     };
     const colors = g.summary.user_color === "both" ? (["white", "black"] as const) : g.summary.user_color ? [g.summary.user_color] : [];
+    // v0.14 (FR-11.36): Summary and What you did well, worked out from the mock's own numbers like core/game_review.py.
+    const label = (m: ReviewMove) => `${Math.floor(m.ply / 2) + 1}.${m.ply % 2 ? ".." : ""} ${m.san}`;
+    const story = (c: "white" | "black"): GameStoryView => {
+      const sm = summary(c);
+      const result = g.summary.result === "1/2-1/2" ? "drawn" : g.summary.result === "*" ? "unfinished" : (g.summary.result === "1-0") === (c === "white") ? "won" : "lost";
+      const errs = moves.filter((m) => m.classification === "mistake" || m.classification === "blunder");
+      const turning = [...errs].sort((a, b) => (b.cp_loss ?? 0) - (a.cp_loss ?? 0))[0];
+      const strengths: GameStrength[] = [];
+      for (const m of moves) {
+        const prev = moves[m.ply - 1];
+        if (m.mover === c && prev && prev.mover !== c && (prev.classification === "mistake" || prev.classification === "blunder") && (m.cp_loss ?? 0) < 50) {
+          strengths.push({ kind: "punished", ply: m.ply, text: `${label(m)}: you punished your opponent's ${prev.classification} ${label(prev)} straight away.` });
+        }
+      }
+      const opening = moves.filter((m) => m.mover === c && m.phase === "opening");
+      if (opening.length >= 4 && !opening.some((m) => m.classification === "mistake" || m.classification === "blunder")) {
+        strengths.push({ kind: "clean_phase", ply: null, text: `A clean opening: ${opening.length} moves without a mistake or blunder.` });
+      }
+      const verb = { won: "You won", lost: "You lost", drawn: "You drew", unfinished: "The game wasn't finished" }[result];
+      return {
+        color: c, result,
+        summary: [
+          `${verb}, with an average loss of ${Math.round(sm.avg_cp_loss ?? 0)} centipawns a move.`,
+          `Stockfish found ${sm.inaccuracies} inaccuracies, ${sm.mistakes} mistakes and ${sm.blunders} blunders in your moves.`,
+          turning ? `The turning point: ${label(turning)}, ${turning.mover === c ? "your" : "your opponent's"} ${turning.classification}, which cost ${((turning.cp_loss ?? 0) / 100).toFixed(1)}.` : "No big swings: neither side made a mistake or a blunder.",
+        ],
+        strengths,
+      }; // prettier-ignore
+    };
     const yourErrors = colors.flatMap((c) => errorsOf(c));
     const key = [...yourErrors].sort((a, b) => (b.cp_loss ?? 0) - (a.cp_loss ?? 0)).slice(0, this.settings.key_moments).map((m) => m.ply).sort((a, b) => a - b);
     return {
@@ -407,6 +438,7 @@ export class MockGames {
       key_moments: analyzed ? key : [],
       retry_plies: analyzed ? yourErrors.filter((m) => m.classification !== "inaccuracy").map((m) => m.ply) : [],
       ask_reasons: true,
+      stories: analyzed ? colors.map((c) => story(c)) : [],
     };
   }
 

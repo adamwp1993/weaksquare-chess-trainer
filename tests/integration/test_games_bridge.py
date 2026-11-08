@@ -51,6 +51,14 @@ def test_paste_analyze_review_retry_save_and_reason(services, paths, clock) -> N
     rev = ok(api.get_review(gid))
     assert rev["analyzed"] and rev["current"] and len(rev["moves"]) == 7 and len(rev["summaries"]) == 2
     assert rev["game"]["user_color"] == "black" and rev["game"]["analysis_status"] == "analyzed"
+    # v0.14 (FR-11.36): Summary and What you did well for the side you played, from the analysis alone.
+    [story] = rev["stories"]
+    assert story["color"] == "black" and story["result"] in ("won", "lost", "drawn", "unfinished")
+    assert story["summary"][0].startswith(("You won", "You lost", "You drew", "The game wasn't finished"))
+    assert all(
+        s["kind"] in ("only_move", "punished", "defence", "conversion", "clean_phase") for s in story["strengths"]
+    )
+    assert not before["stories"]  # nothing before the analysis
     ply = rev["moves"][5]["ply"]
     if rev["retry_plies"]:  # the fake engine's grading decides which moves are mistakes
         ply = rev["retry_plies"][0]

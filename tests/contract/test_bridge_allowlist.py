@@ -12,6 +12,33 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.errors import BRIDGE_MARK
 
 ALLOWLIST = {
+    # v0.14: Lichess studies (REQUIREMENTS §19)
+    "add_study",  # FR-13.5
+    "add_study_by_id",  # FR-13.5a, 13.6
+    "get_study_add_result",
+    "find_author_studies",  # FR-13.5a
+    "get_study_starter_list",  # FR-13.6
+    "list_studies",  # FR-13.1
+    "get_study",
+    "get_study_chapter",  # FR-13.8
+    "set_study_place",  # FR-13.10
+    "get_study_continue",
+    "set_study_chapter_done",
+    "restart_study",
+    "heart_study",  # FR-13.9
+    "delete_study",
+    "preview_study_repertoire",  # FR-13.11
+    "save_study_repertoire",
+    "discard_study_repertoire",
+    "check_study_updates",  # FR-13.7
+    "get_study_update",
+    "apply_study_update",
+    "discard_study_update",
+    "open_study_on_lichess",
+    "open_lichess_studies_in_browser",  # FR-13.5
+    "open_lichess_window",  # FR-13.3
+    "close_lichess_window",
+    "is_lichess_window_open",
     # v0.11 (whole-game coaching; get_coach_ai is replaced by the AI runs)
     "get_coach_ai_job_run",
     "list_coach_ai_runs",

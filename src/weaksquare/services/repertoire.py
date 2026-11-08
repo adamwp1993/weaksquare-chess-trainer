@@ -24,7 +24,7 @@ from weaksquare.core.opening_practice import (
     path_to,
     propose,
 )
-from weaksquare.core.openings import Line, position_key
+from weaksquare.core.openings import Line, board_of, position_key
 from weaksquare.core.repertoire import (
     Edge,
     NewMove,
@@ -324,6 +324,21 @@ class RepertoireService:
             for m in line_to_moves([(x.uci, x.source) for x in line.moves]):
                 moves.setdefault((m.position_key, m.move_uci), m)
         added = self._repo.add_moves(color, list(moves.values()), self._now())
+        return AddResult(added, len(moves) - added)
+
+    def add_study_moves(self, color: object, moves: Sequence[NewMove], mains: Sequence[tuple[str, str]]) -> AddResult:
+        """v0.14 (FR-13.11): moves from a study, already planned by `core.study_repertoire` (checked, reachable, with
+        your conflict choices applied). Each is checked again here. `mains` are the study moves you chose over yours:
+        they become the main move at their position, and yours stay as sidelines."""
+        c = check_color(color)
+        for m in moves:
+            board = board_of(m.position_key)
+            move = chess.Move.from_uci(m.move_uci)
+            if move not in board.legal_moves or m.source != "study":
+                raise ValidationError("That move can't be added.")
+        added = self._repo.add_moves(c, list(moves), self._now())
+        for key, uci in mains:
+            self._repo.set_main(c, key, uci)
         return AddResult(added, len(moves) - added)
 
     def add_lines(self, color: object, family: object, indices: object) -> AddResult:

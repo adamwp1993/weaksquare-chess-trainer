@@ -71,6 +71,10 @@ export function gameNarrative(review: GameReview, n: number, plies: number[], pr
     moments,
     preset: { themes: ["hangingPiece", "fork"], names: ["Hanging piece", "Fork"], rating_min: 1200, rating_max: 1700 },
     discarded: 1,
+    did_well: review.stories.flatMap((st) => st.strengths).slice(0, 2).map((x) => ({
+      fact: x.text,
+      text: "Spotting that kept the pressure on and gave your opponent no time to recover.",
+    })),
     provider,
     model,
     cost_usd: costUsd,

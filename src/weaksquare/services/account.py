@@ -16,7 +16,7 @@ from typing import Any, Literal, Protocol
 
 from weaksquare.core.errors import AppError, ConflictError
 from weaksquare.core.lichess import Account, LichessClient
-from weaksquare.core.oauth import OAuthError, authorize_url, parse_callback, token_form
+from weaksquare.core.oauth import SCOPES, OAuthError, authorize_url, parse_callback, token_form
 from weaksquare.jobs.runner import CancelToken, JobCancelled, JobFailed, JobRunner, ProgressFn
 
 log = logging.getLogger(__name__)
@@ -25,6 +25,9 @@ SIGN_IN_JOB = "lichess_sign_in"
 CHECK_JOB = "lichess_account_check"
 ACCOUNT_KEY = "lichess.account"  # {"id", "username"}: not a secret (SR-1)
 SECRET_ACCOUNT = "lichess"
+# v0.14: the scopes requested at the last sign-in (Lichess doesn't report what a token has). A sign-in from before v0.14
+# has none recorded, so it's known to lack `study:read`. Not a secret.
+SCOPES_KEY = "lichess.scopes"
 RECHECK_DELAYS_S = (30, 60, 120, 300, 600)
 
 AccountState = Literal["signed_out", "checking", "signed_in", "offline", "expired"]
@@ -148,6 +151,13 @@ class AccountService:
     def token(self) -> str | None:
         return self._d.secrets.get(SECRET_ACCOUNT)
 
+    def has_scope(self, scope: str) -> bool:
+        """Whether the stored sign-in was granted `scope` (v0.14: `study:read` for private studies, FR-13.7)."""
+        if not self.token():
+            return False
+        granted = self._d.settings.get(SCOPES_KEY)
+        return isinstance(granted, str) and scope in granted.split()
+
     def account_id(self) -> str | None:
         """Who solves are queued for: the signed-in account, or the stored one while offline."""
         with self._lock:
@@ -172,6 +182,7 @@ class AccountService:
     def mark_expired(self) -> None:
         """A 401 from Lichess: the token is gone or revoked (FR-6.4). Discard it."""
         self._d.secrets.delete(SECRET_ACCOUNT)
+        self._d.settings.set(SCOPES_KEY, None)
         self._set_state("expired")
 
     def note_reachable(self) -> None:
@@ -306,6 +317,9 @@ class AccountService:
             log.error("sign-in: couldn't store the token (%s)", type(e).__name__)
             self._revoke_quietly(secret)
             raise JobFailed("secret_store", "Sign-in failed: Windows Credential Manager refused the token.") from None
+        self._d.settings.set(
+            SCOPES_KEY, SCOPES
+        )  # what this sign-in asked for (and Lichess's consent is all or nothing)
         if old and old != secret:
             self._revoke_quietly(old)  # signing in again replaces the old token
         self._d.browser.bring_to_front()
@@ -337,4 +351,5 @@ class AccountService:
                     ) from None
             self._d.secrets.delete(SECRET_ACCOUNT)
         self._d.settings.set(ACCOUNT_KEY, None)
+        self._d.settings.set(SCOPES_KEY, None)
         self._set_state("signed_out")

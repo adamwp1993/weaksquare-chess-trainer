@@ -44,6 +44,7 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
     from tests.fakes.games import FakeChesscom, FakeLichessGames
     from tests.fakes.lichess import FakeLichess
     from tests.fakes.llm import fake_providers
+    from tests.fakes.studies import FakeLichessStudies, FakeLichessWindow
     from weaksquare.adapters.secret_store import MemorySecretStore
 
     return {
@@ -57,6 +58,8 @@ def fake_service_kwargs(lichess: object | None = None) -> dict:
         "llm_providers": fake_providers(),  # never the real Anthropic or OpenAI
         "lichess_games": FakeLichessGames(),  # never the real Lichess or chess.com (v0.8)
         "chesscom": FakeChesscom(),
+        "lichess_studies": FakeLichessStudies(),  # never the real Lichess (v0.14)
+        "make_lichess_window": FakeLichessWindow,  # never a real window process (v0.14)
     }
 
 
@@ -105,6 +108,8 @@ def build_api(
         opening_notes=services.opening_notes,
         opening_practice=services.opening_practice,
         repertoire=services.repertoire,
+        studies=services.studies,
+        lichess_window=services.lichess_window,
     )
 
 

@@ -49,6 +49,7 @@ from weaksquare.adapters.db.repos.puzzle_meta import PuzzleMetaRepo
 from weaksquare.adapters.db.repos.puzzle_sources import CombinedSource
 from weaksquare.adapters.db.repos.puzzles import LichessDbSource
 from weaksquare.adapters.db.repos.stats import StatsRepo
+from weaksquare.adapters.db.repos.studies import StudiesRepo
 from weaksquare.adapters.db.repos.user_data import (
     AttemptsRepo,
     MistakeReasonsRepo,
@@ -65,7 +66,7 @@ from weaksquare.adapters.desktop import (
     system_prefers_dark,
 )
 from weaksquare.adapters.files import PuzzleCsv, extract_member, rename_with_retry, sha256_file, zip_names
-from weaksquare.adapters.http import HttpClient
+from weaksquare.adapters.http import HttpClient, HttpError
 from weaksquare.adapters.lichess import (
     LichessHttp,
     is_network_error,
@@ -74,6 +75,8 @@ from weaksquare.adapters.lichess import (
     retry_after,
 )
 from weaksquare.adapters.lichess_games import LichessGames
+from weaksquare.adapters.lichess_studies import LichessStudies
+from weaksquare.adapters.lichess_window import LichessWindow
 from weaksquare.adapters.llm.anthropic import AnthropicProvider
 from weaksquare.adapters.llm.openai import OpenAIProvider
 from weaksquare.adapters.logging_setup import setup_logging
@@ -120,6 +123,7 @@ from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
 from weaksquare.services.stats import StatsService
+from weaksquare.services.studies import StudiesClient, StudiesService, StudyErrors, load_starter
 from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
 from weaksquare.services.ui_settings import UiSettingsService
 
@@ -248,8 +252,11 @@ class Services:
     opening_notes: OpeningNotesService
     opening_practice: OpeningPracticeService
     repertoire: RepertoireService
+    studies: StudiesService
+    lichess_window: Any
 
     def close(self) -> None:
+        self.lichess_window.close()  # v0.14: the Lichess window closes with the app
         self.engine.close()  # NFR-6: stop the engine process
         close = getattr(self.scheduler, "close", None)
         if close:
@@ -277,6 +284,8 @@ def build_services(
     llm_providers: dict[str, LLMProvider] | None = None,
     lichess_games: LichessGamesClient | None = None,
     chesscom: ChesscomClient | None = None,
+    lichess_studies: StudiesClient | None = None,
+    make_lichess_window: Callable[..., Any] | None = None,
 ) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
 
@@ -440,7 +449,36 @@ def build_services(
         OpeningNotesRepo(db), openings, opening_sources, llm_settings, llm_usage, runner, clock,
         paths.data_dir / "exports",
     )  # fmt: skip
+    studies = StudiesService(
+        StudiesRepo(db), lichess_studies or LichessStudies(http), account, runner, clock,
+        StudyErrors(
+            status_of=lambda e: e.status if isinstance(e, HttpError) else None,
+            is_network_error=is_network_error,
+            is_rate_limited=is_rate_limited,
+        ),
+        starter=lambda: load_starter(config.STUDY_STARTER_FILE.read_text(encoding="utf-8")),
+        repertoire=repertoire,
+    )  # fmt: skip
+
+    def window_added(ref: Any) -> None:
+        """FR-13.4: Add this study in the Lichess window downloads it like a pasted link, and the UI hears about it."""
+        try:
+            job = studies.add(ref)
+        except Exception:
+            log.exception("couldn't start adding a study from the Lichess window")
+            return
+        emit("study_window", dto.StudyWindowEvent("added", ref.study_id, ref.chapter_id, job))
+
+    def window_page(ref: Any) -> None:
+        emit("study_window", dto.StudyWindowEvent("page", ref.study_id if ref else None, None, None))
+
+    def window_closed() -> None:
+        emit("study_window", dto.StudyWindowEvent("closed", None, None, None))
+
+    lichess_window = (make_lichess_window or LichessWindow)(window_added, window_page, window_closed)
     return Services(
+        studies=studies,
+        lichess_window=lichess_window,
         plan=plan,
         journal=journal,
         openings=openings,
@@ -570,6 +608,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         opening_notes=services.opening_notes,
         opening_practice=services.opening_practice,
         repertoire=services.repertoire,
+        studies=services.studies,
+        lichess_window=services.lichess_window,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

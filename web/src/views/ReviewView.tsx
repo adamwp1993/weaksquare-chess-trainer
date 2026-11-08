@@ -526,6 +526,19 @@ export function ReviewView({
                 onTrain={(p) => onTrain?.(p)}
               />
             )}
+            {review.analyzed && review.stories.length > 0 && (
+              <Paper withBorder p="sm" data-testid="review-story-summary">
+                <Title order={5}>Summary</Title>
+                {review.stories.map((st) => (
+                  <Stack key={st.color} gap={2} mt={4}>
+                    {review.stories.length > 1 && <Text size="sm" fw={600}>As {cap(st.color)}</Text>}
+                    {st.summary.map((line, i) => (
+                      <Text key={i} size="sm">{line}</Text>
+                    ))}
+                  </Stack>
+                ))}
+              </Paper>
+            )}
             {review.analyzed && <EvalGraph moves={moves} ply={cursor - 1} onPly={(p) => go(p + 1)} />}
             {review.analyzed && (
               <Table withTableBorder data-testid="review-summary">
@@ -564,7 +577,7 @@ export function ReviewView({
             )}
             {review.analyzed && (
               <Stack gap="xs" data-testid="key-moments">
-                <Title order={5}>Key moments</Title>
+                <Title order={5}>What to improve: key moments</Title>
                 {review.key_moments.length === 0 && <Text size="sm" c="dimmed">No mistakes of yours to show. Well played.</Text>}
                 {review.key_moments.map((p) => {
                   const m = moves[p];
@@ -626,6 +639,33 @@ export function ReviewView({
                   );
                 })}
                 {saved && <Text size="xs" c="dimmed" data-testid="saved-note">{saved}</Text>}
+              </Stack>
+            )}
+            {review.analyzed && review.stories.length > 0 && (
+              <Stack gap="xs" data-testid="review-strengths">
+                <Title order={5}>What you did well</Title>
+                {review.stories.map((st) => (
+                  <Stack key={st.color} gap={4}>
+                    {review.stories.length > 1 && <Text size="sm" fw={600}>As {cap(st.color)}</Text>}
+                    {st.strengths.length === 0 ? (
+                      <Text size="sm" c="dimmed" data-testid="review-strengths-none">
+                        Nothing stood out by the engine's measures this time: no only moves, punished mistakes, hard defences,
+                        clean conversion or mistake-free phase.
+                      </Text>
+                    ) : (
+                      st.strengths.map((x, i) =>
+                        x.ply !== null ? (
+                          <Button key={i} variant="subtle" size="compact-sm" justify="flex-start" onClick={() => go((x.ply as number) + 1)}
+                            styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={2} data-testid="review-strength">
+                            {x.text}
+                          </Button>
+                        ) : (
+                          <Text key={i} size="sm" px={10} data-testid="review-strength">{x.text}</Text>
+                        ),
+                      )
+                    )}
+                  </Stack>
+                ))}
               </Stack>
             )}
             <Paper withBorder p="xs" data-testid="move-list">

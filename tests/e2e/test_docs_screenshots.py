@@ -699,3 +699,17 @@ def test_opening_practice(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("practice-refutation").wait_for()
     page.mouse.move(1270, 890)
     shot(page, "opening-practice")
+
+
+def test_studies(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.14: My studies, then a study's page with its chapters and a step-through chapter with side lines."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-studies").click()
+    page.get_by_test_id("study-card").wait_for()
+    page.get_by_test_id("studies-tab-find").click()
+    page.get_by_test_id("study-paste").fill("https://lichess.org/study/TestNm02")
+    page.get_by_test_id("study-paste-add").click()
+    page.get_by_test_id("study-moves").wait_for()
+    for _ in range(3):
+        page.get_by_test_id("study-forward").click()
+    shot(page, "studies", full_page=True)

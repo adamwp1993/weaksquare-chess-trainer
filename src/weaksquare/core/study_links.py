@@ -84,6 +84,22 @@ def parse_study_ref(text: object) -> StudyRef | None:
     return StudyRef(m["study"], m["chapter"])
 
 
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$")
+
+
+def clean_username(text: object) -> str | None:
+    """A Lichess username for Studies by author (FR-13.5a): 2-30 letters, digits, `_` or `-`, also from a profile
+    link (`lichess.org/@/name`). None for anything else, so no request is made."""
+    if not isinstance(text, str):
+        return None
+    s = text.strip()
+    for prefix in ("https://lichess.org/@/", "lichess.org/@/", "@"):
+        if s.lower().startswith(prefix):
+            s = s[len(prefix) :].strip("/")
+            break
+    return s if _USERNAME_RE.match(s) else None
+
+
 def is_lichess_page(url: object) -> bool:
     """Whether the Lichess window may show this address itself (FR-13.3): https on lichess.org only.
 

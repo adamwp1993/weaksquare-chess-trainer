@@ -570,6 +570,11 @@ export interface SuggestedPreset {
   rating_max: number | null;
 }
 
+export interface GameDidWell {
+  fact: string;
+  text: string;
+}
+
 export interface GameNarrative {
   game_id: number;
   n: number;
@@ -585,6 +590,7 @@ export interface GameNarrative {
   model: string;
   cost_usd: number;
   cached: boolean;
+  did_well: GameDidWell[];
 }
 
 export interface ReviewThresholds {
@@ -728,6 +734,7 @@ export interface GameReview {
   key_moments: number[];
   retry_plies: number[];
   ask_reasons: boolean;
+  stories: GameStoryView[];
 }
 
 export interface RetryResult {
@@ -1493,4 +1500,142 @@ export interface Repertoire {
 export interface RepertoireAdded {
   added: number;
   kept: number;
+}
+
+export interface StudySummary {
+  id: string;
+  title: string;
+  author: string | null;
+  url: string;
+  hearted: boolean;
+  private: boolean;
+  chapters: number;
+  playable: number;
+  done: number;
+  status: "new" | "in_progress" | "finished";
+  place_chapter_key: string | null;
+  place_chapter_title: string | null;
+  added_at: string;
+  updated_at: string;
+  checked_at: string | null;
+}
+
+export interface StudyChapterInfo {
+  key: string;
+  index: number;
+  title: string;
+  mode: "normal" | "gamebook";
+  orientation: "white" | "black";
+  text_only: boolean;
+  rejected: string | null;
+  move_count: number;
+  done: boolean;
+}
+
+export interface StudyDetail {
+  summary: StudySummary;
+  chapters: StudyChapterInfo[];
+}
+
+export interface StudyShape {
+  orig: string;
+  dest: string | null;
+  color: "green" | "red" | "yellow" | "blue";
+}
+
+export interface StudyMove {
+  id: number;
+  parent: number | null;
+  san: string | null;
+  uci: string | null;
+  fen: string;
+  ply: number;
+  comment: string;
+  shapes: StudyShape[];
+  nags: number[];
+  children: number[];
+}
+
+export interface StudyChapter {
+  study_id: string;
+  info: StudyChapterInfo;
+  start_fen: string;
+  moves: StudyMove[];
+}
+
+export interface StudyAddResult {
+  study_id: string;
+  chapter_key: string | null;
+  already_saved: boolean;
+}
+
+export interface AuthorStudy {
+  study_id: string;
+  name: string;
+  updated_ms: number | null;
+  saved: boolean;
+}
+
+export interface StudyUpdate {
+  study_id: string;
+  new_title: string;
+  title_changed: boolean;
+  added: string[];
+  removed: string[];
+  changed: string[];
+  unchanged: number;
+}
+
+export interface StudyPlace {
+  chapter_key: string;
+  path: string[];
+}
+
+export interface StarterStudy {
+  study_id: string;
+  title: string;
+  author: string;
+  opening: string;
+  url: string;
+  saved: boolean;
+}
+
+export interface StudyWindowEvent {
+  kind: "added" | "page" | "closed";
+  study_id: string | null;
+  chapter_id: string | null;
+  job_id: string | null;
+}
+
+export interface StudyRepertoireConflict {
+  position_key: string;
+  path: string[];
+  yours: string[];
+  study: string[];
+}
+
+export interface StudyRepertoirePreview {
+  id: string;
+  color: "white" | "black";
+  side_lines: boolean;
+  chapters: string[];
+  skipped: string[];
+  yours: number;
+  theirs: number;
+  already: number;
+  unreachable: number;
+  conflicts: StudyRepertoireConflict[];
+}
+
+export interface GameStrength {
+  kind: "only_move" | "punished" | "defence" | "conversion" | "clean_phase";
+  ply: number | null;
+  text: string;
+}
+
+export interface GameStoryView {
+  color: "white" | "black";
+  result: "won" | "lost" | "drawn" | "unfinished";
+  summary: string[];
+  strengths: GameStrength[];
 }
