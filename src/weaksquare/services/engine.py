@@ -29,12 +29,12 @@ from weaksquare.core.engine import (
     EngineNotInstalled,
     EngineProbe,
     UnsupportedPlatform,
+    Viewpoint,
     format_score,
     game_over_text,
     score_for,
 )
 from weaksquare.core.errors import ConflictError, ValidationError
-from weaksquare.core.puzzle import Color
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
 from weaksquare.services.engine_install import EngineInstaller, run_install
 from weaksquare.services.ui_settings import SettingsStore
@@ -304,7 +304,7 @@ class EngineService:
             return self._latest.get(key) == gen
 
     def analyse(
-        self, board: chess.Board, player: Color, *, multipv: int = MULTIPV, key: Any = None, gen: int | None = None
+        self, board: chess.Board, player: Viewpoint, *, multipv: int = MULTIPV, key: Any = None, gen: int | None = None
     ) -> Analysis:
         """Analyse a position that core.engine.validate_fen / validate_line already accepted."""
         fen = board.fen()
@@ -332,7 +332,7 @@ class EngineService:
             client = self._client()
             return client.analyse(board.copy(), self.settings().think_s, multipv)
 
-    def analysis_of(self, board: chess.Board, lines: list[EngineLine], player: Color) -> Analysis:
+    def analysis_of(self, board: chess.Board, lines: list[EngineLine], player: Viewpoint) -> Analysis:
         """Stored raw lines as one side's view (v0.13)."""
         over = game_over_text(board, player)
         if over is not None or not any(board.legal_moves):
@@ -344,8 +344,8 @@ class EngineService:
         return Analysis(fen, (), superseded=True)
 
     @staticmethod
-    def _line(board: chess.Board, line: EngineLine, player: Color) -> AnalysisLine:
-        cp, mate = score_for(line, player)
+    def _line(board: chess.Board, line: EngineLine, player: Viewpoint) -> AnalysisLine:
+        cp, mate = score_for(line, "white" if player == "both" else player)
         pv: list[str] = []
         b = board.copy()
         for uci in line.pv[:MAX_PV_PLIES]:  # keep only the legal prefix: engine output is checked too

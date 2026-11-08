@@ -202,3 +202,26 @@ def test_game_over_text() -> None:
 def test_refutation_is_at_most_five_plies() -> None:
     assert refutation_plies(("a", "b", "c", "d", "e", "f", "g")) == ("a", "b", "c", "d", "e")
     assert refutation_plies(("a", "b")) == ("a", "b")
+
+
+# ---- v0.15 (FR-14.4): the Analysis tab words evals from White's side, since you play both -------------------------
+@pytest.mark.parametrize(
+    ("cp", "mate", "text"),
+    [(30, None, "+0.3"), (-140, None, "−1.4"), (0, None, "0.0 (level)"), (None, 3, "White mates in 3"),
+     (None, -2, "Black mates in 2")],
+)  # fmt: skip
+def test_the_both_viewpoint_is_whites_side_and_never_says_you(cp: int | None, mate: int | None, text: str) -> None:
+    from weaksquare.core.engine import EngineLine, format_score
+
+    assert format_score(EngineLine(cp, mate, ("e2e4",)), "both") == text
+    assert "you" not in format_score(EngineLine(cp, mate, ("e2e4",)), "both").lower()
+
+
+def test_the_both_viewpoint_names_the_winner_of_a_checkmate() -> None:
+    import chess
+
+    from weaksquare.core.engine import game_over_text
+
+    fools_mate = chess.Board("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3")
+    assert game_over_text(fools_mate, "both") == "Checkmate: Black wins"
+    assert game_over_text(fools_mate, "white") == "You're checkmated"

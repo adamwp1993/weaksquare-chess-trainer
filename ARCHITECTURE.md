@@ -268,6 +268,7 @@ Entry format:
   - **The front end reuses v0.14's flat tree** (`StudyMove[]`): `state/analysisTree.ts` adds moves as branches, and `MoveTree` moved out of `StudyReader` into its own component for both screens. The tree lives in `App` while the app is open and is never saved (Adam, v0.15 planning).
   - **`Board` gained a set-up mode** (chessground free moves, drop-off removes, a palette that drags with `dragNewPiece` or places by click), so it stays the only chessground wrapper (§3 decision 11).
   - **`ExplorerMove`** gained White-win, draw and Black-win counts (default 0) for the popular replies bar.
+  - **A neutral viewpoint `"both"`** (`core.engine.Viewpoint`) for `format_score` and `game_over_text`: on this tab you play both sides, so evals read "+0.3" and "White mates in 3" instead of "for you". Puzzles, Game Review and the opening trainer pass a color as before.
   - **Open in Analysis tab** sends the moves that led to the position: Game Review's game moves, or the puzzle's moves from its start, which `TrainerView` now records as they're played. Each candidate line is replayed and used only if it reaches the board's first position.
 - Alternatives: a second, simpler board component for the tab, rejected by §20 ("not a second one"); saving the board in `user.db`, rejected by Adam at planning; sending every game of a large PGN at once, rejected for size.
 - Consequences: the tab can't count anything by construction. A PGN's games aren't in My games; to review one, import it there.

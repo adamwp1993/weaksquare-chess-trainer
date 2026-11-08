@@ -81,14 +81,15 @@ class AnalysisTabService:
         return validate_fen(check.fen)  # the engine's own check, again (FR-7.6)
 
     def analyze(self, fen: object, purpose: object = "board") -> Any:
-        """FR-14.4: eval and top 3 lines, from White's side, on the interactive engine. Latest request wins."""
+        """FR-14.4: eval and top 3 lines, worded from White's side ("+0.3", "White mates in 2"), on the interactive
+        engine. Latest request wins."""
         if purpose not in PURPOSES:
             raise ValidationError("Unknown analysis purpose.")
         board = self._board(fen)
         if self._engine.status().state != "ready":
             raise EngineNotInstalled("Install Stockfish to analyze positions.")
         key = ("analysis_tab", purpose)
-        return self._engine.analyse(board, "white", key=key, gen=self._engine.ticket(key))
+        return self._engine.analyse(board, "both", key=key, gen=self._engine.ticket(key))
 
     def popular_replies(self, fen: object) -> PopularReplies:
         """FR-14.4: the Lichess explorer's most played moves here, or a quiet reason there are none."""

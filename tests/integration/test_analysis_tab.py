@@ -88,6 +88,7 @@ def test_a_legal_position_is_analyzed_on_the_interactive_engine(api: Any, paths:
     FakeEngine.instances.clear()
     a = ok(api.analyze_board_position(AFTER_E4, "board"))
     assert len(a["lines"]) == 3 and a["fen"] == AFTER_E4
+    assert all("you" not in line["score"].lower() for line in a["lines"])  # you play both sides here
     used = [e for e in FakeEngine.instances if e.calls]
     assert used and all(e.options[0] == 7 for e in used)  # the interactive engine only, never the background one
 

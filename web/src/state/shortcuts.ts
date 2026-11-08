@@ -10,7 +10,7 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: "R", action: "Try again (not scored), once the puzzle is over" },
   { keys: "S / U", action: "Danger spotting: call the highlighted move Safe or Unsafe" },
   { keys: "1–6", action: "Why you missed it: pick a reason after a failed puzzle" },
-  { keys: "← / →", action: "Step back / forward (the answer, the analysis board, a line you chose with Show me)" },
+  { keys: "← / →", action: "Step back / forward (the answer, the analysis board, a line you chose with Show me, the Analysis tab)" },
   { keys: "C", action: "Show or hide the board coordinates" },
   { keys: "F", action: "Hide or show the filters panel" },
   { keys: "?", action: "This list" },

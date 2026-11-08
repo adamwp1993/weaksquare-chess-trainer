@@ -6,7 +6,7 @@ import { Button, Group, Paper, Text } from "@mantine/core";
 import { Chess, type Square } from "chess.js";
 import { Chessground } from "chessground";
 import type { Api } from "chessground/api";
-import type { Key } from "chessground/types";
+import type { Key, Role } from "chessground/types";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface BoardProps {
@@ -28,6 +28,17 @@ export interface BoardProps {
   arrows?: [string, string][];
   /** Explain's annotations (v0.7, FR-8.5): arrows and circles, already validated by the backend (FR-8.4). */
   shapes?: BoardShape[];
+  /** v0.15 (FR-14.2): set up a position. Pieces move freely, drop off the board to remove, come from the palette by
+   * drag or by picking one and clicking squares. Reports the board part of the FEN; the caller checks it. */
+  editor?: BoardEditor;
+}
+
+export type EditTool = { color: "white" | "black"; role: Role } | "trash" | null;
+
+export interface BoardEditor {
+  tool: EditTool;
+  onTool: (tool: EditTool) => void;
+  onChange: (placement: string) => void;
 }
 
 export interface BoardShape {
@@ -38,6 +49,7 @@ export interface BoardShape {
 
 const NO_ARROWS: [string, string][] = [];
 const NO_SHAPES: BoardShape[] = [];
+const ROLES: Role[] = ["king", "queen", "rook", "bishop", "knight", "pawn"];
 const RANKS = ["1", "2", "3", "4", "5", "6", "7", "8"];
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
@@ -100,6 +112,7 @@ export function Board({
   fitWindow = false,
   arrows = NO_ARROWS,
   shapes = NO_SHAPES,
+  editor,
 }: BoardProps) {
   const frame = useRef<HTMLDivElement>(null);
   const fit = useWindowFit(frame, fitWindow);
@@ -108,9 +121,14 @@ export function Board({
   const onMoveRef = useRef(onMove);
   const [promotion, setPromotion] = useState<{ from: string; to: string } | null>(null);
 
+  const editorRef = useRef(editor);
   useEffect(() => {
     onMoveRef.current = onMove;
   }, [onMove]);
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+  const editing = editor !== undefined;
 
   useEffect(() => {
     if (!el.current) return;
@@ -137,6 +155,35 @@ export function Board({
   }, []);
 
   useEffect(() => {
+    if (!editing) return;
+    const report = () => {
+      if (cg.current) editorRef.current?.onChange(cg.current.getFen());
+    };
+    cg.current?.set({
+      fen,
+      orientation,
+      turnColor: "white",
+      check: false,
+      lastMove: undefined,
+      movable: { free: true, color: "both", dests: undefined, showDests: false, events: { after: undefined } },
+      draggable: { deleteOnDropOff: true },
+      events: {
+        change: report,
+        // A picked palette piece (or the bin) goes on the square you click.
+        select: (key) => {
+          const tool = editorRef.current?.tool;
+          if (!cg.current || !tool) return;
+          cg.current.setPieces(new Map([[key, tool === "trash" ? undefined : { color: tool.color, role: tool.role }]]));
+          cg.current.selectSquare(null);
+          report();
+        },
+      },
+      drawable: { autoShapes: [] },
+    });
+  }, [editing, fen, orientation]);
+
+  useEffect(() => {
+    if (editing) return;
     // v0.14 (FR-13.7): a study's text chapter can show a decorative board (no kings, pawn art) that chess.js
     // refuses. Draw it as given, read-only.
     let chess: Chess | null = null;
@@ -166,6 +213,8 @@ export function Board({
           },
         },
       },
+      draggable: { deleteOnDropOff: false },
+      events: { change: undefined, select: undefined },
       drawable: {
         autoShapes: [
           ...(hintSquare ? [{ orig: hintSquare as Key, brush: "green" }] : []),
@@ -174,7 +223,7 @@ export function Board({
         ],
       },
     });
-  }, [fen, orientation, movable, lastMove, hintSquare, arrows, shapes]);
+  }, [editing, fen, orientation, movable, lastMove, hintSquare, arrows, shapes]);
 
   // Rank numbers down the left and file letters along the bottom, outside the squares, so no piece
   // or square color can hide them (Adam, 2026-11-07: still missing on Game Review inside the board).
@@ -182,7 +231,21 @@ export function Board({
   const ranks = white ? [...RANKS].reverse() : RANKS;
   const files = white ? FILES : [...FILES].reverse();
 
+  const palette = (color: "white" | "black") =>
+    editor && (
+      <SparePieces
+        color={color}
+        tool={editor.tool}
+        onTool={editor.onTool}
+        onDrag={(role, e) => cg.current?.dragNewPiece({ color, role }, e, true)}
+        indent={coordinates}
+      />
+    );
+  const top = orientation === "white" ? "black" : "white";
+
   return (
+    <>
+    {palette(top)}
     <div
       ref={frame}
       className={coordinates ? "ws-board-frame ws-board-frame-coords" : "ws-board-frame"}
@@ -243,6 +306,71 @@ export function Board({
             <span key={f}>{f}</span>
           ))}
         </div>
+      )}
+    </div>
+    {palette(top === "white" ? "black" : "white")}
+    </>
+  );
+}
+
+/** The set-up palette (FR-14.2): one color's pieces and a bin. Drag a piece onto the board, or click it and then
+ * click squares. chessground draws pieces with its own `piece` elements and CSS, so the palette uses them too. */
+function SparePieces({
+  color,
+  tool,
+  onTool,
+  onDrag,
+  indent,
+}: {
+  color: "white" | "black";
+  tool: EditTool;
+  onTool: (tool: EditTool) => void;
+  onDrag: (role: Role, e: MouseEvent | TouchEvent) => void;
+  indent: boolean;
+}) {
+  const label = color === "white" ? "White" : "Black";
+  return (
+    <div
+      className="cg-wrap ws-spare"
+      style={{ marginLeft: indent ? "1.4rem" : 0 }}
+      data-testid={`spare-${color}`}
+      role="toolbar"
+      aria-label={`${label} pieces`}
+    >
+      {ROLES.map((role) => {
+        const picked = tool !== null && tool !== "trash" && tool.color === color && tool.role === role;
+        return (
+          <button
+            key={role}
+            type="button"
+            className={picked ? "ws-spare-slot ws-spare-picked" : "ws-spare-slot"}
+            aria-label={`${label} ${role}`}
+            aria-pressed={picked}
+            data-testid={`spare-${color}-${role}`}
+            onClick={() => onTool(picked ? null : { color, role })}
+            onMouseDown={(e) => onDrag(role, e.nativeEvent)}
+            onTouchStart={(e) => onDrag(role, e.nativeEvent)}
+            ref={(el) => {
+              if (el && !el.firstChild) {
+                const p = document.createElement("piece");
+                p.className = `${color} ${role}`;
+                el.appendChild(p);
+              }
+            }}
+          />
+        );
+      })}
+      {color === "white" && (
+        <button
+          type="button"
+          className={tool === "trash" ? "ws-spare-slot ws-spare-bin ws-spare-picked" : "ws-spare-slot ws-spare-bin"}
+          aria-label="Remove pieces"
+          aria-pressed={tool === "trash"}
+          data-testid="spare-trash"
+          onClick={() => onTool(tool === "trash" ? null : "trash")}
+        >
+          🗑
+        </button>
       )}
     </div>
   );

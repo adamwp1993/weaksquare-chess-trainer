@@ -22,6 +22,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   Your training journal ....................................... v0.12
   The opening trainer ......................................... v0.13
   Lichess studies ............................................. v0.14
+  The Analysis tab ............................................ v0.15
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
   The About screen ............................................ v0.1
@@ -79,6 +80,9 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Studies by author** asks lichess.org for that username's public studies (`/api/study/by/<name>`). If that list is empty, it also asks whether the user exists (`/api/user/<name>`), so it can tell you about a typo. Nothing else is sent.
     - **The Lichess window** loads lichess.org pages, and whatever those pages load, like a browser would, in its own temporary profile with no sign-in. WeakSquare never reads what you type there. It learns only which study is on screen, so **Add this study** works. Links to other sites open in your usual browser.
     - **Open Lichess in your browser** and **Open on Lichess** open lichess.org in your usual browser, like any link.
+  - **The Analysis tab** (v0.15). Your lines stay in the app while it's open and are never saved. A pasted PGN is read on your PC and isn't added to My games. Nothing on this tab goes to an AI.
+    - **Popular replies**, only while you're signed in: the position on the board (FEN), with your explorer source and rating bands from the opening trainer, goes to explorer.lichess.org with your Lichess sign-in. Nothing else is sent. Answers are saved on your PC and shared with the opening trainer.
+    - **Stockfish** runs on your PC, as everywhere else in the app.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -394,6 +398,8 @@ Once the puzzle is over (you finished the line, or you used Show answer), the **
 ### The analysis board
 Click **Analyze on the board** in the panel to play out your own ideas. You can move pieces for **either side** (legal moves only), and after each move Stockfish re-evaluates and draws an arrow for its best move. **◀ Back** and **Forward ▶** step through your moves, **Reset** goes back to the puzzle position, and **Close** returns to the puzzle. If you opened the answer first, the button reads **Back to the answer** and takes you back to it (so does **Show answer**). Nothing you do on the analysis board is scored or saved.
 
+*Changed in v0.15:* **Open in Analysis tab** takes the position to the [Analysis tab](#the-analysis-tab), with the puzzle's moves from its start, so you can keep exploring there.
+
 ![The analysis board](img/analysis-board.png)
 
 ### Engine settings
@@ -697,6 +703,7 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 1. Play moves on the board. **◀ Back** and **Forward ▶** (or **←** and **→**) step through what you played; **Reset** goes back to the game position.
 2. With **Show best moves** on, Stockfish's eval and top three lines follow the position on the board, with a green arrow for its best move. With it off, they stay hidden until you turn it on.
 3. **Back to the game** returns to the game where you left it.
+4. *Added in v0.15:* **Open in Analysis tab** takes the position to the [Analysis tab](#the-analysis-tab), with the game's moves from the start, and your own moves after them.
 
 Nothing you play there changes the game, its analysis or your stats. It uses the same engine as the analysis board after puzzles, so it answers even while games are being analyzed in the background.
 
@@ -1197,6 +1204,52 @@ Added moves show **Study** as their source in your repertoire. Your repertoire s
 - A study you've added keeps working if its author changes it or deletes it, or if you're offline. Only **Check for updates** fetches it again.
 - Study text is never sent to an AI.
 
+## The Analysis tab
+*Added in v0.15.*
+
+A board of your own for trying ideas: set up any position, paste a game, and explore it with Stockfish and the moves people play most, without starting a puzzle or opening a game first.
+
+**Analysis** in the top bar opens it at the starting position. Nothing on this tab is scored, saved to your stats, added to My games or sent to an AI. Your lines stay while the app is open, even when you switch to another page, but closing the app clears them.
+
+![The Analysis tab](img/analysis-tab.png)
+
+### Exploring
+1. Move pieces for **either side**. Only legal moves are allowed.
+2. Each different move you try from a position becomes its own line. They're listed under **Your lines**, the first line inline and the others indented under the move they replace, like study chapters. Click any move to go there.
+3. **◀ Back** and **Forward ▶** (or **←** and **→**) step through the line you're on, **|◀** goes to the start and **▶|** to the end of the first line. **Back to main line** appears when you're on a side line.
+4. **Flip board** turns the board round. **New board** starts again from the starting position.
+
+The **Stockfish** panel shows the eval and the top three lines for the position on the board, with an arrow for its best move. Here the eval is from White's side, because you play both: **+0.3** means White is better, **−1.4** that Black is, and a mate reads *White mates in 3*. It's the same engine as the puzzle analysis board, so it answers even while games are being analyzed in the background. Without Stockfish, the panel offers to install it.
+
+**Popular replies** lists the moves played most often in this position on Lichess, with the number of games and how they ended (White wins, draws, Black wins). Click one to play it. They use the source and rating bands you chose in the opening trainer's settings. You need to be signed in to Lichess; otherwise the panel says *Sign in to Lichess to see popular replies*, and offline it says they aren't available right now. Everything else on the tab works either way.
+
+### Setting up a position
+![Setting up a position](img/analysis-setup.png)
+
+1. Click **Set up position**. The board shows the current position, with a row of pieces for each side above and below it.
+2. Drag a piece from a row onto a square. Or click a piece in a row and then click squares to place it, as many as you like; click it again to stop. Drag a piece off the board to remove it, or pick the bin (🗑) and click squares.
+3. **Clear board** empties it and **Start position** puts all the pieces back.
+4. Choose **White to move** or **Black to move**, and tick the **castling rights** each side still has. A box is greyed out unless that king and rook are on their starting squares.
+5. Click **Done**. If the position can't happen in a game, you get a list of what's wrong, for example *Black has no king* or *The side that isn't to move is in check*, and you stay in set-up to fix it. Nothing reaches Stockfish until it's right.
+
+**Or paste a FEN:** paste one into **Or paste a FEN** and click **Use this FEN** (or press **Enter**). It's checked the same way.
+
+**Cancel** leaves the board as it was. **Done** replaces your current board and its lines.
+
+### Importing a PGN
+1. Click **Import PGN** and paste a game in PGN format, from Lichess, chess.com, a book or another app.
+2. Click **Import**. A PGN with several games lists them by players, date and result: pick one and click **Open**. Games that can't be used (an illegal move, another variant such as Crazyhouse) are listed with the reason.
+3. The game opens at its starting position, with its side lines and comments. Step through it with **Forward**, the arrow keys, or by clicking moves, and play your own moves wherever you like: they become new lines.
+
+Comments are shown as plain text, and a web address in one is never a link. Headers, clocks and evals written in the PGN are left out. If the PGN can't be read, you're told why and the board doesn't change. To keep a game and have Stockfish review it, use **Import game** instead: that adds it to My games.
+
+### Open in Analysis tab
+On the analysis board after a puzzle, and under **Analyze from here** in Game Review, **Open in Analysis tab** brings the position here. It comes with the moves that led to it (the puzzle from its start, or the game from its first move) plus the moves you played on that board, and the board shows the position you were looking at. Step back to see how it arose.
+
+### Gotchas
+- **Replacing your board asks first.** **New board**, **Import PGN** and **Open in Analysis tab** all ask *Replace your current board?* when it has moves; **Keep my board** leaves it as it was. Your lines aren't saved anywhere else.
+- Closing the app clears the Analysis tab.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 
@@ -1206,7 +1259,7 @@ Added moves show **Study** as their source in your repertoire. Your repertoire s
 | **H** | Hint |
 | **A** | Show answer (once it's unlocked; after the puzzle, back to the start of the answer) |
 | **R** | Try again (not scored), once the puzzle is over (v0.4) |
-| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4). In Game Review: through the game, or a line you're stepping through (v0.8) |
+| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4). In Game Review: through the game, or a line you're stepping through (v0.8). On the Analysis tab: back to the move before, or forward along the first line (v0.15) |
 | **C** | Show or hide the letters and numbers around the board |
 | **F** | Hide or show the filters panel (v0.5) |
 | **S** / **U** | Danger spotting: call the highlighted move Safe or Unsafe (v0.6) |

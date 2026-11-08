@@ -13,6 +13,13 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **The Analysis tab**: a board of its own in the top bar. Move for either side and every different move you try becomes its own line, listed with side lines like a study. Stockfish's eval, top three lines and best-move arrow follow the board, worded from White's side. Nothing here is scored, saved to your stats or sent to an AI. Your lines are kept while the app is open. [FR-14.1, FR-14.4, FR-14.5]
+- **Set up a position** by dragging pieces from a palette, or picking a piece and clicking squares, with the side to move and castling rights; or paste a FEN. A position that can't happen in a game is refused with what's wrong, and never reaches Stockfish. [FR-14.2]
+- **Import a PGN** into the Analysis tab, side lines and comments included. A file with several games lets you pick one. A PGN that can't be read changes nothing. It isn't added to My games. [FR-14.3]
+- **Popular replies** on the Analysis tab while you're signed in to Lichess: the most played moves with their games and results, from the explorer settings you chose in the opening trainer. Click one to play it. [FR-14.4]
+- **Open in Analysis tab** on the analysis board after a puzzle and under Analyze from here in Game Review: the position comes with the moves that led to it. A board that already has moves asks before it's replaced. [FR-14.6]
+
 ## [v0.14] - 2026-11-08
 
 Candidates: v0.14-rc1 (2026-11-08)

@@ -11,7 +11,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
 import type { EngineStatus, Explanation, GameMoment, GameNarrative, GameReview, JournalEntry, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
-import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
+import {
+  AnalysisControls,
+  analysisMove,
+  lineForAnalysisTab,
+  openAnalysis,
+  type AnalysisState,
+} from "../components/AnalysisBoard";
+import type { AnalysisLine } from "../state/analysisTree";
 import { EnginePanel } from "../components/EnginePanel";
 import { legalArrow } from "../state/engine";
 import { answerPositions, AnswerPlayer } from "../components/AnswerPlayer";
@@ -51,6 +58,7 @@ export function ReviewView({
   coordinates,
   autoExplain = false,
   onTrain,
+  onOpenInAnalysis,
   startRetry = false,
   hideBest = false,
 }: {
@@ -67,6 +75,8 @@ export function ReviewView({
   /** Review + Explain my game (FR-11.29): analyze if needed, then open Explain my game's Confirm. */
   autoExplain?: boolean;
   onTrain?: (p: SuggestedPreset) => void;
+  /** v0.15 (FR-14.6): Open in Analysis tab from the free board. */
+  onOpenInAnalysis?: (line: AnalysisLine) => void;
 }) {
   const [review, setReview] = useState<GameReview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -413,6 +423,10 @@ export function ReviewView({
                   onReset={() => setFree(openAnalysis(free.positions[0].fen))}
                   onClose={() => setFree(null)}
                   closeLabel="Back to the game"
+                  onOpenInTab={
+                    onOpenInAnalysis &&
+                    (() => onOpenInAnalysis(lineForAnalysisTab(free, [{ start: review.start_fen, ucis: moves.map((m) => m.uci) }], orientation)))
+                  }
                 />
                 {showBest ? (
                   <EnginePanel

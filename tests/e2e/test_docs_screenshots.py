@@ -713,3 +713,26 @@ def test_studies(page) -> None:  # type: ignore[no-untyped-def]
     for _ in range(3):
         page.get_by_test_id("study-forward").click()
     shot(page, "studies", full_page=True)
+
+
+def test_analysis_tab(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.15: the Analysis tab with two lines from one position, the engine and popular replies; then setting up a
+    position."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-analysis").click()
+    page.get_by_test_id("analysis-view").wait_for()
+    play(page, "e2e4", "white")
+    play(page, "e7e5", "white")
+    page.get_by_test_id("analysis-back").click()
+    play(page, "c7c5", "white")
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.get_by_test_id("analysis-back").click()
+    page.get_by_test_id("popular-move").first.wait_for()
+    page.get_by_test_id("engine-line").first.wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "analysis-tab", full_page=True)
+    page.get_by_test_id("analysis-setup").click()
+    page.get_by_test_id("analysis-setup-panel").wait_for()
+    page.get_by_test_id("spare-white-queen").click()
+    page.mouse.move(1270, 890)
+    shot(page, "analysis-setup", full_page=True)

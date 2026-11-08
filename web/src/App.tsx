@@ -43,6 +43,13 @@ import { useJob } from "./state/useJob";
 import { useShortcuts } from "./state/shortcuts";
 import { AboutModal } from "./views/AboutModal";
 import { CoachView, type CoachTab } from "./views/CoachView";
+import {
+  type AnalysisBoardState,
+  analysisBoardFromLine,
+  AnalysisView,
+  newAnalysisBoard,
+} from "./views/AnalysisView";
+import { type AnalysisLine, hasMoves } from "./state/analysisTree";
 import { GamesView } from "./views/GamesView";
 import { ImportGameDialog } from "./views/ImportGameDialog";
 import { ImportPuzzlesDialog } from "./views/ImportPuzzlesDialog";
@@ -78,6 +85,7 @@ export function App() {
     | { kind: "coach" }
     | { kind: "openings"; family?: string; query?: string }
     | { kind: "studies" }
+    | { kind: "analysis" }
     | {
         kind: "review"; gameId: number; explain?: boolean; ply?: number; from?: "games" | "coach" | "trainer";
         retry?: boolean; hideBest?: boolean;
@@ -93,6 +101,19 @@ export function App() {
   const [journalDraft, setJournalDraft] = useState<JournalDraft | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [sendIds, setSendIds] = useState<number[]>([]); // Send to Coach (FR-11.30)
+  // v0.15 (§20): the Analysis tab's board lives here, so it survives switching tabs (never saved: Adam, v0.15 planning).
+  const [analysisBoard, setAnalysisBoard] = useState<AnalysisBoardState>(newAnalysisBoard);
+  const [analysisPending, setAnalysisPending] = useState<AnalysisLine | null>(null);
+  const clearAnalysisPending = useCallback(() => setAnalysisPending(null), []);
+  const openInAnalysis = useCallback(
+    (line: AnalysisLine) => {
+      // FR-14.6: straight onto an empty board; a board with moves asks first (Adam, v0.15 planning).
+      if (hasMoves(analysisBoard.tree)) setAnalysisPending(line);
+      else setAnalysisBoard(analysisBoardFromLine(line));
+      setPage({ kind: "analysis" });
+    },
+    [analysisBoard],
+  );
   const [suggestion, setSuggestion] = useState<SuggestionView | null>(null); // FR-10.28–10.31
   const [catalog, setCatalog] = useState<ThemeGroup[]>([]);
   const [importOpen, setImportOpen] = useState(false);
@@ -407,6 +428,15 @@ export function App() {
           />
         )}
         {page.kind === "studies" && <StudiesView coordinates={coordinates} />}
+        {page.kind === "analysis" && (
+          <AnalysisView
+            board={analysisBoard}
+            onBoard={setAnalysisBoard}
+            pending={analysisPending}
+            onPendingDone={clearAnalysisPending}
+            coordinates={coordinates}
+          />
+        )}
         {page.kind === "openings" && <OpeningsView key={`${page.family ?? ""}:${page.query ?? ""}`} initialFamily={page.family ?? null} initialQuery={page.query ?? ""} coordinates={coordinates} />}
         {page.kind === "coach" && (
           <CoachView
@@ -449,6 +479,7 @@ export function App() {
             onBack={() => setPage({ kind: page.from === "coach" ? "coach" : page.from === "trainer" ? "trainer" : "games" })}
             coordinates={coordinates}
             autoExplain={page.explain ?? false}
+            onOpenInAnalysis={openInAnalysis}
             onTrain={(p) => {
               // FR-11.18 Train these: only on your click, after the confirm; saved presets don't change. It sets
               // the themes and rating; themes need Lichess puzzles and no ratios, so those switch only if they
@@ -613,6 +644,7 @@ export function App() {
                 coordinates={coordinates}
                 wide={collapsed}
                 onOpenGame={(id, ply) => setPage({ kind: "review", gameId: id, ply })}
+                onOpenInAnalysis={openInAnalysis}
               />
             )}
           </Grid.Col>
@@ -668,6 +700,14 @@ export function App() {
                   data-testid="nav-studies"
                 >
                   Studies
+                </Button>
+                <Button
+                  size="xs"
+                  variant={page.kind === "analysis" ? "light" : "subtle"}
+                  onClick={() => setPage({ kind: "analysis" })}
+                  data-testid="nav-analysis"
+                >
+                  Analysis
                 </Button>
                 <Button
                   size="xs"
