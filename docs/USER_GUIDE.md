@@ -76,7 +76,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Wikibooks**: opening **Read about this position**, or asking for an AI note, requests that page from en.wikibooks.org. The page's name is your line's moves, so Wikimedia sees those moves, as it would if you opened the page in a browser. It needs no sign-in and sends nothing else. Pages are saved on your PC. Turn **Use Wikibooks** off and nothing is requested.
   - **Lichess studies** (v0.14). Your copies, your place, hearts and progress stay in `user.db`. Nothing about them is ever sent to Lichess or to an AI.
     - **Adding a study, or Check for updates**, downloads that one study from lichess.org (`/api/study/<id>.pgn`), without your sign-in. Only if Lichess refuses because the study is private, and your sign-in allows reading studies, is it asked again with your sign-in.
-    - **Studies by author** asks lichess.org for that username's public studies (`/api/study/by/<name>`). Nothing else is sent.
+    - **Studies by author** asks lichess.org for that username's public studies (`/api/study/by/<name>`). If that list is empty, it also asks whether the user exists (`/api/user/<name>`), so it can tell you about a typo. Nothing else is sent.
     - **The Lichess window** loads lichess.org pages, and whatever those pages load, like a browser would, in its own temporary profile with no sign-in. WeakSquare never reads what you type there. It learns only which study is on screen, so **Add this study** works. Links to other sites open in your usual browser.
     - **Open Lichess in your browser** and **Open on Lichess** open lichess.org in your usual browser, like any link.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
@@ -1170,7 +1170,7 @@ On a study's page, its chapters are listed on the left. Click one to open it.
 - **Play-along chapters** (Lichess calls them *interactive* or *gamebook* chapters): you play the side the board faces and the app plays the other. The moves still to come are hidden. If you play a move the author wrote about, you see what they said about it; otherwise *Not this one. Try again.* After two tries you can ask for a **Hint** or **Show the move**.
 - The author's text, arrows and highlighted squares appear as you go.
 
-Nothing here is scored or affects any rating. Reaching the end of a chapter's main line marks it done (✓), and **Next chapter** moves on.
+Nothing here is scored or affects any rating. Reaching the end of a chapter's main line marks it done (✓), and **Next chapter** moves on. A chapter with no moves, such as an introduction or a text chapter, is done as soon as you open it.
 
 Your place is saved as you go, so closing the app and choosing **Continue** brings you back to the same move. **More → Restart this chapter** or **Restart the study** starts again; restarting the study also clears the ✓ marks.
 

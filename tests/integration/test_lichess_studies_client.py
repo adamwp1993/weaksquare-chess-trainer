@@ -88,3 +88,23 @@ def test_studies_by_parses_strictly() -> None:
     assert [(s.study_id, s.name, s.created_ms, s.updated_ms) for s in got] == [
         ("TestGb01", "One", 1, 2), ("TestNm02", "Two", None, None),
     ]  # fmt: skip
+
+
+def test_user_exists_is_a_plain_get_and_false_only_on_a_404() -> None:
+    """QA v0.14-B2: asked when an author lists nothing, since Lichess lists an unknown user as empty."""
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        if req.url.path.endswith("/player_nobody"):
+            return httpx.Response(404, json={"error": "Not found"})
+        if req.url.path.endswith("/player_broken"):
+            return httpx.Response(503)
+        return httpx.Response(200, json={"id": "player_author", "username": "player_author"})
+
+    c = client(handler)
+    assert c.user_exists("player_author") is True
+    assert c.user_exists("player_nobody") is False
+    assert seen[0].url.path == "/api/user/player_author" and "authorization" not in seen[0].headers
+    with pytest.raises(HttpError):
+        c.user_exists("player_broken")

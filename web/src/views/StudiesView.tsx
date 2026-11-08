@@ -41,7 +41,9 @@ type Filter = "all" | "favorites" | "in_progress" | "finished";
 type Open = { studyId: string; chapterKey: string | null; path: string[] };
 
 function message(e: unknown): string {
-  return e instanceof ApiCallError || e instanceof Error ? e.message : String(e);
+  return e instanceof ApiCallError || e instanceof Error
+    ? e.message
+    : String(e);
 }
 
 function progressLabel(s: StudySummary): string {
@@ -49,7 +51,9 @@ function progressLabel(s: StudySummary): string {
   if (s.place_chapter_title) {
     return `${s.done} of ${s.playable} chapters done · at “${s.place_chapter_title}”`;
   }
-  return s.done ? `${s.done} of ${s.playable} chapters done` : `${s.playable} chapter${s.playable === 1 ? "" : "s"}`;
+  return s.done
+    ? `${s.done} of ${s.playable} chapters done`
+    : `${s.playable} chapter${s.playable === 1 ? "" : "s"}`;
 }
 
 /** Follows the jobs this page started (adding, checking for updates) through the pushed job events. */
@@ -81,7 +85,11 @@ export function StudiesView({ coordinates }: { coordinates: boolean }) {
   const [open, setOpen] = useState<Open | null>(null);
   const [tab, setTab] = useState<string | null>("mine");
   const [version, setVersion] = useState(0);
-  const [notice, setNotice] = useState<{ text: string; code: string | null; ok: boolean } | null>(null);
+  const [notice, setNotice] = useState<{
+    text: string;
+    code: string | null;
+    ok: boolean;
+  } | null>(null);
 
   const { running, watch } = useJobs(
     useCallback(async (job: Job) => {
@@ -93,7 +101,8 @@ export function StudiesView({ coordinates }: { coordinates: boolean }) {
       setNotice({ text: job.message, code: null, ok: true });
       setVersion((v) => v + 1);
       const r = await api.getStudyAddResult(job.id);
-      if (r) setOpen({ studyId: r.study_id, chapterKey: r.chapter_key, path: [] });
+      if (r)
+        setOpen({ studyId: r.study_id, chapterKey: r.chapter_key, path: [] });
     }, []),
   );
 
@@ -101,7 +110,12 @@ export function StudiesView({ coordinates }: { coordinates: boolean }) {
   useEffect(
     () =>
       api.onEvent((e) => {
-        if (e.name === "study_window" && e.payload.kind === "added" && e.payload.job_id) watch(e.payload.job_id);
+        if (
+          e.name === "study_window" &&
+          e.payload.kind === "added" &&
+          e.payload.job_id
+        )
+          watch(e.payload.job_id);
       }),
     [watch],
   );
@@ -112,7 +126,11 @@ export function StudiesView({ coordinates }: { coordinates: boolean }) {
       try {
         watch(await start());
       } catch (e) {
-        setNotice({ text: message(e), code: e instanceof ApiCallError ? e.code : null, ok: false });
+        setNotice({
+          text: message(e),
+          code: e instanceof ApiCallError ? e.code : null,
+          ok: false,
+        });
       }
     },
     [watch],
@@ -146,13 +164,19 @@ export function StudiesView({ coordinates }: { coordinates: boolean }) {
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
       <Tabs value={tab} onChange={setTab}>
         <Tabs.List>
-          <Tabs.Tab value="mine" data-testid="studies-tab-mine">My studies</Tabs.Tab>
-          <Tabs.Tab value="find" data-testid="studies-tab-find">Find studies</Tabs.Tab>
+          <Tabs.Tab value="mine" data-testid="studies-tab-mine">
+            My studies
+          </Tabs.Tab>
+          <Tabs.Tab value="find" data-testid="studies-tab-find">
+            Find studies
+          </Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="mine" pt="md">
           <MyStudies
             version={version}
-            onOpen={(id, chapterKey, path) => setOpen({ studyId: id, chapterKey, path })}
+            onOpen={(id, chapterKey, path) =>
+              setOpen({ studyId: id, chapterKey, path })
+            }
             onFind={() => setTab("find")}
           />
         </Tabs.Panel>
@@ -164,10 +188,21 @@ export function StudiesView({ coordinates }: { coordinates: boolean }) {
   );
 }
 
-function Notice({ notice, onClose }: { notice: { text: string; code: string | null; ok: boolean }; onClose: () => void }) {
+function Notice({
+  notice,
+  onClose,
+}: {
+  notice: { text: string; code: string | null; ok: boolean };
+  onClose: () => void;
+}) {
   const [signing, setSigning] = useState(false);
   return (
-    <Alert color={notice.ok ? "green" : "orange"} withCloseButton onClose={onClose} data-testid="study-notice">
+    <Alert
+      color={notice.ok ? "green" : "orange"}
+      withCloseButton
+      onClose={onClose}
+      data-testid="study-notice"
+    >
       <Text size="sm">{notice.text}</Text>
       {(notice.code === "study_scope" || notice.code === "study_private") && (
         <Group gap="xs" mt="xs">
@@ -185,9 +220,13 @@ function Notice({ notice, onClose }: { notice: { text: string; code: string | nu
             }}
             data-testid="study-sign-in"
           >
-            {notice.code === "study_scope" ? "Sign in again" : "Sign in with Lichess"}
+            {notice.code === "study_scope"
+              ? "Sign in again"
+              : "Sign in with Lichess"}
           </Button>
-          <Text size="xs" c="dimmed">Approve in your browser, then add the study again.</Text>
+          <Text size="xs" c="dimmed">
+            Approve in your browser, then add the study again.
+          </Text>
         </Group>
       )}
     </Alert>
@@ -247,13 +286,19 @@ function MyStudies({
         />
         <OptionInfo id="studies.filter" />
       </Group>
-      {error && <Text c="red" size="sm">{error}</Text>}
+      {error && (
+        <Text c="red" size="sm">
+          {error}
+        </Text>
+      )}
       {rows === null ? (
         <Loader size="sm" />
       ) : rows.length === 0 ? (
         <Paper withBorder p="md" data-testid="studies-empty">
           <Text size="sm">
-            {filter === "all" ? "You haven't added any studies yet." : "No studies here."}{" "}
+            {filter === "all"
+              ? "You haven't added any studies yet."
+              : "No studies here."}{" "}
             {filter === "all" && (
               <Anchor component="button" onClick={onFind}>
                 Find studies
@@ -267,15 +312,41 @@ function MyStudies({
             <Group justify="space-between" wrap="nowrap" align="flex-start">
               <Stack gap={2} style={{ minWidth: 0 }}>
                 <Group gap="xs" wrap="nowrap">
-                  <Text fw={600} style={{ overflowWrap: "anywhere" }} data-testid="study-title">{s.title}</Text>
-                  {s.private && <Badge size="xs" variant="outline">Private</Badge>}
+                  <Text
+                    fw={600}
+                    style={{ overflowWrap: "anywhere" }}
+                    data-testid="study-title"
+                  >
+                    {s.title}
+                  </Text>
+                  {s.private && (
+                    <Badge size="xs" variant="outline">
+                      Private
+                    </Badge>
+                  )}
                 </Group>
-                <Text size="xs" c="dimmed">by {s.author ?? "unknown"} · {progressLabel(s)}</Text>
+                <Text size="xs" c="dimmed">
+                  by {s.author ?? "unknown"} · {progressLabel(s)}
+                </Text>
               </Stack>
               <Group gap={4} wrap="nowrap">
-                <HeartButton hearted={s.hearted} onChange={async (h) => { await api.heartStudy(s.id, h); reload(); }} />
-                <Button size="xs" onClick={() => cont(s)} data-testid="study-continue">
-                  {s.status === "new" ? "Start" : s.status === "finished" ? "Open" : "Continue"}
+                <HeartButton
+                  hearted={s.hearted}
+                  onChange={async (h) => {
+                    await api.heartStudy(s.id, h);
+                    reload();
+                  }}
+                />
+                <Button
+                  size="xs"
+                  onClick={() => cont(s)}
+                  data-testid="study-continue"
+                >
+                  {s.status === "new"
+                    ? "Start"
+                    : s.status === "finished"
+                      ? "Open"
+                      : "Continue"}
                 </Button>
               </Group>
             </Group>
@@ -287,7 +358,15 @@ function MyStudies({
 }
 
 // ---- Find studies (FR-13.2–13.6, 13.5a) ---------------------------------------------------------------------------
-function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean; onAdd: (start: () => Promise<string>) => void }) {
+function FindStudies({
+  version,
+  busy,
+  onAdd,
+}: {
+  version: number;
+  busy: boolean;
+  onAdd: (start: () => Promise<string>) => void;
+}) {
   const [text, setText] = useState("");
   const [author, setAuthor] = useState("");
   const [authorRows, setAuthorRows] = useState<AuthorStudy[] | null>(null);
@@ -311,13 +390,19 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
         if (e.payload.kind === "closed") {
           setWindowOpen(false);
           setWindowStudy(null);
-        } else if (e.payload.kind === "page") setWindowStudy(e.payload.study_id);
+        } else if (e.payload.kind === "page")
+          setWindowStudy(e.payload.study_id);
       }),
     [],
   );
 
-  const openings = useMemo(() => [...new Set(starter.map((s) => s.opening))].sort(), [starter]);
-  const shown = opening ? starter.filter((s) => s.opening === opening) : starter;
+  const openings = useMemo(
+    () => [...new Set(starter.map((s) => s.opening))].sort(),
+    [starter],
+  );
+  const shown = opening
+    ? starter.filter((s) => s.opening === opening)
+    : starter;
 
   const search = async () => {
     setSearching(true);
@@ -335,9 +420,12 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
   return (
     <Stack gap="lg">
       <Paper withBorder p="md">
-        <Text fw={600} mb={4}>Paste a study link</Text>
+        <Text fw={600} mb={4}>
+          Paste a study link
+        </Text>
         <Text size="sm" c="dimmed" mb="xs">
-          A Lichess study address (or a link to one of its chapters), or just its 8-character ID.
+          A Lichess study address (or a link to one of its chapters), or just
+          its 8-character ID.
         </Text>
         <form
           onSubmit={(e) => {
@@ -345,7 +433,11 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
             onAdd(() => api.addStudy(text));
           }}
         >
-          <Group gap="xs" align="flex-end" data-no-tip="free text: a link you paste">
+          <Group
+            gap="xs"
+            align="flex-end"
+            data-no-tip="free text: a link you paste"
+          >
             <TextInput
               style={{ flex: 1 }}
               placeholder="https://lichess.org/study/…"
@@ -354,13 +446,22 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
               aria-label="Study link or ID"
               data-testid="study-paste"
             />
-            <Button type="submit" disabled={!text.trim() || busy} data-testid="study-paste-add">
+            <Button
+              type="submit"
+              disabled={!text.trim() || busy}
+              data-testid="study-paste-add"
+            >
               Add
             </Button>
           </Group>
         </form>
         <Group gap="xs" mt="sm">
-          <Button size="xs" variant="default" onClick={() => api.openLichessStudiesInBrowser()} data-testid="study-open-browser">
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => api.openLichessStudiesInBrowser()}
+            data-testid="study-open-browser"
+          >
             Open Lichess in your browser
           </Button>
           <Button
@@ -377,33 +478,52 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
             }}
             data-testid="study-open-window"
           >
-            {windowOpen ? "Bring the Lichess window forward" : "Browse Lichess in a window"}
+            {windowOpen
+              ? "Bring the Lichess window forward"
+              : "Browse Lichess in a window"}
           </Button>
         </Group>
         <Text size="xs" c="dimmed" mt={6}>
-          The Lichess window shows lichess.org only, in its own process with no access to WeakSquare, your settings or
-          your sign-in. You're signed out of Lichess there. On a study, click <b>Add this study</b> at its top.
+          The Lichess window shows lichess.org only, in its own process with no
+          access to WeakSquare, your settings or your sign-in. You're signed out
+          of Lichess there. On a study, click <b>Add this study</b> at its top.
         </Text>
         {windowOpen && windowStudy && (
           <Group gap="xs" mt="xs">
             <Text size="sm">The Lichess window is showing a study.</Text>
-            <Button size="xs" variant="light" disabled={busy} onClick={() => onAdd(() => api.addStudyById(windowStudy, null))} data-testid="study-add-from-window">
+            <Button
+              size="xs"
+              variant="light"
+              disabled={busy}
+              onClick={() => onAdd(() => api.addStudyById(windowStudy, null))}
+              data-testid="study-add-from-window"
+            >
               Add it
             </Button>
           </Group>
         )}
-        {windowError && <Text size="sm" c="red" mt="xs">{windowError}</Text>}
+        {windowError && (
+          <Text size="sm" c="red" mt="xs">
+            {windowError}
+          </Text>
+        )}
       </Paper>
 
       <Paper withBorder p="md">
-        <Text fw={600} mb={4}>Studies by author</Text>
+        <Text fw={600} mb={4}>
+          Studies by author
+        </Text>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void search();
           }}
         >
-          <Group gap="xs" align="flex-end" data-no-tip="free text: a username you type">
+          <Group
+            gap="xs"
+            align="flex-end"
+            data-no-tip="free text: a username you type"
+          >
             <TextInput
               style={{ flex: 1 }}
               placeholder="Lichess username"
@@ -412,19 +532,42 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
               aria-label="Lichess username"
               data-testid="study-author"
             />
-            <Button type="submit" variant="default" loading={searching} disabled={!author.trim()} data-testid="study-author-search">
+            <Button
+              type="submit"
+              variant="default"
+              loading={searching}
+              disabled={!author.trim()}
+              data-testid="study-author-search"
+            >
               Search
             </Button>
           </Group>
         </form>
-        {authorError && <Text size="sm" c="red" mt="xs" data-testid="study-author-error">{authorError}</Text>}
+        {authorError && (
+          <Text size="sm" c="red" mt="xs" data-testid="study-author-error">
+            {authorError}
+          </Text>
+        )}
         {authorRows && (
           <Stack gap={4} mt="sm" data-testid="study-author-results">
-            {authorRows.length === 0 && <Text size="sm" c="dimmed">No public studies.</Text>}
+            {authorRows.length === 0 && (
+              <Text size="sm" c="dimmed">
+                No public studies.
+              </Text>
+            )}
             {authorRows.map((s) => (
               <Group key={s.study_id} justify="space-between" wrap="nowrap">
-                <Text size="sm" style={{ overflowWrap: "anywhere" }}>{s.name}</Text>
-                <Button size="xs" variant="light" disabled={busy} onClick={() => onAdd(() => api.addStudyById(s.study_id, null))}>
+                <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                  {s.name}
+                </Text>
+                <Button
+                  size="xs"
+                  variant="light"
+                  disabled={busy}
+                  onClick={() =>
+                    onAdd(() => api.addStudyById(s.study_id, null))
+                  }
+                >
                   {s.saved ? "Open" : "Add"}
                 </Button>
               </Group>
@@ -443,23 +586,43 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
             data={openings}
             value={opening}
             onChange={setOpening}
-            label={<>Opening <OptionInfo id="studies.starterOpening" /></>}
+            label={
+              <>
+                Opening <OptionInfo id="studies.starterOpening" />
+              </>
+            }
             data-testid="study-starter-opening"
           />
         </Group>
         <Text size="xs" c="dimmed" mb="xs">
-          Comes with WeakSquare: links, titles and authors only. A study is downloaded when you add it.
+          Comes with WeakSquare: links, titles and authors only. A study is
+          downloaded when you add it.
         </Text>
         <ScrollArea.Autosize mah={320}>
           <Stack gap={4} data-testid="study-starter">
-            {shown.length === 0 && <Text size="sm" c="dimmed">No starter studies.</Text>}
+            {shown.length === 0 && (
+              <Text size="sm" c="dimmed">
+                No starter studies.
+              </Text>
+            )}
             {shown.map((s) => (
               <Group key={s.study_id} justify="space-between" wrap="nowrap">
                 <Stack gap={0} style={{ minWidth: 0 }}>
-                  <Text size="sm" style={{ overflowWrap: "anywhere" }}>{s.title}</Text>
-                  <Text size="xs" c="dimmed">by {s.author} · {s.opening}</Text>
+                  <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                    {s.title}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    by {s.author} · {s.opening}
+                  </Text>
                 </Stack>
-                <Button size="xs" variant="light" disabled={busy} onClick={() => onAdd(() => api.addStudyById(s.study_id, null))}>
+                <Button
+                  size="xs"
+                  variant="light"
+                  disabled={busy}
+                  onClick={() =>
+                    onAdd(() => api.addStudyById(s.study_id, null))
+                  }
+                >
                   {s.saved ? "Open" : "Add"}
                 </Button>
               </Group>
@@ -472,7 +635,15 @@ function FindStudies({ version, busy, onAdd }: { version: number; busy: boolean;
 }
 
 // ---- one study: its chapters and the reader (FR-13.7, 13.8, 13.10) ----------------------------------------------
-function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boolean; onBack: () => void }) {
+function StudyPage({
+  open,
+  coordinates,
+  onBack,
+}: {
+  open: Open;
+  coordinates: boolean;
+  onBack: () => void;
+}) {
   const [detail, setDetail] = useState<StudyDetail | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(open.chapterKey);
   const [startPath, setStartPath] = useState<string[]>(open.path);
@@ -489,7 +660,9 @@ function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boo
     api.getStudy(id).then(
       (d) => {
         setDetail(d);
-        setChapterKey((k) => k ?? d.chapters.find((c) => !c.rejected)?.key ?? null);
+        setChapterKey(
+          (k) => k ?? d.chapters.find((c) => !c.rejected)?.key ?? null,
+        );
       },
       (e) => setError(message(e)),
     );
@@ -537,7 +710,17 @@ function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boo
   const onFinished = useCallback(() => {
     if (!chapterKey) return;
     api.setStudyChapterDone(id, chapterKey, true).then(
-      () => setDetail((d) => (d ? { ...d, chapters: d.chapters.map((c) => (c.key === chapterKey ? { ...c, done: true } : c)) } : d)),
+      () =>
+        setDetail((d) =>
+          d
+            ? {
+                ...d,
+                chapters: d.chapters.map((c) =>
+                  c.key === chapterKey ? { ...c, done: true } : c,
+                ),
+              }
+            : d,
+        ),
       () => undefined,
     );
   }, [id, chapterKey]);
@@ -549,33 +732,74 @@ function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boo
       <Group justify="space-between" wrap="nowrap" align="flex-start">
         <Stack gap={2} style={{ minWidth: 0 }}>
           <Group gap="xs">
-            <Button size="xs" variant="subtle" onClick={onBack} data-testid="study-back-to-list">
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={onBack}
+              data-testid="study-back-to-list"
+            >
               ← My studies
             </Button>
           </Group>
-          <Title order={3} style={{ overflowWrap: "anywhere" }} data-testid="study-page-title">{s.title}</Title>
+          <Title
+            order={3}
+            style={{ overflowWrap: "anywhere" }}
+            data-testid="study-page-title"
+          >
+            {s.title}
+          </Title>
           <Text size="sm" c="dimmed">
             by {s.author ?? "unknown"} ·{" "}
-            <Anchor component="button" size="sm" onClick={() => api.openStudyOnLichess(id, chapterKey)} data-testid="study-on-lichess">
+            <Anchor
+              component="button"
+              size="sm"
+              onClick={() => api.openStudyOnLichess(id, chapterKey)}
+              data-testid="study-on-lichess"
+            >
               Open on Lichess
             </Anchor>{" "}
             · your copy, saved on this PC
           </Text>
         </Stack>
         <Group gap={4} wrap="nowrap">
-          <HeartButton hearted={s.hearted} onChange={async (h) => { await api.heartStudy(id, h); setReload((v) => v + 1); }} />
+          {/* Only the summary changes: reloading would remount the reader and lose your place (QA v0.14-B5). */}
+          <HeartButton
+            hearted={s.hearted}
+            onChange={async (h) => {
+              await api.heartStudy(id, h);
+              setDetail((d) =>
+                d ? { ...d, summary: { ...d.summary, hearted: h } } : d,
+              );
+            }}
+          />
           <Menu position="bottom-end">
             <Menu.Target>
-              <Button size="xs" variant="default" data-testid="study-menu">More</Button>
+              <Button size="xs" variant="default" data-testid="study-menu">
+                More
+              </Button>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item onClick={() => setRepertoireOpen(true)} data-testid="study-add-repertoire">
+              <Menu.Item
+                onClick={() => setRepertoireOpen(true)}
+                data-testid="study-add-repertoire"
+              >
                 Add to my repertoire…
               </Menu.Item>
-              <Menu.Item onClick={async () => { setUpdateNote(null); watch(await api.checkStudyUpdates(id)); }} data-testid="study-check-updates">
+              <Menu.Item
+                onClick={async () => {
+                  setUpdateNote(null);
+                  watch(await api.checkStudyUpdates(id));
+                }}
+                data-testid="study-check-updates"
+              >
                 Check for updates
               </Menu.Item>
-              <Menu.Item onClick={() => chapterKey && pick(chapterKey)} data-testid="study-restart-chapter">Restart this chapter</Menu.Item>
+              <Menu.Item
+                onClick={() => chapterKey && pick(chapterKey)}
+                data-testid="study-restart-chapter"
+              >
+                Restart this chapter
+              </Menu.Item>
               <Menu.Item
                 onClick={async () => {
                   await api.restartStudy(id);
@@ -589,15 +813,33 @@ function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boo
                 Restart the study
               </Menu.Item>
               <Menu.Divider />
-              <Menu.Item color="red" onClick={() => setConfirmDelete(true)} data-testid="study-delete">Delete from My studies</Menu.Item>
+              <Menu.Item
+                color="red"
+                onClick={() => setConfirmDelete(true)}
+                data-testid="study-delete"
+              >
+                Delete from My studies
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         </Group>
       </Group>
       {running && (
-        <Group gap="xs"><Loader size="xs" /><Text size="sm">{running.message}</Text></Group>
+        <Group gap="xs">
+          <Loader size="xs" />
+          <Text size="sm">{running.message}</Text>
+        </Group>
       )}
-      {updateNote && <Alert color="blue" withCloseButton onClose={() => setUpdateNote(null)} data-testid="study-update-note">{updateNote}</Alert>}
+      {updateNote && (
+        <Alert
+          color="blue"
+          withCloseButton
+          onClose={() => setUpdateNote(null)}
+          data-testid="study-update-note"
+        >
+          {updateNote}
+        </Alert>
+      )}
       {update && (
         <UpdateReview
           update={update}
@@ -623,19 +865,47 @@ function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boo
                 active={c.key === chapterKey}
                 disabled={!!c.rejected}
                 onClick={() => !c.rejected && pick(c.key)}
-                label={<Text size="sm" style={{ overflowWrap: "anywhere" }}>{c.index + 1}. {c.title}</Text>}
-                description={c.rejected ? `Can't be used: it ${c.rejected}` : c.text_only ? "Text" : c.mode === "gamebook" ? "Play along" : undefined}
-                rightSection={c.done ? <Text size="xs" c="green">✓</Text> : null}
+                label={
+                  <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                    {c.index + 1}. {c.title}
+                  </Text>
+                }
+                description={
+                  c.rejected
+                    ? `Can't be used: it ${c.rejected}`
+                    : c.text_only
+                      ? "Text"
+                      : c.mode === "gamebook"
+                        ? "Play along"
+                        : undefined
+                }
+                rightSection={
+                  c.done ? (
+                    <Text size="xs" c="green">
+                      ✓
+                    </Text>
+                  ) : null
+                }
                 data-testid="study-chapter"
               />
             ))}
           </Stack>
         </ScrollArea.Autosize>
         <Stack gap="sm" style={{ flex: 1, minWidth: 0 }}>
-          {error && <Text c="red" size="sm">{error}</Text>}
+          {error && (
+            <Text c="red" size="sm">
+              {error}
+            </Text>
+          )}
           {chapter ? (
             <>
-              <Text fw={600} data-testid="study-chapter-title" style={{ overflowWrap: "anywhere" }}>{chapter.info.title}</Text>
+              <Text
+                fw={600}
+                data-testid="study-chapter-title"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                {chapter.info.title}
+              </Text>
               <StudyReader
                 key={`${chapter.info.key}:${reload}:${startPath.join(" ")}`}
                 chapter={chapter}
@@ -654,24 +924,52 @@ function StudyPage({ open, coordinates, onBack }: { open: Open; coordinates: boo
       {repertoireOpen && (
         <StudyRepertoireModal
           studyId={id}
-          chapterKey={chapter && !chapter.info.text_only ? chapter.info.key : null}
+          chapterKey={
+            chapter && !chapter.info.text_only ? chapter.info.key : null
+          }
           chapterTitle={chapter?.info.title ?? null}
           defaultColor={chapter?.info.orientation ?? "white"}
           onClose={() => setRepertoireOpen(false)}
         />
       )}
-      <Modal opened={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this study?">
-        <Text size="sm">Your copy, your place and your progress in it are deleted from this PC. The study on Lichess isn't touched.</Text>
+      <Modal
+        opened={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete this study?"
+      >
+        <Text size="sm">
+          Your copy, your place and your progress in it are deleted from this
+          PC. The study on Lichess isn't touched.
+        </Text>
         <Group justify="flex-end" mt="md">
-          <Button variant="default" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-          <Button color="red" onClick={async () => { await api.deleteStudy(id); onBack(); }} data-testid="study-delete-confirm">Delete</Button>
+          <Button variant="default" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
+          <Button
+            color="red"
+            onClick={async () => {
+              await api.deleteStudy(id);
+              onBack();
+            }}
+            data-testid="study-delete-confirm"
+          >
+            Delete
+          </Button>
         </Group>
       </Modal>
     </Stack>
   );
 }
 
-function UpdateReview({ update, onApply, onDiscard }: { update: StudyUpdate; onApply: () => void; onDiscard: () => void }) {
+function UpdateReview({
+  update,
+  onApply,
+  onDiscard,
+}: {
+  update: StudyUpdate;
+  onApply: () => void;
+  onDiscard: () => void;
+}) {
   const list = (label: string, items: string[]) =>
     items.length > 0 && (
       <Text size="sm">
@@ -681,15 +979,36 @@ function UpdateReview({ update, onApply, onDiscard }: { update: StudyUpdate; onA
   return (
     <Paper withBorder p="md" data-testid="study-update">
       <Text fw={600}>The study has changed on Lichess</Text>
-      <Text size="sm" c="dimmed" mb="xs">Nothing changes in your copy until you update it. Your place is kept if its chapter is still there.</Text>
-      {update.title_changed && <Text size="sm"><b>New title:</b> {update.new_title}</Text>}
+      <Text size="sm" c="dimmed" mb="xs">
+        Nothing changes in your copy until you update it. Your place is kept if
+        its chapter is still there.
+      </Text>
+      {update.title_changed && (
+        <Text size="sm">
+          <b>New title:</b> {update.new_title}
+        </Text>
+      )}
       {list("New chapters", update.added)}
       {list("Removed chapters", update.removed)}
       {list("Changed chapters", update.changed)}
-      {update.unchanged > 0 && <Text size="sm">{update.unchanged} chapter{update.unchanged === 1 ? "" : "s"} unchanged.</Text>}
+      {update.unchanged > 0 && (
+        <Text size="sm">
+          {update.unchanged} chapter{update.unchanged === 1 ? "" : "s"}{" "}
+          unchanged.
+        </Text>
+      )}
       <Group gap="xs" mt="sm">
-        <Button size="xs" onClick={onApply} data-testid="study-update-apply">Update my copy</Button>
-        <Button size="xs" variant="default" onClick={onDiscard} data-testid="study-update-discard">Keep my copy</Button>
+        <Button size="xs" onClick={onApply} data-testid="study-update-apply">
+          Update my copy
+        </Button>
+        <Button
+          size="xs"
+          variant="default"
+          onClick={onDiscard}
+          data-testid="study-update-discard"
+        >
+          Keep my copy
+        </Button>
       </Group>
     </Paper>
   );

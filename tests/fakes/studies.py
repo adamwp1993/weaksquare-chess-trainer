@@ -58,12 +58,18 @@ class FakeLichessStudies:
             self.calls.append((f"by:{username}", None))
         if f"by:{username}" in self.errors:
             raise self.errors[f"by:{username}"]
-        if username not in self.authors:
-            raise HttpError("https://lichess.org/api/study/by/x returned HTTP 404", status=404, retryable=False)
-        for obj in self.authors[username]:
+        # Like real Lichess (checked 2026-11-08): an unknown user is HTTP 200 with an empty list, not a 404.
+        for obj in self.authors.get(username, []):
             listing = parse_listing(obj)
             if listing is not None:
                 yield listing
+
+    def user_exists(self, username: str) -> bool:
+        with self._lock:
+            self.calls.append((f"user:{username}", None))
+        if f"user:{username}" in self.errors:
+            raise self.errors[f"user:{username}"]
+        return username in self.authors
 
 
 def rate_limited() -> RateLimited:

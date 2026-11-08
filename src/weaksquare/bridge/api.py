@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import chess
 
@@ -42,6 +42,7 @@ from weaksquare.core.plan import PlanDraft
 from weaksquare.core.preset_suggestion import validate_coach_preset
 from weaksquare.core.reasons import REASONS
 from weaksquare.core.study_links import STUDY_LIST_URL, StudyRef, ref_from_ids
+from weaksquare.core.study_pgn import Node as StudyNode
 from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
@@ -2144,33 +2145,35 @@ def _chapter_info(c: ChapterRow) -> dto.StudyChapterInfo:
     )  # fmt: skip
 
 
-def _flatten_study_tree(tree: dict[str, Any], start_fen: str) -> list[dto.StudyMove]:
+def _flatten_study_tree(root: StudyNode, start_fen: str) -> list[dto.StudyMove]:
     """A chapter's checked tree as a flat list (FR-13.8): ids in pre-order, the root first, each with its position.
-    A text chapter's board can be invalid, so its root keeps the start FEN as given and has no moves."""
+    A text chapter's board can be invalid, so its root keeps the start FEN as given and has no moves. A loop, not a
+    recursion per move (QA v0.14-B1)."""
     out: list[dto.StudyMove] = []
+    kids: list[list[int]] = []
     try:
         root_board: chess.Board | None = chess.Board(start_fen)
     except ValueError:
         root_board = None
-
-    def visit(node: dict[str, Any], parent: int | None, board: chess.Board | None, ply: int) -> int:
+    stack: list[tuple[StudyNode, int | None, chess.Board | None, int]] = [(root, None, root_board, 0)]
+    while stack:
+        node, parent, board, ply = stack.pop()
         my_id = len(out)
-        shapes = [dto.StudyShape(sh[0], sh[1], sh[2]) for sh in node.get("shapes", [])]
+        if parent is not None:
+            kids[parent].append(my_id)
+        shapes = [dto.StudyShape(s.orig, s.dest, cast(Any, s.color)) for s in node.shapes]  # checked by parse_shapes
         fen = board.fen() if board is not None else start_fen
-        out.append(dto.StudyMove(my_id, parent, node.get("san"), node.get("uci"), fen, ply, node.get("comment", ""),
-                                 shapes, list(node.get("nags", [])), []))  # fmt: skip
-        kids: list[int] = []
-        for child in node.get("children", []):
+        out.append(
+            dto.StudyMove(my_id, parent, node.san, node.uci, fen, ply, node.comment, shapes, list(node.nags), [])
+        )
+        kids.append([])
+        for child in reversed(node.children):
             nb = None
             if board is not None:
                 nb = board.copy(stack=False)
-                nb.push_uci(child["uci"])
-            kids.append(visit(child, my_id, nb, ply + 1))
-        out[my_id] = replace(out[my_id], children=kids)
-        return my_id
-
-    visit(tree, None, root_board, 0)
-    return out
+                nb.push_uci(child.uci or "")
+            stack.append((child, my_id, nb, ply + 1))
+    return [replace(m, children=k) for m, k in zip(out, kids, strict=True)]
 
 
 def _story_dto(st: Any) -> dto.GameStoryView:

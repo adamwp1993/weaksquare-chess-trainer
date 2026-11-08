@@ -116,7 +116,7 @@ def test_an_illegal_chapter_is_rejected_and_the_rest_kept_with_a_text_chapter(ri
     with pytest.raises(ValidationError):
         rig.svc.chapter("TestNm02", "Chap0002")
     text_row, text_tree = rig.svc.chapter("TestNm02", "Chap0003")
-    assert text_row.text_only and text_tree == {"comment": "Thanks for studying! This board is empty on purpose."}
+    assert text_row.text_only and text_tree.comment == "Thanks for studying! This board is empty on purpose."
 
 
 def test_a_chapter_link_opens_that_chapter(rig: Rig) -> None:
@@ -209,7 +209,7 @@ def test_a_saved_study_opens_offline_and_after_its_author_deletes_it(rig: Rig) -
     rig.client.errors["TestNm02"] = HttpError("Network error while fetching x: ConnectError")
     calls = len(rig.client.calls)
     row, tree = rig.svc.chapter("TestNm02", "Chap0001")
-    assert row.title == "Main line" and tree["children"][0]["san"] == "e4"
+    assert row.title == "Main line" and tree.children[0].san == "e4"
     assert len(rig.client.calls) == calls  # opening a saved study makes no request
 
 
@@ -268,7 +268,7 @@ def test_a_damaged_row_never_reaches_the_board(rig: Rig) -> None:
     with sqlite3.connect(rig.paths.user_db) as conn:
         conn.execute(
             "UPDATE study_chapters SET tree = ? WHERE chapter_key = 'Chap0001'",
-            ('{"children":[{"uci":"e2e5","san":"e5"}]}',),
+            ('{"v":2,"nodes":[{},{"p":0,"uci":"e2e5","san":"e5"}]}',),
         )
     with pytest.raises(AppError) as e:
         rig.svc.chapter("TestGb01", "Chap0001")

@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from weaksquare.adapters.http import HttpClient
+from weaksquare.adapters.http import HttpClient, HttpError
 from weaksquare.core.study_links import is_study_id
 
 BASE = "https://lichess.org"
@@ -52,6 +52,17 @@ class LichessStudies:
             count += 1
             if count >= MAX_AUTHOR_STUDIES:
                 return
+
+    def user_exists(self, username: str) -> bool:
+        """`GET /api/user/{username}`: False on a 404. Asked only when an author lists no studies, because
+        `/api/study/by/` answers an unknown user with HTTP 200 and an empty list (checked 2026-11-08, QA v0.14-B2)."""
+        try:
+            self._http.get_json(f"{self._base}/api/user/{username}", retry=False)
+        except HttpError as e:
+            if e.status == 404:
+                return False
+            raise
+        return True
 
 
 def parse_listing(obj: object) -> StudyListing | None:

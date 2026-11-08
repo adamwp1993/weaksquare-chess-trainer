@@ -9,6 +9,7 @@ import pytest
 
 from weaksquare.core import study_pgn as sp
 from weaksquare.core.study_pgn import (
+    Node,
     Shape,
     clean_text,
     mainline,
@@ -179,11 +180,54 @@ def test_stored_json_round_trips_and_is_rechecked() -> None:
     stored = json.loads(json.dumps(node_to_json(c.root)))
     assert node_to_json(node_from_json(stored, chess.Board(c.start_fen))) == stored
     # A damaged row can't put an illegal move on the board.
-    stored["children"][0]["uci"] = "e2e5"
+    stored["nodes"][1]["uci"] = "e2e5"
     with pytest.raises(ValueError):
         node_from_json(stored, chess.Board())
-    with pytest.raises(ValueError):
-        node_from_json({"children": [{"uci": "zz"}]}, chess.Board())
+    for bad in (
+        {"v": 2, "nodes": [{}, {"p": 0, "uci": "zz"}]},
+        {"v": 2, "nodes": [{}, {"p": 1, "uci": "e2e4"}]},  # a parent must come first: no cycles
+        {"v": 2, "nodes": [{}, {"p": True, "uci": "e2e4"}]},
+        {"v": 2, "nodes": [{"p": 0}]},
+        {"v": 2, "nodes": []},
+        {"v": 1, "nodes": [{}]},
+        {"children": [{"uci": "e2e4"}]},  # the old nested layout
+    ):
+        with pytest.raises(ValueError):
+            node_from_json(bad, chess.Board())
     # A stored shape with a bad square or colour is dropped on reading.
-    shaped = node_from_json({"shapes": [["e4", None, "green"], ["z9", None, "red"], ["e2", "e4", "purple"]]})
+    shaped = node_from_json(
+        {"v": 2, "nodes": [{"shapes": [["e4", None, "green"], ["z9", None, "red"], ["e2", "e4", "purple"]]}]}
+    )
     assert shaped.shapes == [Shape("e4", None, "green")]
+
+
+def test_qa14_b1_deep_trees_never_recurse_per_move() -> None:
+    """Regression (QA v0.14-B1): a 300-move main line and side lines nested 300 deep are kept whole, stored as JSON,
+    read back and walked, with Python's recursion limit far below their depth."""
+    import sys
+
+    from weaksquare.core.study_pgn import walk
+    from weaksquare.core.study_repertoire import study_moves
+
+    cycle = ["Nf3", "Nf6", "Ng1", "Ng8"]
+    long_line = " ".join(f"{i // 2 + 1}. {cycle[i % 4]}" if i % 2 == 0 else cycle[i % 4] for i in range(600))
+    pgn = f'[Event "S: C1"]\n[ChapterURL "https://lichess.org/study/{SID}/Chap0001"]\n\n{long_line} *\n'
+    # Side lines nested 300 deep: at every move, the main move ends and the side line goes on.
+    nested = Node()
+    at = nested
+    for i in range(300):
+        side = Node(san=cycle[i % 4], uci=["g1f3", "g8f6", "f3g1", "f6g8"][i % 4])
+        at.children = [Node(san="a3" if i % 2 == 0 else "a6", uci="a2a3" if i % 2 == 0 else "a7a6"), side]
+        at = side
+    old = sys.getrecursionlimit()
+    sys.setrecursionlimit(200)
+    try:
+        long_root = parse_study(SID, pgn).chapters[0].root
+        assert len(mainline(long_root)) == 600
+        for root in (long_root, nested):
+            stored = json.loads(json.dumps(node_to_json(root)))
+            back = node_from_json(stored, chess.Board())
+            assert node_to_json(back) == stored and len(walk(back)) == len(walk(root))
+            assert study_moves(back, chess.STARTING_FEN, True)
+    finally:
+        sys.setrecursionlimit(old)

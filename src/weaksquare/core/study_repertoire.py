@@ -35,21 +35,23 @@ def study_moves(root: Node, start_fen: str, include_side_lines: bool) -> list[Ne
     out: list[NewMove] = []
     seen: set[tuple[str, str]] = set()
 
-    def walk(node: Node, board: chess.Board) -> None:
-        kids = node.children if include_side_lines else node.children[:1]
-        for child in kids:
-            move = chess.Move.from_uci(child.uci or "")
-            if move not in board.legal_moves:
-                raise ValueError("illegal move in a checked tree")
-            key = position_key(board)
-            if (key, move.uci()) not in seen:
-                seen.add((key, move.uci()))
-                out.append(NewMove(key, move.uci(), board.san(move), SOURCE))
-            nxt = board.copy(stack=False)
-            nxt.push(move)
-            walk(child, nxt)
+    # A loop, not a recursion per move: a long main line must not pass Python's recursion limit (QA v0.14-B1).
+    def kids(node: Node, board: chess.Board) -> list[tuple[Node, chess.Board]]:
+        return [(c, board) for c in reversed(node.children if include_side_lines else node.children[:1])]
 
-    walk(root, chess.Board(start_fen))
+    stack = kids(root, chess.Board(start_fen))  # (move, the position it's played from), depth first
+    while stack:
+        child, board = stack.pop()
+        move = chess.Move.from_uci(child.uci or "")
+        if move not in board.legal_moves:
+            raise ValueError("illegal move in a checked tree")
+        key = position_key(board)
+        if (key, move.uci()) not in seen:
+            seen.add((key, move.uci()))
+            out.append(NewMove(key, move.uci(), board.san(move), SOURCE))
+        nxt = board.copy(stack=False)
+        nxt.push(move)
+        stack.extend(kids(child, nxt))
     return out
 
 

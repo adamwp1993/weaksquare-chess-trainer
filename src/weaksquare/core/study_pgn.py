@@ -9,7 +9,9 @@ and they're only ever shown as plain text. Arrows and highlights are parsed item
 that item only (python-chess drops the whole group).
 
 The tree is stored as JSON in `study_chapters.tree` (see `node_to_json`), so a saved study opens offline exactly as it
-was checked.
+was checked. It's stored **flat** (a list of moves, each naming its parent) and every walk here is a loop, never a
+recursion per move: a 130-move game nested one level per move would pass Python's recursion limit, and `json` refuses
+deep nesting too (QA v0.14-B1).
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ MAX_CHAPTERS = 64  # Lichess's own limit per study
 MAX_NODES = 5000  # moves per chapter, side lines included
 MAX_COMMENT = 4000  # characters per comment
 MAX_TITLE = 200
-MAX_DEPTH = 200  # nesting of side lines
+TREE_FORMAT = 2  # `node_to_json`'s flat layout
 
 COLORS = {"G": "green", "R": "red", "Y": "yellow", "B": "blue"}
 _COMMAND = re.compile(r"\[%(\w+)\s*([^\]]*)\]")
@@ -194,28 +196,29 @@ def parse_chapter(index: int, game: chess.pgn.Game) -> Chapter:
         base.text_only = True
         base.root = Node(comment=clean_text(game.comment))
         return base
-    base.root = _convert(game, None, 0)
+    base.root = _convert(game)
     return base
 
 
-def _convert(node: chess.pgn.GameNode, move_board: chess.Board | None, depth: int) -> Node:
-    if isinstance(node, chess.pgn.ChildNode):
-        assert move_board is not None
-        out = Node(
-            san=move_board.san(node.move),
-            uci=node.move.uci(),
-            comment=clean_text(node.comment),
-            shapes=parse_shapes(node.comment),
-            nags=sorted(n for n in node.nags if 0 < n < 256),
-        )
-    else:
-        out = Node(comment=clean_text(node.comment), shapes=parse_shapes(node.comment))
-    if depth >= MAX_DEPTH:
-        return out
-    board = node.board()
-    for child in node.variations:
-        out.children.append(_convert(child, board, depth + 1))
-    return out
+def _convert(game: chess.pgn.Game) -> Node:
+    """python-chess's tree as ours, every move kept, in a loop (a long main line must not recurse, B1)."""
+    root = Node(comment=clean_text(game.comment), shapes=parse_shapes(game.comment))
+    stack: list[tuple[chess.pgn.GameNode, Node, chess.Board]] = [(game, root, game.board())]
+    while stack:
+        pnode, out, board = stack.pop()
+        for child in pnode.variations:
+            node = Node(
+                san=board.san(child.move),
+                uci=child.move.uci(),
+                comment=clean_text(child.comment),
+                shapes=parse_shapes(child.comment),
+                nags=sorted(n for n in child.nags if 0 < n < 256),
+            )
+            out.children.append(node)
+            nxt = board.copy(stack=False)
+            nxt.push(child.move)
+            stack.append((child, node, nxt))
+    return root
 
 
 def _chapter_id(url: str) -> str | None:
@@ -239,7 +242,18 @@ def _rejected(index: int, chapter_id: str | None, reason: str) -> Chapter:
 
 
 def _count(node: Node) -> int:
-    return 1 + sum(_count(c) for c in node.children)
+    return sum(1 for _ in walk(node))
+
+
+def walk(root: Node) -> list[Node]:
+    """Every node, root first, in pre-order (a main line before its side lines), without recursion."""
+    out: list[Node] = []
+    stack = [root]
+    while stack:
+        n = stack.pop()
+        out.append(n)
+        stack.extend(reversed(n.children))
+    return out
 
 
 class _TooBig(Exception):
@@ -283,49 +297,83 @@ def _chapter_offsets(handle: io.StringIO) -> list[tuple[int, chess.pgn.Headers]]
 
 
 # ---- JSON for storage and the bridge --------------------------------------------------------------------------------
-def node_to_json(node: Node) -> dict[str, Any]:
-    d: dict[str, Any] = {}
-    if node.san is not None:
-        d["san"], d["uci"] = node.san, node.uci
-    if node.comment:
-        d["comment"] = node.comment
-    if node.shapes:
-        d["shapes"] = [[s.orig, s.dest, s.color] for s in node.shapes]
-    if node.nags:
-        d["nags"] = node.nags
-    if node.children:
-        d["children"] = [node_to_json(c) for c in node.children]
-    return d
+def node_to_json(root: Node) -> dict[str, Any]:
+    """`{"v": 2, "nodes": [...]}`: the nodes in pre-order, root first; every other node has `p`, its parent's index,
+    which is always earlier. Children keep their order (the first is the main line)."""
+    nodes: list[dict[str, Any]] = []
+    stack: list[tuple[Node, int | None]] = [(root, None)]
+    while stack:
+        node, parent = stack.pop()
+        d: dict[str, Any] = {}
+        if parent is not None:
+            d["p"] = parent
+        if node.san is not None:
+            d["san"], d["uci"] = node.san, node.uci
+        if node.comment:
+            d["comment"] = node.comment
+        if node.shapes:
+            d["shapes"] = [[s.orig, s.dest, s.color] for s in node.shapes]
+        if node.nags:
+            d["nags"] = node.nags
+        me = len(nodes)
+        nodes.append(d)
+        stack.extend((c, me) for c in reversed(node.children))
+    return {"v": TREE_FORMAT, "nodes": nodes}
 
 
-def node_from_json(d: Any, board: chess.Board | None = None, depth: int = 0) -> Node:
+def node_from_json(d: Any, board: chess.Board | None = None) -> Node:
     """Read a stored tree back, re-checking every move against `board` (the chapter's start position). A stored tree
     that no longer validates raises ValueError, so a damaged row can't put an illegal move on the board."""
-    if not isinstance(d, dict):
-        raise ValueError("bad node")
-    board = board or chess.Board()
-    node = Node(comment=clean_text(d.get("comment", "")), nags=[n for n in d.get("nags", []) if isinstance(n, int)])
-    for s in d.get("shapes", []):
-        if isinstance(s, list) and len(s) == 3:
-            shapes = parse_shapes(f"[%{'cal' if s[1] else 'csl'} {_color_letter(s[2])}{s[0]}{s[1] or ''}]")
-            node.shapes.extend(shapes)
-    if depth >= MAX_DEPTH:
-        return node
-    for c in d.get("children", []):
-        if not isinstance(c, dict):
-            raise ValueError("bad node")
+    raw = _stored_nodes(d)
+    root = _bare(raw[0])
+    if "p" in raw[0]:
+        raise ValueError("bad root")
+    built: list[tuple[Node, chess.Board]] = [(root, board or chess.Board())]
+    for r in raw[1:]:
+        p = r.get("p")
+        if not isinstance(p, int) or isinstance(p, bool) or not 0 <= p < len(built):
+            raise ValueError("bad parent")
+        parent, parent_board = built[p]
         try:
-            move = chess.Move.from_uci(str(c.get("uci", "")))
+            move = chess.Move.from_uci(str(r.get("uci", "")))
         except ValueError:
             raise ValueError("bad move") from None
-        if move not in board.legal_moves:
+        if move not in parent_board.legal_moves:
             raise ValueError("illegal stored move")
-        child_board = board.copy(stack=False)
-        san = child_board.san(move)
+        child = _bare(r)
+        child.san, child.uci = parent_board.san(move), move.uci()
+        child_board = parent_board.copy(stack=False)
         child_board.push(move)
-        child = node_from_json(c, child_board, depth + 1)
-        child.san, child.uci = san, move.uci()
-        node.children.append(child)
+        parent.children.append(child)
+        built.append((child, child_board))
+    return root
+
+
+def stored_comment(d: Any) -> str:
+    """A text chapter's comment from its stored tree (its board can't be replayed); "" if the row is damaged."""
+    try:
+        return _bare(_stored_nodes(d)[0]).comment
+    except ValueError:
+        return ""
+
+
+def _stored_nodes(d: Any) -> list[dict[str, Any]]:
+    if not isinstance(d, dict) or d.get("v") != TREE_FORMAT:
+        raise ValueError("bad tree")
+    raw = d.get("nodes")
+    if not isinstance(raw, list) or not raw or len(raw) > MAX_NODES + 1 or not all(isinstance(r, dict) for r in raw):
+        raise ValueError("bad tree")
+    return raw
+
+
+def _bare(r: dict[str, Any]) -> Node:
+    """A stored node's text, shapes and glyphs, re-cleaned; the move is set by the caller."""
+    nags = r.get("nags", [])
+    node = Node(comment=clean_text(r.get("comment", "")),
+                nags=[n for n in nags if isinstance(n, int) and 0 < n < 256] if isinstance(nags, list) else [])  # fmt: skip
+    for s in r.get("shapes", []) if isinstance(r.get("shapes"), list) else []:
+        if isinstance(s, list) and len(s) == 3:
+            node.shapes.extend(parse_shapes(f"[%{'cal' if s[1] else 'csl'} {_color_letter(s[2])}{s[0]}{s[1] or ''}]"))
     return node
 
 

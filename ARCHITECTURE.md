@@ -137,7 +137,7 @@ weaksquare-chess-trainer/
 │  │  ├─ oauth_loopback.py     # one-shot 127.0.0.1 listener for the OAuth redirect (v0.3)
 │  │  ├─ scheduler.py          # run-later timer for sync retries and reconnect checks (v0.3)
 │  │  ├─ lichess_window.py     # v0.14: starts the Lichess window process, reads its JSON lines, re-checks IDs
-│  │  ├─ lichess_studies.py    # v0.14: GET /api/study/{id}.pgn (size-capped) and /api/study/by/{user}
+│  │  ├─ lichess_studies.py    # v0.14: GET /api/study/{id}.pgn (size-capped), /api/study/by/{user}, /api/user/{user}
 │  │  └─ llm/                  # anthropic.py, openai.py over http.py; error mapping (v0.7)
 │  ├─ jobs/runner.py           # background jobs: queue, progress, cancel
 │  └─ vendor/lichess_puzzler/  # Lichess's tagger (cook.py, util.py, model.py), AGPL-3.0, pinned; README.md
@@ -260,7 +260,8 @@ Entry format:
 - Context: the plan left the storage shape, how private studies are detected, how study lines join a repertoire and where the review's strengths are worked out.
 - Decision:
   - **Migration `0014_studies.sql`:** `studies`, `study_chapters` (the checked move tree as JSON, re-checked by `core.study_pgn.node_from_json` whenever it's read, so a damaged row can't put an illegal move on a board), `study_progress` and `study_chapters_done`. Chapters are keyed by Lichess's chapter ID (`idx:<n>` if missing), so your place and finished chapters survive an accepted update where their chapter still exists.
-  - **`core/study_pgn.py`** parses each chapter from its own offset (found with `chess.pgn.read_headers`), so a chapter rejected half-way can't swallow the next. It parses `[%cal]`/`[%csl]` item by item (python-chess drops a whole group when one square is bad), strips every `[%…]` command and control/bidi characters from text, and caps moves, depth and comment length.
+  - **`core/study_pgn.py`** parses each chapter from its own offset (found with `chess.pgn.read_headers`), so a chapter rejected half-way can't swallow the next. It parses `[%cal]`/`[%csl]` item by item (python-chess drops a whole group when one square is bad), strips every `[%…]` command and control/bidi characters from text, and caps moves and comment length.
+  - **The tree is stored flat** (`{"v": 2, "nodes": [...]}`, pre-order, each node naming its earlier parent) and every walk over it (`_convert`, `node_from_json`, `walk`, `study_moves`, the bridge's flattening) is a loop. The first build nested one JSON level per move and recursed per move, and silently cut main lines at 200 plies; raising the cap would hit Python's recursion limit, and `json` refuses deep nesting too (QA v0.14-B1). The cap is now only on moves per chapter (5,000).
   - **Scopes are recorded, not queried.** Lichess's token response doesn't say what was granted, so `AccountService` stores the scopes it asked for at each sign-in (`lichess.scopes`, cleared on sign-out and expiry). A pre-v0.14 sign-in has none, so a 403 on a private study says *Sign in again* without sending the token. A public study never sends it.
   - **`core/study_repertoire.py`** plans Add to my repertoire: main line by default, conflicts only at your-turn positions where you already have a move, **Keep mine** by default, **Use the study's** sets the study's move as main and keeps yours. Only moves reachable from the start are stored, because `core.repertoire.removal` deletes anything unreachable. `RepertoireService.add_study_moves` re-checks each move.
   - **`core.game_review.game_story`** works out the Summary and What you did well from stored `MoveRow`s with the review's own thresholds. The Review screen and Explain my game use the same list; the narrative's `did_well` keeps only ids that were sent, and its cache key gained `"strengths"`.

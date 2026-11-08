@@ -30,6 +30,7 @@ from weaksquare.core.repertoire import NewMove, check_color, is_your_turn
 from weaksquare.core.study_links import StudyRef, clean_username, is_study_id, parse_study_ref, ref_from_ids
 from weaksquare.core.study_pgn import (
     ChapterDiff,
+    Node,
     Study,
     diff_chapters,
     fingerprint,
@@ -38,6 +39,7 @@ from weaksquare.core.study_pgn import (
     node_to_json,
     parse_path,
     parse_study,
+    stored_comment,
 )
 from weaksquare.core.study_repertoire import Choice, Conflict, plan_add, resolve, study_moves
 from weaksquare.jobs.runner import CancelToken, JobFailed, JobRunner, ProgressFn
@@ -54,6 +56,7 @@ Filter = Literal["all", "favorites", "in_progress", "finished"]
 class StudiesClient(Protocol):
     def study_pgn(self, study_id: str, token: str | None = None) -> str: ...
     def studies_by(self, username: str) -> Iterator[Any]: ...
+    def user_exists(self, username: str) -> bool: ...
 
 
 class Repertoire(Protocol):
@@ -323,12 +326,20 @@ class StudiesService:
         try:
             with self._net:
                 found = list(self._client.studies_by(name))
+                # Lichess lists an unknown user's studies as empty, so only then ask whether the user exists (B2).
+                if not found and not self._client.user_exists(name):
+                    raise NotFoundError(f"Lichess has no user called {name}.", code="user_not_found")
+        except NotFoundError:
+            raise
         except Exception as e:
             status = self._errors.status_of(e)
             if status == 404:
                 raise NotFoundError(f"Lichess has no user called {name}.", code="user_not_found") from None
             if self._errors.is_rate_limited(e):
                 raise AppError("Lichess asked WeakSquare to slow down. Try again in a minute.", code="rate_limited",
+                               retryable=True) from None  # fmt: skip
+            if status is not None and status >= 500:  # before the network check, which counts a 5xx as offline (B3)
+                raise AppError("Lichess is having trouble right now. Try again later.", code="lichess_trouble",
                                retryable=True) from None  # fmt: skip
             if self._errors.is_network_error(e):
                 raise AppError("Lichess couldn't be reached. Check your connection.", code="offline",
@@ -374,7 +385,7 @@ class StudiesService:
             self._pending.pop(study_id, None)
 
     # ---- one chapter, your place (FR-13.8, 13.10) ---------------------------------------------------------------------
-    def chapter(self, study_id: str, key: str) -> tuple[ChapterRow, dict[str, Any]]:
+    def chapter(self, study_id: str, key: str) -> tuple[ChapterRow, Node]:
         """A chapter and its move tree, re-checked move by move (a damaged row can't put an illegal move on the board)."""
         _, chapters = self.get(study_id)
         row = next((c for c in chapters if c.key == key), None)
@@ -383,9 +394,9 @@ class StudiesService:
         if row.rejected is not None:
             raise ValidationError(f"This chapter {row.rejected}.", code="chapter_rejected")
         if row.text_only:
-            return row, {"comment": row.tree.get("comment", "")} if isinstance(row.tree, dict) else {}
+            return row, Node(comment=stored_comment(row.tree))
         try:
-            tree = node_to_json(node_from_json(row.tree, chess.Board(row.start_fen)))
+            tree = node_from_json(row.tree, chess.Board(row.start_fen))
         except ValueError:
             log.error("study %s chapter %s failed its re-check", study_id, key)
             raise AppError("This chapter's saved copy is damaged. Delete the study and add it again.",
@@ -397,7 +408,7 @@ class StudiesService:
         moves = parse_path(path)
         if moves is None:
             raise ValidationError("bad path", code="bad_path")
-        if not row.text_only and follow(node_from_json(tree, chess.Board(row.start_fen)), moves) is None:
+        if not row.text_only and follow(tree, moves) is None:
             raise ValidationError("That move isn't in this chapter.", code="bad_path")
         self._repo.set_place(study_id, key, " ".join(moves), self._now())
 
