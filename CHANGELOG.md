@@ -13,6 +13,8 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+Candidates: v0.14-rc1 (2026-11-08)
+
 ### Added
 - **Lichess studies**: a new **Studies** page. Paste a study's link (or a chapter's link, or its ID) under **Find studies** and it's downloaded, checked move by move and kept on your PC, so it works offline and stays if its author deletes it. [FR-13.1, FR-13.5, FR-13.7]
 - **Four ways to find a study**: paste a link, open Lichess in your browser, browse lichess.org in a separate window with **Add this study** (it can't see WeakSquare, your settings or your sign-in), **Studies by author**, and a starter list of opening studies (links, titles and authors only). [FR-13.2, FR-13.3, FR-13.4, FR-13.5a, FR-13.6]

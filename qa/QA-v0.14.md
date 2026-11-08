@@ -1,5 +1,66 @@
 # QA report: v0.14 (Lichess studies + Game Review in three parts)
 
+# Round 2, 2026-11-08: re-verification at `5705bc3` (fixes in `7878123`)
+
+Same rules as round 1. I changed only `tests/` and this report. No credentials, no `-m live`, and no request to lichess.org this round.
+
+## Verdict: **PASS** (no open bugs)
+
+All six round 1 bugs are fixed, and I found no regressions around the changed code. The notes at the end of this section aren't filed as bugs.
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B1 (major) | **FIXED** | Round 1's test passes unmarked: 260 plies kept. New tests run each of these with only 120 stack frames of headroom, so any recursion per move would fail: parsing, storing, re-checking, the bridge's flattening and `study_moves`. The chapter has a 700-ply main line and a 600-ply side line. A 520-ply chapter opens, saves your place at its end and continues. The 5,000-move cap holds (5,000 kept, 5,001 rejected *too large*). The three real studies from round 1 still parse and round-trip in the new format |
+| B2 (minor) | **FIXED** | Round 1's test, extended by the builder, passes. The `/api/user/` check runs only after an empty listing, never after a non-empty one, and sends no token even when signed in. The User Guide's privacy entry and FR-13.5a mention the extra request |
+| B3 (minor) | **FIXED** | A 5xx gives `lichess_trouble`. Offline and rate-limited messages are unchanged |
+| B4 (major) | **FIXED** | Real app: the intro chapter is `done` after **Next chapter**. Mock: a chapter with moves isn't ticked when it opens at its start, and is ticked at its main-line end; a text chapter is ticked when it opens |
+| B5 (minor) | **FIXED** | Real app and mock: after the heart, the board stays on the move and the saved place is unchanged |
+| B6 (major) | **FIXED** | Real app at 1400x900: step-through and play-along boards are both at least 240 px. Mock at 900x700 (stacked layout), 1024x700 and 1920x1080: no horizontal overflow, the board stays between 240 and 560 px, and it no longer changes size when **Back to main line** appears. Screenshots: `tests/e2e/artifacts/qa-v014-r2-*.png` |
+
+## Regression checks around the changed code
+- **Stored tree format:** order, comments, shapes and glyphs survive JSON storage, and parents always come before their children. These damaged rows are refused with `ValueError`, so the service shows *saved copy is damaged*:
+  - a missing or wrong version
+  - the old nested format
+  - an empty node list
+  - a root with a parent, a node that is its own parent, or a parent that comes later
+  - a parent index that is a bool, negative or a string
+  - an illegal or unreadable move, or a non-object node
+  - more than 5,001 nodes
+- **`chapter()` returns a Node:** `set_place` accepts places in side lines and refuses moves off the tree. Text chapters return their text with no children. A damaged text row reads as empty text. The bridge flattens a text chapter to one entry holding its FEN as given.
+- **Check for updates:** a byte-only change in the PGN reports *Only small changes*, with all 3 chapters unchanged. So stored and freshly parsed chapters fingerprint the same way, text and rejected chapters included.
+- **Bridge flattening:** ids are in pre-order, each child points back to its parent, and every child's FEN is its parent's FEN plus the move.
+
+## Commands at `5705bc3`
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **3766 passed**, 1 skipped, 2 xfailed. It started before my round 2 files existed; those ran separately: unit 20 passed, integration 6 passed |
+| `uv run pytest -m e2e` | **509 passed** (505 plus my 4 round 2 tests) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | 78 passed, 1 skipped, **1 failed**: `test_qa_v011_real_app.py::test_qa_v011_whole_game_report_and_per_run_options`, explained below. It passed in 9 re-runs of that file |
+| ruff check, ruff format, mypy, tsc, ESLint, pre-commit | clean |
+| `python scripts/check_docs.py --strict` | 0 errors, 1 warning (the `pyproject.toml` version) |
+
+**The smoke failure is a test problem, not a product bug.** I'm not filing it against v0.14.
+- **What failed:** the v0.11 QA test's last check looked for the bare word `advanced` anywhere in `user.db`'s settings, and it found the word in this run. Pytest truncated the offending value.
+- **Likely cause:** the puzzle theme `advancedPawn` in `mixer.suggested`, the Coach's suggested mix. Its themes depend on real Stockfish's analysis, so the word appears only in some runs.
+- **What I changed:** in `tests/smoke/test_qa_v011_real_app.py` the check now looks for the per-run option keys and JSON fields themselves, and names the offending rows. It passed afterwards.
+
+## Tests added in round 2
+- `tests/unit/test_qa_v014_r2.py` (20 tests): `test_qa14r2_order_comments_shapes_and_glyphs_survive_storage_through_json`, `test_qa14r2_a_damaged_stored_tree_is_refused` (15 cases), `test_qa14r2_stored_text_survives_and_a_damaged_text_chapter_reads_as_empty`, `test_qa14r2_the_move_cap_still_holds_at_5000`, `test_qa14r2_parse_store_recheck_flatten_and_repertoire_never_recurse_per_move`, `test_qa14r2_a_text_chapter_flattens_to_its_board_and_text`
+- `tests/integration/test_qa_v014_r2_studies.py`: `test_qa14r2_a_byte_change_with_the_same_content_lists_every_chapter_unchanged`, `test_qa14r2_a_260_move_chapter_opens_saves_your_place_and_adds_to_the_repertoire`, `test_qa14r2_your_place_is_limited_to_600_moves_deep`, `test_qa14r2_text_chapters_still_open_with_their_text`, `test_qa14r2_a_row_in_the_old_nested_format_reads_as_damaged`, `test_qa14r2_b2_the_user_check_sends_no_token_and_only_follows_an_empty_listing`
+- `tests/e2e/test_qa_v014_ui.py`: `test_qa14r2_opening_a_chapter_with_moves_doesnt_finish_it_but_a_text_chapter_does`, `test_qa14r2_the_reader_fits_narrow_and_wide_windows` (900x700, 1024x700, 1920x1080)
+- `tests/smoke/test_qa_v011_real_app.py`: the settings check made precise (above)
+
+## Notes (not filed)
+- **Old saved copies:** a copy saved before `7878123`, in the nested format, now opens as *damaged: delete the study and add it again*. Nothing in the format change converts it. That's harmless, because v0.14 hasn't been released. Copies saved in Adam's dev folder during the build would need re-adding.
+- **Your place past ply 600:** `parse_path` caps a saved place at 600 plies, so in a chapter longer than 300 moves your place stops being saved past that point. The UI ignores the error. Real games essentially never get there, and `test_qa14r2_your_place_is_limited_to_600_moves_deep` records the limit.
+- **Wide windows:** at 1920x1080 the board column (7 of 12) is wider than the 560 px board, which leaves an empty band of about 400 px before the move list. It's cosmetic.
+
+## For Adam's manual test
+Unchanged from round 1 (below). Step 2's play-along board is now full size.
+
 # Round 1, 2026-11-08, at `6940507` (branch `v0.14`)
 
 I changed only `tests/` and this report. No credentials, no `-m live`. Smoke runs were signed out, in temp data folders. The Lichess window ran only against local pages (`--test-origin`). I made 4 plain GETs to lichess.org's documented study API (3 study `.pgn` downloads, 1 `/api/study/by/<made-up name>`). Nothing from them was committed.

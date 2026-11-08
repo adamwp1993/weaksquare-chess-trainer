@@ -125,3 +125,51 @@ def test_qa14_a_bad_username_and_an_author_search_error_show_a_message(page: Any
     err = page.get_by_test_id("study-author-error")
     err.wait_for()
     assert "isn't a Lichess username" in err.inner_text()
+
+
+# ---- round 2: regressions around the B4 and B6 fixes ----------------------------------------------------------------
+def test_qa14r2_opening_a_chapter_with_moves_doesnt_finish_it_but_a_text_chapter_does(page: Any) -> None:
+    _studies(page)
+    _paste(page, "TestNm02")
+    chapters = page.get_by_test_id("study-chapter")
+    page.wait_for_timeout(800)
+    assert "✓" not in chapters.nth(0).inner_text()  # at the start of a chapter with moves: not finished
+    chapters.nth(2).click()
+    page.get_by_text("Thanks for studying!").wait_for()
+    page.wait_for_function(
+        "() => document.querySelectorAll('[data-testid=study-chapter]')[2].innerText.includes('✓')", timeout=5000
+    )
+    assert "✓" not in chapters.nth(0).inner_text()
+    chapters.nth(0).click()
+    page.get_by_test_id("study-last").click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('[data-testid=study-chapter]')[0].innerText.includes('✓')", timeout=5000
+    )
+
+
+@pytest.mark.parametrize("size", [(900, 700), (1024, 700), (1920, 1080)])
+def test_qa14r2_the_reader_fits_narrow_and_wide_windows(page: Any, size: tuple[int, int]) -> None:
+    w, h = size
+    page.set_viewport_size({"width": w, "height": h})
+    _studies(page)
+    _paste(page, "TestNm02")
+    page.wait_for_timeout(400)
+    normal = _board_width(page)
+    _no_horizontal_overflow(page)
+    for _ in range(3):
+        page.get_by_test_id("study-forward").click()
+    page.locator("[data-testid=study-variation] [data-move-id]").filter(has_text="Nc6").first.click()
+    page.get_by_test_id("study-main-line").wait_for()
+    page.wait_for_timeout(300)
+    in_side_line = _board_width(page)
+    assert abs(in_side_line - normal) <= 2, (normal, in_side_line)  # no jump when Back to main line appears
+    assert 240 <= normal <= 562
+    _shot(page, f"r2-normal-{w}x{h}")
+    page.get_by_test_id("study-back-to-list").click()
+    page.get_by_test_id("studies-tab-mine").click()
+    page.get_by_test_id("study-card").filter(has_text="Invented gamebook").get_by_test_id("study-continue").click()
+    page.get_by_test_id("study-reader").wait_for()
+    page.wait_for_timeout(900)
+    assert 240 <= _board_width(page) <= 562
+    _no_horizontal_overflow(page)
+    _shot(page, f"r2-gamebook-{w}x{h}")
