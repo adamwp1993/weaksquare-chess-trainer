@@ -48,7 +48,9 @@ export function gameNarrative(review: GameReview, n: number, plies: number[], pr
     return {
       ply,
       played_san: m.san,
-      text: `${m.san} left a piece without a defender, and your opponent's reply took it. ${better} kept everything covered.`,
+      text: `${m.san} left a piece without a defender, and your opponent's reply took it. ${better} kept everything covered. Next time, check what each move leaves unguarded.`,
+      training_ideas: ["hangingPiece", "defensiveMove"],
+      idea_names: ["Hanging piece", "Defensive move"],
       annotations: [
         { kind: "arrow" as const, orig: m.uci.slice(0, 2), dest: m.uci.slice(2, 4), color: "red" as const },
         { kind: "arrow" as const, orig: best.slice(0, 2), dest: best.slice(2, 4), color: "green" as const },
@@ -61,13 +63,17 @@ export function gameNarrative(review: GameReview, n: number, plies: number[], pr
     game_id: review.game.id,
     n,
     key_moments: plies,
-    opening_summary: "You reached a normal position out of the opening, then the game turned on one loose piece.",
+    summary:
+      "You came out of the opening with a normal position and kept it level through the early middlegame. " +
+      "The game turned when a piece was left without a defender, and from there you were defending. " +
+      "Most of your trouble came from not checking what your opponent's moves attacked.",
     turning_point: plies.length ? plies[plies.length - 1] : null,
-    themes: ["loose pieces", "checking your opponent's threats"],
-    takeaways: [
-      "Before each move, look at what your opponent's last move attacks.",
-      "Count the defenders of every piece you move away from.",
-    ],
+    improve_summary:
+      "Your mistakes had one thing in common: a piece left loose after a move. Before each move, look at what " +
+      "your opponent's last move attacks and count the defenders of the piece you're moving away from.",
+    did_well_summary: review.stories.some((st) => st.strengths.length > 0)
+      ? "When your opponent slipped, you noticed it straight away and made them pay."
+      : "",
     moments,
     preset: { themes: ["hangingPiece", "fork"], names: ["Hanging piece", "Fork"], rating_min: 1200, rating_max: 1700 },
     discarded: 1,

@@ -118,7 +118,7 @@ def test_one_real_explain_my_game_under_the_cap(run) -> None:  # type: ignore[no
     assert (row["provider"], row["model"], row["feature"]) == (run["provider"], run["model"], "game_review")
     assert 0 < row["cost_usd"] <= RUN_CAP and row["input_tokens"] > 0 and row["output_tokens"] > 0
     n = run["narrative"]
-    assert n and n["opening_summary"] and n["key_moments"] == [5], n
+    assert n and n["summary"] and n["key_moments"] == [5], n
     for m in n["moments"]:  # every move and square was validated
         assert m["ply"] == 5 and m["played_san"] == "Nf6"
         assert not m["better_uci"] or m["better_uci"][0] == "d8e7"

@@ -2025,13 +2025,13 @@ def _narrative_dto(v: NarrativeView) -> dto.GameNarrative:
     moments = [
         dto.GameMoment(m.ply, m.played_san, m.text,
                        [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in m.annotations],  # type: ignore[arg-type]
-                       list(m.better_line), list(m.better_uci))
+                       list(m.better_line), list(m.better_uci), list(m.training_ideas), list(m.idea_names))
         for m in n.moments
     ]  # fmt: skip
     p = n.preset
     preset = dto.SuggestedPreset(list(p.themes), list(p.names), p.rating_min, p.rating_max) if p else None
-    return dto.GameNarrative(v.game_id, v.n, list(v.moments), n.opening_summary, n.turning_point, list(n.themes),
-                             list(n.takeaways), moments, preset, n.discarded, v.provider, v.model,
+    return dto.GameNarrative(v.game_id, v.n, list(v.moments), n.summary, n.turning_point, n.improve_summary,
+                             n.did_well_summary, moments, preset, n.discarded, v.provider, v.model,
                              round(v.cost_usd, 6), v.cached, [dto.GameDidWell(f, t) for f, t in n.did_well])  # fmt: skip
 
 

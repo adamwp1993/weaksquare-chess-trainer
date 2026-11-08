@@ -24,7 +24,7 @@ def test_the_review_has_a_summary_what_to_improve_and_what_you_did_well(page: An
     summary.wait_for()
     text = summary.inner_text()
     assert "Summary" in text and "Stockfish found" in text and "turning point" in text
-    assert "What to improve: key moments" in page.get_by_test_id("key-moments").inner_text()
+    assert "What to improve" in page.get_by_test_id("key-moments").inner_text()
     strengths = page.get_by_test_id("review-strengths")
     assert "What you did well" in strengths.inner_text()
     # The parts come in this order on the page.
@@ -45,9 +45,11 @@ def test_a_lost_game_with_blunders_gets_no_invented_praise(page: Any) -> None:
 
 
 def test_the_ai_narrative_adds_no_strengths_of_its_own(page: Any) -> None:
-    """FR-11.36: with nothing computed, Explain my game shows no What you did well at all."""
+    """FR-11.36: with nothing computed, Explain my game adds no praise: no summary and no notes in What you did well."""
     review(page, "?ai=on")
     page.get_by_test_id("narrative-button").filter(has_text="≈ $").click()
     page.get_by_test_id("narrative-confirm-button").click()
-    page.get_by_test_id("narrative-takeaways").wait_for()
-    assert page.get_by_test_id("narrative-did-well").count() == 0
+    page.get_by_test_id("review-improve-summary").wait_for()
+    assert page.get_by_test_id("review-did-well-summary").count() == 0
+    assert page.get_by_test_id("review-strength-note").count() == 0
+    page.get_by_test_id("review-strengths-none").wait_for()

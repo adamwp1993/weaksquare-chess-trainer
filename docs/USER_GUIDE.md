@@ -677,7 +677,7 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 #### Summary, What to improve and What you did well
 *Added in v0.14.* A review that only lists faults reads like criticism even after a good game, so the review comes in three parts. All three come from Stockfish's analysis on your PC, so they work without an AI key.
 1. **Summary**, at the top: the result, your accuracy (when the platform gave one) and average loss, how many inaccuracies, mistakes and blunders Stockfish found in your moves, the turning point (the biggest mistake or blunder of the game, by either side), and how each phase went.
-2. **What to improve: key moments**, as above.
+2. **What to improve**: the key moments, as above.
 3. **What you did well**, below the key moments. Only things Stockfish's numbers back up, each naming a move you played; click one to go to it:
    - **The only good move:** you played Stockfish's best move, and its next choice was at least 1.5 pawns worse.
    - **Punishing a mistake:** right after your opponent's mistake or blunder, you kept what it gave you.
@@ -729,18 +729,17 @@ With an [AI provider set up](#setting-it-up), Game Review can explain your games
 
 ![Explain my game](img/game-review-ai.png)
 
-After about half a minute you get:
-- a short summary of the **opening**,
-- the **turning point** (click it to jump there),
-- the **recurring themes** of your mistakes and 2–3 **takeaways**,
-- **What you did well** (v0.14): for up to three items from the Review screen's [What you did well](#summary-what-to-improve-and-what-you-did-well) list, why each was good. The AI may only explain items on that list, never add its own; with nothing on the list, this part is left out,
-- a note on **each key moment** in the Key moments list, with **Show on the board** for its arrows and the better line,
-- often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
+After about half a minute, the AI's words appear in the review's [three parts](#summary-what-to-improve-and-what-you-did-well) (*changed in v0.15*):
+1. **Summary:** a general summary of the game in place of the computed sentences: how it went, where it turned, what you struggled with and what went right. It may point at a move number, but it doesn't walk through the moves. The **turning point** is under it (click it to jump there).
+2. **What to improve:** a short summary of what your mistakes had in common, then the key moments. Each key moment gets a note on what went wrong, why the better move is better and what to look for next time, with **Show on the board** for its arrows and the better line. Under the note, **Train:** tags the puzzle themes that practise that kind of moment, for example *Hanging piece*.
+3. **What you did well:** a short summary of your strengths, then, under up to three of the items on the list, why each was good. The AI may only explain items on that list, never add its own; with nothing on the list, it adds nothing here.
+
+At the end of What to improve there's often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
 
 The game then shows **AI-reviewed** in My games.
 
 **Gotchas**
-- **Saved explanations are free.** The same move, or the same game with the same number of key moments, on the same model, shows **(saved)** and costs nothing, even when the budget is used up. A new analysis at other settings, or other grading thresholds, gets a new explanation. Analyzing a game again sets it back to **Analyzed**.
+- **Saved explanations are free.** The same move, or the same game with the same number of key moments, on the same model, shows **(saved)** and costs nothing, even when the budget is used up. A new analysis at other settings, or other grading thresholds, gets a new explanation. Analyzing a game again sets it back to **Analyzed**. A game explained before v0.15 needs a new run (at the usual cost) to get the three-part version.
 - **What it costs:** Explain my game is roughly 10,000 input and 3,000 output tokens: about $0.003 on Claude Haiku 5.5, $0.05 on Claude Sonnet 5.5 and $0.14 on GPT-5.5. Explain this move costs about the same as one puzzle Explain. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply.
 - **Your side first:** the AI needs to know which side you played. If the app asks, answer it first.
 - **What's sent:** see [Your data and privacy](#your-data-and-privacy). No names, ratings, dates, links or clocks.

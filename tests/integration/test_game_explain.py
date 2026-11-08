@@ -24,9 +24,9 @@ MOVE_ANSWER = {
                "annotations": [{"type": "arrow", "from": "d8", "to": "e7", "color": "green"}]}],
 }  # fmt: skip
 NARRATIVE_ANSWER = {
-    "opening_summary": "An early queen sortie.", "turning_point_ply": 5, "recurring_themes": ["king safety"],
-    "takeaways": ["Defend f7.", "Check queen threats."],
-    "moments": [{"ply": 5, "played": "Nf6", "text": "It drops f7.", "better_line": ["Qe7"],
+    "summary": "An early queen sortie decided the game.", "turning_point_ply": 5,
+    "improve_summary": "Check queen threats before you develop.", "did_well_summary": "", "did_well": [],
+    "moments": [{"ply": 5, "played": "Nf6", "text": "It drops f7.", "better_line": ["Qe7"], "training_ideas": ["mateIn1"],
                  "annotations": [{"type": "arrow", "from": "h5", "to": "f7", "color": "red"}]}],
     "preset": {"themes": ["mateIn1", "notATheme"], "rating_min": 1000, "rating_max": 1500},
 }  # fmt: skip

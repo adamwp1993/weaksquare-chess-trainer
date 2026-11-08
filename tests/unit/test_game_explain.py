@@ -144,12 +144,14 @@ def test_move_input_for_the_best_move_has_no_refutation_and_no_best_line_means_n
 
 def _answer(**over: Any) -> str:
     body: dict[str, Any] = {
-        "opening_summary": "You met an early queen sortie.",
+        "summary": "You met an early queen sortie and the game turned around move 3.",
         "turning_point_ply": 5,
-        "recurring_themes": ["king safety"],
-        "takeaways": ["Check what the queen attacks.", "Defend f7 first."],
+        "improve_summary": "Check what your opponent's queen attacks before you develop.",
+        "did_well_summary": "",
+        "did_well": [],
         "moments": [{
             "ply": 5, "played": "Nf6", "text": "Nf6 leaves f7 to the queen.",
+            "training_ideas": ["mateIn1", "defensiveMove"],
             "annotations": [{"type": "arrow", "from": "h5", "to": "f7", "color": "red"},
                             {"type": "circle", "from": "f7", "to": None, "color": "yellow"}],
             "better_line": ["Qe7", "Nc3"],
@@ -163,9 +165,11 @@ def _answer(**over: Any) -> str:
 def test_a_good_narrative_is_kept() -> None:
     n = validate_narrative(_narrative_input(), _answer())
     assert n is not None and n.discarded == 0
-    assert n.turning_point == 5 and n.takeaways == ("Check what the queen attacks.", "Defend f7 first.")
+    assert n.turning_point == 5 and n.summary.startswith("You met an early queen sortie")
+    assert n.improve_summary == "Check what your opponent's queen attacks before you develop."
     (m,) = n.moments
     assert (m.ply, m.played_san, m.better_line, m.better_uci) == (5, "Nf6", ("Qe7", "Nc3"), ("d8e7", "b1c3"))
+    assert m.training_ideas == ("mateIn1", "defensiveMove") and m.idea_names == ("Mate in 1", "Defensive move")
     assert [a.kind for a in m.annotations] == ["arrow", "circle"]
     assert n.preset is not None and n.preset.themes == ("mateIn1", "defensiveMove")
     assert (n.preset.rating_min, n.preset.rating_max) == (1200, 1600)
@@ -208,16 +212,16 @@ def test_bad_annotations_turning_point_and_texts_are_dropped() -> None:
            "annotations": [{"type": "arrow", "from": "z9", "to": "f7", "color": "red"},
                            {"type": "arrow", "from": "h5", "to": "f7", "color": "purple"},
                            {"type": "circle", "from": "f7", "to": None, "color": "blue"}]}  # fmt: skip
-    n = validate_narrative(_narrative_input(), _answer(moments=[raw], turning_point_ply=42, takeaways=["", 3, "ok"]))
+    n = validate_narrative(_narrative_input(), _answer(moments=[raw], turning_point_ply=42, improve_summary=3))
     assert n is not None
     assert n.moments[0].text == "fine" and len(n.moments[0].annotations) == 1
-    assert n.turning_point is None and n.takeaways == ("ok",)
-    assert n.discarded == 2 + 1 + 2
+    assert n.turning_point is None and n.improve_summary == ""
+    assert n.discarded == 2 + 1
 
 
 def test_answers_that_arent_the_json_asked_for_are_refused() -> None:
     inp = _narrative_input()
-    for text in ["not json", "[]", json.dumps({"opening_summary": 3}), json.dumps({"moments": []})]:
+    for text in ["not json", "[]", json.dumps({"summary": 3}), json.dumps({"moments": []})]:
         assert validate_narrative(inp, text) is None
 
 
@@ -256,7 +260,7 @@ def test_preset_validation_drops_unknown_themes_and_bad_ranges() -> None:
 
 def test_the_prompt_lists_only_preset_themes_that_validate() -> None:
     prompt = build_narrative_prompt(_narrative_input())
-    allowed = prompt.rsplit("Allowed theme keys for the preset: ", 1)[1].split(", ")
+    allowed = prompt.rsplit("Allowed theme keys (training ideas and the preset): ", 1)[1].split(", ")
     assert "fork" in allowed and "mateIn1" in allowed and "opening" not in allowed
     p, dropped = validate_preset({"themes": allowed[:3], "rating_min": None, "rating_max": None})
     assert p is not None and dropped == 0
@@ -275,11 +279,11 @@ def _with_strengths(*texts: str) -> NarrativeInput:
     return replace(_narrative_input(), strengths=tuple(texts))
 
 
-def _did_well_answer(did_well: object) -> str:
+def _did_well_answer(did_well: object, did_well_summary: str = "You defended well.") -> str:
     return json.dumps({
-        "opening_summary": "You got a normal position.", "turning_point_ply": None, "recurring_themes": [],
-        "takeaways": ["Check your opponent's threats."], "did_well": did_well, "moments": [],
-        "preset": {"themes": [], "rating_min": None, "rating_max": None},
+        "summary": "You got a normal position.", "turning_point_ply": None,
+        "improve_summary": "Check your opponent's threats.", "did_well_summary": did_well_summary,
+        "did_well": did_well, "moments": [], "preset": {"themes": [], "rating_min": None, "rating_max": None},
     })  # fmt: skip
 
 
@@ -321,3 +325,43 @@ def test_a_narrative_cached_before_v014_still_loads() -> None:
     assert stored["did_well"] == [["fact", "Why."]]
     del stored["did_well"]
     assert GameNarrative.from_json(json.dumps(stored)).did_well == ()
+
+
+# ---- v0.15: the review in three parts (Adam's v0.15-rc1 feedback) ----------------------------------------------
+def test_the_prompt_asks_for_general_summaries_not_a_move_list() -> None:
+    for field in ("summary", "improve_summary", "did_well_summary"):
+        assert field in NARRATIVE_SCHEMA["required"] and f'"{field}"' in NARRATIVE_SYSTEM_PROMPT
+    assert "never list the\n  moves one by one" in NARRATIVE_SYSTEM_PROMPT
+    moment = NARRATIVE_SCHEMA["properties"]["moments"]["items"]
+    assert "training_ideas" in moment["required"]
+    for gone in ("opening_summary", "recurring_themes", "takeaways"):
+        assert gone not in NARRATIVE_SCHEMA["properties"]
+
+
+def test_training_ideas_keep_only_allowed_theme_keys_once_and_at_most_three() -> None:
+    raw = {"ply": 5, "played": "Nf6", "text": "x", "annotations": [], "better_line": [],
+           "training_ideas": ["fork", "notATheme", "fork", "opening", 7, "pin", "skewer", "mateIn2"]}  # fmt: skip
+    n = validate_narrative(_narrative_input(), _answer(moments=[raw]))
+    assert n is not None and n.moments[0].training_ideas == ("fork", "pin", "skewer")
+    assert n.discarded == 5
+    raw["training_ideas"] = "fork"  # not a list
+    n = validate_narrative(_narrative_input(), _answer(moments=[raw]))
+    assert n is not None and n.moments[0].training_ideas == () and n.discarded == 0
+
+
+def test_the_did_well_summary_is_kept_only_when_strengths_were_sent() -> None:
+    n = validate_narrative(_with_strengths("fact"), _did_well_answer([{"id": "S1", "text": "Why."}]))
+    assert n is not None and n.did_well_summary == "You defended well."
+    n = validate_narrative(_with_strengths(), _did_well_answer([], "You played brilliantly."))
+    assert n is not None and n.did_well_summary == ""  # no computed strength: no praise
+
+
+def test_the_three_parts_round_trip_and_older_saved_narratives_still_load() -> None:
+    n = validate_narrative(_with_strengths("fact"), _did_well_answer([{"id": "S1", "text": "Why."}]))
+    assert n is not None and GameNarrative.from_json(n.to_json()) == n
+    old = {"opening_summary": "An old opening summary.", "turning_point": None, "themes": ["x"], "takeaways": ["y"],
+           "moments": [{"ply": 5, "played_san": "Nf6", "text": "t", "annotations": [], "better_line": [],
+                        "better_uci": []}], "preset": None, "discarded": 0}  # fmt: skip
+    loaded = GameNarrative.from_json(json.dumps(old))
+    assert loaded.summary == "An old opening summary." and loaded.improve_summary == ""
+    assert loaded.moments[0].training_ideas == ()

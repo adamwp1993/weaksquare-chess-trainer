@@ -22,6 +22,9 @@ Candidates: v0.15-rc1 (2026-11-08)
 - **Popular replies** on the Analysis tab while you're signed in to Lichess: the most played moves with their games and results, from the explorer settings you chose in the opening trainer. Click one to play it. [FR-14.4]
 - **Open in Analysis tab** on the analysis board after a puzzle and under Analyze from here in Game Review: the position comes with the moves that led to it. A board that already has moves asks before it's replaced. [FR-14.6]
 
+### Changed
+- **Explain my game** now fills the review's three parts instead of adding a block of its own. **Summary** gets a general summary of the game rather than an opening summary. **What to improve** opens with a short summary of what your mistakes had in common, and each key moment is tagged with the puzzle themes that train it. **What you did well** opens with a short summary, and the AI's words sit under the strengths they're about. A game explained before needs a new run for the new version. [FR-11.18, FR-11.36]
+
 ### Fixed
 - **Lichess studies**: a chapter containing a null move (`--`) was accepted when the study was added, then showed as damaged when opened. It's now listed as **Can't be used** with the reason, and the rest of the study works. Re-add the study, or use **Check for updates**, to see it. [FR-13.7]
 

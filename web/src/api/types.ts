@@ -600,6 +600,8 @@ export interface GameMoment {
   annotations: ExplainAnnotation[];
   better_line: string[];
   better_uci: string[];
+  training_ideas: string[];
+  idea_names: string[];
 }
 
 export interface SuggestedPreset {
@@ -618,10 +620,10 @@ export interface GameNarrative {
   game_id: number;
   n: number;
   key_moments: number[];
-  opening_summary: string;
+  summary: string;
   turning_point: number | null;
-  themes: string[];
-  takeaways: string[];
+  improve_summary: string;
+  did_well_summary: string;
   moments: GameMoment[];
   preset: SuggestedPreset | null;
   discarded: number;

@@ -329,8 +329,9 @@ class GameExplainService:
         return tuple(out)
 
     def _narrative_what(self, inp: NarrativeInput, n: int) -> tuple[Any, ...]:
-        # v0.14: "strengths" (FR-11.36), so a narrative cached before the prompt listed them isn't reused.
-        return ("narrative", "strengths", n, ",".join(str(p) for p in inp.moments))
+        # The prompt version: "strengths" in v0.14 (FR-11.36), "parts" in v0.15 (the three-part report), so a narrative
+        # cached under an earlier prompt isn't reused.
+        return ("narrative", "parts", n, ",".join(str(p) for p in inp.moments))
 
     def quote_narrative(self, game_id: object, n: object = None) -> GameQuote:
         game, inp, count = self._narrative_input(game_id, n)

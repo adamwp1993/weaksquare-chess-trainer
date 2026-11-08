@@ -679,6 +679,8 @@ class GameMoment:
     annotations: list[ExplainAnnotation]  # in the position before the move, validated
     better_line: list[str]  # SAN from the position before the move; starts with Stockfish's best move
     better_uci: list[str]
+    training_ideas: list[str] = field(default_factory=list)  # v0.15: puzzle theme keys, validated
+    idea_names: list[str] = field(default_factory=list)  # their display names, in the same order
 
 
 @dataclass(frozen=True)
@@ -696,10 +698,10 @@ class GameNarrative:
     game_id: int
     n: int
     key_moments: list[int]  # the plies it covers
-    opening_summary: str
+    summary: str  # v0.15: the general summary (part 1)
     turning_point: int | None  # a ply
-    themes: list[str]
-    takeaways: list[str]
+    improve_summary: str  # v0.15: What to improve's own summary ("" when the AI gave none)
+    did_well_summary: str  # v0.15: What you did well's own summary ("" when there's nothing computed to praise)
     moments: list[GameMoment]
     preset: SuggestedPreset | None
     discarded: int  # > 0: "some annotations were discarded" (FR-8.4)
