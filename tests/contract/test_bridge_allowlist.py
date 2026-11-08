@@ -12,6 +12,12 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.errors import BRIDGE_MARK
 
 ALLOWLIST = {
+    # v0.15: the Analysis tab (REQUIREMENTS §20)
+    "check_board_position",  # FR-14.2
+    "import_analysis_pgn",  # FR-14.3
+    "get_analysis_pgn_game",
+    "analyze_board_position",  # FR-14.4
+    "get_popular_replies",
     # v0.14: Lichess studies (REQUIREMENTS §19)
     "add_study",  # FR-13.5
     "add_study_by_id",  # FR-13.5a, 13.6

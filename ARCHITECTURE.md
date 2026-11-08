@@ -96,6 +96,8 @@ weaksquare-chess-trainer/
 │  │  ├─ study_links.py        # v0.14: study and chapter links, IDs, which pages the Lichess window may show
 │  │  ├─ study_pgn.py          # v0.14: a study's PGN, parsed and checked; arrows, highlights, text chapters
 │  │  ├─ study_repertoire.py   # v0.14: Add to my repertoire: which moves, conflicts, reachability
+│  │  ├─ position_setup.py     # v0.15: a set-up position or FEN, checked, one sentence per problem
+│  │  ├─ analysis_pgn.py       # v0.15: a pasted PGN as move trees for the Analysis tab (study_pgn's builder)
 │  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
 │  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
 │  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
@@ -110,6 +112,7 @@ weaksquare-chess-trainer/
 │  │                           #   v0.7: llm_settings.py (provider, key, prices, Test key), llm_usage.py
 │  │                           #         (the guardrail gate every LLM request goes through)
 │  │                           #   v0.14: studies.py (add, keep, update, place, Add to my repertoire)
+│  │                           #   v0.15: analysis_tab.py (the Analysis tab: checks, PGN, engine, popular replies; no repository)
 │  │                           #   v0.8: games.py (library, sync, imports), analysis.py (the queue on the
 │  │                           #         background engine, Review settings), review.py (review, Retry,
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
@@ -255,6 +258,19 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-08, v0.15: The Analysis tab reuses the study tree and holds no repository
+- Context: REQUIREMENTS §20 asks for a board of its own that never changes puzzles, stats, the game library or Coach reports, never reaches an LLM, and reuses the existing analysis board rather than adding a second one.
+- Decision:
+  - **`services/analysis_tab.py`** is stateless and is built inside `Api` from the engine and `OpeningSources` it already receives. It holds no repository, so it can't write your data (FR-14.5); a test checks its imports and that every table except `explorer_cache` hashes the same after a scripted session. Analysis runs on the **interactive** engine, key `("analysis_tab", purpose)`, from White's side.
+  - **`core/position_setup.py`** turns each python-chess `Board.status()` flag into one sentence, so a set-up position or FEN is refused with a reason before anything reaches the engine; `validate_fen` still checks again.
+  - **`core/analysis_pgn.py`** reads a pasted PGN with `core.study_pgn`'s size-capped builder and converter (made public as `LimitedBuilder`, `TooBig`, `convert_game`), so side lines and comments come with it, `[%…]` commands are stripped, and every move is checked. Headers are used only for the pick list. The bridge sends one game's tree at a time (`get_analysis_pgn_game` re-parses the text it's given); nothing is kept.
+  - **The front end reuses v0.14's flat tree** (`StudyMove[]`): `state/analysisTree.ts` adds moves as branches, and `MoveTree` moved out of `StudyReader` into its own component for both screens. The tree lives in `App` while the app is open and is never saved (Adam, v0.15 planning).
+  - **`Board` gained a set-up mode** (chessground free moves, drop-off removes, a palette that drags with `dragNewPiece` or places by click), so it stays the only chessground wrapper (§3 decision 11).
+  - **`ExplorerMove`** gained White-win, draw and Black-win counts (default 0) for the popular replies bar.
+  - **Open in Analysis tab** sends the moves that led to the position: Game Review's game moves, or the puzzle's moves from its start, which `TrainerView` now records as they're played. Each candidate line is replayed and used only if it reaches the board's first position.
+- Alternatives: a second, simpler board component for the tab, rejected by §20 ("not a second one"); saving the board in `user.db`, rejected by Adam at planning; sending every game of a large PGN at once, rejected for size.
+- Consequences: the tab can't count anything by construction. A PGN's games aren't in My games; to review one, import it there.
 
 ### 2026-11-07, v0.14: What building Lichess studies and the three-part review settled
 - Context: the plan left the storage shape, how private studies are detected, how study lines join a repertoire and where the review's strengths are worked out.

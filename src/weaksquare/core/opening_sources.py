@@ -163,6 +163,9 @@ class ExplorerMove:
     uci: str
     san: str
     games: int
+    white: int = 0  # wins for White, draws and wins for Black (v0.15: the Analysis tab's popular replies)
+    draws: int = 0
+    black: int = 0
 
 
 @dataclass(frozen=True)
@@ -193,8 +196,8 @@ def parse_explorer(board: chess.Board, data: Any) -> ExplorerResult:
             continue
         if move not in board.legal_moves:
             continue
-        games = _count(row, "white") + _count(row, "draws") + _count(row, "black")
-        moves.append(ExplorerMove(uci, board.san(move), games))
+        w, d, b = _count(row, "white"), _count(row, "draws"), _count(row, "black")
+        moves.append(ExplorerMove(uci, board.san(move), w + d + b, w, d, b))
     moves.sort(key=lambda m: (-m.games, m.uci))
     total = _count(data, "white") + _count(data, "draws") + _count(data, "black")
     return ExplorerResult(total or sum(m.games for m in moves), tuple(moves))

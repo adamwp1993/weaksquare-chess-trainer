@@ -1407,7 +1407,67 @@ class StudyWindowEvent:
     job_id: str | None
 
 
+# ---- v0.15: the Analysis tab (REQUIREMENTS §20) ------------------------------------------------------------------
+@dataclass(frozen=True)
+class PositionCheck:
+    """FR-14.2: whether a set-up position or pasted FEN can be analyzed. `fen` is set only when `problems` is empty."""
+
+    ok: bool
+    fen: str | None
+    problems: list[str]
+
+
+@dataclass(frozen=True)
+class AnalysisPgnGameInfo:
+    """One game in a pasted PGN, for the pick list (FR-14.3). The label is shown only on your screen."""
+
+    index: int
+    label: str
+    move_count: int
+
+
+@dataclass(frozen=True)
+class AnalysisPgnImport:
+    games: list[AnalysisPgnGameInfo]
+    skipped: list[str]  # one sentence per game that couldn't be used
+
+
+@dataclass(frozen=True)
+class AnalysisPgnGame:
+    """A game's moves as a tree (the study tree's shape, FR-13.8): `moves[0]` is the start position."""
+
+    index: int
+    label: str
+    start_fen: str
+    moves: list[StudyMove]
+
+
+@dataclass(frozen=True)
+class PopularReply:
+    uci: str
+    san: str
+    games: int
+    white: int  # White wins
+    draws: int
+    black: int  # Black wins
+
+
+@dataclass(frozen=True)
+class PopularReplies:
+    """FR-14.4: the Lichess explorer's most played moves, or why there are none (never an error)."""
+
+    state: Literal["ok", "signed_out", "unavailable"]
+    total: int
+    moves: list[PopularReply]
+
+
 EXPORTED: list[type] = [
+    PositionCheck,
+    AnalysisPgnGameInfo,
+    AnalysisPgnImport,
+    AnalysisPgnGame,
+    PopularReply,
+    PopularReplies,
     ApiError,
     AppInfo,
     Job,

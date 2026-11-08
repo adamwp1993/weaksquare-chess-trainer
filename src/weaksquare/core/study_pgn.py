@@ -149,8 +149,8 @@ def parse_study(study_id: str, pgn: str) -> Study:
     for offset, headers in _chapter_offsets(handle):
         handle.seek(offset)
         try:
-            game = chess.pgn.read_game(handle, Visitor=_LimitedBuilder)
-        except _TooBig as e:
+            game = chess.pgn.read_game(handle, Visitor=LimitedBuilder)
+        except TooBig as e:
             chapters.append(_rejected(len(chapters), _chapter_id(headers.get("ChapterURL", "")), f"is too large ({e})"))
             continue
         except Exception:  # python-chess raises on badly broken input
@@ -196,11 +196,11 @@ def parse_chapter(index: int, game: chess.pgn.Game) -> Chapter:
         base.text_only = True
         base.root = Node(comment=clean_text(game.comment))
         return base
-    base.root = _convert(game)
+    base.root = convert_game(game)
     return base
 
 
-def _convert(game: chess.pgn.Game) -> Node:
+def convert_game(game: chess.pgn.Game) -> Node:
     """python-chess's tree as ours, every move kept, in a loop (a long main line must not recurse, B1)."""
     root = Node(comment=clean_text(game.comment), shapes=parse_shapes(game.comment))
     stack: list[tuple[chess.pgn.GameNode, Node, chess.Board]] = [(game, root, game.board())]
@@ -256,11 +256,11 @@ def walk(root: Node) -> list[Node]:
     return out
 
 
-class _TooBig(Exception):
+class TooBig(Exception):
     pass
 
 
-class _LimitedBuilder(chess.pgn.GameBuilder):
+class LimitedBuilder(chess.pgn.GameBuilder):
     """python-chess's builder with a cap on moves and comment size, so a huge chapter can't exhaust memory."""
 
     def begin_game(self) -> None:
@@ -270,7 +270,7 @@ class _LimitedBuilder(chess.pgn.GameBuilder):
     def visit_move(self, board: chess.Board, move: chess.Move) -> None:
         self._nodes += 1
         if self._nodes > MAX_NODES:
-            raise _TooBig(f"more than {MAX_NODES} moves")
+            raise TooBig(f"more than {MAX_NODES} moves")
         super().visit_move(board, move)
 
     def visit_comment(self, comment: str | list[str]) -> None:
