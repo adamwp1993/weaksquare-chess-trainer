@@ -679,6 +679,8 @@ class GameMoment:
     annotations: list[ExplainAnnotation]  # in the position before the move, validated
     better_line: list[str]  # SAN from the position before the move; starts with Stockfish's best move
     better_uci: list[str]
+    training_ideas: list[str] = field(default_factory=list)  # v0.15: puzzle theme keys, validated
+    idea_names: list[str] = field(default_factory=list)  # their display names, in the same order
 
 
 @dataclass(frozen=True)
@@ -696,10 +698,10 @@ class GameNarrative:
     game_id: int
     n: int
     key_moments: list[int]  # the plies it covers
-    opening_summary: str
+    summary: str  # v0.15: the general summary (part 1)
     turning_point: int | None  # a ply
-    themes: list[str]
-    takeaways: list[str]
+    improve_summary: str  # v0.15: What to improve's own summary ("" when the AI gave none)
+    did_well_summary: str  # v0.15: What you did well's own summary ("" when there's nothing computed to praise)
     moments: list[GameMoment]
     preset: SuggestedPreset | None
     discarded: int  # > 0: "some annotations were discarded" (FR-8.4)
@@ -1407,7 +1409,67 @@ class StudyWindowEvent:
     job_id: str | None
 
 
+# ---- v0.15: the Analysis tab (REQUIREMENTS §20) ------------------------------------------------------------------
+@dataclass(frozen=True)
+class PositionCheck:
+    """FR-14.2: whether a set-up position or pasted FEN can be analyzed. `fen` is set only when `problems` is empty."""
+
+    ok: bool
+    fen: str | None
+    problems: list[str]
+
+
+@dataclass(frozen=True)
+class AnalysisPgnGameInfo:
+    """One game in a pasted PGN, for the pick list (FR-14.3). The label is shown only on your screen."""
+
+    index: int
+    label: str
+    move_count: int
+
+
+@dataclass(frozen=True)
+class AnalysisPgnImport:
+    games: list[AnalysisPgnGameInfo]
+    skipped: list[str]  # one sentence per game that couldn't be used
+
+
+@dataclass(frozen=True)
+class AnalysisPgnGame:
+    """A game's moves as a tree (the study tree's shape, FR-13.8): `moves[0]` is the start position."""
+
+    index: int
+    label: str
+    start_fen: str
+    moves: list[StudyMove]
+
+
+@dataclass(frozen=True)
+class PopularReply:
+    uci: str
+    san: str
+    games: int
+    white: int  # White wins
+    draws: int
+    black: int  # Black wins
+
+
+@dataclass(frozen=True)
+class PopularReplies:
+    """FR-14.4: the Lichess explorer's most played moves, or why there are none (never an error)."""
+
+    state: Literal["ok", "signed_out", "unavailable"]
+    total: int
+    moves: list[PopularReply]
+
+
 EXPORTED: list[type] = [
+    PositionCheck,
+    AnalysisPgnGameInfo,
+    AnalysisPgnImport,
+    AnalysisPgnGame,
+    PopularReply,
+    PopularReplies,
     ApiError,
     AppInfo,
     Job,

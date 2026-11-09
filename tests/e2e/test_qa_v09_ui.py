@@ -58,10 +58,11 @@ def test_qa_user_guide_explain_my_game_steps_and_screens(page) -> None:  # type:
     shot(page, "narrative-confirm")
     page.get_by_test_id("narrative-confirm-button").click()
     page.get_by_test_id("narrative").wait_for()
-    for tid in ("narrative-opening", "narrative-turning-point", "narrative-takeaways", "narrative-train",
+    # v0.15: the narrative fills the review's three parts
+    for tid in ("review-ai-summary", "narrative-turning-point", "review-improve-summary", "narrative-train",
                 "moment-note-6", "moment-note-8"):  # fmt: skip
         page.get_by_test_id(tid).wait_for()
-    assert "Practise:" in page.get_by_test_id("narrative").inner_text()
+    assert "Suggested training" in page.get_by_test_id("suggested-training").inner_text()
     shot(page, "narrative")
     page.get_by_test_id("moment-show-8").click()
     page.get_by_test_id("review-show-note").wait_for()

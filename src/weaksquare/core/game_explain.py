@@ -15,6 +15,9 @@ The answer is **untrusted** (CLAUDE.md): every move, line and square is checked 
   squares. The recommended preset goes through `preset_suggestion.validate_preset`.
 - **What you did well** (v0.14, FR-11.36): the prompt lists the strengths `core.game_review.game_story` computed from
   the analysis, as S1, S2…; the model may explain only those, by id. An id that wasn't sent is dropped.
+- **Three parts** (v0.15, Adam's rc1 feedback): a general summary of the game, a short summary for What to improve and
+  one for What you did well, and each key moment tagged with up to 3 training ideas (puzzle theme keys from the same
+  allowed list as the preset; unknown keys are dropped).
 """
 
 from __future__ import annotations
@@ -30,7 +33,6 @@ from weaksquare.core.engine import format_score
 from weaksquare.core.explain import (
     COLORS,
     MAX_ANNOTATIONS,
-    MAX_IDEA,
     MAX_TEXT,
     Annotation,
     EngineLineFact,
@@ -47,9 +49,11 @@ from weaksquare.core.explain import (
 from weaksquare.core.game_review import MoveRow, Score, saved_line
 from weaksquare.core.preset_suggestion import MAX_PRESET_THEMES, SuggestedPreset, preset_themes, validate_preset
 from weaksquare.core.puzzle import NO_PREMOVE, Color
+from weaksquare.core.themes import display_name
 
 MAX_MOMENTS = 10  # FR-11.18: default 5, max 10
-MAX_SUMMARY, MAX_TAKEAWAY, MAX_TAKEAWAYS, MAX_THEMES = 800, 300, 3, 4
+MAX_SUMMARY, MAX_SECTION_SUMMARY = 800, 500
+MAX_IDEAS = 3  # training ideas per key moment (v0.15)
 MAX_BETTER_LINE = 6
 MAX_DID_WELL, MAX_DID_WELL_TEXT = 3, 300
 ENGINE_LINES = 3  # top lines per key moment in the prompt
@@ -145,19 +149,19 @@ NARRATIVE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "opening_summary",
+        "summary",
         "turning_point_ply",
-        "recurring_themes",
-        "takeaways",
+        "improve_summary",
+        "did_well_summary",
         "did_well",
         "moments",
         "preset",
     ],
     "properties": {
-        "opening_summary": {"type": "string"},
+        "summary": {"type": "string"},
         "turning_point_ply": {"type": ["integer", "null"]},
-        "recurring_themes": {"type": "array", "items": {"type": "string"}},
-        "takeaways": {"type": "array", "items": {"type": "string"}},
+        "improve_summary": {"type": "string"},
+        "did_well_summary": {"type": "string"},
         "did_well": {
             "type": "array",
             "items": {
@@ -172,11 +176,12 @@ NARRATIVE_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["ply", "played", "text", "annotations", "better_line"],
+                "required": ["ply", "played", "text", "training_ideas", "annotations", "better_line"],
                 "properties": {
                     "ply": {"type": "integer"},
                     "played": {"type": "string"},
                     "text": {"type": "string"},
+                    "training_ideas": {"type": "array", "items": {"type": "string"}},
                     "annotations": {"type": "array", "items": _ANNOTATION},
                     "better_line": {"type": "array", "items": {"type": "string"}},
                 },
@@ -201,15 +206,23 @@ Rules:
 - Use ONLY the moves, evaluations and facts given. Never invent a move, a piece or a square. If the facts
   don't settle something, say less rather than guess.
 - Speak to the player as "you" and to the other side as "your opponent". Plain text only: no markdown, no HTML.
-- "opening_summary": 1–3 sentences on how the opening went.
+- The summaries are prose about the game as a whole, not a walk through the moves: say what happened and what it
+  means for the player. You may name a move number to point at a moment ("around move 18"), but never list the
+  moves one by one.
+- "summary": 3–5 sentences, the general summary: how the game went from the opening to the end, where it turned,
+  what you struggled with and what went right.
 - "turning_point_ply": the ply number of the key moment where the game turned, or null.
-- "recurring_themes": 1–{MAX_THEMES} short phrases for patterns across the key moments (for example "missed forks", "king safety").
-- "takeaways": 2–{MAX_TAKEAWAYS} concrete lessons, one sentence each.
+- "improve_summary": 2–3 sentences on what to improve: the patterns behind your key moments (for example missed
+  tactics, king safety, rushing in a better position), as general advice. The key moments follow it.
+- "did_well_summary": 1–3 sentences on your strengths in this game, drawn ONLY from the strengths listed under
+  "What you did well". If the list says none, "".
 - "did_well": up to {MAX_DID_WELL} of the strengths listed under "What you did well", each with its "id" exactly as
   given (S1, S2…) and 1–2 sentences on why it was good. Praise ONLY what that list contains: never add a strength
   of your own. If the list says none, return [].
 - "moments": one entry per key moment, in order. "ply" and "played" exactly as given. "text": 2–4
-  sentences on what went wrong and why the better move is better. "annotations": up to 4 arrows or circles
+  sentences on what went wrong and why the better move is better, ending with what to look for next time.
+  "training_ideas": 1–{MAX_IDEAS} puzzle theme keys that train what this moment was about, chosen ONLY from the
+  allowed theme keys; [] if none fits. "annotations": up to 4 arrows or circles
   in the position before the move (an arrow has "from" and "to"; a circle has its square in "from" and
   "to": null). Colors: green for the better move, red for the mistake or the threat, blue for lines and
   attacks, yellow for key squares. "better_line": Stockfish's best move from that position, then up to
@@ -306,7 +319,7 @@ def build_narrative_prompt(inp: NarrativeInput) -> str:
     by_ply = {r.ply: r for r in inp.rows}
     for ply in inp.moments:
         lines += _moment_lines(by_ply[ply])
-    lines += ["", "Allowed theme keys for the preset: " + ", ".join(preset_themes())]
+    lines += ["", "Allowed theme keys (training ideas and the preset): " + ", ".join(preset_themes())]
     return "\n".join(lines)
 
 
@@ -318,28 +331,34 @@ class MomentNote:
     annotations: tuple[Annotation, ...]
     better_line: tuple[str, ...]  # SAN, legal from the position before the move
     better_uci: tuple[str, ...]
+    training_ideas: tuple[str, ...] = ()  # v0.15: theme keys, all from preset_themes()
+
+    @property
+    def idea_names(self) -> tuple[str, ...]:
+        return tuple(display_name(t) for t in self.training_ideas)
 
 
 @dataclass(frozen=True)
 class GameNarrative:
-    opening_summary: str
+    summary: str  # the general summary (v0.15; before it, the opening summary)
     turning_point: int | None
-    themes: tuple[str, ...]
-    takeaways: tuple[str, ...]
     moments: tuple[MomentNote, ...]
     preset: SuggestedPreset | None
     discarded: int = 0  # dropped by validation (FR-8.4's note)
     did_well: tuple[tuple[str, str], ...] = ()  # v0.14: (the computed strength, why it was good), only listed ones
+    improve_summary: str = ""  # v0.15: What to improve's own summary
+    did_well_summary: str = ""  # v0.15: What you did well's own summary
 
     def to_json(self) -> str:
         return json.dumps(
             {
-                "opening_summary": self.opening_summary,
+                "summary": self.summary,
                 "turning_point": self.turning_point,
-                "themes": list(self.themes),
-                "takeaways": list(self.takeaways),
+                "improve_summary": self.improve_summary,
+                "did_well_summary": self.did_well_summary,
                 "moments": [
                     {"ply": m.ply, "played_san": m.played_san, "text": m.text,
+                     "training_ideas": list(m.training_ideas),
                      "annotations": [{"kind": a.kind, "orig": a.orig, "dest": a.dest, "color": a.color}
                                      for a in m.annotations],
                      "better_line": list(m.better_line), "better_uci": list(m.better_uci)}
@@ -358,13 +377,14 @@ class GameNarrative:
         moments = tuple(
             MomentNote(m["ply"], m["played_san"], m["text"],
                        tuple(Annotation(a["kind"], a["orig"], a["dest"], a["color"]) for a in m["annotations"]),
-                       tuple(m["better_line"]), tuple(m["better_uci"]))
+                       tuple(m["better_line"]), tuple(m["better_uci"]), tuple(m.get("training_ideas", ())))
             for m in d["moments"]
         )  # fmt: skip
         preset = SuggestedPreset.from_json(d["preset"]) if d.get("preset") else None
         did_well = tuple((str(a), str(b)) for a, b in d.get("did_well", []))  # absent before v0.14
-        return cls(d["opening_summary"], d["turning_point"], tuple(d["themes"]), tuple(d["takeaways"]), moments,
-                   preset, int(d["discarded"]), did_well)  # fmt: skip
+        summary = d.get("summary", d.get("opening_summary", ""))  # saved before v0.15: the opening summary
+        return cls(summary, d["turning_point"], moments, preset, int(d["discarded"]), did_well,
+                   d.get("improve_summary", ""), d.get("did_well_summary", ""))  # fmt: skip
 
 
 def _better_line(row: MoveRow, raw: Any) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
@@ -393,10 +413,16 @@ def _better_line(row: MoveRow, raw: Any) -> tuple[tuple[str, ...], tuple[str, ..
     return tuple(sans), tuple(ucis), False
 
 
-def _texts(raw: Any, limit: int, most: int) -> tuple[list[str], int]:
+def _ideas(raw: Any) -> tuple[tuple[str, ...], int]:
+    """v0.15: a key moment's training ideas: theme keys from the preset's allowed list, each once, at most MAX_IDEAS.
+    (kept, dropped)"""
+    allowed = set(preset_themes())
     items = raw if isinstance(raw, list) else []
-    kept = [t for t in (clean_text(x, limit) for x in items) if t]
-    return kept[:most], len(items) - min(len(kept), most)
+    kept: list[str] = []
+    for t in items:
+        if isinstance(t, str) and t in allowed and t not in kept and len(kept) < MAX_IDEAS:
+            kept.append(t)
+    return tuple(kept), len(items) - len(kept)
 
 
 def validate_narrative(inp: NarrativeInput, text: str) -> GameNarrative | None:
@@ -407,9 +433,13 @@ def validate_narrative(inp: NarrativeInput, text: str) -> GameNarrative | None:
         return None
     if not isinstance(data, dict):
         return None
-    summary = clean_text(data.get("opening_summary"), MAX_SUMMARY)
+    summary = clean_text(data.get("summary"), MAX_SUMMARY)
     if summary is None:
         return None
+    improve = clean_text(data.get("improve_summary"), MAX_SECTION_SUMMARY) or ""
+    did_well_summary = clean_text(data.get("did_well_summary"), MAX_SECTION_SUMMARY) or ""
+    if not inp.strengths:
+        did_well_summary = ""  # nothing computed to praise, so no praise from the AI either (FR-11.36)
     discarded = 0
     tp = data.get("turning_point_ply")
     turning: int | None = None
@@ -417,9 +447,6 @@ def validate_narrative(inp: NarrativeInput, text: str) -> GameNarrative | None:
         turning = tp
     elif tp is not None:
         discarded += 1
-    themes, d1 = _texts(data.get("recurring_themes"), MAX_IDEA, MAX_THEMES)
-    takeaways, d2 = _texts(data.get("takeaways"), MAX_TAKEAWAY, MAX_TAKEAWAYS)
-    discarded += d1 + d2
     by_ply = {r.ply: r for r in inp.rows}
     wanted = set(inp.moments)
     notes: dict[int, MomentNote] = {}
@@ -444,14 +471,16 @@ def validate_narrative(inp: NarrativeInput, text: str) -> GameNarrative | None:
                 annotations.append(ann)
         sans, ucis, dropped = _better_line(row, raw.get("better_line"))
         discarded += dropped
+        ideas, dropped_ideas = _ideas(raw.get("training_ideas"))
+        discarded += dropped_ideas
         notes[ply] = MomentNote(ply, row.move_san, clean_text(raw.get("text"), MAX_TEXT) or "", tuple(annotations),
-                                sans, ucis)  # fmt: skip
+                                sans, ucis, ideas)  # fmt: skip
     preset, d3 = validate_preset(data.get("preset"))
     discarded += d3
     did_well, d4 = _did_well(inp, data.get("did_well"))
     discarded += d4
-    return GameNarrative(summary, turning, tuple(themes), tuple(takeaways), tuple(notes[k] for k in sorted(notes)),
-                         preset, discarded, did_well)  # fmt: skip
+    return GameNarrative(summary, turning, tuple(notes[k] for k in sorted(notes)), preset, discarded, did_well,
+                         improve, did_well_summary)  # fmt: skip
 
 
 def _did_well(inp: NarrativeInput, raw: Any) -> tuple[tuple[tuple[str, str], ...], int]:

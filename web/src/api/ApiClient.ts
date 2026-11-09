@@ -89,6 +89,10 @@ import type {
   StarterStudy,
   StudyAddResult,
   StudyChapter,
+  PositionCheck,
+  AnalysisPgnImport,
+  AnalysisPgnGame,
+  PopularReplies,
   StudyDetail,
   StudyPlace,
   StudySummary,
@@ -543,6 +547,16 @@ export interface ApiClient {
   listStudies(which: "all" | "favorites" | "in_progress" | "finished"): Promise<StudySummary[]>;
   getStudy(studyId: string): Promise<StudyDetail>;
   getStudyChapter(studyId: string, chapterKey: string): Promise<StudyChapter>;
+  // ---- v0.15: the Analysis tab (REQUIREMENTS §20). Nothing here is scored or saved (FR-14.5) ----
+  /** FR-14.2: a set-up position or pasted FEN, with a sentence per problem. */
+  checkBoardPosition(fen: string): Promise<PositionCheck>;
+  /** FR-14.3: the games in a pasted PGN, to pick from. Not added to your library. */
+  importAnalysisPgn(pgn: string): Promise<AnalysisPgnImport>;
+  getAnalysisPgnGame(pgn: string, index: number): Promise<AnalysisPgnGame>;
+  /** FR-14.4: eval and top 3 lines on the interactive engine. */
+  analyzeBoardPosition(fen: string, purpose: "start" | "panel" | "board"): Promise<Analysis>;
+  /** FR-14.4: the Lichess explorer's most played moves; signed out or offline is a state, not an error. */
+  getPopularReplies(fen: string): Promise<PopularReplies>;
   /** FR-13.10: local only. */
   setStudyPlace(studyId: string, chapterKey: string, path: string[]): Promise<void>;
   getStudyContinue(studyId: string): Promise<StudyPlace>;

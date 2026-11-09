@@ -22,6 +22,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   Your training journal ....................................... v0.12
   The opening trainer ......................................... v0.13
   Lichess studies ............................................. v0.14
+  The Analysis tab ............................................ v0.15
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
   The About screen ............................................ v0.1
@@ -79,6 +80,9 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Studies by author** asks lichess.org for that username's public studies (`/api/study/by/<name>`). If that list is empty, it also asks whether the user exists (`/api/user/<name>`), so it can tell you about a typo. Nothing else is sent.
     - **The Lichess window** loads lichess.org pages, and whatever those pages load, like a browser would, in its own temporary profile with no sign-in. WeakSquare never reads what you type there. It learns only which study is on screen, so **Add this study** works. Links to other sites open in your usual browser.
     - **Open Lichess in your browser** and **Open on Lichess** open lichess.org in your usual browser, like any link.
+  - **The Analysis tab** (v0.15). Your lines stay in the app while it's open and are never saved. A pasted PGN is read on your PC and isn't added to My games. Nothing on this tab goes to an AI.
+    - **Popular replies**, only while you're signed in: the position on the board (FEN), with your explorer source and rating bands from the opening trainer, goes to explorer.lichess.org with your Lichess sign-in. Nothing else is sent. Answers are saved on your PC and shared with the opening trainer.
+    - **Stockfish** runs on your PC, as everywhere else in the app.
   - **Importing your own puzzles** (v0.8): the file is read on your PC and **never sent anywhere**.
   - **Name the idea first, Danger spotting and mistake reasons** (v0.6) send nothing. Danger-spotting results are never synced to Lichess, and your mistake reasons and notes stay in `user.db`.
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
@@ -394,6 +398,8 @@ Once the puzzle is over (you finished the line, or you used Show answer), the **
 ### The analysis board
 Click **Analyze on the board** in the panel to play out your own ideas. You can move pieces for **either side** (legal moves only), and after each move Stockfish re-evaluates and draws an arrow for its best move. **◀ Back** and **Forward ▶** step through your moves, **Reset** goes back to the puzzle position, and **Close** returns to the puzzle. If you opened the answer first, the button reads **Back to the answer** and takes you back to it (so does **Show answer**). Nothing you do on the analysis board is scored or saved.
 
+*Changed in v0.15:* **Open in Analysis tab** takes the position to the [Analysis tab](#the-analysis-tab), with the puzzle's moves from its start, so you can keep exploring there.
+
 ![The analysis board](img/analysis-board.png)
 
 ### Engine settings
@@ -671,7 +677,7 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 #### Summary, What to improve and What you did well
 *Added in v0.14.* A review that only lists faults reads like criticism even after a good game, so the review comes in three parts. All three come from Stockfish's analysis on your PC, so they work without an AI key.
 1. **Summary**, at the top: the result, your accuracy (when the platform gave one) and average loss, how many inaccuracies, mistakes and blunders Stockfish found in your moves, the turning point (the biggest mistake or blunder of the game, by either side), and how each phase went.
-2. **What to improve: key moments**, as above.
+2. **What to improve**: the key moments, as above.
 3. **What you did well**, below the key moments. Only things Stockfish's numbers back up, each naming a move you played; click one to go to it:
    - **The only good move:** you played Stockfish's best move, and its next choice was at least 1.5 pawns worse.
    - **Punishing a mistake:** right after your opponent's mistake or blunder, you kept what it gave you.
@@ -697,6 +703,7 @@ If the app can't tell which side you played, it asks: **White**, **Black** or **
 1. Play moves on the board. **◀ Back** and **Forward ▶** (or **←** and **→**) step through what you played; **Reset** goes back to the game position.
 2. With **Show best moves** on, Stockfish's eval and top three lines follow the position on the board, with a green arrow for its best move. With it off, they stay hidden until you turn it on.
 3. **Back to the game** returns to the game where you left it.
+4. *Added in v0.15:* **Open in Analysis tab** takes the position to the [Analysis tab](#the-analysis-tab), with the game's moves from the start, and your own moves after them.
 
 Nothing you play there changes the game, its analysis or your stats. It uses the same engine as the analysis board after puzzles, so it answers even while games are being analyzed in the background.
 
@@ -722,18 +729,17 @@ With an [AI provider set up](#setting-it-up), Game Review can explain your games
 
 ![Explain my game](img/game-review-ai.png)
 
-After about half a minute you get:
-- a short summary of the **opening**,
-- the **turning point** (click it to jump there),
-- the **recurring themes** of your mistakes and 2–3 **takeaways**,
-- **What you did well** (v0.14): for up to three items from the Review screen's [What you did well](#summary-what-to-improve-and-what-you-did-well) list, why each was good. The AI may only explain items on that list, never add its own; with nothing on the list, this part is left out,
-- a note on **each key moment** in the Key moments list, with **Show on the board** for its arrows and the better line,
-- often a **puzzle recommendation**, for example *Practise: Hanging piece, Fork (1200–1700)*. **Train these** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
+After about half a minute, the AI's words appear in the review's [three parts](#summary-what-to-improve-and-what-you-did-well) (*changed in v0.15*):
+1. **Summary:** a general summary of the game in place of the computed sentences: how it went, where it turned, what you struggled with and what went right. It may point at a move number, but it doesn't walk through the moves. The **turning point** is under it (click it to jump there).
+2. **What to improve:** a short summary of what your mistakes had in common, then the key moments. Each key moment gets a note on what went wrong, why the better move is better and what to look for next time, with **Show on the board** for its arrows and the better line. Under the note, **Train:** tags the puzzle themes that practise that kind of moment, for example *Hanging piece*.
+3. **What you did well:** a short summary of your strengths, then, under up to three of the items on the list, why each was good. The AI may only explain items on that list, never add its own; with nothing on the list, it adds nothing here.
+
+What to improve usually ends with a **Suggested training** box: the puzzle themes that practice what went wrong, for example *Hanging piece* and *Fork*, rated 1200–1700. **Train these puzzles** asks first, then sets the puzzle filters to those themes and that rating range and takes you to your puzzles. It replaces the themes and rating you had, and keeps **Match** (any or all) as you set it. Themes apply only to Lichess puzzles without a mix by ratio, so if **Puzzles from** was **My puzzles**, it switches to **Lichess DB**, and **Mix by ratio** turns off. Your other filters and your saved presets don't change.
 
 The game then shows **AI-reviewed** in My games.
 
 **Gotchas**
-- **Saved explanations are free.** The same move, or the same game with the same number of key moments, on the same model, shows **(saved)** and costs nothing, even when the budget is used up. A new analysis at other settings, or other grading thresholds, gets a new explanation. Analyzing a game again sets it back to **Analyzed**.
+- **Saved explanations are free.** The same move, or the same game with the same number of key moments, on the same model, shows **(saved)** and costs nothing, even when the budget is used up. A new analysis at other settings, or other grading thresholds, gets a new explanation. Analyzing a game again sets it back to **Analyzed**. A game explained before v0.15 needs a new run (at the usual cost) to get the three-part version.
 - **What it costs:** Explain my game is roughly 10,000 input and 3,000 output tokens: about $0.003 on Claude Haiku 5.5, $0.05 on Claude Sonnet 5.5 and $0.14 on GPT-5.5. Explain this move costs about the same as one puzzle Explain. The [budget and the per-run cap](#what-it-costs-and-the-limits) apply.
 - **Your side first:** the AI needs to know which side you played. If the app asks, answer it first.
 - **What's sent:** see [Your data and privacy](#your-data-and-privacy). No names, ratings, dates, links or clocks.
@@ -1158,7 +1164,7 @@ The other ways to find one:
 **Private studies.** A study that's private on Lichess can only be added if it's yours or you're a member, and you're signed in with Lichess. If you signed in before v0.14, WeakSquare asks you to **Sign in again**, because older sign-ins can't read studies. Approve in your browser, then add the study again. Someone else's private study can't be added: ask its author to make it public or unlisted.
 
 ### What gets checked
-Every move of every chapter is checked. A chapter with an illegal move, or one for another variant such as Crazyhouse, is listed as **Can't be used** with the reason, and the rest of the study works. A chapter that's only text on a decorative board (an empty board, or pictures drawn with pawns) is kept as a **Text** chapter: you read it, and there's nothing to play.
+Every move of every chapter is checked. A chapter with an illegal move (*from v0.15*, a null move written as `--` counts as one), or one for another variant such as Crazyhouse, is listed as **Can't be used** with the reason, and the rest of the study works. A chapter that's only text on a decorative board (an empty board, or pictures drawn with pawns) is kept as a **Text** chapter: you read it, and there's nothing to play.
 
 Comments and titles are shown as plain text. A web address in a comment is just text, never a link: WeakSquare's only links are the ones it builds, such as **Open on Lichess**.
 
@@ -1197,6 +1203,52 @@ Added moves show **Study** as their source in your repertoire. Your repertoire s
 - A study you've added keeps working if its author changes it or deletes it, or if you're offline. Only **Check for updates** fetches it again.
 - Study text is never sent to an AI.
 
+## The Analysis tab
+*Added in v0.15.*
+
+A board of your own for trying ideas: set up any position, paste a game, and explore it with Stockfish and the moves people play most, without starting a puzzle or opening a game first.
+
+**Analysis** in the top bar opens it at the starting position. Nothing on this tab is scored, saved to your stats, added to My games or sent to an AI. Your lines stay while the app is open, even when you switch to another page, but closing the app clears them.
+
+![The Analysis tab](img/analysis-tab.png)
+
+### Exploring
+1. Move pieces for **either side**. Only legal moves are allowed.
+2. Each different move you try from a position becomes its own line. They're listed under **Your lines**, the first line inline and the others indented under the move they replace, like study chapters. Click any move to go there.
+3. **◀ Back** and **Forward ▶** (or **←** and **→**) step through the line you're on, **|◀** goes to the start and **▶|** to the end of the first line. **Back to main line** appears when you're on a side line.
+4. **Flip board** turns the board round. **New board** starts again from the starting position.
+
+The **Stockfish** panel shows the eval and the top three lines for the position on the board, with an arrow for its best move. Here the eval is from White's side, because you play both: **+0.3** means White is better, **−1.4** that Black is, and a mate reads *White mates in 3*. It's the same engine as the puzzle analysis board, so it answers even while games are being analyzed in the background. Without Stockfish, the panel offers to install it.
+
+**Popular replies** lists the moves played most often in this position on Lichess, with the number of games and how they ended (White wins, draws, Black wins). Click one to play it. They use the source and rating bands you chose in the opening trainer's settings. You need to be signed in to Lichess; otherwise the panel says *Sign in to Lichess to see popular replies*, and offline it says they aren't available right now. Everything else on the tab works either way.
+
+### Setting up a position
+![Setting up a position](img/analysis-setup.png)
+
+1. Click **Set up position**. The board shows the current position, with a row of pieces for each side above and below it.
+2. Drag a piece from a row onto a square. Or click a piece in a row and then click squares to place it, as many as you like; click it again to stop. Drag a piece off the board to remove it, or pick the bin (🗑) and click squares.
+3. **Clear board** empties it and **Start position** puts all the pieces back.
+4. Choose **White to move** or **Black to move**, and tick the **castling rights** each side still has. A box is greyed out unless that king and rook are on their starting squares.
+5. Click **Done**. If the position can't happen in a game, you get a list of what's wrong, for example *Black has no king* or *The side that isn't to move is in check*, and you stay in set-up to fix it. Nothing reaches Stockfish until it's right.
+
+**Or paste a FEN:** paste one into **Or paste a FEN** and click **Use this FEN** (or press **Enter**). It's checked the same way.
+
+**Cancel** leaves the board as it was. **Done** replaces your current board and its lines.
+
+### Importing a PGN
+1. Click **Import PGN** and paste a game in PGN format, from Lichess, chess.com, a book or another app.
+2. Click **Import**. A PGN with several games lists them by players, date and result: pick one and click **Open**. Games that can't be used (an illegal move, a null move written as `--`, another variant such as Crazyhouse) are listed with the reason.
+3. The game opens at its starting position, with its side lines and comments. Step through it with **Forward**, the arrow keys, or by clicking moves, and play your own moves wherever you like: they become new lines.
+
+Comments are shown as plain text, and a web address in one is never a link. Headers, clocks and evals written in the PGN are left out. If the PGN can't be read, you're told why and the board doesn't change. To keep a game and have Stockfish review it, use **Import game** instead: that adds it to My games.
+
+### Open in Analysis tab
+On the analysis board after a puzzle, and under **Analyze from here** in Game Review, **Open in Analysis tab** brings the position here. It comes with the moves that led to it (the puzzle from its start, or the game from its first move) plus the moves you played on that board, and the board shows the position you were looking at. Step back to see how it arose.
+
+### Gotchas
+- **Replacing your board asks first.** **New board**, **Import PGN** and **Open in Analysis tab** all ask *Replace your current board?* when it has moves; **Keep my board** leaves it as it was. Your lines aren't saved anywhere else.
+- Closing the app clears the Analysis tab.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 
@@ -1206,12 +1258,13 @@ Added moves show **Study** as their source in your repertoire. Your repertoire s
 | **H** | Hint |
 | **A** | Show answer (once it's unlocked; after the puzzle, back to the start of the answer) |
 | **R** | Try again (not scored), once the puzzle is over (v0.4) |
-| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4). In Game Review: through the game, or a line you're stepping through (v0.8) |
+| **←** / **→** | Step back / forward through the answer, through your moves on the analysis board, or through a line you chose with **Show me** (v0.4). In Game Review: through the game, or a line you're stepping through (v0.8). On the Analysis tab: back to the move before, or forward along the first line (v0.15) |
 | **C** | Show or hide the letters and numbers around the board |
 | **F** | Hide or show the filters panel (v0.5) |
 | **S** / **U** | Danger spotting: call the highlighted move Safe or Unsafe (v0.6) |
 | **1**–**6** | After a failed puzzle: pick why you missed it (v0.6) |
 | **?** | The list of shortcuts (also in **☰ → Keyboard shortcuts**) |
+| **Ctrl+C** | Copy the text you've selected (v0.15). Select it with the mouse, as in a browser: an AI explanation, a summary, a FEN. The board itself can't be selected, so dragging pieces never highlights anything. There's no right-click menu |
 
 Shortcuts do nothing while you're typing in a box or a dialog is open, and a key does nothing when its button is greyed out.
 

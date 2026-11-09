@@ -13,6 +13,25 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.15] - 2026-11-08
+
+Candidates: v0.15-rc1 (2026-11-08)
+
+### Added
+- **The Analysis tab**: a board of its own in the top bar. Move for either side and every different move you try becomes its own line, listed with side lines like a study. Stockfish's eval, top three lines and best-move arrow follow the board, worded from White's side. Nothing here is scored, saved to your stats or sent to an AI. Your lines are kept while the app is open. [FR-14.1, FR-14.4, FR-14.5]
+- **Set up a position** by dragging pieces from a palette, or picking a piece and clicking squares, with the side to move and castling rights; or paste a FEN. A position that can't happen in a game is refused with what's wrong, and never reaches Stockfish. [FR-14.2]
+- **Import a PGN** into the Analysis tab, side lines and comments included. A file with several games lets you pick one. A PGN that can't be read changes nothing. It isn't added to My games. [FR-14.3]
+- **Popular replies** on the Analysis tab while you're signed in to Lichess: the most played moves with their games and results, from the explorer settings you chose in the opening trainer. Click one to play it. [FR-14.4]
+- **Open in Analysis tab** on the analysis board after a puzzle and under Analyze from here in Game Review: the position comes with the moves that led to it. A board that already has moves asks before it's replaced. [FR-14.6]
+
+### Changed
+- **Explain my game** now fills the review's three parts instead of adding a block of its own. **Summary** gets a general summary of the game rather than an opening summary. **What to improve** opens with a short summary of what your mistakes had in common, and each key moment is tagged with the puzzle themes that train it. **What you did well** opens with a short summary, and the AI's words sit under the strengths they're about. A game explained before needs a new run for the new version. [FR-11.18, FR-11.36]
+- **Suggested training**: the puzzles Explain my game recommends now have their own box at the end of What to improve, with a **Train these puzzles** button, instead of a small "Practise:" line. [FR-11.36]
+
+### Fixed
+- **Copying text**: you can now select text in the app with the mouse and copy it with Ctrl+C. The board still can't be selected. [NFR-8b]
+- **Lichess studies**: a chapter containing a null move (`--`) was accepted when the study was added, then showed as damaged when opened. It's now listed as **Can't be used** with the reason, and the rest of the study works. Re-add the study, or use **Check for updates**, to see it. [FR-13.7]
+
 ## [v0.14] - 2026-11-08
 
 Candidates: v0.14-rc1 (2026-11-08)

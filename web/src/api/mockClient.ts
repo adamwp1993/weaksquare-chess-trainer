@@ -42,6 +42,7 @@ import type {
 } from "./ApiClient";
 import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient";
 import { mockAnalysis } from "./mockEngine";
+import { mockCheckPosition, mockImportPgn, mockPgnGame, mockPopular } from "./mockAnalysisTab";
 import { MockCoach } from "./mockCoach";
 import { MockOpenings } from "./mockOpenings";
 import { MockStudies } from "./mockStudies";
@@ -2204,6 +2205,46 @@ export class MockClient implements ApiClient {
 
   async getStudy(studyId: string) {
     return this.studies.detail(studyId);
+  }
+
+  // ---- v0.15: the Analysis tab ----
+  async checkBoardPosition(fen: string) {
+    this.calls.push("checkBoardPosition");
+    return mockCheckPosition(fen);
+  }
+
+  async importAnalysisPgn(pgn: string) {
+    try {
+      return mockImportPgn(pgn);
+    } catch (e) {
+      throw new ApiCallError({ code: "invalid_argument", message: (e as Error).message, retryable: false });
+    }
+  }
+
+  async getAnalysisPgnGame(pgn: string, index: number) {
+    try {
+      return mockPgnGame(pgn, index);
+    } catch (e) {
+      throw new ApiCallError({ code: "invalid_argument", message: (e as Error).message, retryable: false });
+    }
+  }
+
+  async analyzeBoardPosition(fen: string, purpose: "start" | "panel" | "board"): Promise<Analysis> {
+    const check = mockCheckPosition(fen);
+    if (!check.ok) throw new ApiCallError({ code: "invalid_argument", message: check.problems[0], retryable: false });
+    if (this.engine.state !== "ready") {
+      throw new ApiCallError({ code: "engine_not_installed", message: "Install Stockfish to analyze positions.", retryable: false });
+    }
+    this.calls.push(`analyzeBoard:${purpose}`);
+    await this.think();
+    return mockAnalysis(fen, "both");
+  }
+
+  async getPopularReplies(fen: string) {
+    const check = mockCheckPosition(fen);
+    if (!check.ok) throw new ApiCallError({ code: "invalid_argument", message: check.problems[0], retryable: false });
+    this.calls.push("getPopularReplies");
+    return mockPopular(fen, this.account.state === "signed_in");
   }
 
   async getStudyChapter(studyId: string, chapterKey: string) {

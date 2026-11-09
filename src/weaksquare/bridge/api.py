@@ -47,6 +47,7 @@ from weaksquare.core.themes import display_name
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
 from weaksquare.services.analysis import AnalysisService
+from weaksquare.services.analysis_tab import AnalysisTabService
 from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
@@ -137,6 +138,8 @@ class Api:
         lichess_window: Any,
     ) -> None:
         self._studies = studies
+        # v0.15: stateless, built from what's already here; it holds no repository (FR-14.5)
+        self._analysis_tab = AnalysisTabService(engine, opening_sources)
         self._lichess_window = lichess_window
         self._opening_practice = opening_practice
         self._opening_notes = opening_notes
@@ -1240,6 +1243,37 @@ class Api:
         """Continue the lines past the book with Stockfish (FR-12.13). None when there's nothing to do."""
         return self._openings.start_extend(family)
 
+    # ---- v0.15: the Analysis tab (REQUIREMENTS §20). Nothing here is scored or saved (FR-14.5) ----------------
+    @bridge_call
+    def check_board_position(self, fen: str) -> dto.PositionCheck:
+        """FR-14.2: a set-up position or pasted FEN, with a sentence per problem."""
+        c = self._analysis_tab.check_position(fen)
+        return dto.PositionCheck(c.ok, c.fen, list(c.problems))
+
+    @bridge_call
+    def import_analysis_pgn(self, pgn: str) -> dto.AnalysisPgnImport:
+        """FR-14.3: the games in a pasted PGN, to pick from. Not added to your library."""
+        games, skipped = self._analysis_tab.import_pgn(pgn)
+        return dto.AnalysisPgnImport([dto.AnalysisPgnGameInfo(g.index, g.label, g.move_count) for g in games], skipped)
+
+    @bridge_call
+    def get_analysis_pgn_game(self, pgn: str, index: int) -> dto.AnalysisPgnGame:
+        g = self._analysis_tab.pgn_game(pgn, index)
+        return dto.AnalysisPgnGame(g.index, g.label, g.start_fen, _flatten_study_tree(g.root, g.start_fen))
+
+    @bridge_call
+    def analyze_board_position(self, fen: str, purpose: Literal["start", "panel", "board"] = "board") -> dto.Analysis:
+        """FR-14.4: eval and top 3 lines on the interactive engine, after the position passes FR-14.2's check."""
+        return analysis_dto(self._analysis_tab.analyze(fen, purpose))
+
+    @bridge_call
+    def get_popular_replies(self, fen: str) -> dto.PopularReplies:
+        """FR-14.4: the Lichess explorer's most played moves; signed out or offline is a state, not an error."""
+        r = self._analysis_tab.popular_replies(fen)
+        return dto.PopularReplies(
+            r.state, r.total, [dto.PopularReply(m.uci, m.san, m.games, m.white, m.draws, m.black) for m in r.moves]
+        )
+
     @bridge_call
     def analyze_opening_position(
         self, fen: str, purpose: Literal["start", "panel", "board"], player: Literal["white", "black"]
@@ -1991,13 +2025,13 @@ def _narrative_dto(v: NarrativeView) -> dto.GameNarrative:
     moments = [
         dto.GameMoment(m.ply, m.played_san, m.text,
                        [dto.ExplainAnnotation(a.kind, a.orig, a.dest, a.color) for a in m.annotations],  # type: ignore[arg-type]
-                       list(m.better_line), list(m.better_uci))
+                       list(m.better_line), list(m.better_uci), list(m.training_ideas), list(m.idea_names))
         for m in n.moments
     ]  # fmt: skip
     p = n.preset
     preset = dto.SuggestedPreset(list(p.themes), list(p.names), p.rating_min, p.rating_max) if p else None
-    return dto.GameNarrative(v.game_id, v.n, list(v.moments), n.opening_summary, n.turning_point, list(n.themes),
-                             list(n.takeaways), moments, preset, n.discarded, v.provider, v.model,
+    return dto.GameNarrative(v.game_id, v.n, list(v.moments), n.summary, n.turning_point, n.improve_summary,
+                             n.did_well_summary, moments, preset, n.discarded, v.provider, v.model,
                              round(v.cost_usd, 6), v.cached, [dto.GameDidWell(f, t) for f, t in n.did_well])  # fmt: skip
 
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import chess
 
@@ -225,8 +225,14 @@ def score_for(line: EngineLine, player: Color) -> tuple[int | None, int | None]:
     return _relative(line.cp, line.mate, player)
 
 
-def format_score(line: EngineLine, player: Color) -> str:
-    """FR-7.2: "+3.2 for you", "−1.4 for you", "0.0 (level)", "You mate in 3", "You're mated in 2"."""
+Viewpoint = Color | Literal["both"]  # v0.15: "both" is the Analysis tab, where you play either side
+
+
+def format_score(line: EngineLine, player: Viewpoint) -> str:
+    """FR-7.2: "+3.2 for you", "−1.4 for you", "0.0 (level)", "You mate in 3", "You're mated in 2". From the
+    viewpoint "both" (the Analysis tab, FR-14.4) it's White's side, as on Lichess: "+3.2", "White mates in 3"."""
+    if player == "both":
+        return _neutral_score(line)
     cp, mate = score_for(line, player)
     if mate is not None:
         n = abs(mate)
@@ -240,10 +246,25 @@ def format_score(line: EngineLine, player: Color) -> str:
     return f"{sign}{abs(value):.1f} for you"
 
 
-def game_over_text(board: chess.Board, player: Color) -> str | None:
+def _neutral_score(line: EngineLine) -> str:
+    cp, mate = score_for(line, "white")
+    if mate is not None:
+        n = abs(mate)
+        if n == 0:
+            return "Checkmate"
+        return f"{'White' if mate > 0 else 'Black'} mates in {n}"
+    value = (cp or 0) / 100
+    if round(value, 1) == 0:
+        return "0.0 (level)"
+    return f"{'+' if value > 0 else '−'}{abs(value):.1f}"
+
+
+def game_over_text(board: chess.Board, player: Viewpoint) -> str | None:
     """The result text for a position the engine needn't see (mate, stalemate, draw), else None."""
     if board.is_checkmate():
         mated_white = board.turn == chess.WHITE
+        if player == "both":
+            return "Checkmate: Black wins" if mated_white else "Checkmate: White wins"
         return "You're checkmated" if (player == "white") == mated_white else "Checkmate: you win"
     if board.is_stalemate():
         return "Stalemate: a draw"

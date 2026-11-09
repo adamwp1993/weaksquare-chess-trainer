@@ -107,6 +107,10 @@ import type {
   StarterStudy,
   StudyAddResult,
   StudyChapter,
+  PositionCheck,
+  AnalysisPgnImport,
+  AnalysisPgnGame,
+  PopularReplies,
   StudyDetail,
   StudyPlace,
   StudySummary,
@@ -917,6 +921,26 @@ export class PywebviewClient implements ApiClient {
 
   getStudy(studyId: string) {
     return this.call<StudyDetail>("get_study", studyId);
+  }
+
+  checkBoardPosition(fen: string) {
+    return this.call<PositionCheck>("check_board_position", fen);
+  }
+
+  importAnalysisPgn(pgn: string) {
+    return this.call<AnalysisPgnImport>("import_analysis_pgn", pgn);
+  }
+
+  getAnalysisPgnGame(pgn: string, index: number) {
+    return this.call<AnalysisPgnGame>("get_analysis_pgn_game", pgn, index);
+  }
+
+  analyzeBoardPosition(fen: string, purpose: "start" | "panel" | "board") {
+    return this.call<Analysis>("analyze_board_position", fen, purpose);
+  }
+
+  getPopularReplies(fen: string) {
+    return this.call<PopularReplies>("get_popular_replies", fen);
   }
 
   getStudyChapter(studyId: string, chapterKey: string) {

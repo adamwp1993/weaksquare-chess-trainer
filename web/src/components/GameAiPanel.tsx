@@ -1,7 +1,7 @@
 // Game Review AI (v0.9, §11.4): Explain this move and Explain my game. Both are built from the stored
 // analysis, use Game Review's own model (FR-1.15) and the shared guardrails (§9.3). Every word from the
 // AI is rendered as plain text (React escapes it), never as HTML (FR-8.7).
-import { Alert, Badge, Button, Group, List, Modal, Paper, Select, Stack, Text } from "@mantine/core";
+import { Alert, Badge, Button, Group, Modal, Paper, Select, Stack, Text } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Explanation, GameAiQuote, GameMoment, GameNarrative, SuggestedPreset } from "../api/types";
@@ -126,28 +126,25 @@ export function EstimateLines({ q, sends }: { q: GameAiQuote; sends?: string }) 
   );
 }
 
+/** Explain my game's controls: the button, the Confirm dialog and the run. What it writes is shown in the review's
+ * three parts (v0.15): the Summary, What to improve and What you did well, through `onNarrative`. */
 export function GameNarrativePanel({
   gameId,
   analyzed,
   autoConfirm,
   onNarrative,
-  onJump,
-  onTrain,
 }: {
   gameId: number;
   analyzed: boolean;
   /** Review + Explain my game (FR-11.29): open the Confirm dialog as soon as the analysis is there. */
   autoConfirm: boolean;
   onNarrative: (n: GameNarrative | null) => void;
-  onJump: (ply: number) => void;
-  onTrain: (p: SuggestedPreset) => void;
 }) {
   const { settings, configured } = useGameReviewReady();
   const [n, setN] = useState<number | null>(null); // null: the Key moments setting
   const [quote, setQuote] = useState<GameAiQuote | null>(null);
   const [narrative, setNarrative] = useState<GameNarrative | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const [train, setTrain] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const job = useJob(jobId);
@@ -231,7 +228,7 @@ export function GameNarrativePanel({
             {error ?? jobError(job)}
           </Alert>
         )}
-        {narrative && <NarrativeView x={narrative} onJump={onJump} onTrain={() => setTrain(true)} />}
+        {narrative && <NarrativeFooter x={narrative} />}
       </Stack>
       <Modal opened={confirm && !!quote && quote.state === "ok"} onClose={() => setConfirm(false)} title="Explain my game?" data-testid="narrative-confirm">
         {quote && (
@@ -248,109 +245,126 @@ export function GameNarrativePanel({
           </Stack>
         )}
       </Modal>
-      <Modal opened={train && !!narrative?.preset} onClose={() => setTrain(false)} title="Train these?" data-testid="train-confirm">
-        {narrative?.preset && (
-          <Stack>
-            <Text size="sm">
-              This sets the Mixer's themes to <b>{narrative.preset.names.join(", ")}</b>
-              {narrative.preset.rating_min !== null || narrative.preset.rating_max !== null
-                ? ` and the rating range to ${narrative.preset.rating_min ?? "any"}–${narrative.preset.rating_max ?? "any"}`
-                : ""}
-              , replacing the themes and rating you have now. Themes apply only to Lichess puzzles without a mix by
-              ratio, so if you were training My puzzles only, or mixing by ratio, it switches those off too. Your other
-              filters and your saved presets don't change.
-            </Text>
-            <Group justify="flex-end">
-              <Button variant="default" onClick={() => setTrain(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  setTrain(false);
-                  if (narrative.preset) onTrain(narrative.preset);
-                }}
-                data-testid="train-apply"
-              >
-                Apply and go to puzzles
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
     </Paper>
   );
 }
 
-function NarrativeView({ x, onJump, onTrain }: { x: GameNarrative; onJump: (ply: number) => void; onTrain: () => void }) {
+function NarrativeFooter({ x }: { x: GameNarrative }) {
   return (
-    <Stack gap={6} data-testid="narrative">
-      <Text size="sm" data-testid="narrative-opening">
-        <b>Opening.</b> {x.opening_summary}
-      </Text>
-      {x.turning_point !== null && (
-        <Group gap={6}>
-          <Text size="sm" fw={600}>
-            Turning point:
-          </Text>
-          <Button size="compact-xs" variant="light" onClick={() => onJump(x.turning_point!)} data-testid="narrative-turning-point">
-            {moveLabel(x.turning_point)} {x.moments.find((m) => m.ply === x.turning_point)?.played_san ?? ""}
-          </Button>
-        </Group>
-      )}
-      {x.themes.length > 0 && (
-        <Group gap={4}>
-          {x.themes.map((t) => (
-            <Badge key={t} variant="light" color="indigo" style={{ textTransform: "none" }}>
-              {t}
-            </Badge>
-          ))}
-        </Group>
-      )}
-      {x.takeaways.length > 0 && (
-        <List size="sm" spacing={2} data-testid="narrative-takeaways">
-          {x.takeaways.map((t, i) => (
-            <List.Item key={i}>{t}</List.Item>
-          ))}
-        </List>
-      )}
-      {x.did_well.length > 0 && (
-        <Stack gap={2} data-testid="narrative-did-well">
-          <Text size="sm" fw={600}>What you did well</Text>
-          {x.did_well.map((d, i) => (
-            <Text key={i} size="sm">
-              <b>{d.fact}</b> {d.text}
-            </Text>
-          ))}
-        </Stack>
-      )}
-      {x.preset && (
-        <Group gap="xs">
-          <Text size="sm">
-            Practise: {x.preset.names.join(", ")}
-            {x.preset.rating_min !== null || x.preset.rating_max !== null ? ` (${x.preset.rating_min ?? "any"}–${x.preset.rating_max ?? "any"})` : ""}
-          </Text>
-          <Button size="compact-xs" variant="light" onClick={onTrain} data-testid="narrative-train">
-            Train these
-          </Button>
-        </Group>
-      )}
+    <Stack gap={2} data-testid="narrative">
       {x.discarded > 0 && (
         <Text size="xs" c="orange" data-testid="narrative-discarded">
           Some annotations were discarded because they didn't fit the game.
         </Text>
       )}
       <Text size="xs" c="dimmed" data-testid="narrative-cost">
-        {x.model} · {x.cached ? "saved, free" : dollars(x.cost_usd)} · the key moments below have the AI's notes
+        {x.model} · {x.cached ? "saved, free" : dollars(x.cost_usd)} · the AI's notes are in the Summary, What to improve
+        and What you did well below
       </Text>
     </Stack>
   );
 }
 
-/** A key moment's note from Explain my game, under its entry in the key-moments list. */
+/** The AI's own summary for one part of the review (v0.15): a short paragraph before that part's moves. */
+export function PartSummary({ text, testId }: { text: string; testId: string }) {
+  if (!text) return null;
+  return (
+    <Text size="sm" data-testid={testId}>
+      {text}
+    </Text>
+  );
+}
+
+/** Explain my game's turning point, as a button that goes to that move. */
+export function TurningPoint({ x, onJump }: { x: GameNarrative; onJump: (ply: number) => void }) {
+  if (x.turning_point === null) return null;
+  return (
+    <Group gap={6}>
+      <Text size="sm" fw={600}>
+        Turning point:
+      </Text>
+      <Button size="compact-xs" variant="light" onClick={() => onJump(x.turning_point!)} data-testid="narrative-turning-point">
+        {moveLabel(x.turning_point)} {x.moments.find((m) => m.ply === x.turning_point)?.played_san ?? ""}
+      </Button>
+    </Group>
+  );
+}
+
+/** Suggested training, the last part of What to improve (v0.15, Adam): the recommended puzzle set, set off in its own
+ * box so it's seen, with a button that takes you to those puzzles after a confirmation (FR-11.18). */
+export function SuggestedTraining({ preset, onTrain }: { preset: SuggestedPreset; onTrain: (p: SuggestedPreset) => void }) {
+  const [train, setTrain] = useState(false);
+  const range = preset.rating_min !== null || preset.rating_max !== null;
+  return (
+    <>
+      <Paper withBorder p="sm" bg="var(--mantine-color-indigo-light)" data-testid="suggested-training">
+        <Stack gap={6}>
+          <Text fw={600}>Suggested training</Text>
+          <Text size="sm">Puzzles that practice what went wrong in this game:</Text>
+          <Group gap={6}>
+            {preset.names.map((name) => (
+              <Badge key={name} variant="filled" color="indigo" style={{ textTransform: "none" }} data-testid="suggested-theme">
+                {name}
+              </Badge>
+            ))}
+            {range && (
+              <Text size="sm" c="dimmed" data-testid="suggested-range">
+                rated {preset.rating_min ?? "any"}–{preset.rating_max ?? "any"}
+              </Text>
+            )}
+          </Group>
+          <Button color="indigo" w="fit-content" onClick={() => setTrain(true)} data-testid="narrative-train">
+            Train these puzzles
+          </Button>
+        </Stack>
+      </Paper>
+      <Modal opened={train} onClose={() => setTrain(false)} title="Train these?" data-testid="train-confirm">
+        <Stack>
+          <Text size="sm">
+            This sets the Mixer's themes to <b>{preset.names.join(", ")}</b>
+            {range ? ` and the rating range to ${preset.rating_min ?? "any"}–${preset.rating_max ?? "any"}` : ""}, replacing
+            the themes and rating you have now. Themes apply only to Lichess puzzles without a mix by ratio, so if you
+            were training My puzzles only, or mixing by ratio, it switches those off too. Your other filters and your
+            saved presets don't change.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setTrain(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setTrain(false);
+                onTrain(preset);
+              }}
+              data-testid="train-apply"
+            >
+              Apply and go to puzzles
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+/** A key moment's note from Explain my game, under its entry in What to improve: what went wrong, what to do next
+ * time, and (v0.15) the training ideas it points to. */
 export function MomentNote({ m, onShow }: { m: GameMoment; onShow?: () => void }) {
   return (
     <Stack gap={2} mt={4} data-testid={`moment-note-${m.ply}`}>
       <Text size="xs">{m.text}</Text>
+      {m.idea_names.length > 0 && (
+        <Group gap={4} data-testid={`moment-ideas-${m.ply}`}>
+          <Text size="xs" c="dimmed">
+            Train:
+          </Text>
+          {m.idea_names.map((name) => (
+            <Badge key={name} size="xs" variant="light" color="indigo" style={{ textTransform: "none" }} data-testid="moment-idea">
+              {name}
+            </Badge>
+          ))}
+        </Group>
+      )}
       {onShow && (m.annotations.length > 0 || m.better_uci.length > 0) && (
         <Button size="compact-xs" variant="subtle" w="fit-content" onClick={onShow} data-testid={`moment-show-${m.ply}`}>
           Show on the board{m.better_line.length ? ` (${m.better_line.join(" ")})` : ""}

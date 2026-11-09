@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { ApiCallError, type ReasonKey } from "../api/ApiClient";
 import type { AttemptRating, CommitFeedback, Outcome, PuzzleView, ReasonPrompt, SessionStats } from "../api/types";
-import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
+import {
+  AnalysisControls,
+  analysisMove,
+  lineForAnalysisTab,
+  openAnalysis,
+  type AnalysisState,
+} from "../components/AnalysisBoard";
+import { type AnalysisLine, uciOf } from "../state/analysisTree";
 import { AnswerPlayer, answerPositions, type AnswerPosition, type AnswerSegment } from "../components/AnswerPlayer";
 import { Board, type BoardShape } from "../components/Board";
 import { ExplainPanel, type ExplainShowMe } from "../components/ExplainPanel";
@@ -72,7 +79,10 @@ export function TrainerView({
   coordinates = true,
   wide = false,
   onOpenGame,
+  onOpenInAnalysis,
 }: {
+  /** v0.15 (FR-14.6): Open in Analysis tab from the analysis board. */
+  onOpenInAnalysis?: (line: AnalysisLine) => void;
   /** v0.10: a puzzle from your games links back to its game in Game Review (FR-10.44). */
   onOpenGame?: (gameId: number, ply: number) => void;
   /** FR-1.14: the filters panel is hidden, so the board may grow (within the window's height). */
@@ -135,6 +145,8 @@ export function TrainerView({
   const [reasonNote, setReasonNote] = useState("");
   const lastMode = useRef<PuzzleView["mode"] | null>(null);
   const chess = useRef<Chess | null>(null);
+  // v0.15 (FR-14.6): the puzzle's moves from its start, so Open in Analysis tab can bring them along.
+  const played = useRef<{ start: string; ucis: string[] } | null>(null);
   const timers = useRef<number[]>([]);
   // One next_puzzle call at a time: a quick second click on Next/Skip would otherwise record a
   // failure for a puzzle you never saw (v0.1-B1).
@@ -242,6 +254,7 @@ export function TrainerView({
       if (next.mode === "danger_spotting") {
         // The raw position: nothing to animate; the candidate is the arrow.
         chess.current = c;
+        played.current = { start: next.fen, ucis: [] };
         setDangerPhase("call");
         setMessage({ color: "gray", text: turnMessage(next, false) });
         return;
@@ -251,6 +264,7 @@ export function TrainerView({
         const opp = next.opponent_move; // empty for your own puzzles (v0.8): nothing to play first
         if (opp) c.move(uciMove(opp));
         chess.current = c;
+        played.current = { start: next.fen, ucis: opp ? [opp] : [] };
         setFen(c.fen());
         setLastMove(opp ? [opp.slice(0, 2), opp.slice(2, 4)] : null);
         setMovable(next.mode === "commit_line" ? "both" : next.mode === "name_idea" ? null : next.player_color);
@@ -360,6 +374,7 @@ export function TrainerView({
       if (fb.refute && view.candidate) {
         const c = new Chess(fb.fen);
         chess.current = c;
+        played.current = { start: view.fen, ucis: [view.candidate] };
         setFen(fb.fen);
         setLastMove([view.candidate.slice(0, 2), view.candidate.slice(2, 4)]);
         sounds.play(fb.blunder_sound);
@@ -412,6 +427,7 @@ export function TrainerView({
       setLineDone(true);
       if (fb.kind === "solved") {
         chess.current = after;
+        played.current?.ucis.push(uci);
         setMessage({ color: "green", text: practice ? "That's the punishment! (practice, not scored)" : "That's the punishment!" });
       } else {
         setFen(before.fen());
@@ -450,10 +466,12 @@ export function TrainerView({
       if (fb.kind !== "wrong" && fb.kind !== "illegal") setHintSquare(null);
       if (fb.kind === "correct" && fb.reply) {
         chess.current = after;
+        played.current?.ucis.push(uci);
         setMessage({ color: "green", text: "Correct. Keep going." });
         const reply = fb.reply;
         later(() => {
           after.move(uciMove(reply));
+          played.current?.ucis.push(reply);
           setFen(after.fen());
           setLastMove([reply.slice(0, 2), reply.slice(2, 4)]);
           setMovable(view.player_color);
@@ -461,6 +479,7 @@ export function TrainerView({
         }, REPLY_DELAY_MS);
       } else if (fb.kind === "solved") {
         chess.current = after;
+        played.current?.ucis.push(uci);
         setLineDone(true);
         if (practice) {
           setMessage(
@@ -622,6 +641,7 @@ export function TrainerView({
     setMessage({ color: "gray", text: "Try again: practice, not scored." });
     if (view.mode === "danger_spotting") {
       chess.current = c;
+      played.current = { start: view.fen, ucis: [] };
       setDangerPhase("call");
       setMessage({ color: "gray", text: turnMessage(view, true) });
       return;
@@ -630,12 +650,31 @@ export function TrainerView({
       const opp = view.opponent_move;
       if (opp) c.move(uciMove(opp));
       chess.current = c;
+      played.current = { start: view.fen, ucis: opp ? [opp] : [] };
       setFen(c.fen());
       setLastMove(opp ? [opp.slice(0, 2), opp.slice(2, 4)] : null);
       setMovable(view.mode === "commit_line" ? "both" : view.player_color);
       sounds.play(view.opponent_sound);
       setMessage({ color: "gray", text: turnMessage(view, true) });
     }, OPPONENT_DELAY_MS);
+  };
+  /** FR-14.6: the analysis board's moves, after the puzzle's own moves from its start: the opponent's move, then what
+   * you played or the answer, whichever reaches where the board was opened. */
+  const puzzleLine = (a: AnalysisState): AnalysisLine => {
+    const history: { start: string; ucis: string[] }[] = [];
+    const orient = view?.player_color ?? "white";
+    if (played.current) {
+      // Commit the line keeps your line in `entry` until Submit (QA v0.15-B3).
+      if (entry.length) history.push({ start: played.current.start, ucis: [...played.current.ucis, ...entry] });
+      history.push({ start: played.current.start, ucis: [...played.current.ucis] });
+    }
+    if (view && answer) {
+      const shown = answer.positions.slice(1).map((p) => uciOf(p.lastMove, p.san) ?? "");
+      const opp = view.opponent_move;
+      if (opp && answer.positions[0].fen !== view.fen) history.push({ start: view.fen, ucis: [opp, ...shown] });
+      history.push({ start: answer.positions[0].fen, ucis: shown });
+    }
+    return lineForAnalysisTab(a, history, orient);
   };
   const stepAnalysis = (to: number) => {
     if (!analysis) return;
@@ -954,6 +993,7 @@ export function TrainerView({
                   onReset={() => setAnalysis(openAnalysis(startFen))}
                   onClose={() => setAnalysis(null)}
                   closeLabel={answer ? "Back to the answer" : "Close"}
+                  onOpenInTab={onOpenInAnalysis && (() => onOpenInAnalysis(puzzleLine(analysis)))}
                 />
               ) : (
                 <AnalyzeButton onClick={() => setAnalysis(openAnalysis(boardFen))} />

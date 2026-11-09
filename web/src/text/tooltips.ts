@@ -2,6 +2,10 @@
 // User Guide. It says what the option does and, for a choice, what each choice means and costs. Add an entry for every
 // option a later version adds. The Playwright walk in tests/e2e/test_v012_tooltips.py fails on a control without one.
 export const TOOLTIPS = {
+  // ---- the Analysis tab (v0.15) ----
+  "analysis.sideToMove": "Whose turn it is in the position you set up. The engine and popular replies look at the position with that side to move, and it must not be possible to capture the other king.",
+  "analysis.castling": "Which sides may still castle, and to which side. A box is greyed out unless that king and rook are on their starting squares.",
+  "analysis.fen": "A FEN describes a whole position in one line of text: the pieces, the side to move, castling rights and the en passant square. Paste one from another app or website to load that position. It's checked before anything uses it.",
   // ---- Lichess studies (v0.14) ----
   "studies.filter": "Which of your studies to list. All: every study you've added. Favorites: the ones you've hearted (hearts stay in WeakSquare and never reach Lichess). In progress: started but not finished. Finished: every chapter you can use is done.",
   "studies.starterOpening": "Show only starter studies about this opening. The starter list comes with the app and holds only links, titles and authors. A study is downloaded only when you add it.",

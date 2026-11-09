@@ -98,8 +98,8 @@ def test_explain_my_game_confirm_cancel_then_run(page) -> None:  # type: ignore[
     button.click()
     page.get_by_test_id("narrative-confirm-button").click()
     page.get_by_test_id("narrative").wait_for()
-    assert "Opening." in page.get_by_test_id("narrative-opening").inner_text()
-    assert page.get_by_test_id("narrative-takeaways").locator("li").count() == 2
+    page.get_by_test_id("review-ai-summary").wait_for()  # v0.15: the general summary, in the Summary part
+    page.get_by_test_id("review-improve-summary").wait_for()
     page.get_by_test_id("narrative-discarded").wait_for()
     # The key moments carry the AI's notes, and Show on the board draws them.
     page.get_by_test_id("moment-note-6").wait_for()

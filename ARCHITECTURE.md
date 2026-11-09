@@ -96,6 +96,8 @@ weaksquare-chess-trainer/
 │  │  ├─ study_links.py        # v0.14: study and chapter links, IDs, which pages the Lichess window may show
 │  │  ├─ study_pgn.py          # v0.14: a study's PGN, parsed and checked; arrows, highlights, text chapters
 │  │  ├─ study_repertoire.py   # v0.14: Add to my repertoire: which moves, conflicts, reachability
+│  │  ├─ position_setup.py     # v0.15: a set-up position or FEN, checked, one sentence per problem
+│  │  ├─ analysis_pgn.py       # v0.15: a pasted PGN as move trees for the Analysis tab (study_pgn's builder)
 │  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
 │  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
 │  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
@@ -110,6 +112,7 @@ weaksquare-chess-trainer/
 │  │                           #   v0.7: llm_settings.py (provider, key, prices, Test key), llm_usage.py
 │  │                           #         (the guardrail gate every LLM request goes through)
 │  │                           #   v0.14: studies.py (add, keep, update, place, Add to my repertoire)
+│  │                           #   v0.15: analysis_tab.py (the Analysis tab: checks, PGN, engine, popular replies; no repository)
 │  │                           #   v0.8: games.py (library, sync, imports), analysis.py (the queue on the
 │  │                           #         background engine, Review settings), review.py (review, Retry,
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
@@ -256,6 +259,20 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-08, v0.15: The Analysis tab reuses the study tree and holds no repository
+- Context: REQUIREMENTS §20 asks for a board of its own that never changes puzzles, stats, the game library or Coach reports, never reaches an LLM, and reuses the existing analysis board rather than adding a second one.
+- Decision:
+  - **`services/analysis_tab.py`** is stateless and is built inside `Api` from the engine and `OpeningSources` it already receives. It holds no repository, so it can't write your data (FR-14.5); a test checks its imports and that every table except `explorer_cache` hashes the same after a scripted session. Analysis runs on the **interactive** engine, key `("analysis_tab", purpose)`, from White's side.
+  - **`core/position_setup.py`** turns each python-chess `Board.status()` flag into one sentence, so a set-up position or FEN is refused with a reason before anything reaches the engine; `validate_fen` still checks again.
+  - **`core/analysis_pgn.py`** reads a pasted PGN with `core.study_pgn`'s size-capped builder and converter (made public as `LimitedBuilder`, `TooBig`, `convert_game`), so side lines and comments come with it, `[%…]` commands are stripped, and every move is checked. Headers are used only for the pick list. The bridge sends one game's tree at a time (`get_analysis_pgn_game` re-parses the text it's given); nothing is kept.
+  - **The front end reuses v0.14's flat tree** (`StudyMove[]`): `state/analysisTree.ts` adds moves as branches, and `MoveTree` moved out of `StudyReader` into its own component for both screens. The tree lives in `App` while the app is open and is never saved (Adam, v0.15 planning).
+  - **`Board` gained a set-up mode** (chessground free moves, drop-off removes, a palette that drags with `dragNewPiece` or places by click), so it stays the only chessground wrapper (§3 decision 11).
+  - **`ExplorerMove`** gained White-win, draw and Black-win counts (default 0) for the popular replies bar.
+  - **A neutral viewpoint `"both"`** (`core.engine.Viewpoint`) for `format_score` and `game_over_text`: on this tab you play both sides, so evals read "+0.3" and "White mates in 3" instead of "for you". Puzzles, Game Review and the opening trainer pass a color as before.
+  - **Open in Analysis tab** sends the moves that led to the position: Game Review's game moves, or the puzzle's moves from its start, which `TrainerView` now records as they're played. Each candidate line is replayed and used only if it reaches the board's first position.
+- Alternatives: a second, simpler board component for the tab, rejected by §20 ("not a second one"); saving the board in `user.db`, rejected by Adam at planning; sending every game of a large PGN at once, rejected for size.
+- Consequences: the tab can't count anything by construction. A PGN's games aren't in My games; to review one, import it there.
+
 ### 2026-11-07, v0.14: What building Lichess studies and the three-part review settled
 - Context: the plan left the storage shape, how private studies are detected, how study lines join a repertoire and where the review's strengths are worked out.
 - Decision:
@@ -264,7 +281,7 @@ Entry format:
   - **The tree is stored flat** (`{"v": 2, "nodes": [...]}`, pre-order, each node naming its earlier parent) and every walk over it (`_convert`, `node_from_json`, `walk`, `study_moves`, the bridge's flattening) is a loop. The first build nested one JSON level per move and recursed per move, and silently cut main lines at 200 plies; raising the cap would hit Python's recursion limit, and `json` refuses deep nesting too (QA v0.14-B1). The cap is now only on moves per chapter (5,000).
   - **Scopes are recorded, not queried.** Lichess's token response doesn't say what was granted, so `AccountService` stores the scopes it asked for at each sign-in (`lichess.scopes`, cleared on sign-out and expiry). A pre-v0.14 sign-in has none, so a 403 on a private study says *Sign in again* without sending the token. A public study never sends it.
   - **`core/study_repertoire.py`** plans Add to my repertoire: main line by default, conflicts only at your-turn positions where you already have a move, **Keep mine** by default, **Use the study's** sets the study's move as main and keeps yours. Only moves reachable from the start are stored, because `core.repertoire.removal` deletes anything unreachable. `RepertoireService.add_study_moves` re-checks each move.
-  - **`core.game_review.game_story`** works out the Summary and What you did well from stored `MoveRow`s with the review's own thresholds. The Review screen and Explain my game use the same list; the narrative's `did_well` keeps only ids that were sent, and its cache key gained `"strengths"`.
+  - **`core.game_review.game_story`** works out the Summary and What you did well from stored `MoveRow`s with the review's own thresholds. The Review screen and Explain my game use the same list; the narrative's `did_well` keeps only ids that were sent, and its cache key gained `"strengths"`. *v0.15 (Adam's rc1 feedback):* the narrative fills the same three parts instead of adding its own block. Its schema swaps `opening_summary`, `recurring_themes` and `takeaways` for `summary`, `improve_summary` and `did_well_summary`, and each moment gains `training_ideas` (theme keys checked against `preset_themes()`). The cache key's prompt version is now `"parts"`. `GameNarrative.from_json` still reads older saved answers, using the opening summary as the summary. The front end renders the parts in `ReviewView`, and `GameNarrativePanel` keeps only the controls.
   - **`Board`** draws a FEN chess.js refuses (a text chapter's decorative board) read-only instead of throwing.
   - **The starter list** (`study_starter.json`) is loaded by a strict loader: exactly ID, title, author and opening per entry.
 - Alternatives: storing the PGN and re-parsing on every open, rejected for speed on 30-chapter studies and because the checked tree is what was shown; asking Lichess for a token's scopes with `/api/token/test`, rejected as an extra request that sends the token when the app can know without it.

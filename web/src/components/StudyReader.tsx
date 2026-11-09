@@ -5,18 +5,15 @@
 import {
   ActionIcon,
   Badge,
-  Box,
   Button,
   Grid,
   Group,
   Paper,
-  ScrollArea,
   Stack,
   Text,
   Tooltip,
 } from "@mantine/core";
 import {
-  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -29,13 +26,12 @@ import {
   checkGamebookMove,
   follow,
   mainLineEnd,
-  moveNumber,
-  nagText,
   onMainLine,
   pathTo,
   sideToMove,
 } from "../state/studyTree";
 import { Board } from "./Board";
+import { MoveTree } from "./MoveTree";
 
 const OPPONENT_REPLY_MS = 650;
 const SAVE_PLACE_MS = 400;
@@ -448,140 +444,6 @@ function GamebookPanel({
         </Group>
       )}
     </Stack>
-  );
-}
-
-/** The move list with nested side lines, as on Lichess: inline main line, side lines indented underneath. */
-function MoveTree({
-  moves,
-  cur,
-  onSelect,
-}: {
-  moves: StudyMove[];
-  cur: number;
-  onSelect: (id: number) => void;
-}) {
-  const viewport = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    viewport.current
-      ?.querySelector(`[data-move-id="${cur}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [cur]);
-  const root = moves[0];
-  return (
-    <ScrollArea.Autosize mah={460} viewportRef={viewport} type="auto">
-      <Box data-testid="study-moves" style={{ lineHeight: 1.9 }}>
-        {root.comment && <Comment text={root.comment} />}
-        {root.children.length ? (
-          renderLine(moves, 0, root.children[0], cur, onSelect, 0)
-        ) : (
-          <Text size="sm" c="dimmed">
-            No moves in this chapter.
-          </Text>
-        )}
-      </Box>
-    </ScrollArea.Autosize>
-  );
-}
-
-function renderLine(
-  moves: StudyMove[],
-  parent: number,
-  first: number,
-  cur: number,
-  onSelect: (id: number) => void,
-  depth: number,
-): ReactNode[] {
-  const out: ReactNode[] = [];
-  let p = parent;
-  let id: number | undefined = first;
-  let needNumber = true;
-  while (id !== undefined) {
-    const n: StudyMove = moves[id];
-    const { number, white } = moveNumber(moves, id);
-    out.push(
-      <MoveSpan
-        key={`m${id}`}
-        move={n}
-        label={white ? `${number}. ` : needNumber ? `${number}… ` : ""}
-        active={id === cur}
-        onSelect={onSelect}
-      />,
-    );
-    needNumber = false;
-    if (n.comment) {
-      out.push(<Comment key={`c${id}`} text={n.comment} />);
-      needNumber = true;
-    }
-    const siblings = moves[p].children;
-    if (siblings[0] === id && siblings.length > 1) {
-      for (const sib of siblings.slice(1)) {
-        out.push(
-          <Box
-            key={`v${sib}`}
-            pl="md"
-            my={2}
-            style={{
-              borderLeft: "2px solid var(--mantine-color-default-border)",
-            }}
-            data-testid="study-variation"
-          >
-            {renderLine(moves, p, sib, cur, onSelect, depth + 1)}
-          </Box>,
-        );
-      }
-      needNumber = true;
-    }
-    p = id;
-    id = n.children[0];
-  }
-  return out;
-}
-
-function MoveSpan({
-  move,
-  label,
-  active,
-  onSelect,
-}: {
-  move: StudyMove;
-  label: string;
-  active: boolean;
-  onSelect: (id: number) => void;
-}) {
-  return (
-    <Text
-      component="span"
-      size="sm"
-      fw={active ? 700 : 400}
-      px={3}
-      mr={2}
-      bg={active ? "var(--mantine-primary-color-light)" : undefined}
-      style={{ cursor: "pointer", borderRadius: 4, whiteSpace: "nowrap" }}
-      onClick={() => onSelect(move.id)}
-      data-move-id={move.id}
-      data-testid={active ? "study-current-move" : undefined}
-      aria-current={active ? "step" : undefined}
-    >
-      {label}
-      {move.san}
-      {nagText(move.nags)}
-    </Text>
-  );
-}
-
-function Comment({ text }: { text: string }) {
-  return (
-    <Text
-      component="span"
-      size="sm"
-      c="dimmed"
-      mx={4}
-      style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-      data-testid="study-inline-comment"
-    >
-      {text}{" "}
-    </Text>
   );
 }
 

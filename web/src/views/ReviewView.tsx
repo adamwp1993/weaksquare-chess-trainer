@@ -11,14 +11,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReasonKey } from "../api/ApiClient";
 import type { EngineStatus, Explanation, GameMoment, GameNarrative, GameReview, JournalEntry, RetryResult, ReviewMove, SuggestedPreset } from "../api/types";
-import { AnalysisControls, analysisMove, openAnalysis, type AnalysisState } from "../components/AnalysisBoard";
+import {
+  AnalysisControls,
+  analysisMove,
+  lineForAnalysisTab,
+  openAnalysis,
+  type AnalysisState,
+} from "../components/AnalysisBoard";
+import type { AnalysisLine } from "../state/analysisTree";
 import { EnginePanel } from "../components/EnginePanel";
 import { legalArrow } from "../state/engine";
 import { answerPositions, AnswerPlayer } from "../components/AnswerPlayer";
 import { Board, type BoardShape } from "../components/Board";
 import { EvalGraph } from "../components/EvalGraph";
 import { showMeFor } from "../components/ExplainPanel";
-import { GameNarrativePanel, MomentNote, MoveExplain } from "../components/GameAiPanel";
+import { GameNarrativePanel, MomentNote, MoveExplain, PartSummary, SuggestedTraining, TurningPoint } from "../components/GameAiPanel";
 import { GameNotes } from "../components/GameNotes";
 import { ReasonChips } from "../components/ReasonChips";
 import { CLASS_COLOR, PLATFORM_LABEL, cap, gameDate, gamePrompt, moveLabel, resultLabel } from "../state/games";
@@ -51,6 +58,7 @@ export function ReviewView({
   coordinates,
   autoExplain = false,
   onTrain,
+  onOpenInAnalysis,
   startRetry = false,
   hideBest = false,
 }: {
@@ -67,12 +75,15 @@ export function ReviewView({
   /** Review + Explain my game (FR-11.29): analyze if needed, then open Explain my game's Confirm. */
   autoExplain?: boolean;
   onTrain?: (p: SuggestedPreset) => void;
+  /** v0.15 (FR-14.6): Open in Analysis tab from the free board. */
+  onOpenInAnalysis?: (line: AnalysisLine) => void;
 }) {
   const [review, setReview] = useState<GameReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(initialPly ?? 0); // moves played on the board
   const [showing, setShowing] = useState<Showing | null>(null);
-  const [notes, setNotes] = useState<Map<number, GameMoment>>(new Map());
+  const [narrative, setNarrative] = useState<GameNarrative | null>(null);
+  const notes = useMemo(() => new Map<number, GameMoment>((narrative?.moments ?? []).map((m) => [m.ply, m])), [narrative]);
   const autoAnalyzed = useRef(false);
   const [job, setJob] = useState<string | null>(null);
   const analysis = useJob(job);
@@ -128,7 +139,10 @@ export function ReviewView({
     autoAnalyzed.current = true;
     api.analyzeGames([gameId], false).then(setJob, (e: Error) => setError(e.message));
   }, [autoExplain, review, gameId]);
-  const narrativeChanged = useCallback((x: GameNarrative | null) => setNotes(new Map((x?.moments ?? []).map((m) => [m.ply, m]))), []);
+  const narrativeChanged = useCallback((x: GameNarrative | null) => setNarrative(x), []);
+  /** The AI's words on one computed strength (FR-11.36), or null. Its fact is the strength's own text. */
+  const aiNoteFor = (color: string, text: string) =>
+    narrative?.did_well.find((d) => d.fact === text || d.fact === `As ${cap(color)}: ${text}`)?.text ?? null;
   const showExplanation = useCallback((x: Explanation) => {
     const s = showMeFor(x);
     setShowing({ fen: x.start_fen, line: x.solution, step: 0, shapes: s.shapes, notes: s.notes });
@@ -413,6 +427,10 @@ export function ReviewView({
                   onReset={() => setFree(openAnalysis(free.positions[0].fen))}
                   onClose={() => setFree(null)}
                   closeLabel="Back to the game"
+                  onOpenInTab={
+                    onOpenInAnalysis &&
+                    (() => onOpenInAnalysis(lineForAnalysisTab(free, [{ start: review.start_fen, ucis: moves.map((m) => m.uci) }], orientation)))
+                  }
                 />
                 {showBest ? (
                   <EnginePanel
@@ -522,14 +540,18 @@ export function ReviewView({
                 analyzed={review.analyzed}
                 autoConfirm={autoExplain}
                 onNarrative={narrativeChanged}
-                onJump={(p) => go(p + 1)}
-                onTrain={(p) => onTrain?.(p)}
               />
             )}
-            {review.analyzed && review.stories.length > 0 && (
+            {review.analyzed && (review.stories.length > 0 || narrative) && (
               <Paper withBorder p="sm" data-testid="review-story-summary">
                 <Title order={5}>Summary</Title>
-                {review.stories.map((st) => (
+                {narrative && (
+                  <Stack gap={6} mt={4}>
+                    <PartSummary text={narrative.summary} testId="review-ai-summary" />
+                    <TurningPoint x={narrative} onJump={(p) => go(p + 1)} />
+                  </Stack>
+                )}
+                {!narrative && review.stories.map((st) => (
                   <Stack key={st.color} gap={2} mt={4}>
                     {review.stories.length > 1 && <Text size="sm" fw={600}>As {cap(st.color)}</Text>}
                     {st.summary.map((line, i) => (
@@ -539,45 +561,10 @@ export function ReviewView({
                 ))}
               </Paper>
             )}
-            {review.analyzed && <EvalGraph moves={moves} ply={cursor - 1} onPly={(p) => go(p + 1)} />}
-            {review.analyzed && (
-              <Table withTableBorder data-testid="review-summary">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th />
-                    <Table.Th ta="right">?!</Table.Th>
-                    <Table.Th ta="right">?</Table.Th>
-                    <Table.Th ta="right">??</Table.Th>
-                    <Table.Th ta="right">Avg. loss</Table.Th>
-                    <Table.Th ta="right">Accuracy</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {review.summaries.map((s) => (
-                    <Table.Tr key={s.color}>
-                      <Table.Td>
-                        {cap(s.color)}
-                        {g.user_color === s.color ? " (you)" : ""}
-                      </Table.Td>
-                      <Table.Td ta="right">{s.inaccuracies}</Table.Td>
-                      <Table.Td ta="right">{s.mistakes}</Table.Td>
-                      <Table.Td ta="right">{s.blunders}</Table.Td>
-                      <Table.Td ta="right">{s.avg_cp_loss !== null ? `${Math.round(s.avg_cp_loss)} cp` : "—"}</Table.Td>
-                      <Table.Td ta="right">{s.platform_accuracy !== null ? `${Math.round(s.platform_accuracy)}%` : "—"}</Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
-            {review.analyzed && review.summaries.some((s) => s.low_clock_errors) && (
-              <Text size="xs" c="dimmed">
-                Mistakes on a low clock:{" "}
-                {review.summaries.map((s) => `${cap(s.color)} ${s.low_clock_errors ?? 0}`).join(" · ")}
-              </Text>
-            )}
             {review.analyzed && (
               <Stack gap="xs" data-testid="key-moments">
-                <Title order={5}>What to improve: key moments</Title>
+                <Title order={5}>What to improve</Title>
+                {narrative && <PartSummary text={narrative.improve_summary} testId="review-improve-summary" />}
                 {review.key_moments.length === 0 && <Text size="sm" c="dimmed">No mistakes of yours to show. Well played.</Text>}
                 {review.key_moments.map((p) => {
                   const m = moves[p];
@@ -639,11 +626,13 @@ export function ReviewView({
                   );
                 })}
                 {saved && <Text size="xs" c="dimmed" data-testid="saved-note">{saved}</Text>}
+                {narrative?.preset && <SuggestedTraining preset={narrative.preset} onTrain={(p) => onTrain?.(p)} />}
               </Stack>
             )}
             {review.analyzed && review.stories.length > 0 && (
               <Stack gap="xs" data-testid="review-strengths">
                 <Title order={5}>What you did well</Title>
+                {narrative && <PartSummary text={narrative.did_well_summary} testId="review-did-well-summary" />}
                 {review.stories.map((st) => (
                   <Stack key={st.color} gap={4}>
                     {review.stories.length > 1 && <Text size="sm" fw={600}>As {cap(st.color)}</Text>}
@@ -653,20 +642,62 @@ export function ReviewView({
                         clean conversion or mistake-free phase.
                       </Text>
                     ) : (
-                      st.strengths.map((x, i) =>
-                        x.ply !== null ? (
-                          <Button key={i} variant="subtle" size="compact-sm" justify="flex-start" onClick={() => go((x.ply as number) + 1)}
-                            styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={2} data-testid="review-strength">
-                            {x.text}
-                          </Button>
-                        ) : (
-                          <Text key={i} size="sm" px={10} data-testid="review-strength">{x.text}</Text>
-                        ),
-                      )
+                      st.strengths.map((x, i) => {
+                        const why = aiNoteFor(st.color, x.text);
+                        return (
+                          <Stack key={i} gap={0}>
+                            {x.ply !== null ? (
+                              <Button variant="subtle" size="compact-sm" justify="flex-start" onClick={() => go((x.ply as number) + 1)}
+                                styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={2} data-testid="review-strength">
+                                {x.text}
+                              </Button>
+                            ) : (
+                              <Text size="sm" px={10} data-testid="review-strength">{x.text}</Text>
+                            )}
+                            {why && <Text size="xs" px={10} data-testid="review-strength-note">{why}</Text>}
+                          </Stack>
+                        );
+                      })
                     )}
                   </Stack>
                 ))}
               </Stack>
+            )}
+            {review.analyzed && <EvalGraph moves={moves} ply={cursor - 1} onPly={(p) => go(p + 1)} />}
+            {review.analyzed && (
+              <Table withTableBorder data-testid="review-summary">
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th />
+                    <Table.Th ta="right">?!</Table.Th>
+                    <Table.Th ta="right">?</Table.Th>
+                    <Table.Th ta="right">??</Table.Th>
+                    <Table.Th ta="right">Avg. loss</Table.Th>
+                    <Table.Th ta="right">Accuracy</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {review.summaries.map((s) => (
+                    <Table.Tr key={s.color}>
+                      <Table.Td>
+                        {cap(s.color)}
+                        {g.user_color === s.color ? " (you)" : ""}
+                      </Table.Td>
+                      <Table.Td ta="right">{s.inaccuracies}</Table.Td>
+                      <Table.Td ta="right">{s.mistakes}</Table.Td>
+                      <Table.Td ta="right">{s.blunders}</Table.Td>
+                      <Table.Td ta="right">{s.avg_cp_loss !== null ? `${Math.round(s.avg_cp_loss)} cp` : "—"}</Table.Td>
+                      <Table.Td ta="right">{s.platform_accuracy !== null ? `${Math.round(s.platform_accuracy)}%` : "—"}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            )}
+            {review.analyzed && review.summaries.some((s) => s.low_clock_errors) && (
+              <Text size="xs" c="dimmed">
+                Mistakes on a low clock:{" "}
+                {review.summaries.map((s) => `${cap(s.color)} ${s.low_clock_errors ?? 0}`).join(" · ")}
+              </Text>
             )}
             <Paper withBorder p="xs" data-testid="move-list">
               <Group gap={2}>
