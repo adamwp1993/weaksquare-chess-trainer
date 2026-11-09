@@ -15,6 +15,7 @@ import {
 import type { AccountStatus, SoundSettings } from "../api/types";
 import { AccountPanel } from "../components/AccountPanel";
 import { AiSettingsPanel } from "../components/AiSettingsPanel";
+import { BackupPanel } from "../components/BackupPanel";
 import { CoachSettingsPanel } from "../components/CoachSettingsPanel";
 import { GamesSettingsPanel } from "../components/GamesSettingsPanel";
 import { EngineSettingsPanel } from "../components/EngineSettingsPanel";
@@ -181,6 +182,11 @@ export function SettingsModal({
             onChange={(e) => onAutoCheck(e.currentTarget.checked)}
             data-testid="auto-check-switch"
           />
+        </Stack>
+
+        <Stack gap="xs" data-testid="settings-your-data">
+          <Title order={5}>Your data</Title>
+          {opened && <BackupPanel />}
         </Stack>
 
         {timeOffset !== null && (

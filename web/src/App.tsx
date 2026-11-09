@@ -27,7 +27,9 @@ import type {
   ThemeGroup,
   TodayPlan,
   UpdateOffer,
+  RestoreNotice,
 } from "./api/types";
+import { when } from "./components/BackupPanel";
 import type { JournalDraft } from "./components/JournalTab";
 import { LessonTaskModal } from "./components/LessonTaskModal";
 import { TodayCard } from "./components/TodayCard";
@@ -147,6 +149,12 @@ export function App() {
   const [timeOffset, setTimeOffset] = useState<number | null>(null);
   const historyChanged = useCallback(() => setHistoryVersion((v) => v + 1), []);
   const saveTimer = useRef<number | undefined>(undefined);
+
+  // v0.16 (FR-15.4): after the restart that finishes a restore, say what happened, once.
+  const [restoreNotice, setRestoreNotice] = useState<RestoreNotice | null>(null);
+  useEffect(() => {
+    api.takeRestoreNotice().then(setRestoreNotice, () => undefined);
+  }, []);
 
   // The last filters you used come back from user.db (never browser storage).
   useEffect(() => {
@@ -790,7 +798,23 @@ export function App() {
           </Group>
         </Group>
       </AppShell.Header>
-      <AppShell.Main>{main}</AppShell.Main>
+      <AppShell.Main>
+        {/* v0.16 (FR-15.4): above whichever screen opens after the restart (startup, import or puzzles) */}
+        {restoreNotice && (
+          <Alert
+            color={restoreNotice.error ? "red" : "green"}
+            withCloseButton
+            onClose={() => setRestoreNotice(null)}
+            mb="md"
+            data-testid="restore-notice"
+          >
+            {restoreNotice.error
+              ? restoreNotice.error
+              : `Your data was restored from the backup${restoreNotice.created_at ? ` made ${when(restoreNotice.created_at)}` : ""}. Sign-ins and AI keys aren't part of a backup: on a new PC, sign in to Lichess again and re-enter any AI key in Settings.`}
+          </Alert>
+        )}
+        {main}
+      </AppShell.Main>
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ImportGameDialog
         opened={importOpen}

@@ -22,6 +22,9 @@ import {
 } from "./ApiClient";
 import type {
   AccountStatus,
+  BackupInfo,
+  BackupStatus,
+  RestoreNotice,
   Analysis,
   AnalysisQueue,
   ApiError,
@@ -1017,6 +1020,34 @@ export class PywebviewClient implements ApiClient {
 
   isLichessWindowOpen() {
     return this.call<boolean>("is_lichess_window_open");
+  }
+
+  getBackupStatus() {
+    return this.call<BackupStatus>("get_backup_status");
+  }
+
+  setBackupSettings(enabled: boolean, folder: string | null, intervalDays: number, keep: number) {
+    return this.call<BackupStatus>("set_backup_settings", enabled, folder, intervalDays, keep);
+  }
+
+  chooseBackupFolder() {
+    return this.call<string | null>("choose_backup_folder");
+  }
+
+  backupNow() {
+    return this.call<string | null>("backup_now");
+  }
+
+  chooseBackupToRestore() {
+    return this.call<BackupInfo | null>("choose_backup_to_restore");
+  }
+
+  restoreBackup(token: string) {
+    return this.call<string>("restore_backup", token);
+  }
+
+  takeRestoreNotice() {
+    return this.call<RestoreNotice | null>("take_restore_notice");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -22,6 +23,7 @@ from weaksquare.bridge.dto import AppInfo, Job, PuzzleDbStatus
 from weaksquare.bridge.errors import bridge_call
 from weaksquare.bridge.events import job_dto
 from weaksquare.config import APP_VERSION, LICENSE_NAME, REPO_URL, Paths
+from weaksquare.core.backup import manual_file_name
 from weaksquare.core.clock import Clock
 from weaksquare.core.errors import ConflictError, NotFoundError, ValidationError
 from weaksquare.core.filters import FilterSpec
@@ -48,6 +50,7 @@ from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountService
 from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.analysis_tab import AnalysisTabService
+from weaksquare.services.backup import BackupService, BackupStatus
 from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
@@ -136,7 +139,10 @@ class Api:
         repertoire: RepertoireService,
         studies: StudiesService,
         lichess_window: Any,
+        backup: BackupService,
     ) -> None:
+        self._backup = backup
+        self._backup_choice: tuple[str, Path] | None = None  # the file picked to restore, behind a token
         self._studies = studies
         # v0.15: stateless, built from what's already here; it holds no repository (FR-14.5)
         self._analysis_tab = AnalysisTabService(engine, opening_sources)
@@ -1882,6 +1888,65 @@ class Api:
     @bridge_call
     def list_puzzle_sets(self) -> list[dto.PuzzleSet]:
         return [dto.PuzzleSet(label, n) for label, n in self._puzzle_import.sets()]
+
+    # ---- v0.16: backup and restore (REQUIREMENTS §21) ----------------------------------------------
+    # File paths never come from the page: Python opens the dialogs, and the file chosen to restore is
+    # held here behind a one-time token.
+    @bridge_call
+    def get_backup_status(self) -> dto.BackupStatus:
+        return _backup_status_dto(self._backup.status())
+
+    @bridge_call
+    def set_backup_settings(self, enabled: bool, folder: str | None, interval_days: int, keep: int) -> dto.BackupStatus:
+        """FR-15.3: automatic backups. The folder comes from choose_backup_folder."""
+        if folder is not None and (chr(0) in folder or not Path(folder).is_absolute()):
+            raise ValidationError("Choose the folder with the Choose button.")
+        return _backup_status_dto(self._backup.set_auto_settings(enabled, folder, interval_days, keep))
+
+    @bridge_call
+    def choose_backup_folder(self) -> str | None:
+        return self._desktop.choose_folder()
+
+    @bridge_call
+    def backup_now(self) -> str | None:
+        """FR-15.1: the Save dialog, then a backup job. The job id, or None if you cancel."""
+        chosen = self._desktop.choose_backup_save_path(manual_file_name(self._clock.now().astimezone()))
+        if chosen is None:
+            return None
+        return self._backup.backup_now(chosen)
+
+    @bridge_call
+    def choose_backup_to_restore(self) -> dto.BackupInfo | None:
+        """FR-15.4: the Open dialog, then what's in the file. A file that can't be restored is an error."""
+        chosen = self._desktop.choose_backup_file()
+        if chosen is None:
+            return None
+        m = self._backup.inspect(chosen)
+        token = secrets.token_urlsafe(16)
+        self._backup_choice = (token, Path(chosen))
+        return dto.BackupInfo(token, m.created_at, m.app_version, m.schema_version, m.counts.games,
+                              m.counts.attempts, m.counts.coach_reports)  # fmt: skip
+
+    @bridge_call
+    def restore_backup(self, token: str) -> str:
+        """FR-15.4: Replace my data. Checks everything, stages it and restarts the app. Returns the job id."""
+        choice = self._backup_choice
+        if choice is None or not secrets.compare_digest(choice[0], token):
+            raise ValidationError("Choose the backup again.")
+        self._backup_choice = None
+        return self._backup.restore(str(choice[1]))
+
+    @bridge_call
+    def take_restore_notice(self) -> dto.RestoreNotice | None:
+        """What this start did with a restore, once (shown after the restart)."""
+        n = self._backup.take_notice()
+        return None if n is None else dto.RestoreNotice(n.created_at, n.app_version, n.error)
+
+
+def _backup_status_dto(s: BackupStatus) -> dto.BackupStatus:
+    a = s.auto
+    return dto.BackupStatus(dto.BackupSettings(a.enabled, a.folder, a.interval_days, a.keep), s.last_at, s.next_due,
+                            s.last_error)  # fmt: skip
 
 
 def _explanation_dto(v: ExplainView) -> dto.Explanation:

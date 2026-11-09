@@ -96,6 +96,9 @@ import type {
   UpdateOffer,
   OpeningScope,
   StudyAddResult,
+  BackupInfo,
+  BackupStatus,
+  RestoreNotice,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -2342,6 +2345,125 @@ export class MockClient implements ApiClient {
   mockLichessWindowAdd(studyId: string) {
     const job = this.startAdd(studyId, null);
     this.listeners.forEach((l) => l({ name: "study_window", payload: { kind: "added", study_id: studyId, chapter_id: null, job_id: job } }));
+  }
+
+  // ---- v0.16: backup and restore (REQUIREMENTS §21) ----------------------------------------------
+  // Tests steer it: window.__mockBackupNext("ok" | "newer" | "not_backup" | "busy"), window.__mockBackupFolderMissing(),
+  // and ?restored=1 (or ?restored=failed) for the notice after a restart.
+  private backup: BackupStatus = {
+    settings: { enabled: false, folder: null, interval_days: 7, keep: 5 },
+    last_at: null,
+    next_due: null,
+    last_error: null,
+  };
+  private backupNext: "ok" | "newer" | "not_backup" | "busy" = "ok";
+  private backupToken: string | null = null;
+  private restoreNotice: RestoreNotice | null = null;
+  private backupHooksInstalled = false;
+
+  private backupHooks() {
+    if (this.backupHooksInstalled || typeof window === "undefined") return;
+    this.backupHooksInstalled = true;
+    const w = window as unknown as Record<string, unknown>;
+    w.__mockBackupNext = (k: typeof this.backupNext) => {
+      this.backupNext = k;
+    };
+    w.__mockBackupFolderMissing = () => {
+      this.backup = {
+        ...this.backup,
+        last_error: "The automatic backup folder isn't available (is the drive plugged in?). It will try again next time.",
+      };
+    };
+    const restored = new URLSearchParams(window.location.search).get("restored");
+    if (restored === "1") this.restoreNotice = { created_at: "2026-11-02T18:05:00+00:00", app_version: "0.16.0", error: null };
+    if (restored === "failed") {
+      this.restoreNotice = { created_at: null, app_version: null, error: "The restore didn't finish, and your data was put back as it was." };
+    }
+  }
+
+  async getBackupStatus() {
+    this.backupHooks();
+    return structuredClone(this.backup);
+  }
+
+  async setBackupSettings(enabled: boolean, folder: string | null, intervalDays: number, keep: number) {
+    if (!(intervalDays >= 1 && intervalDays <= 90)) {
+      throw new ApiCallError({ code: "invalid_argument", message: "How often must be between 1 and 90 days.", retryable: false });
+    }
+    if (!(keep >= 1 && keep <= 50)) {
+      throw new ApiCallError({ code: "invalid_argument", message: "How many to keep must be between 1 and 50.", retryable: false });
+    }
+    if (enabled && !folder) {
+      throw new ApiCallError({ code: "invalid_argument", message: "Choose a folder for automatic backups first.", retryable: false });
+    }
+    this.calls.push(`backupSettings:${enabled}:${intervalDays}:${keep}`);
+    const changedFolder = folder !== this.backup.settings.folder;
+    this.backup = {
+      settings: { enabled, folder, interval_days: intervalDays, keep },
+      last_at: this.backup.last_at,
+      next_due: enabled ? (this.backup.last_at ? "2026-11-16T09:00:00+00:00" : "2026-11-09T09:00:00+00:00") : null,
+      last_error: enabled && !changedFolder ? this.backup.last_error : null,
+    };
+    return structuredClone(this.backup);
+  }
+
+  async chooseBackupFolder() {
+    return "E:\\WeakSquare backups";
+  }
+
+  async backupNow() {
+    const id = `job-${this.nextJob++}`;
+    const kind = "backup";
+    this.calls.push("backupNow");
+    this.emit({ id, kind, state: "running", progress: null, message: "Backing up your data…", error_code: null });
+    setTimeout(() => {
+      this.backup = { ...this.backup, last_at: "2026-11-09T09:00:00+00:00" };
+      const message = "Backed up 42 games, 1,250 puzzle attempts and 3 Coach reports.";
+      this.emit({ id, kind, state: "done", progress: 1, message, error_code: null });
+    }, 300);
+    return id;
+  }
+
+  async chooseBackupToRestore(): Promise<BackupInfo | null> {
+    if (this.backupNext === "not_backup") {
+      throw new ApiCallError({ code: "not_backup", message: "This file isn't a WeakSquare backup. Nothing was changed.", retryable: false });
+    }
+    if (this.backupNext === "newer") {
+      throw new ApiCallError({ code: "newer_backup", message: "This backup was made by a newer version of WeakSquare. Update the app first.", retryable: false });
+    }
+    this.backupToken = `t${this.nextJob}`;
+    return {
+      token: this.backupToken,
+      created_at: "2026-11-02T18:05:00+00:00",
+      app_version: "0.16.0",
+      schema_version: 14,
+      games: 42,
+      attempts: 1250,
+      coach_reports: 3,
+    };
+  }
+
+  async restoreBackup(token: string) {
+    if (token !== this.backupToken) {
+      throw new ApiCallError({ code: "invalid_argument", message: "Choose the backup again.", retryable: false });
+    }
+    if (this.backupNext === "busy") {
+      throw new ApiCallError({ code: "conflict", message: "Wait for the game analysis to finish, or cancel it, then restore.", retryable: true });
+    }
+    this.backupToken = null;
+    this.calls.push("restoreBackup");
+    const id = `job-${this.nextJob++}`;
+    const kind = "backup_restore";
+    this.emit({ id, kind, state: "running", progress: null, message: "Checking the backup…", error_code: null });
+    setTimeout(() => this.emit({ id, kind, state: "done", progress: 1, message: "Restarting to finish the restore…", error_code: null }), 300);
+    return id;
+  }
+
+  async takeRestoreNotice() {
+    this.backupHooks();
+    const n = this.restoreNotice;
+    this.restoreNotice = null;
+    return n;
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

@@ -11,12 +11,15 @@ import platform
 import random
 import secrets as secrets_module
 import sys
+import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from weaksquare import config
 from weaksquare.adapters import instance_lock
+from weaksquare.adapters.backup_files import BackupFiles, make_backup, prune, recover_interrupted_swap, swap_in_staged
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
@@ -60,6 +63,7 @@ from weaksquare.adapters.db.repos.user_data import (
 )
 from weaksquare.adapters.desktop import (
     Desktop,
+    relaunch,
     set_app_user_model_id,
     set_window_icon,
     show_fatal,
@@ -89,6 +93,7 @@ from weaksquare.adapters.system_clock import OffsetClock, SystemClock, make_rng
 from weaksquare.bridge import dto
 from weaksquare.bridge.api import Api, attempt_rating
 from weaksquare.bridge.events import EventSink
+from weaksquare.core.backup import KEEP_BEFORE_RESTORE, before_restore_name, is_before_restore_name
 from weaksquare.core.clock import Clock
 from weaksquare.core.engine import EngineClient, EngineProbe, parse_manifest, platform_key
 from weaksquare.core.games import ChesscomClient, LichessGamesClient
@@ -97,6 +102,7 @@ from weaksquare.core.llm.provider import LLMProvider
 from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.analysis import AnalysisService
+from weaksquare.services.backup import BackupService, RestoreNotice
 from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
@@ -139,10 +145,45 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     ap.add_argument(
         "--dev-server", action="store_true", help=f"load the front end from the Vite dev server ({VITE_DEV_URL})"
     )
+    # Set by the app itself when it restarts to finish a restore (FR-15.4): wait for the old window to let go.
+    ap.add_argument("--after-restore", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     if args.dev_server:
         args.dev = True
     return args
+
+
+AFTER_RESTORE_WAIT_S = 15.0
+
+
+def after_restore_args(args: argparse.Namespace) -> list[str]:
+    """The arguments the restarted app gets: the same data folder and front end, plus --after-restore."""
+    out = ["--dev-server"] if args.dev_server else (["--dev"] if args.dev else [])
+    return [*out, "--after-restore"]
+
+
+def apply_staged_restore(paths: config.Paths, clock: Clock) -> RestoreNotice | None:
+    """FR-15.4: swap a staged backup into place at startup, after saving the current data as a backup file."""
+    recover_interrupted_swap(paths.user_db)
+    if not paths.user_restore_db.exists():
+        paths.user_restore_manifest.unlink(missing_ok=True)
+        return None
+
+    def save_current() -> Any:
+        if read_version(paths.user_db) == 0:
+            return None
+        now = clock.now()
+        target = paths.backups_dir / before_restore_name(now.astimezone())
+        make_backup(paths.user_db, target, paths.downloads_dir, config.APP_VERSION, now.isoformat())
+        prune(paths.backups_dir, is_before_restore_name, KEEP_BEFORE_RESTORE, now)
+        return target
+
+    result = swap_in_staged(
+        paths.user_db, paths.user_restore_db, paths.user_restore_manifest, save_current,
+        lambda: migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock, paths.backups_dir),
+    )  # fmt: skip
+    m = result.restored_from
+    return RestoreNotice(m.created_at if m else None, m.app_version if m else None, result.error)
 
 
 def debug_port_refusal(env: Mapping[str, str], dev: bool) -> str | None:
@@ -254,6 +295,7 @@ class Services:
     repertoire: RepertoireService
     studies: StudiesService
     lichess_window: Any
+    backup: BackupService
 
     def close(self) -> None:
         self.lichess_window.close()  # v0.14: the Lichess window closes with the app
@@ -286,6 +328,8 @@ def build_services(
     chesscom: ChesscomClient | None = None,
     lichess_studies: StudiesClient | None = None,
     make_lichess_window: Callable[..., Any] | None = None,
+    restart: Callable[[], None] = lambda: None,
+    restore_notice: RestoreNotice | None = None,
 ) -> Services:
     """Wire the concrete adapters into the services. Also used by the scripts/ CLIs and tests.
 
@@ -476,7 +520,14 @@ def build_services(
         emit("study_window", dto.StudyWindowEvent("closed", None, None, None))
 
     lichess_window = (make_lichess_window or LichessWindow)(window_added, window_page, window_closed)
+    backup = BackupService(
+        BackupFiles(paths.user_db, paths.downloads_dir, paths.user_restore_db, paths.user_restore_manifest,
+                    config.APP_VERSION),
+        SettingsRepo(db), runner, clock, scheduler,
+        load_migrations(config.MIGRATIONS_DIR / "user")[-1].version, restart, restore_notice,
+    )  # fmt: skip
     return Services(
+        backup=backup,
         studies=studies,
         lichess_window=lichess_window,
         plan=plan,
@@ -527,6 +578,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     paths.ensure()
 
     lock = instance_lock.acquire(paths.lock_file)
+    if lock is None and args.after_restore:  # the old window is still closing (FR-15.4)
+        deadline = time.monotonic() + AFTER_RESTORE_WAIT_S
+        while lock is None and time.monotonic() < deadline:
+            time.sleep(0.25)
+            lock = instance_lock.acquire(paths.lock_file)
     if lock is None:
         instance_lock.bring_existing_to_front(title)
         return 0
@@ -545,6 +601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     rng = make_rng()
     log.info("Data folder: %s (dev=%s)", paths.data_dir, args.dev)
 
+    restore_notice = apply_staged_restore(paths, clock)  # FR-15.4: before anything opens user.db
     try:
         migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock, paths.backups_dir)
     except NewerSchemaError as e:
@@ -564,6 +621,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     events = EventSink()
     runner = JobRunner(events)
     desktop = Desktop(title)
+    restart_requested = threading.Event()
+
+    def restart() -> None:
+        """FR-15.4: a restore is staged; close the window, and `main` starts the app again once it has let go."""
+        restart_requested.set()
+        desktop.close_window()
+
     services = build_services(
         paths, clock, runner, rng,
         # A sign-in belongs to its data folder: dev and test runs never see your real one.
@@ -572,6 +636,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         browser=desktop,
         emit=events.emit,
+        restart=restart,
+        restore_notice=restore_notice,
     )  # fmt: skip
     api = Api(
         paths=paths,
@@ -610,6 +676,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         repertoire=services.repertoire,
         studies=services.studies,
         lichess_window=services.lichess_window,
+        backup=services.backup,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())
@@ -620,6 +687,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     services.llm_settings.start_launch_check()  # FR-1.6: and a stored AI key, with the free model lookup
     services.games.sync_on_open()  # FR-11.27: new games from your linked accounts, in the background (v0.8)
     services.game_puzzles.start_backfill()  # v0.10, once: tags and puzzles for games analyzed before v0.10
+    services.backup.start()  # FR-15.3: an automatic backup that came due while the app was closed
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's
@@ -653,6 +721,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         lock.release()
         logging.getLogger().removeHandler(file_handler)
         file_handler.close()
+    if restart_requested.is_set():
+        relaunch(sys.executable, ["-m", "weaksquare", *after_restore_args(args)])
     return 0
 
 

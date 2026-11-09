@@ -934,8 +934,10 @@ Keeps your data safe, and moves it to a new install or another PC. Everything yo
   - The file is checked first. A file that isn't a WeakSquare backup, or is damaged, is refused with a message, and nothing changes.
   - A backup from a **newer** app version is refused untouched, like a newer `user.db` (NFR-3): *"This backup was made by a newer version of WeakSquare. Update the app first."*
   - You see what's in it (date, app version, the counts) and confirm **Replace my data**.
-  - Before anything is replaced, your current `user.db` is copied to `<data>\backups\` (kept like the migration backups), so a wrong restore can be undone by restoring that copy.
+  - Before anything is replaced, your current data is saved as a normal backup file, `<data>\backups\before-restore-<date>.zip` (the last 5 are kept), so a wrong restore can be undone with **Restore from a backup** *(v0.16 planning)*.
   - A backup from an older version is upgraded by the normal migrations (NFR-3) after it's restored.
-  - Restore waits until no background job (analysis, Coach, import) is running, and the app reloads its screens afterwards.
+  - While a background job (analysis, Coach, import) is running, Restore is refused with a message naming it: wait for it to finish, or cancel it *(v0.16 planning)*.
+  - **The app restarts to finish the restore (Adam, v0.16 planning):** the checked backup is staged, the app closes and reopens itself, and the data is swapped at startup before anything opens it. If the swap fails partway, your original data is put back. (Swapping while running was rejected: too many parts of the app keep data in memory.)
+  - Settings that belong to this PC keep this install's values: the automatic-backup settings (the folder is a path on this PC), the puzzle database's update-check state, which Lichess account is signed in here (the sign-in itself is in this PC's Credential Manager), and the engine's threads, hash and custom engine path, which belong to this PC's hardware and files (think time travels) *(v0.16 planning and build)*.
   - Puzzles the new install's puzzle database doesn't have are handled as in FR-2.4.
-- **FR-15.5** **Privacy (Adam, 2026-11-08):** the backup is **not encrypted**. It contains your games, notes, journal and AI explanations, so the save dialog says so, and where you keep it is up to you. The app never uploads a backup or sends it anywhere.
+- **FR-15.5** **Privacy (Adam, 2026-11-08):** the backup is **not encrypted**. It contains your games, notes, journal and AI explanations, so **Your data** says so beside **Back up now** (the Windows Save dialog can't carry extra text; v0.16 build), and where you keep it is up to you. The app never uploads a backup or sends it anywhere.

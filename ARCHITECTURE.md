@@ -98,6 +98,7 @@ weaksquare-chess-trainer/
 │  │  ├─ study_repertoire.py   # v0.14: Add to my repertoire: which moves, conflicts, reachability
 │  │  ├─ position_setup.py     # v0.15: a set-up position or FEN, checked, one sentence per problem
 │  │  ├─ analysis_pgn.py       # v0.15: a pasted PGN as move trees for the Analysis tab (study_pgn's builder)
+│  │  ├─ backup.py             # v0.16: backup manifest and checks, automatic schedule, retention, PC-only settings
 │  │  ├─ plan_llm.py           # the AI plan's schema and validation, what v0.12 adds to the prompt (v0.12)
 │  │  ├─ report_compare.py     # Since last report: guards, trend, the check on AI trend claims (v0.12)
 │  │  ├─ daily_log.py          # one day's log, through stats.build_report (v0.12)
@@ -113,6 +114,7 @@ weaksquare-chess-trainer/
 │  │                           #         (the guardrail gate every LLM request goes through)
 │  │                           #   v0.14: studies.py (add, keep, update, place, Add to my repertoire)
 │  │                           #   v0.15: analysis_tab.py (the Analysis tab: checks, PGN, engine, popular replies; no repository)
+│  │                           #   v0.16: backup.py (Back up now, restore by restart, automatic backups)
 │  │                           #   v0.8: games.py (library, sync, imports), analysis.py (the queue on the
 │  │                           #         background engine, Review settings), review.py (review, Retry,
 │  │                           #         Save as puzzle, game reasons), puzzle_import.py (puzzle files)
@@ -129,6 +131,7 @@ weaksquare-chess-trainer/
 │  │  │  └─ repos/             # one repository per aggregate; v0.14: studies.py; v0.12: plans.py, journal.py; v0.8: games.py, game_analysis.py,
 │  │  │                        #   custom_puzzles.py (+ CustomPuzzleSource, RetryRepo), puzzle_sources.py
 │  │  │                        #   (CombinedSource: Lichess DB + My puzzles)
+│  │  ├─ backup_files.py       # v0.16: snapshot, backup zip write/read, the startup swap with rollback
 │  │  ├─ http.py               # shared httpx client: UA, timeouts, retry/backoff, redaction
 │  │  ├─ secret_store.py       # the ONLY module that imports keyring
 │  │  ├─ system_clock.py       # SystemClock + the seeded Random, built only in app.py
@@ -258,6 +261,18 @@ Entry format:
 - Alternatives: what was rejected, and why
 - Consequences: what this makes easier or harder
 ```
+
+### 2026-11-09, v0.16: Backups are a zip of a backup-API snapshot; restore swaps at startup after a restart
+- Context: REQUIREMENTS §21 asks for a consistent backup while the app runs, a restore that replaces everything and can be undone, and no credential in a backup. About 30 services keep data from `user.db` in memory.
+- Decision:
+  - **The file** is a `.zip` with exactly two members: `manifest.json` (`format: "weaksquare-backup"`, `format_version` 1, app and schema version, `created_at`, counts, the SHA-256 and size of `user.db`) and `user.db`, a snapshot taken with SQLite's backup API, switched to `journal_mode=DELETE`, then `integrity_check`ed. It's written under a temp name beside the target and renamed. Python's stdlib `zipfile`; no new dependency.
+  - **Reading one** opens the two members by name only. A zip with any other member is refused (so a `../` name is never even looked at), `extractall` is never used, free space is checked first, and the CRC, SHA-256, size, integrity and schema are all checked before anything is staged. Errors are `BackupError` with codes `not_backup`, `damaged`, `newer_backup`; inside a job they become `JobFailed`, so the UI gets the reason.
+  - **Restore restarts the app** (Adam, v0.16 planning). A `backup_restore` job checks the file and stages it as `user.restore.db` + `user.restore.json`, with this PC's settings copied in. `Desktop.close_window()` ends the window; `main` relaunches itself (`relaunch`, detached) after shutdown with `--after-restore`, which retries the instance lock for up to 15 s. At startup, after the lock and before migrations, `apply_staged_restore` saves the current `user.db` as `backups\before-restore-<stamp>.zip` (a normal backup, so it restores the same way; last 5 kept), moves `user.db` and its `-wal`/`-shm` aside, swaps the staged file in and migrates; any failure moves the original back. The result reaches the UI once through `take_restore_notice`.
+  - **PC-only settings** (`core.backup.PC_LOCAL_KEYS` and the `backup.` prefix): the automatic-backup settings, `puzzle_db.last_check` / `skipped_export`, `lichess.account` / `scopes`, `debug.time_offset_days`, `engine.custom_path` / `custom_name`, `engine.threads` / `hash_mb`. A restore keeps this install's values. No migration: they were already separate keys.
+  - **Automatic backups** run as `backup` jobs from `BackupService._tick`, at launch and on the injected scheduler: until the due time, at least 60 s, at most an hour (sleep and hibernate stop timers). A generation counter drops stale timers when settings change. Retention deletes only files named `weaksquare-backup-<date>[-<time>].zip` whose manifest reads.
+  - **File paths never come from the page:** Python opens the Save, Open and Folder dialogs; the file chosen to restore is held in `Api` behind a one-time token.
+- Alternatives: swapping `user.db` in place under the database's exclusive lock and resetting every service, rejected because any missed in-memory state would show stale or mixed data. A raw `.db` copy before a restore, rejected because Restore reads only backup files. Merging, encryption and copying credentials, rejected at planning (see the 2026-11-08 entry).
+- Consequences: a restore costs a restart of a few seconds. A new PC-specific setting must be added to `PC_LOCAL_KEYS`. A future `format_version` 2 is refused by this version as a newer backup.
 
 ### 2026-11-08, v0.15: The Analysis tab reuses the study tree and holds no repository
 - Context: REQUIREMENTS §20 asks for a board of its own that never changes puzzles, stats, the game library or Coach reports, never reaches an LLM, and reuses the existing analysis board rather than adding a second one.

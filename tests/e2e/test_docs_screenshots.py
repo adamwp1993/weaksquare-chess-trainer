@@ -736,3 +736,19 @@ def test_analysis_tab(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("spare-white-queen").click()
     page.mouse.move(1270, 890)
     shot(page, "analysis-setup", full_page=True)
+
+
+def test_settings_your_data(page) -> None:  # type: ignore[no-untyped-def]
+    """v0.16 (REQUIREMENTS §21): Settings → Your data, after a backup, with automatic backups on."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("gear").click()
+    section = page.get_by_test_id("backup-settings")
+    section.scroll_into_view_if_needed()
+    section.get_by_test_id("backup-now").click()
+    section.get_by_test_id("backup-done").wait_for()
+    section.get_by_test_id("backup-auto").check(force=True)
+    section.get_by_test_id("backup-next").wait_for()
+    page.get_by_test_id("settings-your-data").scroll_into_view_if_needed()
+    page.mouse.move(1270, 890)
+    shot(page, "settings-your-data")
