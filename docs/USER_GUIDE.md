@@ -23,6 +23,7 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   The opening trainer ......................................... v0.13
   Lichess studies ............................................. v0.14
   The Analysis tab ............................................ v0.15
+  Backing up and restoring your data .......................... v0.16
   Tracking your progress ...................................... v1.0
   Installing from source and updating ......................... v0.1, v1.0
   The About screen ............................................ v0.1

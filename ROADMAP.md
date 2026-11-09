@@ -352,14 +352,40 @@ Built in internal steps, each committed and ticked off in `plans/v0.14.md`. QA r
 
 ---
 
+## v0.16: Backup and restore
+**Goal:** back up your data to one file and restore it into a new install (REQUIREMENTS §21). Added by Adam, 2026-11-08. It comes before v1.0 so that v1.0's first-run wizard can offer a restore.
+
+- **Back up now** from Settings: one `.zip` with a consistent copy of `user.db` and a manifest (FR-15.1, 15.2).
+- **Automatic backups:** optional, off by default, weekly into a folder you choose, keeping the last 5 (FR-15.3).
+- **Restore from a backup** in Settings: checked first, replaces everything after you confirm, with your current data copied aside first; older backups are migrated, newer ones refused (FR-15.4).
+- **Privacy:** the backup isn't encrypted, and the save dialog says so; sign-ins and keys are never in it (FR-15.2, 15.5).
+- **Docs:** a User Guide section on backing up and restoring; the "Your data and privacy" section updated.
+
+**Done when:**
+- Backing up and restoring into an empty data folder gives the same data: row counts and contents of every user table match.
+- A backup taken while the app is writing (a background analysis running) is consistent and passes the integrity check.
+- A file that isn't a backup, a damaged backup, and a backup from a newer schema are each refused with a message, and nothing changes.
+- A backup from an older schema is restored and migrated.
+- Your current `user.db` is copied aside before a restore replaces it.
+- No credential is ever in a backup (test with placeholder secrets in the secret store).
+- An automatic backup that's due runs while the app is open or at the next launch, keeps only the last N, and reports a missing folder instead of failing silently.
+
+**Adam's manual test:**
+1. Back up your data with **Back up now**.
+2. Open the dev copy of the app (`--dev`, its own data folder) as the new install, restore the backup there, and check games, stats, Coach reports, your plan, repertoire and studies.
+3. Sign in to Lichess again there, and check that sync works.
+4. Turn on automatic backups, then check that one is made and only the last few are kept.
+
+---
+
 ## v1.0: Fix tracking + release
 - **Checkpoints** every 10 eligible games (configurable, for example every 50), an optional time schedule, plus Run now; each saves a normal Coach report (FR-10.32, 10.33); weakness metrics and statuses with the sample-size guard, including v0.11's whole-game weakness kinds; Progress page with line charts per weakness and for overall game health (blunders, mistakes and inaccuracies per 10 games, one point per checkpoint over the rolling window; FR-10.38); optional auto AI summary (§10.8).
-- Release from source (NFR-8): a first-run wizard (puzzle DB download, Stockfish install, both through the existing install services), the setup script's Start-menu shortcut, and a GitHub Release from the `v1.0` tag with notes from CHANGELOG. No packaged `.exe`.
+- Release from source (NFR-8): a first-run wizard (puzzle DB download, Stockfish install, both through the existing install services, and **Restore from a backup** from v0.16, FR-15.4), the setup script's Start-menu shortcut, and a GitHub Release from the `v1.0` tag with notes from CHANGELOG. No packaged `.exe`.
 - Polish pass: error states, empty states, performance on the full DB.
 - **Docs:** User Guide complete, including installing from source, updating and troubleshooting; README status reads "v1.0".
 
-**Done when:** weakness status-transition tests cover every rule in FR-10.35, using synthetic data; a checkpoint runs end to end on recorded data and its report shows under **Since last report**; a due schedule runs while the app is open or at the next launch, and does nothing with no new eligible games; a checkpoint never changes your training plan; a fresh clone on a clean Windows user profile goes from `setup.py` to a working app through the first-run wizard.
-**Adam's manual test:** clone and run `setup.py` from scratch on a clean Windows user profile → full first-run → play and sync 10 games over a few days → a checkpoint fires → its report is saved and the Progress page updates → your training plan is unchanged.
+**Done when:** weakness status-transition tests cover every rule in FR-10.35, using synthetic data; a checkpoint runs end to end on recorded data and its report shows under **Since last report**; a due schedule runs while the app is open or at the next launch, and does nothing with no new eligible games; a checkpoint never changes your training plan; a fresh clone on a clean Windows user profile goes from `setup.py` to a working app through the first-run wizard, both starting fresh and restoring a v0.16 backup.
+**Adam's manual test:** clone and run `setup.py` from scratch on a clean Windows user profile → full first-run (once fresh, once restoring a backup) → play and sync 10 games over a few days → a checkpoint fires → its report is saved and the Progress page updates → your training plan is unchanged.
 
 ---
 

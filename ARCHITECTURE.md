@@ -324,6 +324,12 @@ Entry format:
 - Alternatives: keeping Wikibooks out of the prompt, which avoids the licence question, rejected by Adam for richer notes. Bundling Wikibooks text, rejected because it would put CC BY-SA content in the repo.
 - Consequences: a new remote host in the privacy section, and estimates count unfetched pages at the size limit, so they run high. Whether AI output based on the text must carry the licence hasn't been settled, so the app takes the cautious route. Fixtures use invented text.
 
+### 2026-11-08, planning: Backup and restore becomes v0.16, before v1.0
+- Context: Adam wants to back up his data and bring it into a new install.
+- Decision: v0.16 (FR-15) is a backup file holding a SQLite-backup-API copy of `user.db` plus a manifest. Restore replaces everything, after copying the current `user.db` aside, and runs the normal migrations; a newer schema is refused (NFR-3). There's an optional weekly automatic backup (off by default, keeps the last 5). The file isn't encrypted. The order is v0.15 → v0.16 → v1.0 → v1.1.
+- Alternatives: merging a backup into existing data, rejected because two histories of stats, plans and reports can't be combined safely. Including sign-ins and keys, rejected because they never leave Credential Manager (§13). Encrypting the file, rejected for now: a forgotten password loses the data, and the file stays on Adam's own drives. Putting it in v1.0, rejected because v1.0 is already large; coming first lets v1.0's first-run wizard offer a restore.
+- Consequences: `puzzles.db` and Stockfish aren't in a backup, so a restored install still downloads them. Settings that belong to one PC are worked out again, not copied, so `user.db` must keep them apart (checked at v0.16 planning).
+
 ### 2026-11-06, planning: Lichess studies and an analysis board tab become v0.14 and v0.15
 - Context: Adam wants to browse Lichess studies, heart them and keep his place, and wants an analysis board as its own tab. The Lichess API can fetch a study by ID or list one author's, but can't browse or search all of them.
 - Decision: the order is v0.13 opening trainer → v0.14 Lichess studies (FR-13) → v0.15 analysis board tab (FR-14) → v1.0 → v1.1. Studies are found through a Lichess window inside the app, a browser plus a pasted link, or a starter list of links only. The window has no bridge, and is dropped if that can't be proven.

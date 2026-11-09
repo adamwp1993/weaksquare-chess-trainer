@@ -717,6 +717,7 @@ The build plan lives in **ROADMAP.md**, as versions v0.1 → v1.1, each a stop-a
 | M4 LLM Explain + guardrails | v0.7 (moved after the modes; guardrails still ship before the first LLM call) |
 | M6 Game Review | v0.8 (engine), v0.9 (AI) |
 | M7 Coach + fix tracking | v0.10 (Coach), v0.11 (whole-game coaching), v0.12 (training plan and journal), v1.0 (checkpoints, release) |
+| Added later | v0.13 (opening trainer), v0.14 (Lichess studies), v0.15 (Analysis tab), v0.16 (backup and restore) |
 
 ---
 
@@ -786,7 +787,7 @@ Estimated cost per request at these prices (my token estimates; actual usage get
 - **NFR-5** **Errors across the bridge.** Every bridge method returns either its result or an error object `{code, message, retryable}`. Python tracebacks, file paths and request details stay in the local log and never reach the UI.
 - **NFR-6** **Clean shutdown.** Closing the window cancels running jobs (each saves its progress), stops the engine processes and closes database connections. Pending sync stays queued in `user.db` for next time.
 - **NFR-7** **About screen.** App version, data folder (with an Open button), logs folder (with an Open button), puzzle database export date, Stockfish version and path (from v0.4), the license and a link to the source repository.
-- **NFR-8** **Runs from source.** `scripts/setup.py` installs everything into a virtual environment and creates a Start-menu shortcut that launches the app without a console window. Updating is `git pull` followed by `scripts/setup.py` again.
+- **NFR-8** **Runs from source.** `scripts/setup.py` installs everything into a virtual environment and creates a Start-menu shortcut that launches the app without a console window. Updating is `git pull` followed by `scripts/setup.py` again. *(From v1.0:)* the first-run wizard also offers **Restore from a backup** (FR-15.4), so a new install can start with your data.
   - **NFR-8a** **Desktop shortcut and app icon** (v0.2).
     - **Desktop shortcut:** `setup.py` also creates one by default. `--no-desktop-shortcut` skips it, and `--no-shortcut` skips both shortcuts. It finds the Desktop through the Windows known-folder API, because the Desktop is often redirected to OneDrive. Re-running replaces the shortcuts and never duplicates them.
     - **The icon:** four board squares (2×2, in the board's light and dark colors) with a **black** queen on top (chosen over a white queen because the solid shape stays readable at 32 px and below). The queen comes from the **cburnett** piece set the board already uses (Colin M. L. Burnett, GPL-2.0-or-later, shipped with chessground), so its license is compatible with AGPL-3.0.
@@ -917,3 +918,24 @@ A board of its own for setting up positions, importing PGNs and exploring. It re
 - **FR-14.4** **Explore:** move for either side, legal moves only, and the lines you try stay as branches you can move between. The interactive engine shows the eval, top 3 lines and an arrow for its best move, worded from White's side ("+0.3", "White mates in 3") because you play both sides. Popular replies come from the Lichess explorer (FR-12.2) when you're signed in, and are skipped cleanly otherwise. *(v0.15 build: each reply shows its games and White wins, draws and Black wins; clicking one plays it. They use the explorer settings from the opening trainer and share its saved answers.)*
 - **FR-14.5** **Nothing counts:** moves here are never scored, and never change puzzles, stats, your game library or Coach reports. Nothing here goes to an LLM.
 - **FR-14.6** **Open in Analysis tab:** a button on the existing analysis boards, in puzzles and Game Review, opens the current position in this tab, with the moves that led to it (the game from its start, or the puzzle from its start) so you can step back through them (Adam, v0.15 planning).
+
+## 21. Backup and restore (v0.16; Adam, 2026-11-08)
+
+Keeps your data safe, and moves it to a new install or another PC. Everything you create is already in one file, `user.db` (ARCHITECTURE.md §3 decision 1), so a backup is a consistent copy of it.
+
+- **FR-15.1** **Back up now:** a button in Settings, under **Your data**, saves one backup file where you choose (default name `weaksquare-backup-<date>.zip`). It holds a copy of `user.db` made with SQLite's backup API, so it's consistent even while the app is running, and a small manifest: app version, schema version, when it was made, and counts (games, puzzle attempts, Coach reports). The copy is checked (integrity check, schema readable) before the file is written. A backup never deletes or changes anything.
+- **FR-15.2** **What's in it, and what isn't:** everything in `user.db`: puzzle attempts and stats, presets and settings, games and their analysis, AI explanations, Coach reports, your training plan, notes and journal, your repertoire, and your studies. **Not included:**
+  - The puzzle database (`puzzles.db`, rebuildable) and Stockfish (reinstalled through FR-7.5).
+  - Logs.
+  - **Sign-ins and API keys.** They stay in Windows Credential Manager and are never read into a backup (§13). After a restore you sign in again and re-enter any AI key.
+  - Settings that belong to one PC (such as where Stockfish is installed) are worked out again on the new install, not copied.
+- **FR-15.3** **Automatic backups (Adam, 2026-11-08):** optional, **off** by default. When on, a backup is saved **weekly** into a folder you choose, and the last **5** are kept (both configurable). Like the checkpoint schedule (FR-10.32), it runs only while the app is open, or the next time you open it if one came due while it was closed. The app installs no Windows scheduled task. If the folder is missing (an unplugged drive), it says so on the Settings page and tries again next time, never failing silently.
+- **FR-15.4** **Restore replaces everything (Adam, 2026-11-08):** **Restore from a backup** in Settings (and, from v1.0, in the first-run wizard) replaces all your data with the backup's. There's no merge: two histories of stats, plans and reports don't combine safely.
+  - The file is checked first. A file that isn't a WeakSquare backup, or is damaged, is refused with a message, and nothing changes.
+  - A backup from a **newer** app version is refused untouched, like a newer `user.db` (NFR-3): *"This backup was made by a newer version of WeakSquare. Update the app first."*
+  - You see what's in it (date, app version, the counts) and confirm **Replace my data**.
+  - Before anything is replaced, your current `user.db` is copied to `<data>\backups\` (kept like the migration backups), so a wrong restore can be undone by restoring that copy.
+  - A backup from an older version is upgraded by the normal migrations (NFR-3) after it's restored.
+  - Restore waits until no background job (analysis, Coach, import) is running, and the app reloads its screens afterwards.
+  - Puzzles the new install's puzzle database doesn't have are handled as in FR-2.4.
+- **FR-15.5** **Privacy (Adam, 2026-11-08):** the backup is **not encrypted**. It contains your games, notes, journal and AI explanations, so the save dialog says so, and where you keep it is up to you. The app never uploads a backup or sends it anywhere.
