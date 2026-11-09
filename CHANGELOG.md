@@ -13,6 +13,8 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+## [v0.15] - 2026-11-08
+
 Candidates: v0.15-rc1 (2026-11-08)
 
 ### Added
