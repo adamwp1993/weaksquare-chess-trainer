@@ -18,6 +18,9 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **Restore from a backup**: shows what's in the backup, then replaces all your data with it once you confirm **Replace my data**. The app restarts to finish. Your current data is saved first as a backup in the `backups` folder, so a restore can be undone. A file that isn't a backup, a damaged one, or one from a newer version is refused and nothing changes; one from an older version is upgraded. [FR-15.4]
 - **Automatic backups**, off unless you turn them on: weekly (or as often as you set) into a folder you choose, keeping the last 5. They run while the app is open, or at the next start if one came due while it was closed. A missing folder is shown in Settings and retried. [FR-15.3]
 
+### Fixed
+- **Data folder names**: a data folder whose path contains `#` or `%` (set with `WEAKSQUARE_DATA_DIR`) couldn't open the puzzle database. It now works. [NFR-2]
+
 ## [v0.15] - 2026-11-08
 
 Candidates: v0.15-rc1 (2026-11-08)

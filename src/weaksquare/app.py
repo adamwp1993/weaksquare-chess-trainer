@@ -19,7 +19,7 @@ from typing import Any
 
 from weaksquare import config
 from weaksquare.adapters import instance_lock
-from weaksquare.adapters.backup_files import BackupFiles, make_backup, prune, swap_in_staged
+from weaksquare.adapters.backup_files import BackupFiles, make_backup, prune, recover_interrupted_swap, swap_in_staged
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
@@ -164,6 +164,7 @@ def after_restore_args(args: argparse.Namespace) -> list[str]:
 
 def apply_staged_restore(paths: config.Paths, clock: Clock) -> RestoreNotice | None:
     """FR-15.4: swap a staged backup into place at startup, after saving the current data as a backup file."""
+    recover_interrupted_swap(paths.user_db)
     if not paths.user_restore_db.exists():
         paths.user_restore_manifest.unlink(missing_ok=True)
         return None
@@ -174,7 +175,7 @@ def apply_staged_restore(paths: config.Paths, clock: Clock) -> RestoreNotice | N
         now = clock.now()
         target = paths.backups_dir / before_restore_name(now.astimezone())
         make_backup(paths.user_db, target, paths.downloads_dir, config.APP_VERSION, now.isoformat())
-        prune(paths.backups_dir, is_before_restore_name, KEEP_BEFORE_RESTORE)
+        prune(paths.backups_dir, is_before_restore_name, KEEP_BEFORE_RESTORE, now)
         return target
 
     result = swap_in_staged(

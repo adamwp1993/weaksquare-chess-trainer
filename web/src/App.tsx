@@ -810,7 +810,7 @@ export function App() {
           >
             {restoreNotice.error
               ? restoreNotice.error
-              : `Your data was restored from the backup${restoreNotice.created_at ? ` made ${when(restoreNotice.created_at)}` : ""}. Sign in to Lichess again and re-enter any AI key in Settings.`}
+              : `Your data was restored from the backup${restoreNotice.created_at ? ` made ${when(restoreNotice.created_at)}` : ""}. Sign-ins and AI keys aren't part of a backup: on a new PC, sign in to Lichess again and re-enter any AI key in Settings.`}
           </Alert>
         )}
         {main}

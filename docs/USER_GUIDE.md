@@ -1278,7 +1278,7 @@ Restoring **replaces all your data** on this PC with the backup's. Nothing is me
 1. Click **Restore from a backup…** and choose the file.
 2. Check what's in it: when it was made, by which version of WeakSquare, and how many games, puzzle attempts and Coach reports it holds.
 3. Click **Replace my data**. The backup is checked in full, then the app closes and opens again by itself to finish. That takes a few seconds.
-4. After the restart, a message says your data was restored. **Sign in to Lichess again**, and re-enter any AI key in **Settings → AI explanations**.
+4. After the restart, a message says your data was restored. Sign-ins and AI keys aren't part of a backup: on a new PC, **sign in to Lichess again** and re-enter any AI key in **Settings → AI explanations**. On the same PC (for example when you undo a restore) you stay signed in.
 
 **Gotchas:**
 - **You can undo a restore.** Before your data is replaced, it's saved as a backup file in the `backups` folder of your data folder (**About → Data folder → Open**), named `before-restore-<date>.zip`. To undo, restore that file the same way. The last five are kept.

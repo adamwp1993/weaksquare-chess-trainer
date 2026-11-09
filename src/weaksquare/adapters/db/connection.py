@@ -18,6 +18,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 log = logging.getLogger(__name__)
 
@@ -74,8 +75,9 @@ class _RWLock:
 
 
 def readonly_uri(path: Path) -> str:
-    """SQLite URI that opens `path` read-only."""
-    return "file:" + path.resolve().as_posix() + "?mode=ro"
+    """SQLite URI that opens `path` read-only. The path is percent-encoded, so a folder named with `#`, `?` or `%`
+    isn't read as part of the URI (v0.16-B7)."""
+    return "file:" + quote(path.resolve().as_posix(), safe="/:") + "?mode=ro"
 
 
 class Database:

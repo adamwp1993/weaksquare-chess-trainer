@@ -64,7 +64,7 @@ class Files(Protocol):
     def stage_restore(self, path: Path) -> Manifest: ...
     def discard_staged(self) -> None: ...
     def folder_exists(self, folder: Path) -> bool: ...
-    def prune(self, folder: Path, is_ours: Callable[[str], bool], keep: int) -> list[str]: ...
+    def prune(self, folder: Path, is_ours: Callable[[str], bool], keep: int, now: datetime) -> list[str]: ...
 
 
 @dataclass(frozen=True)
@@ -135,7 +135,7 @@ class BackupService:
     def _due(self, s: AutoSettings) -> datetime | None:
         if not s.enabled:
             return None
-        return next_due(self._time(LAST_AUTO_KEY), s.interval_days, self._time(ENABLED_AT_KEY))
+        return next_due(self._time(LAST_AUTO_KEY), s.interval_days, self._time(ENABLED_AT_KEY), self._clock.now())
 
     def _time(self, key: str) -> datetime | None:
         v = self._settings.get(key)
@@ -255,14 +255,19 @@ class BackupService:
             try:
                 progress(None, "Automatic backup…")
                 m = self._files.make_backup(folder / auto_file_name(now.astimezone()), now.isoformat())
-                removed = self._files.prune(folder, is_auto_name, s.keep)
             except Exception:  # a full drive, a pulled USB stick, a snapshot that failed its check: all reported
                 log.exception("automatic backup failed")
                 self._settings.set(ERROR_KEY, WRITE_FAILED)
                 return "The automatic backup couldn't be saved."
+            # Saved: record it before tidying up, so a clean-up that fails can't make it due again (v0.16-B3).
             self._settings.set(LAST_AUTO_KEY, m.created_at)
             self._settings.set(LAST_KEY, m.created_at)
             self._settings.set(ERROR_KEY, None)
+            try:
+                removed = self._files.prune(folder, is_auto_name, s.keep, now)
+            except Exception:
+                log.exception("couldn't remove old automatic backups")
+                removed = []
             log.info("automatic backup saved; %d old ones removed", len(removed))
             return "Automatic backup saved."
 

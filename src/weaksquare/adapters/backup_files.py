@@ -17,13 +17,16 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from weaksquare.adapters.db.connection import readonly_uri
 from weaksquare.core.backup import (
     DB_NAME,
+    MANIFEST_MAX_BYTES,
     MANIFEST_NAME,
     BackupError,
     Counts,
@@ -39,6 +42,10 @@ log = logging.getLogger(__name__)
 
 CHUNK = 1024 * 1024
 SPACE_MARGIN = 1.1  # room for the extracted copy plus a little
+# What reading a member of a broken zip can raise: a CRC mismatch or truncation (BadZipFile, EOFError), bit rot in a
+# deflate stream (zlib.error), an encrypted or oddly compressed member (RuntimeError, NotImplementedError) (v0.16-B1).
+READ_ERRORS = (zipfile.BadZipFile, zipfile.LargeZipFile, OSError, EOFError, zlib.error, RuntimeError,
+               NotImplementedError, ValueError)  # fmt: skip
 
 
 class NoSpaceError(AppError):
@@ -138,8 +145,10 @@ def _open(path: Path) -> zipfile.ZipFile:
         zf = zipfile.ZipFile(path)
     except (zipfile.BadZipFile, OSError, ValueError):
         raise BackupError("not_backup") from None
-    names = [i.filename for i in zf.infolist()]
-    if sorted(names) != sorted([MANIFEST_NAME, DB_NAME]):
+    infos = zf.infolist()
+    names = [i.filename for i in infos]
+    # We never write encrypted members, so one is someone else's file (v0.16-B1).
+    if sorted(names) != sorted([MANIFEST_NAME, DB_NAME]) or any(i.flag_bits & 0x1 for i in infos):
         zf.close()
         raise BackupError("not_backup")
     return zf
@@ -147,9 +156,14 @@ def _open(path: Path) -> zipfile.ZipFile:
 
 def read_manifest(path: Path) -> Manifest:
     with _open(path) as zf:
+        if zf.getinfo(MANIFEST_NAME).file_size > MANIFEST_MAX_BYTES:
+            raise BackupError("not_backup")
         try:
-            raw = zf.read(MANIFEST_NAME)
-        except (zipfile.BadZipFile, OSError, EOFError, zipfile.LargeZipFile):
+            # Read at most one byte past the limit, so a header that lies about the size can't make us inflate a
+            # huge manifest into memory (v0.16-B4); parse_manifest refuses anything over the limit.
+            with zf.open(MANIFEST_NAME) as f:
+                raw = f.read(MANIFEST_MAX_BYTES + 1)
+        except READ_ERRORS:
             raise BackupError("damaged") from None
         manifest = parse_manifest(raw)
         if zf.getinfo(DB_NAME).file_size != manifest.db_size:
@@ -173,7 +187,7 @@ def extract_db(path: Path, dest: Path, free_bytes: Callable[[Path], int] | None 
                     raise BackupError("damaged")
                 h.update(chunk)
                 out.write(chunk)
-    except (zipfile.BadZipFile, OSError, EOFError):  # a CRC mismatch or a truncated file
+    except READ_ERRORS:  # a CRC mismatch, a truncated file, a broken deflate stream
         dest.unlink(missing_ok=True)
         raise BackupError("damaged") from None
     except BaseException:
@@ -221,15 +235,15 @@ def list_backups(folder: Path, is_ours: Callable[[str], bool]) -> list[tuple[Pat
             continue
         try:
             found.append((p, read_manifest(p)))
-        except (BackupError, OSError):
+        except Exception:  # anything unreadable is left alone, never deleted, and never stops the rest (v0.16-B3)
             log.info("ignoring %s in the backups folder: not a readable backup", p.name)
     return found
 
 
-def prune(folder: Path, is_ours: Callable[[str], bool], keep: int) -> list[str]:
+def prune(folder: Path, is_ours: Callable[[str], bool], keep: int, now: datetime) -> list[str]:
     """Delete all but the newest `keep` of our backups in `folder`. Returns the names deleted."""
     found = list_backups(folder, is_ours)
-    doomed = set(stale([(p.name, m.created_at) for p, m in found], keep))
+    doomed = set(stale([(p.name, m.created_at) for p, m in found], keep, now))
     removed = []
     for p, _ in found:
         if p.name in doomed:
@@ -278,8 +292,8 @@ class BackupFiles:
     def folder_exists(self, folder: Path) -> bool:
         return folder.is_dir()
 
-    def prune(self, folder: Path, is_ours: Callable[[str], bool], keep: int) -> list[str]:
-        return prune(folder, is_ours, keep)
+    def prune(self, folder: Path, is_ours: Callable[[str], bool], keep: int, now: datetime) -> list[str]:
+        return prune(folder, is_ours, keep, now)
 
 
 # ---- the startup swap (FR-15.4) -------------------------------------------------------------------
@@ -302,6 +316,31 @@ def _remove_db(db: Path) -> None:
         p.unlink(missing_ok=True)
 
 
+def replaced_path(user_db: Path) -> Path:
+    return user_db.with_name(user_db.name + ".replaced")
+
+
+def recover_interrupted_swap(user_db: Path) -> None:
+    """Finish what a swap that was cut off (a crash, a power cut) left behind, before anything opens `user_db`.
+
+    - No `user.db` but a `.replaced` one: it stopped between moving your data aside and putting the backup in, so
+      your data goes back.
+    - Both there: the swap itself finished (it stopped during the migration or the clean-up), and the before-restore
+      backup holds the old copy, so the leftover full copy is deleted (v0.16-B5)."""
+    old = replaced_path(user_db)
+    if not old.exists():
+        return
+    if user_db.exists():
+        log.info("removing user.db.replaced left by an interrupted restore")
+        _remove_db(old)
+    else:
+        log.warning("an interrupted restore left no user.db; putting the original back")
+        _move_db(old, user_db)
+
+
+INCOMPLETE_MESSAGE = "The last restore didn't finish, so nothing was changed. You can choose the backup again."
+
+
 @dataclass(frozen=True)
 class SwapResult:
     restored_from: Manifest | None  # the restored backup's manifest, when the swap succeeded
@@ -320,9 +359,16 @@ def swap_in_staged(
 
     Called at startup, after the instance lock and before anything opens `user_db`."""
     try:
-        manifest = parse_manifest(staged_manifest.read_bytes())
+        manifest: Manifest | None = parse_manifest(staged_manifest.read_bytes())
     except (OSError, BackupError):
         manifest = None
+    if manifest is None:
+        # The manifest is written last, once the settings that belong to this PC are carried in. Without it the
+        # staging was cut off, and the file may still hold the other PC's settings, or be half written (v0.16-B2).
+        log.warning("a staged restore has no manifest; discarding it")
+        _remove_db(staged)
+        staged_manifest.unlink(missing_ok=True)
+        return SwapResult(None, None, INCOMPLETE_MESSAGE)
     try:
         saved = save_current()
     except Exception:
@@ -330,7 +376,7 @@ def swap_in_staged(
         _remove_db(staged)
         staged_manifest.unlink(missing_ok=True)
         return SwapResult(None, None, "Your data couldn't be saved aside first, so nothing was restored.")
-    old = user_db.with_name(user_db.name + ".replaced")
+    old = replaced_path(user_db)
     _remove_db(old)
     had_current = user_db.exists()
     try:
@@ -349,5 +395,5 @@ def swap_in_staged(
         return SwapResult(None, saved, "The restore didn't finish, and your data was put back as it was.")
     _remove_db(old)
     staged_manifest.unlink(missing_ok=True)
-    log.info("restored user.db from a backup made %s", manifest.created_at if manifest else "?")
+    log.info("restored user.db from a backup made %s", manifest.created_at)
     return SwapResult(manifest, saved, None)

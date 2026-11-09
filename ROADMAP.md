@@ -358,7 +358,7 @@ Built in internal steps, each committed and ticked off in `plans/v0.14.md`. QA r
 - **Back up now** from Settings: one `.zip` with a consistent copy of `user.db` and a manifest (FR-15.1, 15.2).
 - **Automatic backups:** optional, off by default, weekly into a folder you choose, keeping the last 5 (FR-15.3).
 - **Restore from a backup** in Settings: checked first, replaces everything after you confirm, with your current data copied aside first; older backups are migrated, newer ones refused (FR-15.4).
-- **Privacy:** the backup isn't encrypted, and the save dialog says so; sign-ins and keys are never in it (FR-15.2, 15.5).
+- **Privacy:** the backup isn't encrypted, and the text beside **Back up now** says so (the Windows Save dialog can't); sign-ins and keys are never in it (FR-15.2, 15.5).
 - **Docs:** a User Guide section on backing up and restoring; the "Your data and privacy" section updated.
 
 **Done when:**

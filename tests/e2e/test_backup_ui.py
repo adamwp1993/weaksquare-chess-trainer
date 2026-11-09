@@ -56,7 +56,10 @@ def test_restore_shows_whats_in_it_and_replaces_only_after_you_confirm(page: Pag
 
 @pytest.mark.parametrize(
     ("kind", "message"),
-    [("not_backup", "isn't a WeakSquare backup"), ("newer", "made by a newer version of WeakSquare. Update the app first.")],
+    [
+        ("not_backup", "isn't a WeakSquare backup"),
+        ("newer", "made by a newer version of WeakSquare. Update the app first."),
+    ],
 )
 def test_a_file_that_cant_be_restored_is_refused_with_its_reason(page: Page, kind: str, message: str) -> None:
     open_your_data(page)
@@ -103,14 +106,17 @@ def test_a_missing_folder_is_shown_not_silent(page: Page) -> None:
 
 @pytest.mark.parametrize(
     ("query", "text"),
-    [("restored=1", "Your data was restored from the backup made Nov 2, 2026"), ("restored=failed", "put back as it was")],
+    [
+        ("restored=1", "Your data was restored from the backup made Nov 2, 2026"),
+        ("restored=failed", "put back as it was"),
+    ],
 )
 def test_the_notice_after_the_restart(page: Page, query: str, text: str) -> None:
     page.goto(page.base_url + "/?" + query)  # type: ignore[attr-defined]
     notice = page.get_by_test_id("restore-notice")
     expect(notice).to_contain_text(text)
     if query == "restored=1":
-        expect(notice).to_contain_text("Sign in to Lichess again")
+        expect(notice).to_contain_text("on a new PC, sign in to Lichess again")  # v0.16-B10: not on an undo
     notice.get_by_role("button").click()  # it closes
     expect(notice).to_have_count(0)
     page.goto(page.base_url + "/")  # type: ignore[attr-defined]  # a start with no restore shows nothing

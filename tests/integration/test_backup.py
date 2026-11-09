@@ -539,3 +539,57 @@ def test_the_restarted_app_keeps_its_data_folder_and_front_end() -> None:
     assert after_restore_args(parse_args(["--dev"])) == ["--dev", "--after-restore"]
     assert after_restore_args(parse_args(["--dev-server"])) == ["--dev-server", "--after-restore"]
     assert parse_args(["--after-restore"]).after_restore is True
+
+
+# ---- v0.16 fix loop: regression tests ------------------------------------------------------------------------
+def test_b5_a_swap_cut_off_between_the_renames_puts_the_original_back(paths: config.Paths, tmp_path: Path,
+                                                                      clock: FixedClock) -> None:  # fmt: skip
+    """v0.16-B5: a power cut after user.db was moved aside but before the backup took its place leaves no user.db.
+    The next start puts the original back instead of starting empty (and instead of deleting the .replaced copy)."""
+    migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock)
+    set_raw(paths.user_db, "mixer.filters", '"original"')
+    before = dump(paths.user_db)
+    paths.user_db.replace(paths.user_db.with_name("user.db.replaced"))
+    assert apply_staged_restore(paths, clock) is None
+    assert dump(paths.user_db) == before
+    assert not paths.user_db.with_name("user.db.replaced").exists()
+
+
+def test_b2_an_incomplete_staging_changes_nothing_and_says_so(paths: config.Paths, tmp_path: Path,
+                                                             clock: FixedClock) -> None:  # fmt: skip
+    """v0.16-B2: user.restore.db without its manifest (the job was cut off) is never swapped in."""
+    migrate(paths.user_db, config.MIGRATIONS_DIR / "user", clock)
+    before = dump(paths.user_db)
+    shutil.copyfile(paths.user_db, paths.user_restore_db)
+    notice = apply_staged_restore(paths, clock)
+    assert notice is not None and notice.error is not None and "nothing was changed" in notice.error
+    assert dump(paths.user_db) == before
+    assert not paths.user_restore_db.exists()
+    assert not list(paths.backups_dir.glob("before-restore-*.zip"))
+
+
+@pytest.mark.parametrize("folder", ["C#dev", "100%41 sure", "a&b=c mode=rw"])
+def test_b7_the_puzzle_db_opens_read_only_in_a_folder_with_uri_characters(tmp_path: Path, folder: str,
+                                                                          clock: FixedClock) -> None:  # fmt: skip
+    """v0.16-B7: readonly_uri percent-encodes the path; it's also how puzzles.db is attached at every start."""
+    from weaksquare.adapters.db.connection import readonly_uri
+
+    d = tmp_path / folder
+    d.mkdir()
+    db = d / "user.db"
+    migrate(db, config.MIGRATIONS_DIR / "user", clock)
+    conn = sqlite3.connect(readonly_uri(db), uri=True)
+    try:
+        assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == KNOWN
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("CREATE TABLE nope (x)")  # still read-only
+    finally:
+        conn.close()
+    assert check_db(db).schema_version == KNOWN
+
+
+def set_raw(db: Path, key: str, value: str) -> None:
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()

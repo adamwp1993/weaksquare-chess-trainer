@@ -91,9 +91,16 @@ def test_auto_settings_are_checked() -> None:
 
 
 def test_due_rules() -> None:
-    assert b.next_due(None, 7, None) is None
-    assert b.next_due(None, 7, AT) == AT  # none made yet: due as soon as they're on
-    assert b.next_due(AT, 7, AT - timedelta(days=30)) == AT + timedelta(days=7)
+    assert b.next_due(None, 7, None, AT) is None
+    assert b.next_due(None, 7, AT, AT) == AT  # none made yet: due as soon as they're on
+    assert b.next_due(AT, 7, AT - timedelta(days=30), AT) == AT + timedelta(days=7)
+
+
+def test_a_time_in_the_future_means_the_clock_was_wrong_so_a_backup_is_due_now() -> None:
+    """v0.16-B6: a last backup (or switch-on) recorded while the clock ran ahead doesn't stop backups until then."""
+    assert b.next_due(AT + timedelta(days=200), 7, None, AT) == AT
+    assert b.next_due(None, 7, AT + timedelta(days=200), AT) == AT
+    assert b.next_due(AT - timedelta(days=1), 7, AT + timedelta(days=200), AT) == AT + timedelta(days=6)
     assert b.is_due(AT, AT) and not b.is_due(AT - timedelta(seconds=1), AT) and not b.is_due(AT, None)
 
 
@@ -106,17 +113,33 @@ def test_the_timer_waits_until_due_but_at_least_a_minute_and_at_most_an_hour() -
 
 def test_retention_keeps_the_newest() -> None:
     found = [(f"n{i}", (AT + timedelta(days=i)).isoformat()) for i in (3, 0, 4, 1, 2)]
-    assert b.stale(found, 3) == ["n0", "n1"]
-    assert b.stale(found, 10) == []
+    now = AT + timedelta(days=10)
+    assert b.stale(found, 3, now) == ["n0", "n1"]
+    assert b.stale(found, 10, now) == []
     # a hand-edited manifest with no offset sorts as UTC instead of crashing
-    assert b.stale([("x", "2026-01-01T00:00:00"), ("y", AT.isoformat())], 1) == ["x"]
+    assert b.stale([("x", "2026-01-01T00:00:00"), ("y", AT.isoformat())], 1, now) == ["x"]
+
+
+def test_retention_ignores_a_backup_dated_in_the_future() -> None:
+    """v0.16-B6: a file made while the clock ran ahead isn't "newest"; the real ones are kept and it isn't deleted."""
+    found = [("future", (AT + timedelta(days=400)).isoformat()), ("a", (AT - timedelta(days=2)).isoformat()),
+             ("b", (AT - timedelta(days=1)).isoformat()), ("c", AT.isoformat())]  # fmt: skip
+    assert b.stale(found, 2, AT) == ["a"]
+    assert b.stale(found, 2, AT + timedelta(days=500)) == ["a", "b"]  # once its date has passed, it counts
 
 
 def test_pc_local_keys() -> None:
     for k in ("backup.auto", "backup.last_error", "puzzle_db.last_check", "lichess.account", "debug.time_offset_days",
               "engine.custom_path", "engine.threads", "engine.hash_mb"):  # fmt: skip
         assert b.is_pc_local(k)
-    for k in ("mixer.filters", "plan.params", "lichess.history_account", "llm.provider", "ui.color_scheme", "engine.think_s"):
+    for k in (
+        "mixer.filters",
+        "plan.params",
+        "lichess.history_account",
+        "llm.provider",
+        "ui.color_scheme",
+        "engine.think_s",
+    ):
         assert not b.is_pc_local(k)
 
 

@@ -197,10 +197,16 @@ def checked_auto_settings(enabled: bool, folder: str | None, interval_days: int,
     return AutoSettings(enabled, folder or None, interval_days, keep)
 
 
-def next_due(last_at: datetime | None, interval_days: int, enabled_at: datetime | None) -> datetime | None:
-    """When the next automatic backup is due. With none made yet, it's due as soon as automatic backups are on."""
+def next_due(last_at: datetime | None, interval_days: int, enabled_at: datetime | None,
+             now: datetime) -> datetime | None:  # fmt: skip
+    """When the next automatic backup is due. With none made yet, it's due as soon as automatic backups are on.
+
+    A time after `now` was recorded while the clock was wrong (v0.16-B6). It can't be trusted, so a backup is due now
+    rather than months away."""
     if last_at is not None:
-        return last_at + timedelta(days=interval_days)
+        return now if _instant_dt(last_at) > _instant_dt(now) else last_at + timedelta(days=interval_days)
+    if enabled_at is not None and _instant_dt(enabled_at) > _instant_dt(now):
+        return now
     return enabled_at
 
 
@@ -215,14 +221,21 @@ def seconds_until_check(now: datetime, due: datetime | None) -> float:
     return max(MIN_WAIT_S, min(RECHECK_S, (due - now).total_seconds()))
 
 
-def stale(found: list[tuple[str, str]], keep: int) -> list[str]:
-    """Which backups to delete, given (name, created_at) of the files that are ours. The newest `keep` stay."""
-    ordered = sorted(found, key=lambda f: (_instant(f[1]), f[0]))
+def stale(found: list[tuple[str, str]], keep: int, now: datetime) -> list[str]:
+    """Which backups to delete, given (name, created_at) of the files that are ours. The newest `keep` stay.
+
+    One dated after `now` was made while the clock was wrong (v0.16-B6): it's neither counted nor deleted, so it can't
+    push real backups out. Once the clock passes its date it's treated like any other."""
+    real = [f for f in found if _instant(f[1]) <= _instant_dt(now)]
+    ordered = sorted(real, key=lambda f: (_instant(f[1]), f[0]))
     return [name for name, _ in ordered[: max(0, len(ordered) - keep)]]
 
 
 def _instant(iso: str) -> datetime:
-    at = datetime.fromisoformat(iso)
+    return _instant_dt(datetime.fromisoformat(iso))
+
+
+def _instant_dt(at: datetime) -> datetime:
     return at if at.tzinfo is not None else at.replace(tzinfo=UTC)
 
 
