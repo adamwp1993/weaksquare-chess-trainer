@@ -52,6 +52,15 @@ class Paths:
         return self.data_dir / "puzzles.new.db"
 
     @property
+    def user_restore_db(self) -> Path:
+        """A checked backup waiting to replace user.db at the next start (FR-15.4, v0.16)."""
+        return self.data_dir / "user.restore.db"
+
+    @property
+    def user_restore_manifest(self) -> Path:
+        return self.data_dir / "user.restore.json"
+
+    @property
     def downloads_dir(self) -> Path:
         return self.data_dir / "downloads"
 

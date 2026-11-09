@@ -82,6 +82,57 @@ class Desktop:
         )
         return str(chosen[0]) if chosen else None
 
+    # ---- backup and restore (FR-15, v0.16) ---------------------------------------------------------
+    def choose_backup_save_path(self, suggested_name: str) -> str | None:
+        """Native Save dialog for a backup file. None if cancelled."""
+        if self._window is None:
+            return None
+        chosen = self._window.create_file_dialog(
+            30,  # webview.FileDialog.SAVE
+            save_filename=suggested_name,
+            file_types=("WeakSquare backup (*.zip)", "All files (*.*)"),
+        )
+        return _first(chosen)
+
+    def choose_backup_file(self) -> str | None:
+        """Native Open dialog for a backup to restore. None if cancelled."""
+        if self._window is None:
+            return None
+        chosen = self._window.create_file_dialog(10, file_types=("WeakSquare backup (*.zip)", "All files (*.*)"))
+        return _first(chosen)
+
+    def choose_folder(self) -> str | None:
+        """Native folder picker (the automatic-backup folder). None if cancelled."""
+        if self._window is None:
+            return None
+        return _first(self._window.create_file_dialog(20))  # webview.FileDialog.FOLDER
+
+    def close_window(self) -> None:
+        """Close the window from any thread; `main` then shuts down as usual (FR-15.4 restart)."""
+        if self._window is not None:
+            self._window.destroy()
+
+
+def _first(chosen: object) -> str | None:
+    """pywebview returns a string from the Save dialog and a tuple from the others."""
+    if not chosen:
+        return None
+    if isinstance(chosen, str):
+        return chosen
+    if isinstance(chosen, list | tuple):
+        return str(chosen[0])
+    return None
+
+
+def relaunch(python: str, args: list[str]) -> None:
+    """Start a new copy of the app, detached from this one (FR-15.4: restart to finish a restore)."""
+    import subprocess
+
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+    subprocess.Popen([python, *args], creationflags=flags, close_fds=True, cwd=str(Path.cwd()))
+
 
 def system_prefers_dark() -> bool:
     """The Windows app theme (Settings → Personalization → Colors → app mode). False if unknown."""

@@ -2,6 +2,9 @@
 // Two implementations: pywebviewClient (the real app) and mockClient (UI development, Playwright).
 import type {
   AccountStatus,
+  BackupInfo,
+  BackupStatus,
+  RestoreNotice,
   Analysis,
   AnalysisQueue,
   ApiError,
@@ -581,6 +584,19 @@ export interface ApiClient {
   openLichessWindow(): Promise<boolean>;
   closeLichessWindow(): Promise<void>;
   isLichessWindowOpen(): Promise<boolean>;
+  // ---- v0.16: backup and restore (REQUIREMENTS §21). File paths never cross the bridge from here. ----
+  getBackupStatus(): Promise<BackupStatus>;
+  /** FR-15.3: automatic backups. `folder` comes from chooseBackupFolder. */
+  setBackupSettings(enabled: boolean, folder: string | null, intervalDays: number, keep: number): Promise<BackupStatus>;
+  chooseBackupFolder(): Promise<string | null>;
+  /** FR-15.1: the Save dialog, then a backup job. The job ID, or null if you cancel. */
+  backupNow(): Promise<string | null>;
+  /** FR-15.4: the Open dialog, then what's in the file (or an error saying why it can't be restored). */
+  chooseBackupToRestore(): Promise<BackupInfo | null>;
+  /** Replace my data: a job that checks and stages the backup, then the app restarts. */
+  restoreBackup(token: string): Promise<string>;
+  /** After a restart: what the restore did, once. */
+  takeRestoreNotice(): Promise<RestoreNotice | null>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

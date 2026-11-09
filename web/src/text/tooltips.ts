@@ -2,6 +2,10 @@
 // User Guide. It says what the option does and, for a choice, what each choice means and costs. Add an entry for every
 // option a later version adds. The Playwright walk in tests/e2e/test_v012_tooltips.py fails on a control without one.
 export const TOOLTIPS = {
+  // ---- backup and restore (v0.16) ----
+  "backup.auto": "On: WeakSquare saves a backup into the folder you choose, as often as you set, and deletes the oldest ones beyond how many you keep. It only deletes its own backups there. It runs only while the app is open, or the next time you open it if one came due while it was closed. If the folder is missing (an unplugged drive), you see a warning here and it tries again next time.",
+  "backup.interval": "How many days apart automatic backups are, from 1 to 90. Weekly (7) is the default.",
+  "backup.keep": "How many automatic backups stay in the folder, from 1 to 50. When there are more, the oldest are deleted. Backups you saved yourself with Back up now are counted too if they're in the same folder and still have their dated name.",
   // ---- the Analysis tab (v0.15) ----
   "analysis.sideToMove": "Whose turn it is in the position you set up. The engine and popular replies look at the position with that side to move, and it must not be possible to capture the other king.",
   "analysis.castling": "Which sides may still castle, and to which side. A box is greyed out unless that king and rook are on their starting squares.",

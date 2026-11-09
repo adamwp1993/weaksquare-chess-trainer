@@ -1680,3 +1680,33 @@ export interface GameStoryView {
   summary: string[];
   strengths: GameStrength[];
 }
+
+export interface BackupSettings {
+  enabled: boolean;
+  folder: string | null;
+  interval_days: number;
+  keep: number;
+}
+
+export interface BackupStatus {
+  settings: BackupSettings;
+  last_at: string | null;
+  next_due: string | null;
+  last_error: string | null;
+}
+
+export interface BackupInfo {
+  token: string;
+  created_at: string;
+  app_version: string;
+  schema_version: number;
+  games: number;
+  attempts: number;
+  coach_reports: number;
+}
+
+export interface RestoreNotice {
+  created_at: string | null;
+  app_version: string | null;
+  error: string | null;
+}

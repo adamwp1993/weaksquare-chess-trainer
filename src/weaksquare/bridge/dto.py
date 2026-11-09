@@ -2204,3 +2204,43 @@ EXPORTED += [
     GameStrength,
     GameStoryView,
 ]
+
+
+# ---- v0.16: backup and restore (REQUIREMENTS §21) ------------------------------------------------
+@dataclass(frozen=True)
+class BackupSettings:
+    enabled: bool  # FR-15.3: off by default
+    folder: str | None
+    interval_days: int  # 1-90, default 7
+    keep: int  # 1-50, default 5
+
+
+@dataclass(frozen=True)
+class BackupStatus:
+    settings: BackupSettings
+    last_at: str | None  # the last backup made on this PC, ISO time
+    next_due: str | None  # the next automatic backup, when they're on
+    last_error: str | None  # e.g. the folder is missing (FR-15.3: never silent)
+
+
+@dataclass(frozen=True)
+class BackupInfo:
+    """What's in a backup you chose to restore (FR-15.4). `token` stands for the file in restore_backup."""
+
+    token: str
+    created_at: str
+    app_version: str
+    schema_version: int
+    games: int
+    attempts: int
+    coach_reports: int
+
+
+@dataclass(frozen=True)
+class RestoreNotice:
+    created_at: str | None
+    app_version: str | None
+    error: str | None  # the restore didn't finish and your data was put back
+
+
+EXPORTED += [BackupSettings, BackupStatus, BackupInfo, RestoreNotice]

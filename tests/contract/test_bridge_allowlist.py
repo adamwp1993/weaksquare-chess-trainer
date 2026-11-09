@@ -12,6 +12,14 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.errors import BRIDGE_MARK
 
 ALLOWLIST = {
+    # v0.16: backup and restore (REQUIREMENTS §21)
+    "get_backup_status",
+    "set_backup_settings",  # FR-15.3
+    "choose_backup_folder",
+    "backup_now",  # FR-15.1
+    "choose_backup_to_restore",  # FR-15.4
+    "restore_backup",
+    "take_restore_notice",
     # v0.15: the Analysis tab (REQUIREMENTS §20)
     "check_board_position",  # FR-14.2
     "import_analysis_pgn",  # FR-14.3

@@ -36,6 +36,17 @@ class FakeDesktop(Desktop):
     def choose_puzzle_import_file(self) -> str | None:
         return self.next_file
 
+    # v0.16: backup and restore
+    def choose_backup_save_path(self, suggested_name: str) -> str | None:
+        self.suggested_name = suggested_name
+        return self.next_file
+
+    def choose_backup_file(self) -> str | None:
+        return self.next_file
+
+    def choose_folder(self) -> str | None:
+        return self.next_file
+
 
 def fake_service_kwargs(lichess: object | None = None) -> dict:
     """Fakes for everything that would reach Lichess, Credential Manager, a timer thread or an engine."""
@@ -110,6 +121,7 @@ def build_api(
         repertoire=services.repertoire,
         studies=services.studies,
         lichess_window=services.lichess_window,
+        backup=services.backup,
     )
 
 

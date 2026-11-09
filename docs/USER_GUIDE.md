@@ -35,9 +35,10 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
 
 - **Where your data lives:** everything is stored on this PC under `%LOCALAPPDATA%\WeakSquare`.
   - `puzzles.db` is the imported Lichess puzzle database. It's large but rebuildable: re-importing replaces it.
-  - `user.db` holds everything you create: your attempts, presets and settings, and from later versions your games and analysis. Back up this file to keep your history.
+  - `user.db` holds everything you create: your attempts, presets and settings, and from later versions your games and analysis. *From v0.16*, back it up from **Settings → Your data**; see [Backing up and restoring your data](#backing-up-and-restoring-your-data).
   - Before an update changes `user.db`, the app saves a copy in the `backups` folder next to it and keeps the last five.
 - **Sign-ins and API keys** are never written to files. Your Lichess sign-in (from v0.3), and from v0.7 any AI provider key, are stored in **Windows Credential Manager**. Signing out removes them. Each data folder has its own entry, so a test or development copy of the app never sees your real sign-in.
+- **Backups** (v0.16) are files you save yourself, on this PC or a drive you choose. They **aren't encrypted** and hold your games, notes, journal and AI explanations, so keep them somewhere private. Your Lichess sign-in and AI keys are never in a backup. The app never uploads a backup or sends it anywhere.
 - **Nothing leaves your PC** unless you use a feature that needs the internet. Those features are listed in their own sections, along with what they send.
   - **Puzzle database download** (v0.1): requests the public puzzle file and its checksum list from database.lichess.org. Nothing else is sent.
   - **Update check** (v0.2): at most once a day, and when you click **Check for updates**, the app makes three plain requests to database.lichess.org: the checksum list (`sha256sums.txt`), the puzzle file's date and size (a `HEAD` request, which doesn't download it) and the front page, for the approximate puzzle count. Nothing about you or your training is sent. Turn it off in **☰ → Settings…**.
@@ -1249,6 +1250,52 @@ On the analysis board after a puzzle, and under **Analyze from here** in Game Re
 ### Gotchas
 - **Replacing your board asks first.** **New board**, **Import PGN** and **Open in Analysis tab** all ask *Replace your current board?* when it has moves; **Keep my board** leaves it as it was. Your lines aren't saved anywhere else.
 - Closing the app clears the Analysis tab.
+
+## Backing up and restoring your data
+*Added in v0.16.*
+
+Everything you create (puzzle attempts and stats, presets and settings, games and their analysis, AI explanations, Coach reports, your training plan, notes and journal, your repertoire and your studies) is kept in one file on this PC. A backup is a copy of it in a single `.zip` file. Use one to keep your history safe, or to bring it into a new install or onto another PC. Everything here is under **☰ → Settings… → Your data**.
+
+![Settings → Your data](img/settings-your-data.png)
+
+### Back up now
+1. Click **Back up now**.
+2. Choose where to save the file. The suggested name is `weaksquare-backup-<date>.zip`.
+3. When it's done you see what it saved (games, puzzle attempts and Coach reports), and **Last backup on this PC** shows the time.
+
+You can keep training while it runs: the copy is consistent even while the app is writing, and it's checked before the file is saved. A backup never changes or deletes anything.
+
+**What isn't in a backup:**
+- Your **Lichess sign-in** and **AI keys**. They stay in Windows Credential Manager and are never put in a file.
+- The **puzzle database** and **Stockfish**. A new install downloads them again.
+- Logs, and settings that only make sense on this PC: the automatic-backup settings, the puzzle database's update check, which Lichess account is signed in here, and the engine's threads, hash and custom engine (they depend on this PC's hardware and files). Think time does come across.
+
+> **A backup isn't encrypted.** It holds your games, notes, journal and AI explanations, so keep it somewhere private.
+
+### Restore from a backup
+Restoring **replaces all your data** on this PC with the backup's. Nothing is merged: two histories of stats, plans and reports can't be combined safely.
+
+1. Click **Restore from a backup…** and choose the file.
+2. Check what's in it: when it was made, by which version of WeakSquare, and how many games, puzzle attempts and Coach reports it holds.
+3. Click **Replace my data**. The backup is checked in full, then the app closes and opens again by itself to finish. That takes a few seconds.
+4. After the restart, a message says your data was restored. **Sign in to Lichess again**, and re-enter any AI key in **Settings → AI explanations**.
+
+**Gotchas:**
+- **You can undo a restore.** Before your data is replaced, it's saved as a backup file in the `backups` folder of your data folder (**About → Data folder → Open**), named `before-restore-<date>.zip`. To undo, restore that file the same way. The last five are kept.
+- **A file that isn't a WeakSquare backup, or is damaged,** is refused with a message, and nothing changes.
+- **A backup from a newer version of WeakSquare** is refused: *"This backup was made by a newer version of WeakSquare. Update the app first."*
+- **A backup from an older version** is restored and then upgraded, like an update.
+- **Restore waits for background work.** While a game analysis, Coach report, sync or import is running, Restore says which one. Let it finish or cancel it, then try again.
+- If the restore can't finish after the restart, your data is put back as it was and a message tells you so.
+- Puzzles from the backup that this install's puzzle database doesn't have are handled as after a database update: they stay in your history.
+
+### Automatic backups
+1. Turn on **Automatic backups**. The first time, choose a folder, such as a folder on another drive or a synced folder.
+2. Set **Every (days)** (weekly by default) and **Keep the last** (5 by default).
+
+- An automatic backup runs only **while the app is open**, or **the next time you open it** if one came due while it was closed. WeakSquare installs no Windows scheduled task. The first one is made soon after you turn them on, and **Next automatic backup** shows when the next is due.
+- When there are more backups in the folder than you keep, the **oldest are deleted**. WeakSquare only ever deletes its own backups there (files named `weaksquare-backup-<date>.zip` that really are backups), never anything else in the folder.
+- **If the folder is missing**, for example an unplugged drive, a warning appears under **Your data** and the app tries again later. It never fails silently.
 
 ## Keyboard shortcuts
 *Added in v0.2.*
