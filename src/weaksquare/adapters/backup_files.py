@@ -143,7 +143,7 @@ def make_backup(user_db: Path, target: Path, work_dir: Path, app_version: str, c
 def _open(path: Path) -> zipfile.ZipFile:
     try:
         zf = zipfile.ZipFile(path)
-    except (zipfile.BadZipFile, OSError, ValueError):
+    except READ_ERRORS:  # also an unsupported zip version, read from the directory (v0.16-B11)
         raise BackupError("not_backup") from None
     infos = zf.infolist()
     names = [i.filename for i in infos]

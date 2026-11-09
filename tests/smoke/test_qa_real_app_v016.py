@@ -157,3 +157,46 @@ def test_qa_restore_through_the_ui_restarts_the_real_app_and_swaps_the_data(pw, 
     assert _setting(data_dir / "user.db", "backup.auto") is None
     assert not (data_dir / "user.restore.db").exists() and not (data_dir / "user.restore.json").exists()
     assert len(list((data_dir / "backups").glob("before-restore-*.zip"))) == 1
+
+
+def test_qa_r2_b7_the_real_app_runs_and_backs_up_in_a_data_folder_with_hash_and_percent(  # type: ignore[no-untyped-def]
+    pw, tmp_path: Path, fixture_puzzles_db: Path
+) -> None:
+    """v0.16-B7: `#` and `%41` in the data folder path. The app opens puzzles.db and shows the match count, and a
+    restore staged there is swapped in at the next start (check_db and the before-restore backup both run)."""
+    data_dir = tmp_path / "C#dev %41 data"
+    data_dir.mkdir()
+    shutil.copyfile(fixture_puzzles_db, data_dir / "puzzles.db")
+    other = tmp_path / "other" / "user.db"
+    other.parent.mkdir()
+    migrate(other, config.MIGRATIONS_DIR / "user", FixedClock())
+    conn = sqlite3.connect(other)
+    conn.execute("INSERT INTO settings (key, value) VALUES ('qa.marker', '\"hash folder\"')")
+    conn.commit()
+    conn.close()
+    zip_path = tmp_path / "b.zip"
+    make_backup(other, zip_path, tmp_path / "work", config.APP_VERSION, "2026-11-02T18:05:00+00:00")
+    app = launch_app(data_dir, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+            from weaksquare.adapters.backup_files import BackupFiles
+
+            paths = config.Paths(data_dir)
+            BackupFiles(paths.user_db, paths.downloads_dir, paths.user_restore_db, paths.user_restore_manifest,
+                        config.APP_VERSION).stage_restore(zip_path)  # fmt: skip
+        assert app.close() == 0
+    finally:
+        if app.process.poll() is None:
+            app.process.kill()
+    app = launch_app(data_dir, free_port())
+    try:
+        with attach(pw, app) as page:
+            page.get_by_test_id("restore-notice").wait_for(timeout=30_000)
+            page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=30_000)
+        assert app.close() == 0
+    finally:
+        if app.process.poll() is None:
+            app.process.kill()
+    assert _setting(data_dir / "user.db", "qa.marker") == '"hash folder"'
+    assert len(list((data_dir / "backups").glob("before-restore-*.zip"))) == 1

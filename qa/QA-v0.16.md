@@ -1,5 +1,63 @@
 # QA report: v0.16 (Backup and restore)
 
+# Round 2, 2026-11-09: re-verification at `83000f6` (fixes for B1-B10)
+
+Same rules as round 1: I changed only `tests/` and this report. No credentials, no `-m live`, temp data folders only.
+`-m docs_screenshots` rewrote one image (see Commands); I put the committed one back, so `docs/` is unchanged.
+
+## Verdict: **PASS WITH ISSUES** (1 new minor; no blocker or major)
+
+All ten round 1 bugs are fixed, B3 (the major) included. Trying to break the fixes turned up one minor gap in B1's class
+(B11): a zip whose "version needed to extract" is unsupported makes `zipfile.ZipFile()` itself raise
+`NotImplementedError`, which `_open` doesn't catch. It's refused with *Something went wrong* instead of the reason;
+nothing changes, and retention skips it. No regressions.
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B1 (minor) | **FIXED** (gap: B11) | Round 1's 5 tests pass unmarked. Fuzzing: 600 single-byte changes (test) and 3,000 1–4-byte changes (scratch run) over a real backup: 2,947 *damaged*, 40 *not a backup*, 10 accepted (bytes that don't matter, e.g. timestamps), **3 crashes**, all `NotImplementedError: zip file version N` from the `ZipFile` constructor (B11) |
+| B2 (minor) | **FIXED** | Round 1 test passes. New: a complete staged file with no manifest is discarded with *"The last restore didn't finish, so nothing was changed…"*, your data stays, and no before-restore copy is made; a manifest truncated by a crash mid-write is treated the same |
+| B3 (major) | **FIXED** | Round 1 test passes: one backup in 5 ticks beside the damaged file, which survives. The backup is recorded before pruning, so a prune that fails can't make it due again. The B11 file also survives retention (`test_qa_r2_b11_retention_survives_it`) |
+| B4 (minor) | **FIXED** | Round 1 test passes. New: a header that **lies small** (100 bytes, exactly 64 KB, 64 KB − 1) over an 80 MB manifest is refused with a peak under 8 MB; a header that lies big (1 GB) on a small manifest is refused; a `user.db` header that lies by −1 / +1 / +1 MB, with a manifest that agrees with it, is *damaged* and nothing is staged |
+| B5 (minor) | **FIXED** | Round 1 test passes. New: a crash between the two renames (no `user.db`, a `.replaced`) puts your data back; with the staged restore still complete, that start then finishes the restore, and the before-restore copy holds **your** data (not nothing); with no staging left, only the recovery happens |
+| B6 (minor) | **FIXED** | Round 1's two tests pass. New: clock 300 days **ahead** → backup → clock fixed: one backup due at once, then none until a week later; 4 normal weeks with keep 3 leave 3 real backups plus the future-dated one, untouched. Clock 200 days **behind** then right: 3 backups, no burst. Clock a year behind with 3 correct backups and keep 1: none of the three is deleted |
+| B7 (minor) | **FIXED** | Round 1's 3 tests pass. **Real app** (new): data folder `C#dev %41 data` opens `puzzles.db` (match count shows), and a restore staged there is swapped in at the next start with its before-restore copy. The CHANGELOG has a **Fixed** line, since it's older than v0.16 |
+| B8 (minor) | **FIXED** | `uv run ruff format --check .`: 529 files already formatted |
+| B9 (doc) | **FIXED** | ROADMAP now says the text beside **Back up now** says so |
+| B10 (wording) | **FIXED** | Notice: *"Sign-ins and AI keys aren't part of a backup: on a new PC, sign in to Lichess again…"*; User Guide step 4 says on the same PC you stay signed in. Real-app notice still found by both smoke tests |
+
+## New bug
+
+| ID | Severity | Steps | Expected | Actual | Evidence |
+|---|---|---|---|---|---|
+| **v0.16-B11** | minor | Restore from a zip whose central directory gives a "version needed to extract" above 6.3 for either member (set the byte at offset 6 of its central header to 88) | *"This backup is damaged"* or *"isn't a WeakSquare backup"* | `zipfile.ZipFile()` raises `NotImplementedError("zip file version 8.8")` while reading the directory; `_open` catches only `BadZipFile`, `OSError`, `ValueError`, so the bridge returns *Something went wrong* (code `internal`). Nothing changes, and `list_backups` now skips such a file, so retention is safe. Catching `READ_ERRORS` (or `Exception`) around the constructor fixes it | `tests/integration/test_qa_v016_round2.py::test_qa_r2_b11_an_unsupported_zip_version_is_refused_not_a_crash[manifest.json / user.db]`, `::test_qa_r2_b11_the_bridge_names_the_reason` (xfail); found by 3 of 3,000 fuzzed files |
+
+Notes, not filed:
+- `recover_interrupted_swap` deletes `user.db.replaced` whenever `user.db` also exists. If a rollback's `_remove_db(user_db)` itself failed (a locked file), the `.replaced` one would be your original and is deleted at the next start; the before-restore zip made before the swap still holds it, so nothing is lost.
+- `readonly_uri` on a UNC data folder (`\\server\share`) gives `file://server/share/…`, which SQLite reads as a URI authority. Unchanged from before v0.16, and not a supported setup.
+- `docs_screenshots` re-rendered `stats-reasons.png` with the **Why you missed** tab's hover shade (the pointer was left over it); the committed image has none. A capture flake, not a product change.
+
+## Tests added this round
+- `tests/integration/test_qa_v016_round2.py` (16 pass, 3 xfail): lying manifest headers (4), lying `user.db` headers (3), 600-case fuzz with retention listing, staged file with no or a truncated manifest, crash between the renames (with and without staging), clock ahead/behind/right, clock behind with retention; B11 (3 xfail) and B11 retention (passes).
+- `tests/smoke/test_qa_real_app_v016.py::test_qa_r2_b7_the_real_app_runs_and_backs_up_in_a_data_folder_with_hash_and_percent`.
+
+## Commands at `83000f6`
+
+| Command | Result |
+|---|---|
+| `uv run pytest` | **4019 passed**, 1 skipped, 2 xfailed (24:22), my round 1 file and the builder's new tests included. My round 2 file ran separately: **16 passed, 3 xfailed** |
+| `uv run pytest -m e2e` | **574 passed** (17:46) |
+| `uv run pytest -m docs_screenshots` | **53 passed** (2:30); only `docs/img/stats-reasons.png` differed (hover shade, see notes); restored |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **87 passed**, 1 skipped, **1 failed** (21:10): `test_qa_v012_round2_real_app.py::test_qa2_the_new_tags_filter_link_and_hand_tick_in_the_real_app` (the journal entry was saved without its task link, `None == 7`). That file re-run alone 3 times: **3 passed** each time. It runs no v0.16 code (v0.12 journal), so I count it as a timing flake. `test_real_app_v016.py` (2) and my `test_qa_real_app_v016.py` (2) passed |
+| `uv run ruff check .` / `uv run ruff format --check .` | clean / 529 files already formatted |
+| `uv run mypy src` | no issues in 158 source files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | clean / clean (exit 0) |
+| `uv run pre-commit run --all-files` | all hooks passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings |
+
+---
+
 # Round 1, 2026-11-09, at `fc471d3` (branch `v0.16`)
 
 I changed only `tests/` and this report. No credentials, no `-m live`, no network requests, no default data folder
