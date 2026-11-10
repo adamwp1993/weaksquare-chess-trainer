@@ -87,7 +87,7 @@ class CheckpointSettings:
     time_classes: tuple[str, ...] = ("rapid", "classical")
     color: str = "both"
     thresholds: Thresholds = field(default_factory=Thresholds)
-    auto_ai: bool = False  # FR-10.37: off by default
+    auto_ai: bool = True  # FR-10.37: on by default (Adam, 2026-11-10); still bound by the cap and budget
     notices: bool = True  # FR-10.38: status-change notices (v1.0 planning: on)
 
     def to_json(self) -> dict[str, Any]:

@@ -247,7 +247,7 @@ def test_puzzle_accuracy_counts_attempts_on_the_themes_before_the_cutoff() -> No
 def test_default_settings_round_trip() -> None:
     d = CheckpointSettings()
     assert checked_settings(d.to_json()) == d
-    assert (d.every_games, d.window, d.schedule.kind, d.auto_ai, d.notices) == (10, 30, "off", False, True)
+    assert (d.every_games, d.window, d.schedule.kind, d.auto_ai, d.notices) == (10, 30, "off", True, True)
 
 
 @pytest.mark.parametrize("bad", [

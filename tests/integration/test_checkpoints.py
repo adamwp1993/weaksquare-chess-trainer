@@ -271,7 +271,7 @@ def test_a_coach_run_going_puts_the_checkpoint_off(services, cp, monkeypatch) ->
 def test_settings_round_trip_through_the_bridge(services, cp, paths, clock) -> None:  # type: ignore[no-untyped-def]
     api = api_for(services, paths, clock, services.checkpoints._runner)
     s = api.get_checkpoint_settings()["data"]
-    assert s["every_games"] == 5 and s["auto_ai"] is False and s["notices"] is True
+    assert s["every_games"] == 5 and s["auto_ai"] is True and s["notices"] is True
     out = api.set_checkpoint_settings(
         {**SMALL, "every_games": 50, "schedule": {"kind": "weekday", "days": 7, "weekday": 0}}
     )["data"]

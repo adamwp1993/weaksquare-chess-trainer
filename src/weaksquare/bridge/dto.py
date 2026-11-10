@@ -2280,7 +2280,7 @@ class CheckpointSettings:
     time_classes: list[str]
     color: Literal["both", "white", "black"]
     thresholds: CheckpointThresholds
-    auto_ai: bool  # FR-10.37: Auto AI checkpoint summary (default off)
+    auto_ai: bool  # FR-10.37: Auto AI checkpoint summary (default on)
     notices: bool  # FR-10.38: status-change notices (default on)
 
 
