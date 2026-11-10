@@ -13,6 +13,14 @@ that just ran), takes the rolling window of your last eligible games, saves a no
 Coach's pipeline (analysis, tags, puzzles, digests), measures every weakness against its frozen baseline
 (`core/fix_tracking.py`), saves the checkpoint, and rebuilds the Suggested mix with the statuses. It never creates
 or changes your training plan (FR-10.65).
+
+**Backfill (once, v1.0 planning):** at the first launch of v1.0, before any live checkpoint, your analyzed eligible
+games are replayed from their stored analysis (no engine, no LLM): baselines from the first `BASELINE_GAMES`, then one
+*reconstructed* checkpoint per `every_games` games over the rolling window, with statuses run checkpoint by
+checkpoint. Puzzle accuracy counts only attempts made before each point (the Lichess dashboard only knows "now").
+Reconstructed checkpoints save no report and make no notices; the Suggested mix is rebuilt once at the end. Each point
+is saved on its own, so a backfill cut short resumes at the next launch. With fewer than `BASELINE_GAMES` games
+there's nothing to replay, and the first live checkpoint sets the baselines.
 """
 
 from __future__ import annotations
@@ -20,8 +28,8 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from weaksquare.core.clock import Clock
@@ -31,14 +39,17 @@ from weaksquare.core.fix_tracking import (
     BASELINE_GAMES,
     FIXED,
     IMPROVING,
+    NEW,
     REGRESSED,
     TRAINING,
+    BackfillPoint,
     Change,
     CheckpointDraft,
     CheckpointSettings,
     Metric,
     PuzzleAccuracy,
     Tracked,
+    backfill_points,
     checked_settings,
     game_health,
     group_by_game,
@@ -60,6 +71,9 @@ SETTINGS_KEY = "checkpoints.settings"
 SCHEDULE_ENABLED_AT_KEY = "checkpoints.schedule_enabled_at"
 SCHEDULE_LAST_KEY = "checkpoints.schedule_last_at"
 NOTICES_SEEN_KEY = "checkpoints.notices_seen"
+BACKFILL_KEY = "checkpoints.backfill_version"
+BACKFILL_VERSION = 1
+BACKFILL_LIMIT = 5000  # games read for the backfill (far more than anyone's analyzed library)
 CHECK_EVERY_S = 3600.0  # the schedule is looked at again at least hourly (sleep can't skip one)
 RETRY_BUSY_S = 60.0  # a Coach run is going: look again in a minute
 LINKED = ("lichess", "chesscom")
@@ -81,6 +95,7 @@ class Library(Protocol):
 
 
 class Coach(Protocol):
+    def measure_stored(self, game_ids: Sequence[int], progress: ProgressFn, cancel: CancelToken) -> Report: ...
     def checkpoint_report(
         self, game_ids: Sequence[int], number: int, progress: ProgressFn, cancel: CancelToken
     ) -> tuple[int, Report]: ...
@@ -231,8 +246,16 @@ class CheckpointService:
 
     # ---- triggers ------------------------------------------------------------------------------------------
     def start(self) -> None:
-        """At launch: a schedule that came due while the app was closed, or enough new games, run now."""
+        """At launch: the one-time backfill if it hasn't run; otherwise a schedule that came due while the app was
+        closed, or enough new games, run now."""
+        if self.backfill_pending():
+            self._submit("backfill")
+            self._schedule(CHECK_EVERY_S)
+            return
         self._tick(self._generation)
+
+    def backfill_pending(self) -> bool:
+        return self._settings.get(BACKFILL_KEY) != BACKFILL_VERSION
 
     def after_new_games(self, n: int) -> None:
         """A sync brought new games (the library's hook, run on the sync job's thread)."""
@@ -245,6 +268,8 @@ class CheckpointService:
     def run_now(self) -> str:
         if self._runner.active(JOB_KIND):
             raise ConflictError("A checkpoint is already running.")
+        if self.backfill_pending():
+            raise ConflictError("Your past checkpoints haven't been rebuilt yet. They're rebuilt when the app starts.")
         job = self._submit("manual")
         if job is None:
             raise ConflictError("A Coach run is going. Run the checkpoint when it's finished.")
@@ -290,6 +315,8 @@ class CheckpointService:
         with self._lock:
             if self._runner.active(JOB_KIND):
                 return None
+            if trigger != "backfill" and self.backfill_pending():
+                return None  # the backfill comes first: start() runs it at launch
             if self._runner.active(COACH_JOB):  # the same pipeline is busy: look again shortly
                 self._scheduler.call_later(RETRY_BUSY_S, lambda: self._retry(trigger))
                 return None
@@ -322,6 +349,8 @@ class CheckpointService:
                 return
 
     def _job(self, trigger: str, run: _Run, progress: ProgressFn, cancel: CancelToken) -> str:
+        if trigger == "backfill":
+            return self._backfill(run, progress, cancel)
         s = self.settings()
         if trigger in ("schedule", "manual"):
             self._sync(progress, cancel, run)
@@ -382,6 +411,71 @@ class CheckpointService:
         sug = self._coach.suggest_from_checkpoint(report_id, report, statuses, maintenance, number)
         if sug is not None:
             self._repo.put_tracked(mark_training(tracked, sug.weaknesses, number).values())
+
+    # ---- the backfill (v1.0 planning) ----------------------------------------------------------------------
+    def _backfill(self, run: _Run, progress: ProgressFn, cancel: CancelToken) -> str:
+        s = self.settings()
+        rows, _ = self._library.list_games(
+            LibraryFilter(
+                player="me", platforms=LINKED, time_classes=s.time_classes, rated=True if s.rated_only else None,
+                colors=() if s.color == "both" else (s.color,), statuses=("analyzed", "ai_reviewed"),
+                limit=BACKFILL_LIMIT,
+            )
+        )  # fmt: skip
+        mine = [g for g in reversed(rows) if g.user_color in ("white", "black", "both") and g.played_at]  # oldest first
+        existing = self._repo.all()
+        # Live checkpoints already set their own baselines (e.g. a restored newer backup): nothing to replay.
+        points = [] if any(not c.reconstructed for c in existing) else backfill_points([g.id for g in mine],
+                                                                                      s.every_games, s.window)  # fmt: skip
+        played = {g.id: g.played_at for g in mine}
+        done = [c for c in existing if c.reconstructed]
+        todo = points[len(done) :]  # resume after the points a cut-short backfill saved
+        attempts, _ = self._coach.puzzle_sources()
+
+        def quiet(fraction: float | None, message: str) -> None:
+            """The backfill reports its own progress, not each measure's."""
+
+        last: tuple[Report, int] | None = None
+        for i, pt in enumerate(todo):
+            cancel.raise_if_cancelled()
+            n = len(done) + i + 1
+            progress(
+                i / max(1, len(todo)), f"Rebuilding your progress from past games: checkpoint {n} of {len(points)}"
+            )
+            last = self._backfill_point(pt, played, self._repo.tracked(), attempts, s, quiet, cancel)
+            run.number = last[1]
+        if last is None and done and points:  # resumed with every point saved: the mix is still to rebuild
+            last = (self._coach.measure_stored(done[-1].game_ids, quiet, cancel), done[-1].number)
+        if last is not None:
+            self._rebuild_mix(None, last[0], self._repo.tracked(), last[1])
+        self._settings.set(BACKFILL_KEY, BACKFILL_VERSION)
+        if not points:
+            return "Not enough analyzed games to rebuild past checkpoints: the first checkpoint sets your baselines."
+        return f"Rebuilt {len(points)} checkpoint{'s' if len(points) != 1 else ''} from your past games."
+
+    def _backfill_point(
+        self, pt: BackfillPoint, played: dict[int, str | None], tracked: dict[str, Tracked],
+        attempts: list[AttemptRow], s: CheckpointSettings, quiet: ProgressFn, cancel: CancelToken,
+    ) -> tuple[Report, int]:  # fmt: skip
+        number = self._repo.next_number()
+        baselines = None
+        if pt.baseline:
+            base = self._coach.measure_stored(pt.baseline, quiet, cancel)
+            baselines = {k: (o.per10, len(pt.baseline)) for k, o in observations(base).items()}
+        report = self._coach.measure_stored(pt.window, quiet, cancel)
+        newest = max(p for g in pt.window if (p := played.get(g)) is not None)
+        before = _parse(newest)
+
+        def puzzles(themes: tuple[str, ...]) -> PuzzleAccuracy:
+            return puzzle_accuracy(themes, attempts, before, None)
+
+        result = step(tracked, observations(report), report.games, number, puzzles, set(), s.thresholds, baselines)
+        # No mix existed back then, so Training doesn't apply: anything not yet decided is New.
+        result = replace(result, tracked={k: (replace(t, status=NEW) if t.status == TRAINING else t)
+                                          for k, t in result.tracked.items()})  # fmt: skip
+        health = game_health(report, group_by_game(self._repo.my_moves(pt.window)), self._repo.my_ratings(pt.window))
+        self._repo.save(CheckpointDraft(number, newest, "backfill", None, True, pt.window, newest, health), result)
+        return report, number
 
     # ---- notices (FR-10.38) --------------------------------------------------------------------------------
     def take_notices(self) -> list[Notice]:
@@ -446,3 +540,8 @@ class CheckpointService:
                     out[w["key"]] = [Example(int(e["game_id"]), int(e["ply"])) for e in w.get("examples") or []
                                      if isinstance(e, dict)]  # fmt: skip
         return out
+
+
+def _parse(iso: str) -> datetime:
+    at = datetime.fromisoformat(iso)
+    return at if at.tzinfo else at.replace(tzinfo=UTC)

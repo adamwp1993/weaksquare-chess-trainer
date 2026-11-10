@@ -556,11 +556,16 @@ class CoachService:
         baselines come from it (FR-10.34)."""
         return self._build("games", ME, list(game_ids), _RunState(), progress, cancel)
 
+    def measure_stored(self, game_ids: Sequence[int], progress: ProgressFn, cancel: CancelToken) -> Report:
+        """v1.0 backfill: your games measured from their **stored** analysis and tags only: no engine, no new tags,
+        no puzzles, no report saved (v1.0 planning)."""
+        return self._build("games", ME, list(game_ids), _RunState(), progress, cancel, analyze=False)
+
     def _build(
         self, source: str, subject: str, game_ids: list[int], state: _RunState, progress: ProgressFn,
-        cancel: CancelToken,
+        cancel: CancelToken, *, analyze: bool = True,
     ) -> Report:  # fmt: skip
-        if game_ids:
+        if game_ids and analyze:
             self._analyze(game_ids, progress, cancel)
             progress(None, "Tagging your mistakes…")
             self._analysis.retag(game_ids, cancel)

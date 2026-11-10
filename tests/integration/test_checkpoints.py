@@ -7,17 +7,16 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
+import chess
 import pytest
 
 from tests.fakes.engine import FakeEngine, plant_managed_install
 from tests.helpers import api_for
-import chess
-
 from tests.integration.test_game_puzzles import Recorder, _filler, _rows
 from weaksquare.adapters.db.repos.game_analysis import GameAnalysisRepo
 from weaksquare.core.errors import ConflictError, ValidationError
 from weaksquare.core.filters import FilterSpec
-from weaksquare.services.checkpoints import NOTICES_SEEN_KEY, SCHEDULE_LAST_KEY
+from weaksquare.services.checkpoints import BACKFILL_KEY, BACKFILL_VERSION, NOTICES_SEEN_KEY, SCHEDULE_LAST_KEY
 
 SMALL = {"every_games": 5, "window": 10}  # the smallest settings, so the tests stay quick
 CLEAN = [_filler(p) for p in range(16)]  # a game with no mistakes
@@ -33,6 +32,7 @@ def cp(services, paths):  # type: ignore[no-untyped-def]
     plant_managed_install(paths)
     services.game_puzzles._engine = Recorder()
     services.checkpoints.set_settings(SMALL)
+    services.coach._settings.set(BACKFILL_KEY, BACKFILL_VERSION)  # these tests are about live checkpoints
     services.scheduler.pending.clear()
     return services.checkpoints
 
@@ -272,7 +272,9 @@ def test_settings_round_trip_through_the_bridge(services, cp, paths, clock) -> N
     api = api_for(services, paths, clock, services.checkpoints._runner)
     s = api.get_checkpoint_settings()["data"]
     assert s["every_games"] == 5 and s["auto_ai"] is False and s["notices"] is True
-    out = api.set_checkpoint_settings({**SMALL, "every_games": 50, "schedule": {"kind": "weekday", "days": 7, "weekday": 0}})["data"]
+    out = api.set_checkpoint_settings(
+        {**SMALL, "every_games": 50, "schedule": {"kind": "weekday", "days": 7, "weekday": 0}}
+    )["data"]
     assert out["every_games"] == 50 and out["schedule"]["kind"] == "weekday"
     assert api.get_checkpoint_settings()["data"]["every_games"] == 50
     bad = api.set_checkpoint_settings({"every_games": 1})
