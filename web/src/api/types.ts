@@ -1710,3 +1710,94 @@ export interface RestoreNotice {
   app_version: string | null;
   error: string | null;
 }
+
+export interface CheckpointSchedule {
+  kind: "off" | "days" | "weekday";
+  days: number;
+  weekday: number;
+}
+
+export interface CheckpointThresholds {
+  improving: number;
+  fixed: number;
+  regressed: number;
+  fixed_streak: number;
+  puzzle_accuracy: number;
+  puzzle_attempts: number;
+  guard_count: number;
+}
+
+export interface CheckpointSettings {
+  every_games: number;
+  window: number;
+  schedule: CheckpointSchedule;
+  rated_only: boolean;
+  time_classes: string[];
+  color: "both" | "white" | "black";
+  thresholds: CheckpointThresholds;
+  auto_ai: boolean;
+  notices: boolean;
+}
+
+export interface StatusChange {
+  key: string;
+  label: string;
+  old: "new" | "training" | "improving" | "fixed" | "regressed" | null;
+  new: "new" | "training" | "improving" | "fixed" | "regressed";
+}
+
+export interface StatusNotice {
+  checkpoint: number;
+  change: StatusChange;
+}
+
+export interface ProgressPoint {
+  checkpoint: number;
+  created_at: string;
+  per10: number;
+  puzzle_accuracy: number | null;
+  guarded: boolean;
+  reconstructed: boolean;
+}
+
+export interface ProgressExample {
+  game_id: number;
+  ply: number;
+}
+
+export interface WeaknessCard {
+  key: string;
+  kind: string;
+  label: string;
+  status: "new" | "training" | "improving" | "fixed" | "regressed";
+  status_since: number;
+  baseline_per10: number;
+  baseline_games: number;
+  current_per10: number | null;
+  current_guarded: boolean;
+  puzzle_accuracy: number | null;
+  puzzle_attempts: number;
+  reasons: Record<string, number>;
+  points: ProgressPoint[];
+  examples: ProgressExample[];
+}
+
+export interface CheckpointRow {
+  number: number;
+  created_at: string;
+  trigger: "count" | "schedule" | "manual" | "backfill";
+  report_id: number | null;
+  reconstructed: boolean;
+  games: number;
+  health: Record<string, unknown>;
+  changes: StatusChange[];
+  ai_run_id: number | null;
+}
+
+export interface ProgressView {
+  settings: CheckpointSettings;
+  new_games: number;
+  running_job: string | null;
+  weaknesses: WeaknessCard[];
+  checkpoints: CheckpointRow[];
+}

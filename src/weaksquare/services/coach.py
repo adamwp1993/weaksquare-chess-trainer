@@ -411,13 +411,14 @@ def finding_id(f: Any) -> str:
 @dataclass(frozen=True)
 class SuggestionState:
     report_id: int
-    number: int  # "Coach run #N" (FR-10.28 note: checkpoints arrive in v1.0)
+    number: int  # "Coach run #N", or the checkpoint's number when `checkpoint` is set (FR-10.28)
     created_at: str
     spec: dict[str, Any]
     mode: str
     why: list[str]
     pending: bool  # waiting behind the banner (FR-10.31)
     previous: dict[str, Any] | None = None  # the filters it would replace (Compare)
+    checkpoint: int | None = None  # v1.0: "from checkpoint #N"
 
 
 @dataclass
@@ -513,6 +514,24 @@ class CoachService:
         return st.report_id if st else None
 
     def _run(self, params: CoachParams, state: _RunState, progress: ProgressFn, cancel: CancelToken) -> str:
+        subject, rid, report = self._produce(params, state, progress, cancel)
+        if subject == ME and params.source != "puzzles":
+            self._suggest(rid, report)
+        return f"Report ready: {report.games} game{'s' if report.games != 1 else ''}"
+
+    def checkpoint_report(
+        self, game_ids: Sequence[int], number: int, progress: ProgressFn, cancel: CancelToken
+    ) -> tuple[int, Report]:
+        """v1.0 (FR-10.33): a checkpoint's normal Coach report on its rolling window, through the same pipeline as a
+        run (analysis, tags, puzzles, digests). The checkpoint rebuilds the Suggested mix itself, with statuses."""
+        params = CoachParams(source="games", rated_only=False, time_classes=(), game_ids=tuple(game_ids))
+        _, rid, report = self._produce(params, _RunState(), progress, cancel, extra={"checkpoint": number})
+        return rid, report
+
+    def _produce(
+        self, params: CoachParams, state: _RunState, progress: ProgressFn, cancel: CancelToken,
+        extra: dict[str, Any] | None = None,
+    ) -> tuple[str, int, Report]:  # fmt: skip
         subject, label = ME, self._my_label(params)
         other: tuple[str, str] | None = None
         if params.player is not None:
@@ -527,6 +546,21 @@ class CoachService:
                     "no_games", "No games match these settings. Try more time controls or include unrated games.",
                     retryable=False,
                 )  # fmt: skip
+        report = self._build(params.source, subject, game_ids, state, progress, cancel)
+        rid = self._save(subject, label, params, report, game_ids, state, extra)
+        state.report_id = rid
+        return subject, rid, report
+
+    def measure_games(self, game_ids: Sequence[int], progress: ProgressFn, cancel: CancelToken) -> Report:
+        """v1.0: your games measured through the same pipeline as a run, with no report saved. The first checkpoint's
+        baselines come from it (FR-10.34)."""
+        return self._build("games", ME, list(game_ids), _RunState(), progress, cancel)
+
+    def _build(
+        self, source: str, subject: str, game_ids: list[int], state: _RunState, progress: ProgressFn,
+        cancel: CancelToken,
+    ) -> Report:  # fmt: skip
+        if game_ids:
             self._analyze(game_ids, progress, cancel)
             progress(None, "Tagging your mistakes…")
             self._analysis.retag(game_ids, cancel)
@@ -539,18 +573,14 @@ class CoachService:
         reasons = self._reports.game_reasons() if subject == ME else {}
         digests = self.digests(game_ids, subject, reasons, progress, cancel) if game_ids else []
         progress(None, "Writing the report…")
-        history = self._puzzle_history(state) if params.source != "games" and subject == ME else []
+        history = self._puzzle_history(state) if source != "games" and subject == ME else []
         infos = [self._info(gid, subject) for gid in game_ids]
         errors = self._reports.errors(subject, game_ids)
-        report = build_report(params.source, [i for i in infos if i is not None], errors, reasons, history)
+        report = build_report(source, [i for i in infos if i is not None], errors, reasons, history)
         if digests:
             ms = build_measures(digests)
             report = replace(report, whole_game=game_weaknesses(digests, ms), measures=ms.to_json())
-        rid = self._save(subject, label, params, report, game_ids, state)
-        state.report_id = rid
-        if subject == ME and params.source != "puzzles":
-            self._suggest(rid, report)
-        return f"Report ready: {report.games} game{'s' if report.games != 1 else ''}"
+        return report
 
     def _my_label(self, params: CoachParams) -> str:
         names = self._library.usernames()
@@ -732,9 +762,11 @@ class CoachService:
         return sum(r.win for r in recent) / len(recent) if len(recent) >= 10 else None
 
     def _save(
-        self, subject: str, label: str, params: CoachParams, report: Report, game_ids: list[int], state: _RunState
-    ) -> int:
+        self, subject: str, label: str, params: CoachParams, report: Report, game_ids: list[int], state: _RunState,
+        extra: dict[str, Any] | None = None,
+    ) -> int:  # fmt: skip
         data = report.to_json()
+        data.update(extra or {})
         preset = report_preset(report, self._rating() if subject == ME else None, None)
         data["preset"] = preset.to_json() if preset else None
         data["notes"] = list(state.notes)
@@ -1249,24 +1281,55 @@ class CoachService:
         except ValidationError:
             return None
 
-    def _suggest(self, report_id: int, report: Report) -> None:
+    def _suggest(
+        self, report_id: int | None, report: Report, *, statuses: dict[str, str] | None = None,
+        maintenance: Sequence[tuple[str, tuple[str, ...]]] = (), checkpoint: int | None = None,
+    ) -> Suggestion | None:  # fmt: skip
+        """Rebuild the Suggested mix (FR-10.28–10.31). A checkpoint passes its statuses and number (v1.0, FR-10.29).
+        Returns the suggestion, or None when there was nothing to build it from (the old one stays)."""
         current = self._current_filters()
         base = FilterSpec.from_json(current) if current else None
         s = build_suggestion(
             report, puzzle_rating=self._rating(), recent_accuracy=self._recent_accuracy(),
-            has_game_puzzles=self._has_game_puzzles(), base=base,
+            has_game_puzzles=self._has_game_puzzles(), base=base, statuses=statuses, maintenance=maintenance,
         )  # fmt: skip
         if s is None:
-            return
+            return None
         applied = self._settings.get(APPLIED_KEY)
         untouched = current is None or current == FilterSpec().to_json() or current == applied
         state = SuggestionState(
-            report_id, self._reports.count(ME), self._clock.now().isoformat(timespec="seconds"), s.spec.to_json(),
-            s.mode, list(s.why), pending=not untouched, previous=current,
+            report_id or 0, checkpoint if checkpoint is not None else self._reports.count(ME),
+            self._clock.now().isoformat(timespec="seconds"), s.spec.to_json(), s.mode, list(s.why),
+            pending=not untouched, previous=current, checkpoint=checkpoint,
         )  # fmt: skip
         self._settings.set(SUGGESTED_KEY, asdict(state))
         if untouched:
             self._apply(s)
+        return s
+
+    def suggest_from_checkpoint(
+        self, report_id: int | None, report: Report, statuses: dict[str, str],
+        maintenance: Sequence[tuple[str, tuple[str, ...]]], checkpoint: int,
+    ) -> Suggestion | None:  # fmt: skip
+        """v1.0: the Suggested mix after a checkpoint (FR-10.33). Your hand-made filters still get the banner."""
+        return self._suggest(report_id, report, statuses=statuses, maintenance=maintenance, checkpoint=checkpoint)
+
+    def puzzle_sources(self) -> tuple[list[AttemptRow], dict[str, tuple[int, int]]]:
+        """v1.0 (FR-10.34): your local attempts and, when signed in, the Lichess dashboard's (`nb`, `firstWins`) per
+        theme, for each weakness's puzzle accuracy. The dashboard is extra: without it the local attempts count."""
+        dash: dict[str, tuple[int, int]] = {}
+        token = self._account.token()
+        if token:
+            try:
+                d = self._lichess.dashboard(token, DASHBOARD_DAYS)
+                dash = {k: (v.nb, v.first_wins) for k, v in d.themes.items()}
+            except Exception as e:
+                log.info("puzzle dashboard unavailable: %s", type(e).__name__)
+        return self._attempts.attempt_rows(), dash
+
+    def report_from_row(self, report_id: int) -> Report | None:
+        row = self._reports.get(report_id)
+        return build_report_from_json(row.report) if row is not None else None
 
     def _apply(self, s: Suggestion) -> None:
         spec = s.spec.to_json()

@@ -13,6 +13,13 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- **Checkpoints**: after every 10 new rated rapid and classical games from your linked accounts, the Coach analyzes them in the background and saves a normal report on your last 30 games, which you can compare under **Since last report**. They also run on an optional schedule (every few days or on a weekday) while the app is open or at the next start, and never change your training plan. [FR-10.32, FR-10.33]
+- **Weakness statuses**: each weakness is measured per 10 games against the rate it started at, and marked New, Training, Improving, Fixed or Regressed. Fixed needs the rate at half or less at two checkpoints in a row *and* 75% puzzle accuracy on its themes over 20 tries; puzzles alone never mark it Fixed. Too few occurrences to tell is shown as *not enough data yet*, and changes nothing. [FR-10.34, FR-10.35]
+
+### Changed
+- **The Suggested mix after a checkpoint** puts Regressed weaknesses first, then New and Training ones, then Improving ones, and keeps a 10% share for Fixed weaknesses so they stay fixed. Its label says *from checkpoint #N*. Filters you changed by hand still get the banner. [FR-10.28, FR-10.29, FR-10.31]
+
 ## [v0.16] - 2026-11-09
 
 Candidates: v0.16-rc1 (2026-11-09)

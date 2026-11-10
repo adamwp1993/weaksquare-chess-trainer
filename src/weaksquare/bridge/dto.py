@@ -2244,3 +2244,127 @@ class RestoreNotice:
 
 
 EXPORTED += [BackupSettings, BackupStatus, BackupInfo, RestoreNotice]
+
+
+# ---- v1.0: checkpoints and fix tracking (REQUIREMENTS §10.8) ---------------------------------------
+WeaknessStatus = Literal["new", "training", "improving", "fixed", "regressed"]
+CheckpointTrigger = Literal["count", "schedule", "manual", "backfill"]
+
+
+@dataclass(frozen=True)
+class CheckpointSchedule:
+    kind: Literal["off", "days", "weekday"]  # FR-10.32: default off
+    days: int  # every N days, 1-60
+    weekday: int  # 0 = Monday … 6 = Sunday
+
+
+@dataclass(frozen=True)
+class CheckpointThresholds:
+    """FR-10.35, as fractions of the baseline rate (0-1)."""
+
+    improving: float
+    fixed: float
+    regressed: float
+    fixed_streak: int  # checkpoints in a row at or under `fixed`
+    puzzle_accuracy: float  # first-try accuracy Fixed also needs
+    puzzle_attempts: int  # over at least this many attempts
+    guard_count: int  # FR-10.34's sample-size guard (fixed at 5)
+
+
+@dataclass(frozen=True)
+class CheckpointSettings:
+    every_games: int  # FR-10.32: a checkpoint after this many new eligible games (default 10)
+    window: int  # FR-10.34: the rolling window (default 30)
+    schedule: CheckpointSchedule
+    rated_only: bool
+    time_classes: list[str]
+    color: Literal["both", "white", "black"]
+    thresholds: CheckpointThresholds
+    auto_ai: bool  # FR-10.37: Auto AI checkpoint summary (default off)
+    notices: bool  # FR-10.38: status-change notices (default on)
+
+
+@dataclass(frozen=True)
+class StatusChange:
+    key: str
+    label: str
+    old: WeaknessStatus | None  # None: newly detected
+    new: WeaknessStatus
+
+
+@dataclass(frozen=True)
+class StatusNotice:
+    """FR-10.38: shown once on the main page."""
+
+    checkpoint: int
+    change: StatusChange
+
+
+@dataclass(frozen=True)
+class ProgressPoint:
+    checkpoint: int
+    created_at: str
+    per10: float  # game rate per 10 games over the window
+    puzzle_accuracy: float | None  # 0-1
+    guarded: bool  # "not enough data yet": drawn hollow (FR-10.34)
+    reconstructed: bool  # from the v1.0 backfill
+
+
+@dataclass(frozen=True)
+class ProgressExample:
+    game_id: int
+    ply: int
+
+
+@dataclass(frozen=True)
+class WeaknessCard:
+    key: str
+    kind: str
+    label: str
+    status: WeaknessStatus
+    status_since: int  # the checkpoint it took this status at
+    baseline_per10: float  # frozen (FR-10.34)
+    baseline_games: int
+    current_per10: float | None
+    current_guarded: bool
+    puzzle_accuracy: float | None
+    puzzle_attempts: int
+    reasons: dict[str, int]  # mistake reason → count, latest window
+    points: list[ProgressPoint]  # oldest first
+    examples: list[ProgressExample]  # from the latest checkpoint's report
+
+
+@dataclass(frozen=True)
+class CheckpointRow:
+    number: int
+    created_at: str
+    trigger: CheckpointTrigger
+    report_id: int | None  # None for a reconstructed one
+    reconstructed: bool
+    games: int
+    health: dict[str, Any]  # FR-10.36: per10, acpl, acpl_by_phase, habits, reasons, results, ratings
+    changes: list[StatusChange]
+    ai_run_id: int | None
+
+
+@dataclass(frozen=True)
+class ProgressView:
+    settings: CheckpointSettings
+    new_games: int  # new eligible games since the last checkpoint, up to every_games
+    running_job: str | None
+    weaknesses: list[WeaknessCard]
+    checkpoints: list[CheckpointRow]  # oldest first
+
+
+EXPORTED += [
+    CheckpointSchedule,
+    CheckpointThresholds,
+    CheckpointSettings,
+    StatusChange,
+    StatusNotice,
+    ProgressPoint,
+    ProgressExample,
+    WeaknessCard,
+    CheckpointRow,
+    ProgressView,
+]

@@ -1,8 +1,9 @@
 """The Suggested puzzle mix (v0.10, REQUIREMENTS §10.7) and the report's recommended preset (FR-10.19).
 
-Deterministic, from the Coach report. Until checkpoints arrive (v1.0) there are no weakness statuses,
-so weaknesses are ranked by score (rate per 10 games × severity) and the label says *"from Coach run
-#N"* (FR-10.28 note, v0.10 planning).
+Deterministic, from the Coach report. After a Coach run, weaknesses are ranked by score (rate per 10 games ×
+severity) and the label says *"from Coach run #N"*. After a checkpoint (v1.0, §10.8), their statuses order
+the groups: Regressed first, then New and Training by score, then Improving, and Fixed weaknesses share a 10%
+maintenance group; the label says *"from checkpoint #N"* (FR-10.28, 10.29).
 
 - **Ratios:** one group per top weakness (its drill themes, FR-10.27), weighted by its score, plus a
   **long combinations** group (Lichess's `long` and `veryLong` themes) sized by how often your Missed
@@ -19,7 +20,7 @@ so weaknesses are ranked by score (rate per 10 games × severity) and the label 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,8 @@ from weaksquare.core.filters import RATING_CEILING, RATING_FLOOR, FilterSpec, Ra
 
 MAX_GROUPS = 4  # weakness groups; the long-combinations group comes on top
 EXPLORATION = 10
+MAINTENANCE = 10  # FR-10.29 (v1.0): Fixed weaknesses' share
+MAX_MAINTENANCE_THEMES = 8
 MY_SHARE = 20
 MIN_TAGGED = 5
 BAND = 150
@@ -104,6 +107,14 @@ def _band(center: int) -> tuple[int, int]:
     return lo, hi
 
 
+def _by_status(report: Report, statuses: Mapping[str, str]) -> list[Weakness]:
+    """FR-10.29 (v1.0): Regressed first, then New and Training by score, then Improving. Fixed ones get only the
+    maintenance share, so they're left out here."""
+    order = {"regressed": 0, "new": 1, "training": 1, "improving": 2}
+    pool = [w for w in [*report.missed, *report.allowed, *report.habits] if statuses.get(w.key, "new") in order]
+    return sorted(pool, key=lambda w: (order[statuses.get(w.key, "new")], -w.score, -w.count, w.key))
+
+
 def build_suggestion(
     report: Report,
     *,
@@ -111,11 +122,17 @@ def build_suggestion(
     recent_accuracy: float | None,
     has_game_puzzles: bool,
     base: FilterSpec | None = None,
+    statuses: Mapping[str, str] | None = None,
+    maintenance: Sequence[tuple[str, tuple[str, ...]]] = (),
 ) -> Suggestion | None:
-    """The Suggested mix for this report, or None when there's nothing to build it from."""
+    """The Suggested mix for this report, or None when there's nothing to build it from.
+
+    From v1.0 a checkpoint passes the weaknesses' ``statuses`` (FR-10.35), which order the groups, and the Fixed
+    ones as ``maintenance`` (label, themes), which share `MAINTENANCE` percent (FR-10.29)."""
+    candidates = _by_status(report, statuses) if statuses is not None else report.weaknesses
     picked: list[Weakness] = []
     seen_themes: set[tuple[str, ...]] = set()
-    for w in report.weaknesses:
+    for w in candidates:
         key = tuple(sorted(w.themes))
         if not w.themes or key in seen_themes:
             continue
@@ -131,9 +148,13 @@ def build_suggestion(
     multi = sum(w.multi_move for w in missed)
     long_share = EXPLORATION + (round((100 - EXPLORATION) * multi / total_missed) if total_missed else 0)
     long_share = min(50, long_share)
-    weights = _weights([w.score or 0.01 for w in picked], 100 - long_share)
+    kept = list(dict.fromkeys(t for _, ts in maintenance for t in ts))[:MAX_MAINTENANCE_THEMES]
+    maint_share = MAINTENANCE if kept else 0
+    weights = _weights([w.score or 0.01 for w in picked], 100 - long_share - maint_share)
     buckets = [RatioBucket(tuple(w.themes), wt) for w, wt in zip(picked, weights, strict=True)]
     buckets.append(RatioBucket(LONG_THEMES, long_share))
+    if kept:
+        buckets.append(RatioBucket(tuple(kept), maint_share))
 
     top = picked[0]
     mode, note = mode_for(top)
@@ -167,6 +188,10 @@ def build_suggestion(
     why: list[str] = []
     for i, (w, wt) in enumerate(zip(picked, weights, strict=True)):
         rank = "your #1 leak" if i == 0 else f"#{i + 1}"
+        if statuses is not None and statuses.get(w.key) == "regressed":
+            rank += ", back after improving, so it's top priority again"
+        elif statuses is not None and statuses.get(w.key) == "improving":
+            rank += ", improving"
         if w.kind == "puzzle":
             acc = f"{round(100 * w.puzzle_accuracy)}%" if w.puzzle_accuracy is not None else "low"
             why.append(f"{w.label}: {acc} first-try accuracy, {rank} ({wt}% of the mix).")
@@ -175,6 +200,9 @@ def build_suggestion(
     if total_missed and multi:
         why.append(f"Long combinations: {multi} of your {total_missed} missed tactics took more than one move.")
     why.append(f"Long and very long combinations get {long_share}%, including a {EXPLORATION}% exploration share.")
+    if kept:
+        names = ", ".join(label for label, ts in maintenance if ts)
+        why.append(f"Fixed weaknesses keep a {MAINTENANCE}% maintenance share so they stay fixed: {names}.")
     mode_name = {"danger_spotting": "Danger spotting", "commit_line": "Commit the line", "standard": "Standard"}
     why.append(f"Mode: {mode_name.get(mode, mode)}" + (f", because {note}." if note else "."))
     if use_mine:

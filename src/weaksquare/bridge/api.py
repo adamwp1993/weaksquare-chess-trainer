@@ -51,6 +51,7 @@ from weaksquare.services.account import AccountService
 from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.analysis_tab import AnalysisTabService
 from weaksquare.services.backup import BackupService, BackupStatus
+from weaksquare.services.checkpoints import CheckpointService, ProgressView
 from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService
 from weaksquare.services.engine import Analysis as AnalysisResult
@@ -140,7 +141,9 @@ class Api:
         studies: StudiesService,
         lichess_window: Any,
         backup: BackupService,
+        checkpoints: CheckpointService,
     ) -> None:
+        self._checkpoints = checkpoints
         self._backup = backup
         self._backup_choice: tuple[str, Path] | None = None  # the file picked to restore, behind a token
         self._studies = studies
@@ -1759,8 +1762,9 @@ class Api:
         day = s.created_at[:10]
         current = self._ui_settings.get().last_filters
         active = current is not None and self._coach.is_suggested(current.to_json())
+        source = f"checkpoint #{s.checkpoint}" if s.checkpoint is not None else f"Coach run #{s.number}"
         return dto.SuggestionView(
-            s.report_id, s.number, s.created_at, f"Suggested — from Coach run #{s.number}, {day}", s.spec, s.mode,
+            s.report_id, s.number, s.created_at, f"Suggested — from {source}, {day}", s.spec, s.mode,
             list(s.why), s.pending, s.previous, active,
         )  # fmt: skip
 
@@ -1941,6 +1945,65 @@ class Api:
         """What this start did with a restore, once (shown after the restart)."""
         n = self._backup.take_notice()
         return None if n is None else dto.RestoreNotice(n.created_at, n.app_version, n.error)
+
+    # ---- v1.0: checkpoints and fix tracking (REQUIREMENTS §10.8) -------------------------------------------
+    @bridge_call
+    def get_progress(self) -> dto.ProgressView:
+        """FR-10.38: the Coach's Progress tab: a card per weakness, the checkpoint history and game health."""
+        return _progress_dto(self._checkpoints.progress())
+
+    @bridge_call
+    def get_checkpoint_settings(self) -> dto.CheckpointSettings:
+        return _checkpoint_settings_dto(self._checkpoints.settings())
+
+    @bridge_call
+    def set_checkpoint_settings(self, settings: dict[str, Any]) -> dto.CheckpointSettings:
+        """FR-10.32/10.35/10.37/10.38: every N games, the schedule, the window, thresholds, AI summary, notices."""
+        return _checkpoint_settings_dto(self._checkpoints.set_settings(settings))
+
+    @bridge_call
+    def run_checkpoint_now(self) -> str:
+        """FR-10.32 Run checkpoint now. Returns the job id."""
+        return self._checkpoints.run_now()
+
+    @bridge_call
+    def take_status_notices(self) -> list[dto.StatusNotice]:
+        """FR-10.38: status changes you haven't seen yet, once (empty when notices are off)."""
+        return [dto.StatusNotice(n.number, _status_change_dto(n.change)) for n in self._checkpoints.take_notices()]
+
+
+def _status_change_dto(c: Any) -> dto.StatusChange:
+    return dto.StatusChange(c.key, c.label, c.old, c.new)
+
+
+def _checkpoint_settings_dto(s: Any) -> dto.CheckpointSettings:
+    sch, th = s.schedule, s.thresholds
+    return dto.CheckpointSettings(
+        s.every_games, s.window, dto.CheckpointSchedule(sch.kind, sch.days, sch.weekday), s.rated_only,
+        list(s.time_classes), s.color,
+        dto.CheckpointThresholds(th.improving, th.fixed, th.regressed, th.fixed_streak, th.puzzle_accuracy,
+                                 th.puzzle_attempts, th.guard_count),
+        s.auto_ai, s.notices,
+    )  # fmt: skip
+
+
+def _progress_dto(v: ProgressView) -> dto.ProgressView:
+    cards = [
+        dto.WeaknessCard(
+            c.key, c.kind, c.label, c.status, c.status_since, c.baseline_per10, c.baseline_games,  # type: ignore[arg-type]
+            c.current_per10, c.current_guarded, c.puzzle_accuracy, c.puzzle_attempts, dict(c.reasons),
+            [dto.ProgressPoint(p.number, p.created_at, p.per10, p.puzzle_accuracy, p.guarded, p.reconstructed)
+             for p in c.points],
+            [dto.ProgressExample(e.game_id, e.ply) for e in c.examples],
+        )
+        for c in v.weaknesses
+    ]  # fmt: skip
+    rows = [
+        dto.CheckpointRow(c.number, c.created_at, c.trigger, c.report_id, c.reconstructed, c.games, c.health,  # type: ignore[arg-type]
+                          [_status_change_dto(x) for x in c.changes], c.ai_run_id)
+        for c in v.checkpoints
+    ]  # fmt: skip
+    return dto.ProgressView(_checkpoint_settings_dto(v.settings), v.new_games, v.running_job, cards, rows)
 
 
 def _backup_status_dto(s: BackupStatus) -> dto.BackupStatus:
