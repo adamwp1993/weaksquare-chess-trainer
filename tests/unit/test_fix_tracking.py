@@ -183,7 +183,9 @@ def test_a_whole_game_weakness_missing_from_the_report_isnt_measured() -> None:
 
 
 def test_absent_means_zero_for_tactics_and_habit_tags_only() -> None:
-    assert absent_means_zero("missed:fork") and absent_means_zero("allowed:pin") and absent_means_zero("habit:hungPiece")
+    assert (
+        absent_means_zero("missed:fork") and absent_means_zero("allowed:pin") and absent_means_zero("habit:hungPiece")
+    )
     for key in ("habit:castledLate", "time:low_clock", "opening:Italian Game", "endgame:rook", "phase:conversion"):
         assert not absent_means_zero(key)
 

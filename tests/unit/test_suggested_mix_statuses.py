@@ -12,7 +12,12 @@ def _w(key: str, score: float) -> Weakness:
     return Weakness(key, kind, name, f"{kind.title()}: {name}", 6, 2.0, 300, score, (name,), None, {})
 
 
-FORK, PIN, SKEWER, MATE = _w("allowed:fork", 9.0), _w("missed:pin", 6.0), _w("missed:skewer", 3.0), _w("allowed:mateIn2", 1.0)
+FORK, PIN, SKEWER, MATE = (
+    _w("allowed:fork", 9.0),
+    _w("missed:pin", 6.0),
+    _w("missed:skewer", 3.0),
+    _w("allowed:mateIn2", 1.0),
+)
 REPORT = Report("games", 30, None, None, {}, {}, [PIN, SKEWER], [FORK, MATE], [], [], [], {}, 0,
                 weaknesses=[FORK, PIN, SKEWER, MATE])  # fmt: skip
 

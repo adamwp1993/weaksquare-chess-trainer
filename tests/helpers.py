@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import csv
 import random
 import shutil
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from weaksquare.adapters.desktop import Desktop
 from weaksquare.adapters.http import DownloadResult
