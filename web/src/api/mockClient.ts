@@ -21,6 +21,7 @@
 // `?file=none`, `?mine=1` starts with one imported puzzle of your own).
 // v0.10: the Coach lives in mockCoach.ts (`?coach=report` starts with one report, `?coach=banner` also with a
 // suggestion waiting behind the banner); `?showbest=1` starts with Show best moves on.
+// v1.0: checkpoints live in mockProgress.ts (`?progress=history` starts with six checkpoints, four of them rebuilt).
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
@@ -44,6 +45,7 @@ import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient
 import { mockAnalysis } from "./mockEngine";
 import { mockCheckPosition, mockImportPgn, mockPgnGame, mockPopular } from "./mockAnalysisTab";
 import { MockCoach } from "./mockCoach";
+import { MockProgress } from "./mockProgress";
 import { MockOpenings } from "./mockOpenings";
 import { MockStudies } from "./mockStudies";
 import { MockPlan } from "./mockPlan";
@@ -99,6 +101,7 @@ import type {
   BackupInfo,
   BackupStatus,
   RestoreNotice,
+  CheckpointSettings,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -361,6 +364,7 @@ export class MockClient implements ApiClient {
   private readonly studies = new MockStudies();
   private studyResults = new Map<string, StudyAddResult>();
   private lichessWindowOpen = false;
+  private progress!: MockProgress;
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
@@ -378,6 +382,12 @@ export class MockClient implements ApiClient {
       quote: (kind, what) => this.llm.gameQuote(kind, what),
       startAi: (kind, what, make) => this.llm.startGame(kind, what, make),
       aiPlan: () => this.plan.aiPlan(),
+    });
+    this.progress = new MockProgress(params, {
+      emit: (job) => this.emit(job),
+      jobId: () => `job-${this.nextJob++}`,
+      calls: this.calls,
+      report: (n, created) => this.coach.checkpointReport(n, created),
     });
     this.plan = new MockPlan(params, {
       calls: this.calls,
@@ -2464,6 +2474,27 @@ export class MockClient implements ApiClient {
     const n = this.restoreNotice;
     this.restoreNotice = null;
     return n;
+  }
+
+  // ---- v1.0: checkpoints and the Progress tab (mockProgress.ts) ----------------------------------------
+  async getProgress() {
+    return this.progress.view();
+  }
+
+  async getCheckpointSettings() {
+    return this.progress.getSettings();
+  }
+
+  async setCheckpointSettings(settings: CheckpointSettings) {
+    return this.progress.setSettings(settings);
+  }
+
+  async runCheckpointNow() {
+    return this.progress.runNow();
+  }
+
+  async takeStatusNotices() {
+    return this.progress.takeNotices();
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

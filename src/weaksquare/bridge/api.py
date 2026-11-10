@@ -901,7 +901,7 @@ class Api:
             out.append(
                 dto.CoachReportSummary(
                     r.id, r.created_at, r.subject_label, r.subject == "me", r.source_kind,  # type: ignore[arg-type]
-                    int(rep.get("games") or 0), top,
+                    int(rep.get("games") or 0), top, _checkpoint_of(rep),
                 )
             )  # fmt: skip
         return out
@@ -926,7 +926,7 @@ class Api:
             int(rep.get("low_clock_errors") or 0),
             _preset_dto("The report's mix", preset) if isinstance(preset, dict) else None,
             [str(n) for n in rep.get("notes") or []], ws("whole_game"), _measures_dto(rep.get("measures")),
-            _comparison_dto(comparison),
+            _comparison_dto(comparison), _checkpoint_of(rep),
         )  # fmt: skip
 
     @bridge_call
@@ -1970,6 +1970,11 @@ class Api:
     def take_status_notices(self) -> list[dto.StatusNotice]:
         """FR-10.38: status changes you haven't seen yet, once (empty when notices are off)."""
         return [dto.StatusNotice(n.number, _status_change_dto(n.change)) for n in self._checkpoints.take_notices()]
+
+
+def _checkpoint_of(rep: Any) -> int | None:
+    n = rep.get("checkpoint") if isinstance(rep, dict) else None
+    return n if isinstance(n, int) and not isinstance(n, bool) else None
 
 
 def _status_change_dto(c: Any) -> dto.StatusChange:

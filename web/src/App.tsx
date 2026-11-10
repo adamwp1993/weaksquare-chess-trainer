@@ -10,6 +10,7 @@ import {
   Menu,
   Modal,
   Paper,
+  Stack,
   Text,
   Title,
 } from "@mantine/core";
@@ -28,11 +29,13 @@ import type {
   TodayPlan,
   UpdateOffer,
   RestoreNotice,
+  StatusNotice,
 } from "./api/types";
 import { when } from "./components/BackupPanel";
 import type { JournalDraft } from "./components/JournalTab";
 import { LessonTaskModal } from "./components/LessonTaskModal";
 import { TodayCard } from "./components/TodayCard";
+import { STATUS } from "./components/ProgressTab";
 import { FiltersStrip } from "./components/FiltersStrip";
 import { LichessStatus } from "./components/LichessStatus";
 import { SpendIndicator } from "./components/SpendIndicator";
@@ -149,6 +152,18 @@ export function App() {
   const [timeOffset, setTimeOffset] = useState<number | null>(null);
   const historyChanged = useCallback(() => setHistoryVersion((v) => v + 1), []);
   const saveTimer = useRef<number | undefined>(undefined);
+
+  // v1.0 (FR-10.38): a checkpoint changed a weakness's status: say so once on the main page.
+  const [statusNotices, setStatusNotices] = useState<StatusNotice[]>([]);
+  const loadNotices = useCallback(() => {
+    api.takeStatusNotices().then((n) => n.length > 0 && setStatusNotices((old) => [...old, ...n]), () => undefined);
+  }, []);
+  useEffect(() => {
+    loadNotices();
+    return api.onEvent((e) => {
+      if (e.name === "job" && e.payload.kind === "checkpoint" && e.payload.state === "done") loadNotices();
+    });
+  }, [loadNotices]);
 
   // v0.16 (FR-15.4): after the restart that finishes a restore, say what happened, once.
   const [restoreNotice, setRestoreNotice] = useState<RestoreNotice | null>(null);
@@ -535,6 +550,33 @@ export function App() {
               />
             </Grid.Col>
           )}
+          {statusNotices.length > 0 && (
+            <Grid.Col span={12}>
+              <Alert color="blue" withCloseButton onClose={() => setStatusNotices([])} data-testid="status-notices">
+                <Group justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    {statusNotices.map((n) => (
+                      <Text size="sm" key={`${n.checkpoint}-${n.change.key}`}>
+                        Checkpoint #{n.checkpoint}: {n.change.label}: {STATUS[n.change.old ?? "new"].label} → {STATUS[n.change.new].label}
+                      </Text>
+                    ))}
+                  </Stack>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    onClick={() => {
+                      setStatusNotices([]);
+                      setCoachTab("progress");
+                      setPage({ kind: "coach" });
+                    }}
+                    data-testid="status-notices-open"
+                  >
+                    See progress
+                  </Button>
+                </Group>
+              </Alert>
+            </Grid.Col>
+          )}
           {planError && (
             <Grid.Col span={12}>
               <Alert color="red" withCloseButton onClose={() => setPlanError(null)} data-testid="plan-start-error">
@@ -839,7 +881,15 @@ export function App() {
           onSession={(a) => sessionFromTask(a, `Lesson drill: ${lessonTask.lesson.label}`)}
         />
       )}
-      <StatsView opened={statsOpen} onClose={() => setStatsOpen(false)} />
+      <StatsView
+        opened={statsOpen}
+        onClose={() => setStatsOpen(false)}
+        onOpenProgress={() => {
+          setStatsOpen(false);
+          setCoachTab("progress");
+          setPage({ kind: "coach" });
+        }}
+      />
       <ShortcutsHelp
         opened={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}

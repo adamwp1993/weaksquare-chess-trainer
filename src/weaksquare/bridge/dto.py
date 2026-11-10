@@ -1883,6 +1883,7 @@ class CoachReport:
     whole_game: list[CoachWeakness] = field(default_factory=list)  # v0.11, FR-10.57
     measures: CoachMeasures | None = None  # v0.11, FR-10.53; None for older reports
     comparison: CoachComparison | None = None  # v0.12, FR-10.73; None with no earlier report
+    checkpoint: int | None = None  # v1.0: the checkpoint this report was saved by (FR-10.33)
 
 
 @dataclass(frozen=True)
@@ -1894,6 +1895,7 @@ class CoachReportSummary:
     source: Literal["puzzles", "games", "both"]
     games: int
     top: list[str]  # the top weaknesses' labels
+    checkpoint: int | None = None  # v1.0: the checkpoint this report was saved by (FR-10.33)
 
 
 @dataclass(frozen=True)

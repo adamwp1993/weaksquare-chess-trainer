@@ -52,6 +52,8 @@ from weaksquare.core.coach_llm import (
 from weaksquare.core.digest import DIGEST_VERSION, Digest, build_digest, numbered_san
 from weaksquare.core.errors import AppError, NotFoundError, ValidationError
 from weaksquare.core.filters import MY_TIME_CLASSES, FilterSpec
+from weaksquare.core.fix_tracking import CHECKPOINT_RULES
+from weaksquare.core.fix_tracking import prompt_part as checkpoint_prompt_part
 from weaksquare.core.game_explain import san_moves
 from weaksquare.core.game_measures import build_measures, game_weaknesses
 from weaksquare.core.game_review import MoveRow, saved_line
@@ -451,6 +453,7 @@ class CoachService:
         observations: Any = None,
     ) -> None:
         self._plan: Any = None  # v0.12: attach_plan
+        self._checkpoint_context: Any = None  # v1.0: attach_checkpoints
         self._journal: Any = None
         self._comparisons: dict[tuple[int, int], dict[str, PuzzleChange]] = {}
         self._digests = digests
@@ -477,6 +480,35 @@ class CoachService:
         self._clock = clock
         self._runner = runner
         self._runs: dict[str, _RunState] = {}
+
+    def attach_checkpoints(self, context: Any) -> None:
+        """v1.0 (FR-10.37): a checkpoint's report gets the checkpoint's statuses in its AI prompt. ``context`` maps a
+        checkpoint number to `core.fix_tracking.summary_context`'s dict, or None."""
+        self._checkpoint_context = context
+
+    def _checkpoint_ctx(self, row: Any) -> dict[str, Any] | None:
+        n = row.report.get("checkpoint") if isinstance(row.report, dict) else None
+        if self._checkpoint_context is None or not isinstance(n, int) or row.subject != ME:
+            return None
+        try:
+            ctx = self._checkpoint_context(n)
+        except Exception:  # the statuses are extra: the report's own coaching still works
+            log.exception("checkpoint context unavailable")
+            return None
+        return ctx if isinstance(ctx, dict) else None
+
+    def checkpoint_ai(self, report_id: int, progress: ProgressFn) -> tuple[str, int | None]:
+        """FR-10.37 Auto AI checkpoint summary: run the AI on a checkpoint's report without a Confirm **only** when the
+        quote is `ok` (a key and a Coach model, under the per-run cap and within the budget). Returns (quote state,
+        the AI run's id or None); any other state leaves it for Get AI take, with the usual estimate and Confirm."""
+        quote = self.quote_ai(report_id)
+        state = str(quote.quote.state)
+        if state == "cached":
+            return state, quote.cached_run
+        if state != "ok":
+            return state, None
+        _, run_id = self._coach_ai(report_id, CoachAiOptions(), progress)
+        return state, run_id
 
     def attach_plan(self, plan: Any, journal: Any) -> None:
         """v0.12: the training plan and journal build on the Coach's reports, and AI coaching feeds on them, so
@@ -959,14 +991,15 @@ class CoachService:
         return TREND_RULES + (PLAN_RULES if plan else "")
 
     def _system(self, base: str, row: Any) -> str:
-        return base + self._system_rules(self._plans_for(row))
+        rules = CHECKPOINT_RULES if self._checkpoint_ctx(row) else ""
+        return base + self._system_rules(self._plans_for(row)) + rules
 
     def _extras(self, row: Any, trend: dict[str, Any] | None, journal: list[JournalLine] | None) -> str:
         mine = self._plans_for(row)
         return prompt_parts(
             comparison=trend, progress=self._plan.progress() if mine else None,
             params=self._plan.params() if mine else None, journal=journal,
-        )  # fmt: skip
+        ) + checkpoint_prompt_part(self._checkpoint_ctx(row))  # fmt: skip
 
     def _journal_lines(self, row: Any, labels: dict[int, str]) -> list[JournalLine]:
         """FR-10.71: your journal for this report, exactly as it's sent. Yours only."""
@@ -1174,6 +1207,11 @@ class CoachService:
             else:
                 out.append(self._observations.note(row.subject, "", f.category, title_key(f.title), f.title, row.id))
         return out
+
+    def latest_ai_run(self, report_id: int) -> int | None:
+        """v1.0: the newest AI answer's id for a report, or None (the Progress page's AI summary link)."""
+        runs = self._ai_runs.for_report(report_id) if self._ai_runs is not None else []
+        return int(runs[-1].id) if runs else None
 
     def ai_runs(self, report_id: Any) -> list[AiRunView]:
         """Every AI answer for this report, oldest first, each with the findings that no earlier answer had

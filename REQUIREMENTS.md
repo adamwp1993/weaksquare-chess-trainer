@@ -448,6 +448,7 @@ Lichess weights rating changes by the reported `angle`, because a theme that's k
     - **A falling line means you're improving.** Each chart says so in its title or axis label.
     - The weakness charts show the frozen baseline as a flat reference line.
     - Points marked *not enough data yet* (FR-10.34) are drawn hollow.
+    - *(v1.0 build:)* game rate and puzzle accuracy are two small charts on each card sharing the time axis, not one chart with two y-scales: they're different units (per 10 games, percent), and a dual-axis chart misreads easily. Rebuilt (backfilled) checkpoints are shaded and captioned.
 
 ---
 

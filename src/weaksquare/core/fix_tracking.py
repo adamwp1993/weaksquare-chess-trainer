@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -479,3 +480,41 @@ def group_by_game(rows: Iterable[tuple[int, int, str, int]]) -> dict[int, list[M
     for gid, ply, phase, loss in rows:
         out[gid].append(MyMove(ply, phase, loss))
     return dict(out)
+
+
+# ---- the AI checkpoint summary (FR-10.37) ---------------------------------------------------------------------
+
+CHECKPOINT_RULES = """
+- This report is a checkpoint (FR-10.37). The "Checkpoint" part gives each tracked weakness's status, its frozen
+  baseline and its rate now (per 10 games), the status changes at this checkpoint, and why the Suggested mix is
+  built as it is. Make your "summary" a checkpoint commentary: what improved, what didn't, and why the mix changed,
+  from those numbers only. Never give a weakness a status the part doesn't, and say "not enough data yet" where it
+  says so.
+"""
+
+
+def prompt_part(ctx: Mapping[str, Any] | None) -> str:
+    """The checkpoint's aggregates for the AI summary: labels, statuses and rates only (no games, names or dates)."""
+    if not ctx:
+        return ""
+    return "\n".join(["", "Checkpoint (aggregates only):", json.dumps(ctx, separators=(",", ":"))])
+
+
+def summary_context(number: int, window_games: int, tracked: Mapping[str, Tracked],
+                    metrics: Sequence[Metric], changes: Sequence[Change], mix_why: Sequence[str]) -> dict[str, Any]:  # fmt: skip
+    """What `prompt_part` sends for one checkpoint."""
+    at = {m.key: m for m in metrics}
+    rows = []
+    for key, t in sorted(tracked.items(), key=lambda kv: (STATUSES.index(kv[1].status), kv[0])):
+        m = at.get(key)
+        rows.append({
+            "key": key, "label": t.label, "status": t.status, "baseline_per10": round(t.baseline_per10, 2),
+            "per10": round(m.per10, 2) if m else None, "not_enough_data": bool(m and m.guarded),
+        })  # fmt: skip
+    return {
+        "checkpoint": number,
+        "window_games": window_games,
+        "weaknesses": rows,
+        "status_changes": [{"label": c.label, "from": c.old, "to": c.new} for c in changes if c.old is not None],
+        "suggested_mix": list(mix_why),
+    }

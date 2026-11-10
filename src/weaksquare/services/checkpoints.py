@@ -58,6 +58,7 @@ from weaksquare.core.fix_tracking import (
     puzzle_accuracy,
     schedule_due,
     step,
+    summary_context,
 )
 from weaksquare.core.games import GameRow, LibraryFilter
 from weaksquare.core.stats import AttemptRow
@@ -106,12 +107,17 @@ class Coach(Protocol):
         maintenance: Sequence[tuple[str, tuple[str, ...]]], checkpoint: int,
     ) -> Any: ...  # fmt: skip
     def report(self, report_id: int) -> tuple[Any, dict[str, float]]: ...
+    def checkpoint_ai(self, report_id: int, progress: ProgressFn) -> tuple[str, int | None]: ...
+    def latest_ai_run(self, report_id: int) -> int | None: ...
+    def suggestion(self) -> Any: ...
 
 
 class Repo(Protocol):
     def last(self, *, live_only: bool = False) -> Any: ...
     def all(self) -> list[Any]: ...
     def next_number(self) -> int: ...
+    def get(self, number: int) -> Any: ...
+    def set_ai_run(self, number: int, run_id: int | None) -> None: ...
     def save(self, draft: Any, step: Any) -> None: ...
     def put_tracked(self, tracked: Any) -> None: ...
     def tracked(self) -> dict[str, Tracked]: ...
@@ -402,7 +408,34 @@ class CheckpointService:
         msg = f"Checkpoint #{number} saved: {report.games} game{'s' if report.games != 1 else ''}"
         if moved:
             msg += f", {len(moved)} status change{'s' if len(moved) != 1 else ''}"
+        if s.auto_ai:
+            run.notes += self._auto_ai(number, rid, progress)
         return msg + (" · " + " ".join(run.notes) if run.notes else "")
+
+    def _auto_ai(self, number: int, report_id: int, progress: ProgressFn) -> list[str]:
+        """FR-10.37: the AI summary without a Confirm only when the quote is `ok`; otherwise it waits behind Get AI
+        take. A failure never fails the checkpoint: the engine part is already saved."""
+        try:
+            state, run_id = self._coach.checkpoint_ai(report_id, progress)
+        except Exception as e:
+            log.warning("AI checkpoint summary failed: %s", type(e).__name__)
+            return ["The AI summary couldn't be made: use Get AI take to try again."]
+        if run_id is not None:
+            self._repo.set_ai_run(number, run_id)
+            return ["AI summary ready."]
+        if state in ("over_cap", "over_budget"):
+            return ["The AI summary is over your per-run cap or budget: use Get AI take to see the estimate."]
+        return []  # no key or no Coach model: nothing is sent, nothing to say
+
+    def ai_context(self, number: int) -> dict[str, Any] | None:
+        """FR-10.37: what the AI summary is told about checkpoint ``number`` (aggregates only)."""
+        cp = self._repo.get(number)
+        if cp is None:
+            return None
+        metrics = [m for n, m in self._repo.metrics() if n == number]
+        sug = self._coach.suggestion()
+        why = list(sug.why) if sug is not None and sug.checkpoint == number else []
+        return summary_context(number, cp.games, self._repo.tracked(), metrics, cp.changes, why)
 
     def _rebuild_mix(self, report_id: int | None, report: Report, tracked: dict[str, Tracked], number: int) -> None:
         statuses = {k: t.status for k, t in tracked.items()}
@@ -515,13 +548,22 @@ class CheckpointService:
             ))  # fmt: skip
         cards.sort(key=lambda c: (STATUS_ORDER.get(c.status, 9), -(c.current_per10 or 0), c.key))
         views = [CheckpointView(c.number, c.created_at, c.trigger, c.report_id, c.reconstructed, c.games, c.health,
-                                c.changes, c.ai_run_id) for c in cps]  # fmt: skip
+                                c.changes, self._ai_run(c)) for c in cps]  # fmt: skip
         try:
             new = self.new_games(s)
         except Exception:
             log.exception("couldn't count new games")
             new = 0
         return ProgressView(s, new, self.running_job(), cards, views)
+
+    def _ai_run(self, c: Any) -> int | None:
+        """The checkpoint's AI summary: the automatic one, else one you asked for on its report (Get AI take)."""
+        if c.ai_run_id is not None or c.report_id is None:
+            return c.ai_run_id  # type: ignore[no-any-return]
+        try:
+            return self._coach.latest_ai_run(c.report_id)
+        except Exception:
+            return None
 
     def _latest_examples(self, cps: list[Any]) -> dict[str, list[Example]]:
         """Each weakness's worst moments from the latest live checkpoint's report (click-through, FR-10.38)."""

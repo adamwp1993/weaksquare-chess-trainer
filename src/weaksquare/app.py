@@ -489,6 +489,7 @@ def build_services(
     coach.attach_plan(plan, journal)
     checkpoints = CheckpointService(CheckpointsRepo(db), coach, games, runner, clock, SettingsRepo(db), scheduler)
     new_games_hooks.append(checkpoints.after_new_games)  # FR-10.32: a sync with new games may make one due
+    coach.attach_checkpoints(checkpoints.ai_context)  # FR-10.37: a checkpoint report's AI prompt gets its statuses
     opening_sources = OpeningSources(
         LichessExplorer(http), WikibooksClient(http), ExplorerCacheRepo(db), WikibooksPagesRepo(db),
         SettingsRepo(db), account, clock,

@@ -145,6 +145,7 @@ export class MockCoach {
     return [...this.reports].reverse().map((r) => ({
       id: r.id, created_at: r.created_at, subject_label: r.subject_label, is_me: r.is_me, source: r.source, games: r.games,
       top: [...r.allowed, ...r.missed, ...r.habits].sort((a, b) => b.score - a.score).slice(0, 3).map((x) => x.label),
+      checkpoint: r.checkpoint,
     })); // prettier-ignore
   }
 
@@ -152,6 +153,13 @@ export class MockCoach {
     const r = this.reports.find((x) => x.id === id);
     if (!r) throw new ApiCallError({ code: "not_found", message: "That report isn't saved.", retryable: false });
     return r;
+  }
+
+  /** v1.0 (FR-10.33): the normal report a live checkpoint saves on its window (mockProgress.ts). */
+  checkpointReport(n: number, created: string): number {
+    const r = this.makeReport({ ...DEFAULT_PARAMS, game_ids: Array.from({ length: 30 }, (_, i) => i + 1) }, created);
+    r.checkpoint = n;
+    return r.id;
   }
 
   private makeReport(p: CoachParams, created: string): CoachReport {
@@ -192,6 +200,7 @@ export class MockCoach {
       ] : [],
       measures: games >= 24 ? measures(games) : null, // the mock's measures assume a full run
       comparison: second && games ? this.comparison() : null,
+      checkpoint: null,
     }; // prettier-ignore
     this.reports.push(report);
     return report;

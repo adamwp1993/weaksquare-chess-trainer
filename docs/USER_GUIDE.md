@@ -73,6 +73,8 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your Lichess puzzle dashboard:** with the **Puzzle history** or **Both** source and while you're signed in, the app reads your per-theme puzzle results for the last 30 days from lichess.org (`/api/puzzle/dashboard/30`). Nothing is sent but the request.
     - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
     - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
+    - **Checkpoints** (v1.0): a checkpoint run on a schedule or with **Run checkpoint now** first syncs your linked accounts, exactly like **Refresh** in My games. The analysis, the statuses and the charts stay on your PC. Rebuilding your past checkpoints sends nothing.
+    - **The AI checkpoint summary** (v1.0, on by default, but only with an AI key) sends what **Get AI coaching** sends for the checkpoint's report, at the Summary level, plus the checkpoint's numbers: each weakness's label, status, starting rate and rate now (per 10 games), the status changes, and the **Why this mix** lines. Never Advanced analysis, your notes or your journal. It runs without asking only if its estimate is under your per-run cap and within your monthly budget.
   - **The opening trainer** (v0.13). The book ships with the app, and your repertoire stays in `user.db`:
     - **Popular moves**, only while you're signed in: when you ask for lines to be continued, run **Build my repertoire**, or save notes with **Extend past the book** on, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
     - **AI notes** go to your AI provider, as described under AI explanations below. They hold only opening data: the opening's name and ECO code, the line's moves in SAN, positions (FEN), Stockfish's evals and lines, and Wikibooks text. Nothing about you or your games.
@@ -281,7 +283,7 @@ The **⋯** button next to it:
 ## Stats
 *Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode. Changed in v0.6: mode details, Why you missed, misclicks. Changed in v0.8: Why you missed in your games, Retry and My puzzles.*
 
-Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
+Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app. *From v1.0*, **Open Progress** at the top takes you to the Coach's [Progress tab](#tracking-your-progress), where your game weaknesses are tracked over time.
 
 ![Your stats](img/stats.png)
 
@@ -813,7 +815,7 @@ Every time one of your games is analyzed (from the Coach, **Analyze selected** o
 ## The Coach
 *Added in v0.10.*
 
-The Coach has three tabs: **Report** (this chapter), [**Plan**](#your-training-plan) and [**Journal**](#your-training-journal). It looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
+The Coach has four tabs: **Report** (this chapter), [**Plan**](#your-training-plan), [**Journal**](#your-training-journal) and, *from v1.0*, [**Progress**](#tracking-your-progress). It looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
 
 ### Running the Coach
 ![The Coach](img/coach-report.png)
@@ -881,11 +883,12 @@ Choose **Another player**, type their username or paste their profile link (`lic
 ### The Suggested mix
 ![The Suggested mix banner](img/suggested-mix-banner.png)
 
-After each Coach run on your games, the app builds a **Suggested mix** and, if you haven't changed your filters by hand, makes it your puzzle selection. The main page then says *Suggested — from Coach run #N, <date>*. **Why this mix** explains it in plain words, for example *Allowed: Fork: 13.3 per 10 games, your #1 leak (46% of the mix)*.
+After each Coach run on your games, and *from v1.0* after each [checkpoint](#tracking-your-progress), the app builds a **Suggested mix** and, if you haven't changed your filters by hand, makes it your puzzle selection. The main page then says *Suggested — from Coach run #N, <date>* (or *from checkpoint #N*). **Why this mix** explains it in plain words, for example *Allowed: Fork: 13.3 per 10 games, your #1 leak (46% of the mix)*.
 - **Built from your weaknesses:** a share of puzzles for each of your top weaknesses, the bigger the leak the bigger the share, plus a share of **long combinations** (more when your missed tactics are long) that never drops below 10%.
 - **The mode** follows your mistake reasons once a weakness has at least 5: mostly *didn't look* → **Danger spotting**, mostly *miscalculated* → **Commit the line**, mostly *unknown pattern* → the same themes at a lower rating. Mostly *rushed* is pointed out as a time issue.
 - **Your own mistakes:** with Standard or Commit the line, 20% of the puzzles come from [your games](#puzzles-from-your-games).
 - **Rating:** around your Lichess puzzle rating (1500 if unknown), adjusted so you solve about 75% at the first try.
+- **After a checkpoint** (*v1.0*), weaknesses go in order of their status: **Regressed** first, then **New** and **Training**, then **Improving**. **Fixed** weaknesses share a 10% maintenance group so they stay fixed, and **Why this mix** names them.
 - **It never overwrites your choices.** If you've changed your filters since the last suggestion, a banner appears instead: **Apply** uses the new mix, **Compare** shows your filters next to it, and **Dismiss** keeps yours.
 
 ### AI coaching (optional)
@@ -958,7 +961,7 @@ The links open in your default browser. The AI only picks the topic; every link 
 ### Gotchas
 - **The first run on your games takes a while:** Stockfish analyzes every move at 0.3 s (Settings → Games), so 50 new games take about 20 minutes. Games already analyzed are reused, and every game the Coach analyzed opens in Game Review at once.
 - **Games without a known side** (an imported game where you didn't say which side you played) aren't counted.
-- **Checkpoints and tracking whether a weakness is fixed** come in a later version. Until then, read [Since last report](#since-last-report).
+- **Whether a weakness is getting better** is tracked automatically from v1.0: see [Tracking your progress](#tracking-your-progress). [Since last report](#since-last-report) still compares any report with the one before.
 - **Whole-game measures need enough games:** with 25 games, few openings or endgame types reach 5 games. Run the Coach on 50 or more for them to count.
 - **The game summaries come from the analysis.** If you change the analysis settings (think time or grading thresholds), the summaries are rebuilt from the new analysis the next time you run the Coach.
 
@@ -1296,6 +1299,75 @@ Restoring **replaces all your data** on this PC with the backup's. Nothing is me
 - An automatic backup runs only **while the app is open**, or **the next time you open it** if one came due while it was closed. WeakSquare installs no Windows scheduled task. The first one is made soon after you turn them on, and **Next automatic backup** shows when the next is due.
 - When there are more backups in the folder than you keep, the **oldest are deleted**. WeakSquare only ever deletes its own backups there (files named `weaksquare-backup-<date>.zip` that really are backups), never anything else in the folder.
 - **If the folder is missing**, for example an unplugged drive, a warning appears under **Your data** and the app tries again later. It never fails silently.
+
+## Tracking your progress
+*Added in v1.0.*
+
+The Coach's **Progress** tab shows whether your weaknesses are actually going away: in your games, not just in puzzles. It's built from **checkpoints**, which run on their own, on your PC, for free.
+
+![The Progress tab](img/coach-progress.png)
+
+### Checkpoints
+A checkpoint looks at your last 30 rated rapid and classical games from your linked Lichess and chess.com accounts. It analyzes any that aren't analyzed yet, saves a normal Coach report on them, measures each weakness, and rebuilds your [Suggested mix](#the-suggested-mix). It runs:
+- **after every 10 new games** that count (games you paste or import, and other players' games, never count);
+- **on a schedule**, if you set one: every few days, or on a weekday. It runs while the app is open, or the next time you open it. If you haven't played since the last checkpoint, it does nothing;
+- when you press **Run checkpoint now**.
+
+A checkpoint's report appears among your saved reports as **Checkpoint #N**, so you can read it and compare it under [Since last report](#since-last-report). **A checkpoint never creates or changes your training plan.**
+
+**Your past games count too.** The first time v1.0 starts, it rebuilds checkpoints from the games you've already analyzed, using their stored analysis (no engine time, no AI cost): your first 50 set where each weakness started, then there's one for every 10 games after that. A job in the background says how far it's got; if you close the app, it carries on next time. Rebuilt checkpoints are shaded on the charts, save no reports and show no notices. With fewer than 50 analyzed games, your first checkpoint sets the starting point instead.
+
+### How a weakness is judged
+Each weakness (a tactic you miss or allow, a habit like hanging pieces, or a whole-game one like mistakes under time pressure) is counted **per 10 games** over the last 30 games, and compared with **where it started**: its rate when it was first found. That starting rate never changes, and the charts show it as a flat dashed line marked *Start*.
+
+| Status | Means |
+|---|---|
+| **New** | just found, not in your Suggested mix yet |
+| **Training** | in your current Suggested mix |
+| **Improving** | at 75% or less of where it started |
+| **Fixed** | at half or less of where it started, **two checkpoints in a row**, *and* 75% first-try accuracy on its puzzle themes over at least 20 tries |
+| **Regressed** | was Improving or Fixed, and climbed back to 90% or more. It goes to the top of your Suggested mix |
+
+- **Your games decide, not your puzzles.** Puzzle accuracy is a second check for Fixed, never enough on its own. A weakness no puzzle trains (an opening, time use) is decided by your games alone.
+- **Not enough data yet:** when a weakness happened fewer than 5 times in the window *and* was too rare at the start to expect 5, there's too little to tell. The point is drawn **hollow**, the card says *not enough data yet*, and its status doesn't change.
+- **Stockfish and the tagger decide, never the AI.** A mistake is a drop of a pawn or more in Stockfish's eval; it's named (*fork*, *pin*…) by the same tagger Lichess uses for its puzzles.
+
+### Reading the Progress tab
+- **Game health** at the top: your blunders, mistakes and inaccuracies per 10 games on one chart, and your average centipawn loss (how much you lose per move, on average) on another. **Lower is better** on both.
+- **A card per weakness**, worst first: its status, where it started and where it is now, its rate over time (lower is better), your puzzle accuracy on its themes (higher is better), why you missed it (your mistake reasons), and **Latest examples** that open the moves in Game Review.
+- **Checkpoints** at the bottom: each one's date, how it ran, the same numbers as the charts, and any status changes. **Report** opens its Coach report.
+- **A status change** is shown once on the main page, for example *Checkpoint #6: Missed: Pin: Improving → Regressed*. **See progress** opens this tab.
+
+![A status change on the main page](img/status-notice.png)
+
+### The AI checkpoint summary
+*On by default; needs an AI key.* After each checkpoint the AI writes a short commentary on what improved, what didn't and why your mix changed, using the Coach's model. It appears as the AI coaching on that checkpoint's report (**AI summary** in the Checkpoints table).
+- It runs **without asking only if** its estimate is under your per-run cap and within your monthly budget (Settings → AI). Otherwise the row says **Get AI take**: it opens the report, where **Get AI coaching** shows the estimate and asks you to confirm.
+- It never decides a status, and it never sends Advanced analysis, your notes or your journal. What it sends is listed in [Your data and privacy](#your-data-and-privacy).
+- Rebuilt past checkpoints never get one. Without an AI key, nothing is sent and checkpoints work the same.
+
+### Checkpoint settings
+Press **Checkpoint settings** on the Progress tab. Each option has an ⓘ.
+
+![Checkpoint settings](img/coach-progress-empty.png)
+
+| Option | Default | What it does |
+|---|---|---|
+| **Every N new games** | 10 | how many new games make a checkpoint (5–200) |
+| **Rolling window** | 30 | how many of your latest games each checkpoint measures (10–100) |
+| **Schedule** | Off | also run every N days, or on a weekday |
+| **Rated games only**, **Time controls**, **Color** | rated, rapid + classical, both | which games count |
+| **Improving at**, **Fixed at**, **Regressed at** | 75%, 50%, 90% | the shares of the starting rate for each status |
+| **Checkpoints in a row**, **Puzzle accuracy**, **Over at least** | 2, 75%, 20 tries | what Fixed also needs |
+| **Auto AI checkpoint summary** | On | the AI summary above |
+| **Tell me when a status changes** | On | the notice on the main page |
+
+Press **Save checkpoint settings**. Changing them affects checkpoints from now on; starting rates already set don't change.
+
+### Gotchas
+- **Checkpoints wait for the rebuild.** On the first start of v1.0, **Run checkpoint now** says your past checkpoints haven't been rebuilt yet until that's finished.
+- **A checkpoint while the Coach is running** waits a minute and tries again: they share the same analysis.
+- **Changing the analysis settings** (think time, thresholds) changes what counts as a mistake from then on, so rates before and after aren't quite comparable.
 
 ## Keyboard shortcuts
 *Added in v0.2.*

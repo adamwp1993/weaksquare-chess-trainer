@@ -2,6 +2,23 @@
 // User Guide. It says what the option does and, for a choice, what each choice means and costs. Add an entry for every
 // option a later version adds. The Playwright walk in tests/e2e/test_v012_tooltips.py fails on a control without one.
 export const TOOLTIPS = {
+  // ---- checkpoints and fix tracking (v1.0) ----
+  "checkpoints.everyGames": "A checkpoint runs after this many new games that match the filters below, from your linked Lichess and chess.com accounts, from 5 to 200. Pasted or imported games and other players' games never count. Default 10.",
+  "checkpoints.window": "How many of your latest eligible games each checkpoint measures, from 10 to 100. Rates are per 10 games over this window, so one bad game can't swing them. Default 30.",
+  "checkpoints.schedule": "Off: checkpoints run only after new games. Every N days or On a weekday: a checkpoint also runs on that schedule, while the app is open or the next time you open it. If there are no new games since the last checkpoint, it does nothing. The app never sets up a Windows task.",
+  "checkpoints.days": "How many days apart scheduled checkpoints are, from 1 to 60.",
+  "checkpoints.weekday": "The day of the week a scheduled checkpoint runs. If the app is closed that day, it runs the next time you open it.",
+  "checkpoints.rated": "On: only rated games count toward checkpoints. Casual games are often played differently.",
+  "checkpoints.timeClasses": "Which time controls count. Rapid and classical by default: mistakes in bullet and blitz come more from the clock than from not knowing a pattern.",
+  "checkpoints.color": "Count games with either color, or only with White or only with Black.",
+  "checkpoints.improving": "Improving: the weakness's rate is at or below this share of the rate it started at. Default 75%.",
+  "checkpoints.fixed": "Fixed: the rate is at or below this share of where it started, at the number of checkpoints in a row below, and your puzzle accuracy on its themes passes too. Puzzles alone never mark it Fixed. Default 50%.",
+  "checkpoints.regressed": "Regressed: an Improving or Fixed weakness whose rate climbs back to at least this share of where it started. It goes back to the top of your Suggested mix. Default 90%.",
+  "checkpoints.streak": "How many checkpoints in a row the rate must stay at or below the Fixed share, from 1 to 5. Default 2.",
+  "checkpoints.puzzleAccuracy": "The first-try accuracy on a weakness's puzzle themes that Fixed also needs. A weakness no puzzle trains (an opening, time use) is decided by its game rate alone. Default 75%.",
+  "checkpoints.puzzleAttempts": "How many puzzle tries on its themes that accuracy must cover, from 5 to 200. Default 20.",
+  "checkpoints.autoAi": "On: after each checkpoint the AI writes a short commentary on what improved, what didn't and why your mix changed, using the Coach's model. It runs without asking only if its estimate is under your per-run cap and within your monthly budget; otherwise use Get AI take on the report. It needs an AI key, and it never decides a status. Rebuilt past checkpoints never get one. On by default.",
+  "checkpoints.notices": "On: when a checkpoint changes a weakness's status (for example Improving → Fixed), the main page tells you once.",
   // ---- backup and restore (v0.16) ----
   "backup.auto": "On: WeakSquare saves a backup into the folder you choose, as often as you set, and deletes the oldest ones beyond how many you keep. It only deletes its own backups there. It runs only while the app is open, or the next time you open it if one came due while it was closed. If the folder is missing (an unplugged drive), you see a warning here and it tries again next time.",
   "backup.interval": "How many days apart automatic backups are, from 1 to 90. Weekly (7) is the default.",

@@ -62,7 +62,8 @@ import type {
   OpeningBookStatus,
   OpeningLines,
   OpeningNote,
-  OpeningNoteQuote, OpeningNotesDeletion,
+  OpeningNoteQuote,
+  OpeningNotesDeletion,
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
@@ -119,6 +120,9 @@ import type {
   StudySummary,
   StudyUpdate,
   StudyRepertoirePreview,
+  CheckpointSettings,
+  ProgressView,
+  StatusNotice,
 } from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -1048,6 +1052,26 @@ export class PywebviewClient implements ApiClient {
 
   takeRestoreNotice() {
     return this.call<RestoreNotice | null>("take_restore_notice");
+  }
+
+  getProgress() {
+    return this.call<ProgressView>("get_progress");
+  }
+
+  getCheckpointSettings() {
+    return this.call<CheckpointSettings>("get_checkpoint_settings");
+  }
+
+  setCheckpointSettings(settings: CheckpointSettings) {
+    return this.call<CheckpointSettings>("set_checkpoint_settings", settings);
+  }
+
+  runCheckpointNow() {
+    return this.call<string>("run_checkpoint_now");
+  }
+
+  takeStatusNotices() {
+    return this.call<StatusNotice[]>("take_status_notices");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

@@ -892,6 +892,7 @@ export interface CoachReport {
   whole_game: CoachWeakness[];
   measures: CoachMeasures | null;
   comparison: CoachComparison | null;
+  checkpoint: number | null;
 }
 
 export interface CoachReportSummary {
@@ -902,6 +903,7 @@ export interface CoachReportSummary {
   source: "puzzles" | "games" | "both";
   games: number;
   top: string[];
+  checkpoint: number | null;
 }
 
 export interface PlayerSubject {
