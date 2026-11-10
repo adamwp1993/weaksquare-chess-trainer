@@ -197,3 +197,44 @@ def test_qa_r2_b7_a_settings_restore_on_an_upgraded_install_doesnt_open_the_wiza
         assert not st.show, (st.step, st.facts.choice)  # the app as before, not the first-run wizard
     finally:
         again.close()
+
+
+# ---- round 3 (2026-11-10): v1.0-B7's fix, the PC-only setup.restore_pending mark --------------------------------
+
+
+def test_qa_r3_a_refused_wizard_restore_then_start_fresh_leaves_no_mark_for_a_later_settings_restore(services) -> None:  # type: ignore[no-untyped-def]
+    """Restore and restart pressed in the wizard (pending), refused; then Start fresh and the wizard finished. A
+    later restore from Settings must not reopen the wizard: Start fresh clears the mark."""
+    from weaksquare.services.setup_state import CHOICE_KEY, FINISHED_KEY, RESTORE_PENDING_KEY
+
+    setup = services.setup
+    setup.choose("restore")  # pressed; the restore is then refused (nothing swapped, note_restored never runs)
+    assert setup._settings.get(RESTORE_PENDING_KEY) is True and setup.state().facts.choice is None
+    setup.choose("fresh")
+    assert setup._settings.get(RESTORE_PENDING_KEY) is False
+    setup._settings.set(FINISHED_KEY, True)
+    setup.note_restored()  # a later restore from Settings swapped in
+    assert setup._settings.get(CHOICE_KEY) == "fresh"
+    assert not setup.state().show
+
+
+def test_qa_r3_a_backups_mark_never_reaches_another_pc(services, tmp_path, clock) -> None:  # type: ignore[no-untyped-def]
+    """setup.restore_pending is PC-only: a backup made while it was set (it's in the file, like every setting) never
+    brings it to another install, whose own setup. settings are kept, so a Settings restore there opens no wizard."""
+    from tests.integration.test_backup import backup_of, dump, files_for, new_install
+    from weaksquare import config
+    from weaksquare.adapters.db.migrate import migrate
+    from weaksquare.app import apply_staged_restore
+    from weaksquare.core.backup import is_pc_local
+    from weaksquare.services.setup_state import RESTORE_PENDING_KEY
+
+    assert is_pc_local(RESTORE_PENDING_KEY)
+    services.setup.choose("restore")
+    zip_path = backup_of(services, tmp_path, clock)
+    other = new_install(tmp_path, "other-pc")
+    migrate(other.user_db, config.MIGRATIONS_DIR / "user", clock)
+    files_for(other).stage_restore(zip_path)
+    notice = apply_staged_restore(other, clock)
+    assert notice is not None and notice.error is None
+    settings = dict(dump(other.user_db)["settings"])
+    assert RESTORE_PENDING_KEY not in settings and "setup.choice" not in settings

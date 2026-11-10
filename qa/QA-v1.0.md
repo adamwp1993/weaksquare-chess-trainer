@@ -1,5 +1,44 @@
 # QA report: v1.0 (Fix tracking + release)
 
+# Round 3, 2026-11-10: re-verification at `5e3526c` (fix for B7)
+
+Same rules: only `tests/` and this report changed; no credentials, no `-m live`, temp data folders only.
+
+## Verdict: **PASS**
+
+B7 is fixed, and B1 stays fixed on every path. No new bugs. All seven bugs from rounds 1–2 are closed.
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B7 (minor) | **FIXED** | `test_qa_r2_b7_a_settings_restore_on_an_upgraded_install_doesnt_open_the_wizard` passes without its xfail: an upgraded install (data, puzzles, no `setup.finished`) restores from Settings and opens without the wizard. New: `test_qa_r3_a_refused_wizard_restore_then_start_fresh_leaves_no_mark_for_a_later_settings_restore` (Start fresh clears the mark, so a later Settings restore records nothing) and `test_qa_r3_a_backups_mark_never_reaches_another_pc`. The mark is in the backup file like every setting, but a restore keeps the target PC's own `setup.` settings, so it never arrives on another PC |
+| B1, refused | still **FIXED** | `test_qa_b1_a_refused_restore_leaves_no_restore_choice_behind` (e2e): choice null, step welcome. The pending mark set just before the refusal doesn't affect the step |
+| B1, failed job | still **FIXED** | `test_qa_r2_b1_a_restore_job_that_fails_stays_on_welcome_with_its_reason` (e2e) passes |
+| B1, failed swap | still **FIXED** | builder's `test_qa_b1_a_restore_that_failed_or_never_ran_records_no_choice` (now presses Restore first, so the mark is set): an error notice never calls `note_restored`, choice stays null |
+| B1, successful wizard restore in the real app | still **FIXED** | `tests/smoke/test_qa_v10_real_app.py::test_qa_restore_a_v016_backup_from_the_wizard_then_finish_into_the_app` passes in the smoke run: the mark is carried into the staged database, the restart records `setup.choice == "restore"`, the wizard resumes past Welcome and finishes |
+
+Checked by reading the code as well: every way out of Welcome clears or uses the mark (Start fresh sets it to false; a successful swap clears it in `note_restored`). A mark left by a refused or failed wizard restore can only meet a later restore while the wizard is still showing, where recording "restore" is right.
+
+## Tests added (round 3)
+`tests/integration/test_qa_v10_checkpoints.py`: `test_qa_r3_a_refused_wizard_restore_then_start_fresh_leaves_no_mark_for_a_later_settings_restore`, `test_qa_r3_a_backups_mark_never_reaches_another_pc` (both pass; the file: 10 passed).
+
+## Commands (round 3)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` (with `-p no:cacheprovider`) | **4160 passed**, 1 skipped, 2 xfailed (26:29); my round 3 tests were added after collection and pass on their own (10 passed) |
+| `uv run pytest -m e2e` | **606 passed** (18:31) |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **91 passed**, 1 skipped (21:28), my wizard-restore smoke test included |
+| `uv run pytest -m fulldb` | 76 passed, 3 xfailed (older QA markers) (9:34) |
+| `uv run ruff check .` / `uv run ruff format --check .` | clean / 549 files already formatted |
+| `uv run mypy src` | no issues in 163 source files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | clean / clean |
+| `uv run pre-commit run --all-files` | all hooks passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings |
+
+The round 1 notes and Adam's manual-test list still apply. The B7 line added in round 2 no longer does.
+
 # Round 2, 2026-11-10: re-verification at `adf452c` (fixes for B1–B6)
 
 Same rules as round 1: I changed only `tests/` and this report. No credentials, no `-m live`, temp data folders only.
