@@ -2386,6 +2386,7 @@ class SetupState:
     signed_in: bool
     puzzle_job: str | None
     engine_job: str | None
+    puzzles_need_upgrade: bool  # an older puzzles.db: the puzzle step upgrades it (no download)
 
 
 EXPORTED += [SetupState]

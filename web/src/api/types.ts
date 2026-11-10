@@ -1814,4 +1814,5 @@ export interface SetupState {
   signed_in: boolean;
   puzzle_job: string | null;
   engine_job: string | null;
+  puzzles_need_upgrade: boolean;
 }

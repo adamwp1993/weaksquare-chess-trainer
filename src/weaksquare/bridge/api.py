@@ -1998,7 +1998,7 @@ class Api:
 def _setup_dto(s: SetupState) -> dto.SetupState:
     f = s.facts
     return dto.SetupState(s.show, s.step, f.choice, f.has_data, f.puzzles_installed, f.engine_ready, f.signed_in,  # type: ignore[arg-type]
-                          s.puzzle_job, s.engine_job)  # fmt: skip
+                          s.puzzle_job, s.engine_job, s.puzzles_need_upgrade)  # fmt: skip
 
 
 def _checkpoint_of(rep: Any) -> int | None:

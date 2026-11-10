@@ -37,6 +37,17 @@ def test_a_fresh_install_goes_through_every_step_into_the_app(page: Page) -> Non
     assert {"setupChoice:fresh", "engineInstall:false", "setupSkip:lichess", "setupFinish"} <= set(calls(page))
 
 
+def test_an_older_puzzle_database_is_upgraded_at_the_puzzle_step(page: Page) -> None:
+    """v1.0 self-check regression: the puzzle step upgrades an older puzzles.db, it never asks for a download."""
+    page.goto(page.base_url + "/?scenario=fresh-upgrade")  # type: ignore[attr-defined]
+    page.get_by_test_id("wizard-fresh").click()
+    expect(page.get_by_test_id("wizard")).to_have_attribute("data-step", "puzzles")
+    expect(page.get_by_text("Upgrading your puzzle database")).to_be_visible()
+    expect(page.get_by_role("button", name="Download from Lichess")).to_have_count(0)
+    expect(page.get_by_test_id("wizard")).to_have_attribute("data-step", "engine", timeout=10_000)
+    assert "upgrade" in calls(page)
+
+
 def test_stockfish_can_be_skipped_and_the_end_says_so(page: Page) -> None:
     fresh(page)
     page.get_by_test_id("wizard-fresh").click()

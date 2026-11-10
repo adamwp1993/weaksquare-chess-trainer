@@ -10,6 +10,7 @@ import { when } from "../components/BackupPanel";
 import { EngineInstallBanner } from "../components/EngineInstallBanner";
 import { useJob } from "../state/useJob";
 import { ImportView } from "./ImportView";
+import { UpgradeView } from "./UpgradeView";
 
 const ORDER = ["welcome", "puzzles", "engine", "lichess", "done"] as const;
 
@@ -144,7 +145,11 @@ export function WizardView({
                 Your data is restored. The puzzle database and Stockfish aren't part of a backup, so they come next.
               </Alert>
             )}
-            <ImportView firstRun runningJobId={state.puzzle_job} onDone={onChanged} />
+            {state.puzzles_need_upgrade ? (
+              <UpgradeView runningJobId={state.puzzle_job} onDone={onChanged} />
+            ) : (
+              <ImportView firstRun runningJobId={state.puzzle_job} onDone={onChanged} />
+            )}
           </Stack>
         )}
         {state.step === "engine" && (

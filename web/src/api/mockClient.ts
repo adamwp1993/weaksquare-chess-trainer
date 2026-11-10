@@ -447,8 +447,13 @@ export class MockClient implements ApiClient {
       (window as unknown as { __mockSyncNow: () => void }).__mockSyncNow = () => this.drain();
     }
     this.status =
-      scenario === "empty" || scenario === "fresh" ? { ...EMPTY } : scenario === "upgrade" ? { ...INSTALLED, needs_upgrade: true } : { ...INSTALLED };
-    if (scenario === "fresh") {
+      scenario === "empty" || scenario === "fresh"
+        ? { ...EMPTY }
+        : scenario === "upgrade" || scenario === "fresh-upgrade"
+          ? { ...INSTALLED, needs_upgrade: true }
+          : { ...INSTALLED };
+    // fresh-upgrade: a new install whose puzzles.db is an older version (the wizard's puzzle step upgrades it)
+    if (scenario === "fresh" || scenario === "fresh-upgrade") {
       this.setup = { finished: false, choice: null, skipped: new Set(), hasData: false };
       this.account = { state: "signed_out", username: null, rating: null, provisional: false };
       this.engine = { ...this.engine, state: "not_installed", path: null, name: null, source: null, message: "Stockfish isn't installed." };
@@ -2507,6 +2512,7 @@ export class MockClient implements ApiClient {
     return {
       show, step, choice: s.choice, has_data: s.hasData, puzzles_installed: puzzles, engine_ready: engineReady,
       signed_in: signedIn, puzzle_job: this.status.import_job_id, engine_job: this.engine.install_job_id,
+      puzzles_need_upgrade: this.status.installed && this.status.needs_upgrade,
     }; // prettier-ignore
   }
 

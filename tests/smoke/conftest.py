@@ -167,19 +167,27 @@ def app_page(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
         yield page
 
 
-def finish_wizard(page) -> None:  # type: ignore[no-untyped-def]
-    """v1.0: get past the first-run wizard like a user starting fresh who sets up nothing optional."""
+def finish_wizard(page, puzzles_timeout: int | None = None) -> None:  # type: ignore[no-untyped-def]
+    """v1.0: get past the first-run wizard like a user starting fresh who sets up nothing optional. A data folder that
+    already has data but no puzzle database skips the welcome step (core/setup.py), so Start fresh only when shown."""
     wizard = page.get_by_test_id("wizard")
-    page.get_by_test_id("wizard-fresh").click(timeout=10_000)
-    for _ in range(4):
+    if wizard.get_attribute("data-step", timeout=10_000) == "welcome":
+        page.get_by_test_id("wizard-fresh").click(timeout=10_000)
+    for _ in range(5):
         page.wait_for_function(
             "() => document.querySelector('[data-testid=wizard]')?.getAttribute('data-step') !== 'welcome'",
             timeout=10_000,
         )
         step = wizard.get_attribute("data-step")
         if step == "puzzles":
-            page.get_by_test_id("import-view").wait_for(timeout=10_000)
-            return
+            if puzzles_timeout is None:
+                page.get_by_test_id("import-view").wait_for(timeout=10_000)  # no puzzle database: stop at the import screen, as before v1.0
+                return
+            # an import or upgrade is running: the wizard moves on by itself when it finishes
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=wizard]')?.getAttribute('data-step') !== 'puzzles'",
+                timeout=puzzles_timeout,
+            )
         if step == "engine":
             page.get_by_test_id("wizard-skip-engine").click()
             page.wait_for_function(

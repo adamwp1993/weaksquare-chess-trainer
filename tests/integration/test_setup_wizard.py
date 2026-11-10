@@ -61,6 +61,21 @@ def test_start_fresh_then_each_step_follows_what_is_installed(services: Any, pat
     assert not st.show and services.setup.state().facts.finished
 
 
+def test_an_older_puzzle_database_is_upgraded_at_the_puzzle_step_not_downloaded(services: Any, paths: config.Paths,
+                                                                                clock: FixedClock) -> None:  # fmt: skip
+    """v1.0 self-check regression: a fresh install with a v0.1 puzzles.db must get the upgrade screen."""
+    real = services.puzzle_db._d
+    services.puzzle_db._d = replace(real, latest_schema=real.schema_version(real.puzzles_db) + 1)
+    services.setup.choose("fresh")
+    st = services.setup.state()
+    assert st.step == "puzzles" and st.puzzles_need_upgrade and not st.facts.puzzles_installed
+    api = api_for(services, paths, clock, services.checkpoints._runner)
+    assert api.get_setup_state()["data"]["puzzles_need_upgrade"] is True
+    services.puzzle_db._d = real  # upgraded
+    st = services.setup.state()
+    assert st.step == "engine" and not st.puzzles_need_upgrade
+
+
 def test_closing_the_app_resumes_at_the_same_step(services: Any) -> None:
     _no_puzzles(services)
     services.setup.choose("fresh")

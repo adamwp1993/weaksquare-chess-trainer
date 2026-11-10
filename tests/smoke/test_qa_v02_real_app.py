@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.smoke.conftest import attach, free_port, launch_app
+from tests.smoke.conftest import attach, finish_wizard, free_port, launch_app
 
 pytestmark = pytest.mark.smoke
 ART = Path(__file__).resolve().parents[1] / "e2e" / "artifacts" / "qa-v02-real"
@@ -124,9 +124,11 @@ def test_v1_puzzles_db_is_upgraded_in_the_real_app(pw, tmp_path: Path) -> None: 
     make_v1_db(d / "puzzles.db", FixedClock(), work)
     app = launch_app(d, free_port())
     try:
-        with attach(pw, app) as page:
+        with attach(pw, app, keep_wizard=True) as page:
             # On the 337-puzzle fixture the upgrade can finish before Playwright attaches, so the
             # upgrade screen itself isn't asserted here (the e2e suite covers it against the mock).
+            # v1.0: a fresh data folder shows the wizard; its puzzle step waits for the upgrade, then moves on.
+            finish_wizard(page, puzzles_timeout=120_000)
             page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for(timeout=120_000)
             catalog = page.evaluate("window.pywebview.api.get_opening_catalog()")
             assert catalog["ok"] and len(catalog["data"]) > 0, catalog

@@ -28,6 +28,7 @@ class SetupState:
     facts: SetupFacts
     puzzle_job: str | None
     engine_job: str | None
+    puzzles_need_upgrade: bool = False  # an older puzzles.db: the puzzle step upgrades it, no download
 
 
 class SetupService:
@@ -60,7 +61,8 @@ class SetupService:
             signed_in=getattr(acct, "state", None) in ("signed_in", "offline"),
             lichess_skipped="lichess" in skipped,
         )
-        return SetupState(shown(facts), step(facts), facts, db.import_job_id, getattr(eng, "install_job_id", None))
+        return SetupState(shown(facts), step(facts), facts, db.import_job_id, getattr(eng, "install_job_id", None),
+                          bool(db.installed) and bool(db.needs_upgrade))  # fmt: skip
 
     def choose(self, choice: Any) -> SetupState:
         """The welcome step: Start fresh, or Restore (recorded just before the restore restarts the app)."""
