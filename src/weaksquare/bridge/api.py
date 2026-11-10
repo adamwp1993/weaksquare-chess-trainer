@@ -1982,7 +1982,8 @@ class Api:
 
     @bridge_call
     def choose_setup(self, choice: str) -> dto.SetupState:
-        """The welcome step's Start fresh. A restore records itself once it has swapped in (v1.0-B1)."""
+        """The welcome step: "fresh", or "restore" just before Restore and restart (only marks it pending: the choice is
+        recorded once the restore has swapped in, v1.0-B1/B7)."""
         return _setup_dto(self._setup.choose(choice))
 
     @bridge_call

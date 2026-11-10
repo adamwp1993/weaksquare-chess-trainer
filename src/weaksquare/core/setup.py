@@ -12,8 +12,8 @@ step" that could go stale (v1.0 planning).
   4. **lichess**: signing in, until you're signed in or skip it.
   5. **done**: the wizard finishes and the app starts as usual.
 - The `setup.` settings stay with this PC (`core.backup.PC_LOCAL_PREFIXES`). The choice "restore" is recorded only
-  by the start that swapped a backup in (`SetupService.note_restored`, v1.0-B1), so the wizard then carries on after
-  Welcome; a restore that was refused or failed leaves the welcome step.
+  by the start that swapped in a restore the wizard started (`SetupService.note_restored`, v1.0-B1/B7), so the wizard
+  then carries on after Welcome; a refused or failed one leaves the welcome step, and one from Settings never opens it.
 """
 
 from __future__ import annotations

@@ -35,7 +35,9 @@ function Welcome({ onFresh, onChanged }: { onFresh: () => void; onChanged: () =>
     if (!info) return;
     setError(null);
     try {
-      // Nothing is recorded here: the app notes the restore at startup once it has swapped in (v1.0-B1).
+      // Marks the restore as the wizard's (pending): the app records it at startup only once it has swapped in
+      // (v1.0-B1), and a restore from Settings never opens the wizard (v1.0-B7).
+      await api.chooseSetup("restore");
       setJobId(await api.restoreBackup(info.token));
     } catch (e) {
       setError((e as Error).message);

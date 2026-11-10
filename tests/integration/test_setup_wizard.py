@@ -122,7 +122,13 @@ def test_a_restore_from_the_wizard_comes_back_after_the_welcome_step(
     zip_path = backup_of(services, tmp_path, clock)
     new = new_install(tmp_path)
     migrate(new.user_db, config.MIGRATIONS_DIR / "user", clock)
-    files_for(new).stage_restore(zip_path)
+    first = _start(new, clock, None)
+    try:
+        first.setup.choose("restore")  # the wizard's Restore and restart: pending only
+        assert first.setup.state().facts.choice is None
+    finally:
+        first.close()
+    files_for(new).stage_restore(zip_path)  # carries this PC's setup. settings, the pending mark included
     notice = apply_staged_restore(new, clock)
     assert notice is not None and notice.error is None
     started = _start(new, clock, notice)
@@ -146,15 +152,21 @@ def test_qa_b1_a_restore_that_failed_or_never_ran_records_no_choice(tmp_path: Pa
     for notice in (RestoreNotice(None, None, "The restore didn't finish."), None):
         started = _start(new, clock, notice)
         try:
+            started.setup.choose("restore")  # pressed Restore and restart; then it was refused, failed or rolled back
             st = started.setup.state()
             assert st.facts.choice is None and st.step == "welcome", notice
-            with pytest.raises(ValidationError):
-                started.setup.choose("restore")
         finally:
             started.close()
 
 
 def test_a_restore_after_the_wizard_finished_records_nothing(services: Any) -> None:
+    services.setup.choose("restore")
     services.setup._settings.set("setup.finished", True)
+    services.setup.note_restored()
+    assert services.setup._settings.get(CHOICE_KEY) is None
+
+
+def test_a_restore_the_wizard_didnt_start_records_nothing(services: Any) -> None:
+    """v1.0-B7: a restore from Settings, on an install that never finished the wizard (upgraded from v0.16)."""
     services.setup.note_restored()
     assert services.setup._settings.get(CHOICE_KEY) is None

@@ -154,9 +154,6 @@ def test_qa_a_guarded_weakness_keeps_its_status_through_a_real_checkpoint(servic
 # ---- round 2 (2026-11-10): v1.0-B1's fix, note_restored at the start that swapped a backup in -------------------
 
 
-@pytest.mark.xfail(
-    strict=True, reason="v1.0-B7: note_restored opens the wizard after any restore on an unfinished install"
-)
 def test_qa_r2_b7_a_settings_restore_on_an_upgraded_install_doesnt_open_the_wizard(  # type: ignore[no-untyped-def]
     services, tmp_path, clock, fixture_puzzles_db
 ) -> None:
