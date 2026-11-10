@@ -13,17 +13,17 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 
 ## [Unreleased]
 
+Candidates: v1.0-rc1 (2026-11-10)
+
 ### Added
 - **Checkpoints**: after every 10 new rated rapid and classical games from your linked accounts, the Coach analyzes them in the background and saves a normal report on your last 30 games, which you can compare under **Since last report**. They also run on an optional schedule (every few days or on a weekday) while the app is open or at the next start, and never change your training plan. [FR-10.32, FR-10.33]
 - **Weakness statuses**: each weakness is measured per 10 games against the rate it started at, and marked New, Training, Improving, Fixed or Regressed. Fixed needs the rate at half or less at two checkpoints in a row *and* 75% puzzle accuracy on its themes over 20 tries; puzzles alone never mark it Fixed. Too few occurrences to tell is shown as *not enough data yet*, and changes nothing. [FR-10.34, FR-10.35]
-
 - **Your past games fill in your progress**: the first time v1.0 starts, it replays the games you've already analyzed, using their stored analysis only (no engine time, no AI cost). Your first 50 games set where each weakness started, then there's a checkpoint for every 10 games after that, so weaknesses can already be Improving or Fixed. These rebuilt checkpoints save no Coach reports and show no notices. It runs once, and carries on at the next start if the app is closed partway. With fewer than 50 analyzed games, the first checkpoint sets the starting point instead. [FR-10.34, FR-10.35]
 - **The Progress tab** in the Coach: a card per weakness with its status, where it started and where it is now, its rate per 10 games over time against a flat *Start* line, your puzzle accuracy on its themes, why you missed it, and links to the latest examples. Above them, your blunders, mistakes and inaccuracies per 10 games and your average centipawn loss over time; below, every checkpoint with its numbers, status changes and report. Points with too little data are drawn hollow, and rebuilt checkpoints are shaded. **Stats** links to it. [FR-10.38, FR-9.6]
 - **Checkpoint settings** on the Progress tab: every N games, the rolling window, an optional schedule, which games count, the status thresholds, the AI summary and notices, each with an ⓘ. [FR-10.32, FR-10.35, FR-10.72]
 - **Status-change notices**: when a checkpoint moves a weakness (for example *Improving → Fixed*), the main page says so once, with **See progress**. [FR-10.38]
 - **The AI checkpoint summary**, on by default: after each checkpoint the AI comments on what improved, what didn't and why your mix changed, as the AI coaching on its report. It needs an AI key, runs without asking only under your per-run cap and within your budget (otherwise **Get AI take** with the usual estimate and Confirm), and never decides a status. [FR-10.37]
 - **Checkpoint reports** are labeled *Checkpoint #N* in the Coach's saved reports. [FR-10.33]
-
 - **A first-run wizard** on a new install: start fresh or **restore a backup** from your old PC, then the puzzle database, Stockfish (skippable) and the Lichess sign-in (optional). Close the app partway and it carries on from the same step; after a restore it comes back at the puzzle database. It shows once per PC, and never on an install that already has your data. [NFR-8, FR-15.4]
 - **User Guide chapters** *First run*, *Updating* and *Troubleshooting*. [NFR-8]
 
