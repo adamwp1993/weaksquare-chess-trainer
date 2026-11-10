@@ -35,7 +35,7 @@ function Welcome({ onFresh, onChanged }: { onFresh: () => void; onChanged: () =>
     if (!info) return;
     setError(null);
     try {
-      await api.chooseSetup("restore"); // kept through the restart: the wizard comes back at the puzzle step
+      // Nothing is recorded here: the app notes the restore at startup once it has swapped in (v1.0-B1).
       setJobId(await api.restoreBackup(info.token));
     } catch (e) {
       setError((e as Error).message);

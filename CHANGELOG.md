@@ -22,7 +22,7 @@ Notable changes to WeakSquare Chess Trainer, newest first. The format follows [K
 - **Checkpoint settings** on the Progress tab: every N games, the rolling window, an optional schedule, which games count, the status thresholds, the AI summary and notices, each with an ⓘ. [FR-10.32, FR-10.35, FR-10.72]
 - **Status-change notices**: when a checkpoint moves a weakness (for example *Improving → Fixed*), the main page says so once, with **See progress**. [FR-10.38]
 - **The AI checkpoint summary**, on by default: after each checkpoint the AI comments on what improved, what didn't and why your mix changed, as the AI coaching on its report. It needs an AI key, runs without asking only under your per-run cap and within your budget (otherwise **Get AI take** with the usual estimate and Confirm), and never decides a status. [FR-10.37]
-- **Checkpoint reports** are labelled *Checkpoint #N* in the Coach's saved reports. [FR-10.33]
+- **Checkpoint reports** are labeled *Checkpoint #N* in the Coach's saved reports. [FR-10.33]
 
 - **A first-run wizard** on a new install: start fresh or **restore a backup** from your old PC, then the puzzle database, Stockfish (skippable) and the Lichess sign-in (optional). Close the app partway and it carries on from the same step; after a restore it comes back at the puzzle database. It shows once per PC, and never on an install that already has your data. [NFR-8, FR-15.4]
 - **User Guide chapters** *First run*, *Updating* and *Troubleshooting*. [NFR-8]

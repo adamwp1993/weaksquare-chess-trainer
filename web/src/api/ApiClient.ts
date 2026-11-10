@@ -615,8 +615,8 @@ export interface ApiClient {
   // ---- v1.0: the first-run wizard (NFR-8, FR-15.4) ----
   /** Whether to show the wizard and which step, decided from what's installed. */
   getSetupState(): Promise<SetupState>;
-  /** The welcome step: "fresh", or "restore" just before Replace my data. */
-  chooseSetup(choice: "fresh" | "restore"): Promise<SetupState>;
+  /** The welcome step's Start fresh. A restore is recorded by the app once it has swapped in (v1.0-B1). */
+  chooseSetup(choice: "fresh"): Promise<SetupState>;
   skipSetupStep(step: "engine" | "lichess"): Promise<SetupState>;
   finishSetup(): Promise<SetupState>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */

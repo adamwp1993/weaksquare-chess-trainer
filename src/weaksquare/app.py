@@ -543,6 +543,8 @@ def build_services(
         load_migrations(config.MIGRATIONS_DIR / "user")[-1].version, restart, restore_notice,
     )  # fmt: skip
     setup = SetupService(SettingsRepo(db), puzzle_db, engine, account, lambda: has_user_data(db))  # v1.0 wizard
+    if restore_notice is not None and restore_notice.error is None:
+        setup.note_restored()  # only a restore that swapped in counts as the wizard's choice (v1.0-B1)
     return Services(
         setup=setup,
         checkpoints=checkpoints,

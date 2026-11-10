@@ -1079,7 +1079,7 @@ export class PywebviewClient implements ApiClient {
     return this.call<SetupState>("get_setup_state");
   }
 
-  chooseSetup(choice: "fresh" | "restore") {
+  chooseSetup(choice: "fresh") {
     return this.call<SetupState>("choose_setup", choice);
   }
 

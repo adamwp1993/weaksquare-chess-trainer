@@ -2334,6 +2334,7 @@ class WeaknessCard:
     reasons: dict[str, int]  # mistake reason → count, latest window
     points: list[ProgressPoint]  # oldest first
     examples: list[ProgressExample]  # from the latest checkpoint's report
+    puzzle_themes: bool  # puzzles train it; without, its game rate alone decides its status
 
 
 @dataclass(frozen=True)

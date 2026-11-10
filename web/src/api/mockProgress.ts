@@ -65,8 +65,9 @@ function points(per10: (number | null)[], accuracy: (number | null)[], guarded: 
 
 function seeded(): WeaknessCard[] {
   const last = (p: ProgressPoint[]) => p[p.length - 1];
-  const card = (c: Omit<WeaknessCard, "current_per10" | "current_guarded" | "puzzle_accuracy">): WeaknessCard => ({
+  const card = (c: Omit<WeaknessCard, "current_per10" | "current_guarded" | "puzzle_accuracy" | "puzzle_themes">): WeaknessCard => ({
     ...c, current_per10: last(c.points).per10, current_guarded: last(c.points).guarded, puzzle_accuracy: last(c.points).puzzle_accuracy,
+    puzzle_themes: c.kind !== "time", // nothing trains time use with puzzles
   }); // prettier-ignore
   return [
     card({
@@ -173,6 +174,7 @@ export class MockProgress {
           key, kind, label, status: "training", status_since: n, baseline_per10: per10, baseline_games: 30, current_per10: per10,
           current_guarded: false, puzzle_accuracy: 0.66, puzzle_attempts: 24, reasons: { didntLook: 2 },
           points: [{ checkpoint: n, created_at: created, per10, puzzle_accuracy: 0.66, guarded: false, reconstructed: false }], examples: [],
+          puzzle_themes: true,
         }); // prettier-ignore
         this.cards = [first("allowed:fork", "allowed", "Allowed: Fork", 4.0), first("missed:pin", "missed", "Missed: Pin", 3.0)];
       }

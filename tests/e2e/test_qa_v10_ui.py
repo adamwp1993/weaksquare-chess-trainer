@@ -31,7 +31,6 @@ def setup_state(page: Page) -> dict:  # type: ignore[type-arg]
     return page.evaluate("window.__mockApi.getSetupState()")  # type: ignore[no-any-return]
 
 
-@pytest.mark.xfail(strict=True, reason="v1.0-B1: the choice is recorded before the restore is accepted")
 def test_qa_b1_a_refused_restore_leaves_no_restore_choice_behind(page: Page) -> None:
     fresh(page)
     page.get_by_test_id("wizard-restore").click()
@@ -150,7 +149,6 @@ def test_qa_two_checkpoints_on_the_same_day_are_two_points(page: Page) -> None:
     expect(card.get_by_test_id("progress-rate-chart").locator("circle")).to_have_count(2)
 
 
-@pytest.mark.xfail(strict=True, reason="v1.0-B3: a weakness no puzzle trains says 'Puzzles: — first try over 0 tries'")
 def test_qa_b3_a_weakness_no_puzzle_trains_has_no_puzzle_line(page: Page) -> None:
     page.goto(page.base_url + "/?progress=history")  # type: ignore[attr-defined]
     page.get_by_test_id("nav-coach").click()
@@ -167,7 +165,6 @@ def _last_point_x(chart) -> float:  # type: ignore[no-untyped-def]
     return float(box["x"] + box["width"] / 2)
 
 
-@pytest.mark.xfail(strict=True, reason="v1.0-B4: the card's two charts don't share their x positions")
 def test_qa_b4_a_cards_two_charts_put_each_checkpoint_at_the_same_x(page: Page) -> None:
     """FR-10.38 (v1.0 build): game rate and puzzle accuracy are two charts "sharing the time axis". The same checkpoint
     should sit at the same horizontal position in both, so the shaded rebuilt stretch and the dates line up."""

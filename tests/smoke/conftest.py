@@ -181,7 +181,9 @@ def finish_wizard(page, puzzles_timeout: int | None = None) -> None:  # type: ig
         step = wizard.get_attribute("data-step")
         if step == "puzzles":
             if puzzles_timeout is None:
-                page.get_by_test_id("import-view").wait_for(timeout=10_000)  # no puzzle database: stop at the import screen, as before v1.0
+                page.get_by_test_id("import-view").wait_for(
+                    timeout=10_000
+                )  # no puzzle database: stop at the import screen, as before v1.0
                 return
             # an import or upgrade is running: the wizard moves on by itself when it finishes
             page.wait_for_function(

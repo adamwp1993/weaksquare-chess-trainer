@@ -3,7 +3,7 @@ one doesn't, each step resumes from what's installed, and a restore from it come
 
 from __future__ import annotations
 
-import sqlite3
+import random
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -105,20 +105,56 @@ def test_the_bridge(services: Any, paths: config.Paths, clock: FixedClock) -> No
     assert api.finish_setup()["ok"] is False
 
 
-def test_a_restore_from_the_wizard_comes_back_at_the_puzzle_step(
+def _start(paths: config.Paths, clock: FixedClock, notice: Any) -> Any:
+    from tests.helpers import fake_service_kwargs
+    from weaksquare.app import build_services
+    from weaksquare.jobs.runner import JobRunner
+
+    return build_services(paths, clock, JobRunner(), random.Random(1), restore_notice=notice, **fake_service_kwargs())
+
+
+def test_a_restore_from_the_wizard_comes_back_after_the_welcome_step(
     services: Any, tmp_path: Path, clock: FixedClock
 ) -> None:
-    """FR-15.4 from the wizard: the choice is this PC's, so it survives the swap; the restored data skips welcome."""
+    """FR-15.4 from the wizard: the start that swaps the backup in records the choice (v1.0-B1), and your data came
+    across; the wizard carries on after Welcome."""
     seed(services)
     zip_path = backup_of(services, tmp_path, clock)
     new = new_install(tmp_path)
     migrate(new.user_db, config.MIGRATIONS_DIR / "user", clock)
-    conn = sqlite3.connect(new.user_db)
-    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (CHOICE_KEY, '"restore"'))
-    conn.commit()
-    conn.close()
     files_for(new).stage_restore(zip_path)
-    assert apply_staged_restore(new, clock).error is None  # type: ignore[union-attr]
+    notice = apply_staged_restore(new, clock)
+    assert notice is not None and notice.error is None
+    started = _start(new, clock, notice)
+    try:
+        st = started.setup.state()
+        assert st.facts.choice == "restore" and st.show and st.step != "welcome"
+    finally:
+        started.close()
     settings = dict(dump(new.user_db)["settings"])
-    assert settings[CHOICE_KEY] == '"restore"'  # kept through the restore
-    assert settings["mixer.filters"] == '{"seeded": true}'  # and your data came across
+    assert settings[CHOICE_KEY] == '"restore"'
+    assert settings["mixer.filters"] == '{"seeded": true}'  # your data came across
+
+
+def test_qa_b1_a_restore_that_failed_or_never_ran_records_no_choice(tmp_path: Path, clock: FixedClock) -> None:
+    """v1.0-B1: only a restore that swapped in counts. A failed swap (your data put back) or a plain start leaves the
+    welcome step, with Restore and Start fresh, in place; the UI can't record "restore" ahead of time either."""
+    from weaksquare.services.backup import RestoreNotice
+
+    new = new_install(tmp_path)
+    migrate(new.user_db, config.MIGRATIONS_DIR / "user", clock)
+    for notice in (RestoreNotice(None, None, "The restore didn't finish."), None):
+        started = _start(new, clock, notice)
+        try:
+            st = started.setup.state()
+            assert st.facts.choice is None and st.step == "welcome", notice
+            with pytest.raises(ValidationError):
+                started.setup.choose("restore")
+        finally:
+            started.close()
+
+
+def test_a_restore_after_the_wizard_finished_records_nothing(services: Any) -> None:
+    services.setup._settings.set("setup.finished", True)
+    services.setup.note_restored()
+    assert services.setup._settings.get(CHOICE_KEY) is None

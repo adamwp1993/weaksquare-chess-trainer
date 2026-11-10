@@ -158,6 +158,7 @@ class WeaknessCard:
     reasons: dict[str, int]
     points: list[Point]
     examples: list[Example]
+    puzzle_themes: bool = True  # puzzles train it; without, game rate alone decides (v1.0-B3)
 
 
 @dataclass(frozen=True)
@@ -544,7 +545,7 @@ class CheckpointService:
                 dict(latest.reasons) if latest else {},
                 [Point(n, by_number[n].created_at, m.per10, m.puzzle_accuracy, m.guarded, by_number[n].reconstructed)
                  for n, m in ms if n in by_number],
-                examples.get(t.key, []),
+                examples.get(t.key, []), bool(t.themes),
             ))  # fmt: skip
         cards.sort(key=lambda c: (STATUS_ORDER.get(c.status, 9), -(c.current_per10 or 0), c.key))
         views = [CheckpointView(c.number, c.created_at, c.trigger, c.report_id, c.reconstructed, c.games, c.health,

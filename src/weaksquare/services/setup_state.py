@@ -65,11 +65,17 @@ class SetupService:
                           bool(db.installed) and bool(db.needs_upgrade))  # fmt: skip
 
     def choose(self, choice: Any) -> SetupState:
-        """The welcome step: Start fresh, or Restore (recorded just before the restore restarts the app)."""
-        if choice not in CHOICES:
-            raise ValidationError("Choose Start fresh or Restore from a backup.")
+        """The welcome step's Start fresh. Restore isn't chosen here: it's recorded by `note_restored` only once a
+        restore has actually swapped your data in (v1.0-B1), so a refused or failed one leaves the welcome step."""
+        if choice != "fresh":
+            raise ValidationError("Choose Start fresh, or restore a backup.")
         self._settings.set(CHOICE_KEY, choice)
         return self.state()
+
+    def note_restored(self) -> None:
+        """At startup, after a staged restore swapped in (FR-15.4): an unfinished wizard carries on after Welcome."""
+        if self._settings.get(FINISHED_KEY) is not True:
+            self._settings.set(CHOICE_KEY, "restore")
 
     def skip(self, which: Any) -> SetupState:
         if which not in SKIPPABLE:

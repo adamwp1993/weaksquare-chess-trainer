@@ -1782,6 +1782,7 @@ export interface WeaknessCard {
   reasons: Record<string, number>;
   points: ProgressPoint[];
   examples: ProgressExample[];
+  puzzle_themes: boolean;
 }
 
 export interface CheckpointRow {

@@ -143,6 +143,19 @@ def test_points_are_saved_per_checkpoint_for_the_charts(services, cp) -> None:  
     assert [p.number for p in card.points] == [1, 2] and [p.per10 for p in card.points] == [10.0, 0.0]
     assert card.baseline_per10 == 10.0 and card.current_per10 == 0.0
     assert [c.number for c in view.checkpoints] == [1, 2]
+    assert card.puzzle_themes  # mate-in-1 puzzles train it
+
+    # v1.0-B3: a weakness without puzzle themes (time use, openings) says so, instead of "over 0 tries"
+    from dataclasses import replace as _replace
+
+    repo = services.checkpoints._repo
+    real = repo.tracked
+    repo.tracked = lambda: {k: _replace(t, themes=()) for k, t in real().items()}
+    try:
+        bare = next(c for c in services.checkpoints.progress().weaknesses if c.key == "allowed:mateIn1")
+        assert not bare.puzzle_themes
+    finally:
+        repo.tracked = real
 
 
 def test_filters_you_changed_get_the_banner_not_replaced(services, cp) -> None:  # type: ignore[no-untyped-def]

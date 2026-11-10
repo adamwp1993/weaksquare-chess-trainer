@@ -2516,7 +2516,7 @@ export class MockClient implements ApiClient {
     }; // prettier-ignore
   }
 
-  async chooseSetup(choice: "fresh" | "restore") {
+  async chooseSetup(choice: "fresh") {
     this.setup.choice = choice;
     this.calls.push(`setupChoice:${choice}`);
     return this.getSetupState();

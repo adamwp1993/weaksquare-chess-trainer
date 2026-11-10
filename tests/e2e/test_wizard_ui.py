@@ -1,6 +1,6 @@
 """v1.0 the first-run wizard against the mock (NFR-8, FR-15.4): a fresh install goes Welcome → puzzle database →
-Stockfish → Lichess → the app; each step can be skipped where the requirement allows; Restore from a backup records
-the choice before restarting; an existing install never sees it. The step rule itself is tested in
+Stockfish → Lichess → the app; each step can be skipped where the requirement allows; Restore from a backup restarts
+without recording a choice (the app does once the swap succeeds, v1.0-B1); an existing install never sees it. The step rule itself is tested in
 tests/unit/test_setup_core.py and tests/integration/test_setup_wizard.py."""
 
 from __future__ import annotations
@@ -58,14 +58,13 @@ def test_stockfish_can_be_skipped_and_the_end_says_so(page: Page) -> None:
     expect(page.get_by_test_id("wizard-done")).to_contain_text("Stockfish isn't installed yet")
 
 
-def test_restore_records_the_choice_then_restarts(page: Page) -> None:
+def test_restore_restarts_without_recording_a_choice_first(page: Page) -> None:
     fresh(page)
     page.get_by_test_id("wizard-restore").click()
     expect(page.get_by_test_id("wizard-restore-info")).to_contain_text("42 games")
     page.get_by_test_id("wizard-restore-go").click()
     expect(page.get_by_test_id("wizard-restore-progress")).to_contain_text("Restarting to finish the restore")
-    log = calls(page)
-    assert log.index("setupChoice:restore") < log.index("restoreBackup")  # kept through the restart
+    assert "setupChoice:restore" not in calls(page)  # recorded by the app only once the swap succeeds (v1.0-B1)
 
 
 def test_an_existing_install_never_sees_it(page: Page) -> None:

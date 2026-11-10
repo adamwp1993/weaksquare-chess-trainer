@@ -1982,7 +1982,7 @@ class Api:
 
     @bridge_call
     def choose_setup(self, choice: str) -> dto.SetupState:
-        """The welcome step: "fresh", or "restore" just before Replace my data."""
+        """The welcome step's Start fresh. A restore records itself once it has swapped in (v1.0-B1)."""
         return _setup_dto(self._setup.choose(choice))
 
     @bridge_call
@@ -2028,7 +2028,7 @@ def _progress_dto(v: ProgressView) -> dto.ProgressView:
             c.current_per10, c.current_guarded, c.puzzle_accuracy, c.puzzle_attempts, dict(c.reasons),
             [dto.ProgressPoint(p.number, p.created_at, p.per10, p.puzzle_accuracy, p.guarded, p.reconstructed)
              for p in c.points],
-            [dto.ProgressExample(e.game_id, e.ply) for e in c.examples],
+            [dto.ProgressExample(e.game_id, e.ply) for e in c.examples], c.puzzle_themes,
         )
         for c in v.weaknesses
     ]  # fmt: skip

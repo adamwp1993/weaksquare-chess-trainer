@@ -137,7 +137,9 @@ function TrendChart({
       </Text>
       <div style={{ width: "100%", height }} aria-label={title}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 8, right: series.length > 1 ? 72 : baseline !== undefined ? 56 : 16, bottom: 0, left: -12 }}>
+          {/* The same right margin with or without the baseline's label, so a card's two charts put each checkpoint
+              at the same x (v1.0-B4). */}
+          <LineChart data={data} margin={{ top: 8, right: series.length > 1 ? 72 : 56, bottom: 0, left: -4 }}>
             <CartesianGrid vertical={false} stroke={GRID[scheme]} />
             <XAxis dataKey="when" tick={{ fontSize: 11, fill: INK[scheme] }} tickLine={false} axisLine={{ stroke: GRID[scheme] }} minTickGap={16} />
             <YAxis
@@ -256,7 +258,12 @@ function WeaknessCardView({ card, onReview }: { card: WeaknessCard; onReview: (g
             series={[{ key: "accuracy", label: "Puzzle accuracy" }]} percent height={110} testId="progress-accuracy-chart" />
         )} {/* prettier-ignore */}
         <Text size="xs" c="dimmed">
-          Puzzles: {pct(card.puzzle_accuracy)} first try over {card.puzzle_attempts} tries · Why you missed it: {reasonMix(card.reasons)}
+          {!card.puzzle_themes
+            ? "No puzzles train this one: its game rate alone decides its status"
+            : card.puzzle_attempts === 0
+              ? "Puzzles: no tries on its themes yet"
+              : `Puzzles: ${pct(card.puzzle_accuracy)} first try over ${card.puzzle_attempts} tries`}{" "}
+          · Why you missed it: {reasonMix(card.reasons)}
         </Text>
         {card.examples.length > 0 && (
           <Group gap={4}>
