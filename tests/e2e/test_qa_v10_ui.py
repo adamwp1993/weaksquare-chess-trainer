@@ -176,3 +176,71 @@ def test_qa_b4_a_cards_two_charts_put_each_checkpoint_at_the_same_x(page: Page) 
     rate = _last_point_x(card.get_by_test_id("progress-rate-chart"))
     acc = _last_point_x(card.get_by_test_id("progress-accuracy-chart"))
     assert abs(rate - acc) <= 2, (rate, acc)
+
+
+# ---- round 2 (2026-11-10) -----------------------------------------------------------------------------------------
+
+
+def test_qa_r2_b1_a_restore_job_that_fails_stays_on_welcome_with_its_reason(page: Page) -> None:
+    """v1.0-B1's other path: the restore job starts, then fails its full check. The reason stays on screen, the
+    wizard stays on Welcome, nothing says your data was restored, and Start fresh still works. (The mock can't fail a
+    restore job, so its restoreBackup is swapped for one that does.)"""
+    fresh(page)
+    page.evaluate(
+        """() => { const api = window.__mockApi;
+        api.restoreBackup = async () => {
+          const job = { id: 'job-qa-fail', kind: 'backup_restore', progress: null, error_code: 'damaged' };
+          api.emit({ ...job, state: 'running', message: 'Checking the backup…' });
+          setTimeout(() => api.emit({ ...job, state: 'failed',
+            message: "This backup is damaged and can't be restored. Nothing was changed." }), 300);
+          return job.id;
+        };
+        api.getJob = async (id) => { throw new Error('no such job ' + id); }; }"""
+    )
+    page.get_by_test_id("wizard-restore").click()
+    page.get_by_test_id("wizard-restore-go").click()
+    expect(page.get_by_test_id("wizard-error")).to_contain_text("This backup is damaged")
+    page.wait_for_timeout(1500)  # the failed job re-reads the setup state: it must not move on
+    expect(page.get_by_test_id("wizard")).to_have_attribute("data-step", "welcome")
+    expect(page.get_by_test_id("wizard-error")).to_contain_text("This backup is damaged")
+    expect(page.get_by_test_id("wizard-restored")).to_have_count(0)
+    st = setup_state(page)
+    assert st["choice"] is None and st["step"] == "welcome", st
+    shot(page, "r2-wizard-restore-failed")
+    page.get_by_test_id("wizard-fresh").click()
+    expect(page.get_by_test_id("wizard")).to_have_attribute("data-step", "puzzles")
+
+
+def test_qa_r2_b3_no_tries_yet_says_so(page: Page) -> None:
+    page.goto(page.base_url + "/?progress=history")  # type: ignore[attr-defined]
+    page.evaluate(
+        """() => { const c = window.__mockApi.progress.cards.find(c => c.key === 'allowed:fork');
+        c.puzzle_attempts = 0; c.puzzle_accuracy = null; c.points.forEach(p => { p.puzzle_accuracy = null; }); }"""
+    )
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-progress").click()
+    card = page.get_by_test_id("progress-card-allowed:fork")
+    expect(card).to_contain_text("Puzzles: no tries on its themes yet")
+    expect(card).not_to_contain_text("over 0 tries")
+    expect(page.get_by_test_id("progress-card-time:low_clock")).to_contain_text(
+        "No puzzles train this one: its game rate alone decides its status"
+    )
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_qa_r2_b4_screenshot_and_no_clipped_percent(page: Page, scheme: str) -> None:
+    page.goto(page.base_url + f"/?progress=history&scheme={scheme}")  # type: ignore[attr-defined]
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-progress").click()
+    card = page.get_by_test_id("progress-card-allowed:fork")
+    chart = card.get_by_test_id("progress-accuracy-chart")
+    label = chart.locator("text", has_text="100%").first
+    label.wait_for()
+    lbox, cbox = label.bounding_box(), chart.bounding_box()
+    assert lbox is not None and cbox is not None and lbox["x"] >= cbox["x"], (lbox, cbox)  # "100%" isn't clipped
+    for key in ("allowed:fork", "missed:pin", "habit:hungPiece"):
+        c = page.get_by_test_id(f"progress-card-{key}")
+        rate = _last_point_x(c.get_by_test_id("progress-rate-chart"))
+        acc = _last_point_x(c.get_by_test_id("progress-accuracy-chart"))
+        assert abs(rate - acc) <= 2, (key, rate, acc)
+    shot(page, f"r2-progress-{scheme}")

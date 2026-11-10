@@ -1,5 +1,56 @@
 # QA report: v1.0 (Fix tracking + release)
 
+# Round 2, 2026-11-10: re-verification at `adf452c` (fixes for B1–B6)
+
+Same rules as round 1: I changed only `tests/` and this report. No credentials, no `-m live`, temp data folders only.
+
+## Verdict: **PASS WITH ISSUES** (1 new minor; no blocker or major)
+
+All six round 1 bugs are fixed, including B1 (the major) on both of its paths. One new minor bug comes from B1's fix
+(B7): on an install that never finished the wizard, which includes every install upgraded from v0.16 such as Adam's,
+any restore from **Settings** now opens the first-run wizard after the restart.
+
+## Re-verified
+
+| Bug | Result | How |
+|---|---|---|
+| B1 (major) | **FIXED** | **Refused:** `test_qa_b1_a_refused_restore_leaves_no_restore_choice_behind` passes without its xfail (choice stays `null`, step `welcome`). **Failed job** (new): `test_qa_r2_b1_a_restore_job_that_fails_stays_on_welcome_with_its_reason`. A restore job that fails its full check leaves the reason on screen, stays on Welcome after the setup state is re-read, never shows *Your data is restored*, and Start fresh still works. **Failed swap:** the builder's `test_qa_b1_a_restore_that_failed_or_never_ran_records_no_choice` (an error notice records nothing). **Successful restore in the real app:** my `test_qa_restore_a_v016_backup_from_the_wizard_then_finish_into_the_app` passes in the smoke run with `setup.choice == "restore"` and `setup.finished` set after the restart. `choose_setup("restore")` is refused by the backend (builder's test). The mock still accepts it, but only "fresh" is in the `ApiClient` type |
+| B2 (minor) | **FIXED** | `uv run ruff format --check .`: 549 files already formatted (including mine) |
+| B3 (minor) | **FIXED** | `test_qa_b3_…` passes. New `test_qa_r2_b3_no_tries_yet_says_so`: a puzzle-trained weakness with 0 tries says *Puzzles: no tries on its themes yet*, and *Mistakes under 10% of your clock* says *No puzzles train this one: its game rate alone decides its status* |
+| B4 (minor) | **FIXED** | `test_qa_b4_…` passes. New `test_qa_r2_b4_screenshot_and_no_clipped_percent[light/dark]`: the last point's x matches within 2 px on all three two-chart cards, and the "100%" tick sits inside the chart. Screenshots `qa-v10-r2-progress-{light,dark}.png` show the shaded bands aligned |
+| B5 (doc) | **FIXED** | CHANGELOG *labeled*; User Guide *canceled*, and every older *labelled* in the User Guide fixed too |
+| B6 (doc) | **FIXED** | FR-10.38's main sentence now says two charts sharing the time axis |
+
+## New bug
+
+| ID | Severity | Steps | Expected | Actual | Evidence |
+|---|---|---|---|---|---|
+| **v1.0-B7** | minor (regression from the B1 fix) | An install that has your data and its puzzle database but no `setup.finished`. That's every install upgraded from v0.16 (they never saw the wizard), Adam's included. Settings → Your data → Restore from a backup (or undo with a `before-restore-*.zip`) → Replace my data → the app restarts | The app opens as usual with the restore notice. NFR-8: *"An install that already has your data never sees the wizard"* | `build_services` calls `setup.note_restored()` after **any** successful swap, and `note_restored` writes `setup.choice = "restore"` whenever the wizard isn't finished. `shown()` is true once a choice exists, so the first-run wizard opens at Stockfish / Lichess / *You're ready*. It takes one to three clicks to get past and loses no data. Possible fix: have the wizard's Restore set a separate PC-only marker (e.g. `setup.restore_pending`) that `note_restored` requires, or only note when the wizard was showing before the swap | `tests/integration/test_qa_v10_checkpoints.py::test_qa_r2_b7_a_settings_restore_on_an_upgraded_install_doesnt_open_the_wizard` (xfail strict): after the restart `show=True, step="engine", choice="restore"` |
+
+## Tests added (round 2)
+- `tests/integration/test_qa_v10_checkpoints.py::test_qa_r2_b7_…` (xfail strict).
+- `tests/e2e/test_qa_v10_ui.py`: `test_qa_r2_b1_a_restore_job_that_fails_stays_on_welcome_with_its_reason`, `test_qa_r2_b3_no_tries_yet_says_so`, `test_qa_r2_b4_screenshot_and_no_clipped_percent[light, dark]` (all pass).
+
+## Commands (round 2)
+
+| Command | Result |
+|---|---|
+| `uv run pytest` (with `-p no:cacheprovider`) | **4158 passed**, 1 skipped, 2 xfailed (26:57). My B7 test was added after collection; my file run alone: 7 passed, 1 xfailed (B7) |
+| `uv run pytest -m e2e` | **606 passed** (18:47), my round 2 tests included, no xfail left |
+| `npm.cmd --prefix web run build`, then `uv run pytest -m smoke` | **91 passed**, 1 skipped (21:20), my wizard-restore smoke test included (`setup.choice == "restore"` after the swap) |
+| `uv run pytest -m fulldb` | 76 passed, 3 xfailed (older QA markers) (9:31) |
+| `uv run ruff check .` / `uv run ruff format --check .` | clean / 549 files already formatted |
+| `uv run mypy src` | no issues in 163 source files |
+| `npm.cmd --prefix web run typecheck` / `npm.cmd --prefix web run lint` | clean / clean |
+| `uv run pre-commit run --all-files` | all hooks passed |
+| `python scripts/check_docs.py --strict` | 0 errors, 0 warnings |
+
+The round 1 notes (puzzle accuracy possibly double-counted, first live checkpoint analyzing up to 50 games unasked, and
+the rest) still apply. Adam's manual-test list is unchanged, plus B7: after a Settings restore on your own install,
+expect the wizard until it's fixed.
+
+# Round 1
+
 Round 1, 2026-11-10, branch `v1.0` at `888fbd0` (commits a7d8870…888fbd0 on top of `main`). I changed only `tests/` and
 this report. No credentials were read or used, no `-m live`, and every run used a temp data folder (the dev data folder
 only read-only, by `-m fulldb` / `-m engine` and `fetch_stockfish.py --dev`, which found nothing to do).

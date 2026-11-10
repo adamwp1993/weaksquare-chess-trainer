@@ -149,3 +149,54 @@ def test_qa_a_guarded_weakness_keeps_its_status_through_a_real_checkpoint(servic
     assert after.status == before.status  # no change made from it
     metric = [m for n, m in services.checkpoints._repo.metrics() if n == 2 and m.key == KEY]
     assert metric and metric[0].guarded and metric[0].per10 == 0.0  # shown, marked "not enough data yet"
+
+
+# ---- round 2 (2026-11-10): v1.0-B1's fix, note_restored at the start that swapped a backup in -------------------
+
+
+@pytest.mark.xfail(
+    strict=True, reason="v1.0-B7: note_restored opens the wizard after any restore on an unfinished install"
+)
+def test_qa_r2_b7_a_settings_restore_on_an_upgraded_install_doesnt_open_the_wizard(  # type: ignore[no-untyped-def]
+    services, tmp_path, clock, fixture_puzzles_db
+) -> None:
+    """An install from before v1.0 (your data and its puzzle database, but no `setup.finished`: it never saw the
+    wizard) restores a backup from **Settings**. NFR-8: "An install that already has your data never sees the wizard."
+    Before the B1 fix it didn't; now the start that swaps the backup in records "restore" and the wizard shows."""
+    import random
+    import shutil
+
+    from tests.helpers import fake_service_kwargs
+    from tests.integration.test_backup import backup_of, files_for, new_install, seed
+    from weaksquare import config
+    from weaksquare.adapters.db.migrate import migrate
+    from weaksquare.app import apply_staged_restore, build_services
+    from weaksquare.jobs.runner import JobRunner
+    from weaksquare.services.setup_state import FINISHED_KEY
+
+    seed(services)  # the backup: games, a journal entry, a preset
+    zip_path = backup_of(services, tmp_path, clock)
+    old = new_install(tmp_path, "upgraded")
+    shutil.copyfile(fixture_puzzles_db, old.puzzles_db)
+    migrate(old.user_db, config.MIGRATIONS_DIR / "user", clock)
+
+    def start(notice):  # type: ignore[no-untyped-def]
+        return build_services(old, clock, JobRunner(), random.Random(1), restore_notice=notice, **fake_service_kwargs())
+
+    first = start(None)
+    try:
+        first.games.import_pgn("1. e4 e5 2. Nf3 Nc6 *")  # it has data
+        st = first.setup.state()
+        assert not st.show and first.setup._settings.get(FINISHED_KEY) is None  # upgraded: no wizard, never finished
+    finally:
+        first.close()
+    files_for(old).stage_restore(zip_path)
+    notice = apply_staged_restore(old, clock)
+    assert notice is not None and notice.error is None
+    again = start(notice)
+    try:
+        st = again.setup.state()
+        assert st.facts.has_data and st.facts.puzzles_installed
+        assert not st.show, (st.step, st.facts.choice)  # the app as before, not the first-run wizard
+    finally:
+        again.close()
