@@ -784,3 +784,16 @@ def test_status_notice(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("status-notices").wait_for()
     page.mouse.move(1270, 890)
     shot(page, "status-notice")
+
+
+def test_first_run_wizard(page) -> None:  # type: ignore[no-untyped-def]
+    """v1.0 (NFR-8, FR-15.4): the wizard's first step, and its Stockfish step."""
+    page.goto(page.base_url + "/?scenario=fresh")
+    page.get_by_test_id("wizard-welcome").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "wizard-welcome")
+    page.get_by_test_id("wizard-fresh").click()
+    page.get_by_role("button", name="Download from Lichess").click()
+    page.get_by_test_id("wizard-engine").wait_for(timeout=10_000)
+    page.mouse.move(1270, 890)
+    shot(page, "wizard-engine")

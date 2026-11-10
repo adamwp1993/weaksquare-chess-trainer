@@ -29,6 +29,7 @@ import type {
   TodayPlan,
   UpdateOffer,
   RestoreNotice,
+  SetupState,
   StatusNotice,
 } from "./api/types";
 import { when } from "./components/BackupPanel";
@@ -69,6 +70,7 @@ import { StartupView } from "./views/StartupView";
 import { StatsView } from "./views/StatsView";
 import { TrainerView } from "./views/TrainerView";
 import { UpgradeView } from "./views/UpgradeView";
+import { WizardView } from "./views/WizardView";
 
 const SAVE_FILTERS_DEBOUNCE_MS = 500;
 
@@ -152,6 +154,13 @@ export function App() {
   const [timeOffset, setTimeOffset] = useState<number | null>(null);
   const historyChanged = useCallback(() => setHistoryVersion((v) => v + 1), []);
   const saveTimer = useRef<number | undefined>(undefined);
+
+  // v1.0 (NFR-8): the first-run wizard, on a fresh install only. Its step comes from the backend.
+  const [setup, setSetup] = useState<SetupState | null>(null);
+  const loadSetup = useCallback(() => {
+    api.getSetupState().then(setSetup, () => setSetup(null));
+  }, []);
+  useEffect(loadSetup, [loadSetup]);
 
   // v1.0 (FR-10.38): a checkpoint changed a weakness's status: say so once on the main page.
   const [statusNotices, setStatusNotices] = useState<StatusNotice[]>([]);
@@ -403,7 +412,22 @@ export function App() {
       : null;
 
   let main;
-  if (!started)
+  if (setup?.show)
+    main = (
+      <WizardView
+        state={setup}
+        account={account}
+        onChanged={loadSetup}
+        onAccountChanged={refreshLichess}
+        onFinished={() => {
+          setSetup(null);
+          setStarted(true); // the wizard did what the startup page does
+          refresh();
+          refreshLichess();
+        }}
+      />
+    );
+  else if (!started)
     main = (
       <StartupView
         account={account}

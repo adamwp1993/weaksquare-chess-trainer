@@ -129,6 +129,7 @@ def api_for(services: Any, paths: Paths, clock: FixedClock, runner: JobRunner, d
         lichess_window=services.lichess_window,
         backup=services.backup,
         checkpoints=services.checkpoints,
+        setup=services.setup,
     )
 
 

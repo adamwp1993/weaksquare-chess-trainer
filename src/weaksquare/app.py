@@ -61,6 +61,7 @@ from weaksquare.adapters.db.repos.user_data import (
     SessionsRepo,
     SettingsRepo,
     SyncFields,
+    has_user_data,
 )
 from weaksquare.adapters.desktop import (
     Desktop,
@@ -130,6 +131,7 @@ from weaksquare.services.reasons import ReasonsService
 from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
+from weaksquare.services.setup_state import SetupService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.studies import StudiesClient, StudiesService, StudyErrors, load_starter
 from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
@@ -299,6 +301,7 @@ class Services:
     lichess_window: Any
     backup: BackupService
     checkpoints: CheckpointService
+    setup: SetupService
 
     def close(self) -> None:
         self.lichess_window.close()  # v0.14: the Lichess window closes with the app
@@ -539,7 +542,9 @@ def build_services(
         SettingsRepo(db), runner, clock, scheduler,
         load_migrations(config.MIGRATIONS_DIR / "user")[-1].version, restart, restore_notice,
     )  # fmt: skip
+    setup = SetupService(SettingsRepo(db), puzzle_db, engine, account, lambda: has_user_data(db))  # v1.0 wizard
     return Services(
+        setup=setup,
         checkpoints=checkpoints,
         backup=backup,
         studies=studies,
@@ -692,6 +697,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         lichess_window=services.lichess_window,
         backup=services.backup,
         checkpoints=services.checkpoints,
+        setup=services.setup,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())

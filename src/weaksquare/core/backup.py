@@ -43,7 +43,7 @@ PC_LOCAL_KEYS = frozenset({
     "engine.threads",  # sized to this PC's CPU and memory (FR-7.4); think time is a preference and travels
     "engine.hash_mb",
 })  # fmt: skip
-PC_LOCAL_PREFIXES = ("backup.",)  # the automatic-backup folder is a path on this PC
+PC_LOCAL_PREFIXES = ("backup.", "setup.")  # the backup folder is a path on this PC; v1.0: the first-run wizard
 
 BackupErrorCode = Literal["not_backup", "damaged", "newer_backup"]
 

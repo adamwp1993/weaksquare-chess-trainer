@@ -2370,3 +2370,22 @@ EXPORTED += [
     CheckpointRow,
     ProgressView,
 ]
+
+
+# ---- v1.0: the first-run wizard (NFR-8, FR-15.4) ---------------------------------------------------
+@dataclass(frozen=True)
+class SetupState:
+    """`step` is decided from what's installed, never stored (core/setup.py)."""
+
+    show: bool
+    step: Literal["welcome", "puzzles", "engine", "lichess", "done"]
+    choice: Literal["fresh", "restore"] | None
+    has_data: bool
+    puzzles_installed: bool
+    engine_ready: bool
+    signed_in: bool
+    puzzle_job: str | None
+    engine_job: str | None
+
+
+EXPORTED += [SetupState]

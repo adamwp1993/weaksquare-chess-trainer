@@ -78,6 +78,7 @@ from weaksquare.services.reasons import ReasonsService
 from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
+from weaksquare.services.setup_state import SetupService, SetupState
 from weaksquare.services.stats import StatsService
 from weaksquare.services.studies import ChapterRow, StudiesService, StudyRow
 from weaksquare.services.sync import RatingInfo, SyncService
@@ -142,7 +143,9 @@ class Api:
         lichess_window: Any,
         backup: BackupService,
         checkpoints: CheckpointService,
+        setup: SetupService,
     ) -> None:
+        self._setup = setup
         self._checkpoints = checkpoints
         self._backup = backup
         self._backup_choice: tuple[str, Path] | None = None  # the file picked to restore, behind a token
@@ -1970,6 +1973,32 @@ class Api:
     def take_status_notices(self) -> list[dto.StatusNotice]:
         """FR-10.38: status changes you haven't seen yet, once (empty when notices are off)."""
         return [dto.StatusNotice(n.number, _status_change_dto(n.change)) for n in self._checkpoints.take_notices()]
+
+    # ---- v1.0: the first-run wizard (NFR-8, FR-15.4) -------------------------------------------------------
+    @bridge_call
+    def get_setup_state(self) -> dto.SetupState:
+        """Whether to show the wizard and which step, decided from what's installed (core/setup.py)."""
+        return _setup_dto(self._setup.state())
+
+    @bridge_call
+    def choose_setup(self, choice: str) -> dto.SetupState:
+        """The welcome step: "fresh", or "restore" just before Replace my data."""
+        return _setup_dto(self._setup.choose(choice))
+
+    @bridge_call
+    def skip_setup_step(self, step: str) -> dto.SetupState:
+        """Skip Stockfish ("engine") or signing in ("lichess"); both can be done later."""
+        return _setup_dto(self._setup.skip(step))
+
+    @bridge_call
+    def finish_setup(self) -> dto.SetupState:
+        return _setup_dto(self._setup.finish())
+
+
+def _setup_dto(s: SetupState) -> dto.SetupState:
+    f = s.facts
+    return dto.SetupState(s.show, s.step, f.choice, f.has_data, f.puzzles_installed, f.engine_ready, f.signed_in,  # type: ignore[arg-type]
+                          s.puzzle_job, s.engine_job)  # fmt: skip
 
 
 def _checkpoint_of(rep: Any) -> int | None:

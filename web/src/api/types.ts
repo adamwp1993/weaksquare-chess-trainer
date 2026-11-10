@@ -1803,3 +1803,15 @@ export interface ProgressView {
   weaknesses: WeaknessCard[];
   checkpoints: CheckpointRow[];
 }
+
+export interface SetupState {
+  show: boolean;
+  step: "welcome" | "puzzles" | "engine" | "lichess" | "done";
+  choice: "fresh" | "restore" | null;
+  has_data: boolean;
+  puzzles_installed: boolean;
+  engine_ready: boolean;
+  signed_in: boolean;
+  puzzle_job: string | null;
+  engine_job: string | null;
+}

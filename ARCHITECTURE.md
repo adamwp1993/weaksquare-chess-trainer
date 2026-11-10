@@ -262,6 +262,17 @@ Entry format:
 - Consequences: what this makes easier or harder
 ```
 
+### 2026-11-10, v1.0: The first-run wizard's step comes from facts; its settings stay with the PC
+- Context: NFR-8 and FR-15.4 ask for a first-run wizard that offers Restore from a backup, then the puzzle database, Stockfish and the Lichess sign-in, and that survives closing the app and the restore's own restart.
+- Decision:
+  - `core/setup.py` decides, with no I/O, whether the wizard shows and which step, from facts only: `setup.finished`, your choice on the welcome step (`setup.choice`), whether `user.db` has data (games, attempts or Coach reports), the puzzle database installed, Stockfish ready, signed in, and skipped steps (`setup.skipped`). No "current step" is stored.
+  - **Shown** when not finished and there's no data yet, or no puzzle database, or a choice was made. `setup.py` imports the puzzle database, so "no data yet" is what makes a fresh clone's first launch show it, with Restore offered; an existing install has data and never sees it.
+  - **`setup.` is a PC-only prefix** (`core.backup.PC_LOCAL_PREFIXES`): a restore keeps this install's values, so the choice "restore", recorded just before Replace my data, survives the swap and the restarted app comes back at the puzzle step.
+  - `services/setup_state.py` gathers the facts from the existing services; the bridge has `get_setup_state`, `choose_setup`, `skip_setup_step`, `finish_setup`. The view (`views/WizardView.tsx`) reuses `ImportView`, `EngineInstallBanner`, `AccountPanel` and the backup bridge; it replaces the startup page until finished.
+  - The smoke harness (`tests/smoke/conftest.attach`) finishes the wizard like a user starting fresh, unless a test keeps it.
+- Alternatives: a stored current step, rejected because it goes stale when something is installed outside the wizard (setup.py, the in-app banner). Showing it only without a puzzle database, rejected at build time because setup.py imports the database, so Restore would never be offered on a fresh clone.
+- Consequences: a new first-run step needs a fact to decide it. A user with no games, attempts or reports who updates to v1.0 sees the wizard once (welcome, then the steps already done).
+
 ### 2026-11-10, v1.0: Checkpoints reuse the Coach pipeline; fix tracking is pure rules over three new tables
 - Context: REQUIREMENTS §10.8 asks for automatic checkpoints that save a normal Coach report, track each weakness against a frozen baseline with statuses, rebuild the Suggested mix by status, and never touch the training plan.
 - Decision:

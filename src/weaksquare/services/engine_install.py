@@ -1,5 +1,5 @@
 """The one Stockfish installer (FR-7.5): used by scripts/fetch_stockfish.py, scripts/setup.py and the
-in-app Install button (and, from v1.0, the first-run wizard).
+in-app Install button (and the first-run wizard's Stockfish step, v1.0).
 
 1. Pinned: the manifest names the release, the asset, its URL and GitHub's SHA-256. Never "latest".
 2. Download through the shared HTTP client, then verify the SHA-256 *before* opening the archive.

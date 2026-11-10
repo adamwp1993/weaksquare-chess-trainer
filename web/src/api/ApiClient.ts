@@ -106,6 +106,7 @@ import type {
   CheckpointSettings,
   ProgressView,
   StatusNotice,
+  SetupState,
 } from "./types";
 
 /** v0.10: one Coach run's settings (FR-10.2–10.5). `player` null means you. */
@@ -611,6 +612,13 @@ export interface ApiClient {
   runCheckpointNow(): Promise<string>;
   /** FR-10.38: status changes not seen yet, once. */
   takeStatusNotices(): Promise<StatusNotice[]>;
+  // ---- v1.0: the first-run wizard (NFR-8, FR-15.4) ----
+  /** Whether to show the wizard and which step, decided from what's installed. */
+  getSetupState(): Promise<SetupState>;
+  /** The welcome step: "fresh", or "restore" just before Replace my data. */
+  chooseSetup(choice: "fresh" | "restore"): Promise<SetupState>;
+  skipSetupStep(step: "engine" | "lichess"): Promise<SetupState>;
+  finishSetup(): Promise<SetupState>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }

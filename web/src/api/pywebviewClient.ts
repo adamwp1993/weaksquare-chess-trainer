@@ -123,6 +123,7 @@ import type {
   CheckpointSettings,
   ProgressView,
   StatusNotice,
+  SetupState,
 } from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -1072,6 +1073,22 @@ export class PywebviewClient implements ApiClient {
 
   takeStatusNotices() {
     return this.call<StatusNotice[]>("take_status_notices");
+  }
+
+  getSetupState() {
+    return this.call<SetupState>("get_setup_state");
+  }
+
+  chooseSetup(choice: "fresh" | "restore") {
+    return this.call<SetupState>("choose_setup", choice);
+  }
+
+  skipSetupStep(step: "engine" | "lichess") {
+    return this.call<SetupState>("skip_setup_step", step);
+  }
+
+  finishSetup() {
+    return this.call<SetupState>("finish_setup");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

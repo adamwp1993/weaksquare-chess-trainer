@@ -12,6 +12,11 @@ from weaksquare.bridge.api import Api
 from weaksquare.bridge.errors import BRIDGE_MARK
 
 ALLOWLIST = {
+    # v1.0: the first-run wizard (NFR-8, FR-15.4)
+    "get_setup_state",
+    "choose_setup",
+    "skip_setup_step",
+    "finish_setup",
     # v1.0: checkpoints and fix tracking (REQUIREMENTS §10.8)
     "get_progress",  # FR-10.38
     "get_checkpoint_settings",

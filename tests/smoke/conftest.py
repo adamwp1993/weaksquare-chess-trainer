@@ -167,8 +167,37 @@ def app_page(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
         yield page
 
 
+def finish_wizard(page) -> None:  # type: ignore[no-untyped-def]
+    """v1.0: get past the first-run wizard like a user starting fresh who sets up nothing optional."""
+    wizard = page.get_by_test_id("wizard")
+    page.get_by_test_id("wizard-fresh").click(timeout=10_000)
+    for _ in range(4):
+        page.wait_for_function(
+            "() => document.querySelector('[data-testid=wizard]')?.getAttribute('data-step') !== 'welcome'",
+            timeout=10_000,
+        )
+        step = wizard.get_attribute("data-step")
+        if step == "puzzles":
+            page.get_by_test_id("import-view").wait_for(timeout=10_000)
+            return
+        if step == "engine":
+            page.get_by_test_id("wizard-skip-engine").click()
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=wizard]')?.getAttribute('data-step') !== 'engine'"
+            )
+        elif step == "lichess":
+            page.get_by_test_id("wizard-skip-lichess").click()
+            page.wait_for_function(
+                "() => document.querySelector('[data-testid=wizard]')?.getAttribute('data-step') !== 'lichess'"
+            )
+        elif step == "done":
+            page.get_by_test_id("wizard-finish").click()
+            wizard.wait_for(state="detached", timeout=10_000)
+            return
+
+
 @contextlib.contextmanager
-def attach(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
+def attach(pw, real_app: RunningApp, keep_wizard: bool = False):  # type: ignore[no-untyped-def]
     endpoint = f"http://127.0.0.1:{real_app.port}"
 
     def app_page_listed() -> bool:
@@ -205,9 +234,16 @@ def attach(pw, real_app: RunningApp):  # type: ignore[no-untyped-def]
     assert page is not None
     page.wait_for_function("() => !!(window.pywebview && window.pywebview.api)", timeout=30_000)
     # v0.3: the startup page comes first. A test launch has its own (empty) keyring entry, so it's
-    # signed out: continue without signing in.
-    page.get_by_test_id("startup-continue").click(timeout=30_000)
-    page.get_by_test_id("startup").wait_for(state="detached", timeout=10_000)
+    # signed out: continue without signing in. v1.0: a fresh data folder (no data yet) shows the first-run wizard
+    # instead. Unless a test keeps it, Start fresh, then stop at the import screen when there's no puzzle database (as
+    # before), or skip Stockfish and Lichess and finish into the app.
+    page.locator("[data-testid=startup-continue], [data-testid=wizard]").first.wait_for(timeout=30_000)
+    if page.get_by_test_id("wizard").count() > 0:
+        if not keep_wizard:
+            finish_wizard(page)
+    else:
+        page.get_by_test_id("startup-continue").click(timeout=30_000)
+        page.get_by_test_id("startup").wait_for(state="detached", timeout=10_000)
     try:
         yield page
     finally:

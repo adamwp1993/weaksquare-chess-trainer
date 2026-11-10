@@ -75,7 +75,7 @@ def page(browser, mock_url: str):  # type: ignore[no-untyped-def]
 
     def goto(url: str, **kwargs):  # type: ignore[no-untyped-def]
         response = original_goto(url, **kwargs)
-        if "startup=show" not in url:
+        if "startup=show" not in url and "scenario=fresh" not in url:  # v1.0: a fresh install shows the wizard
             continue_past_startup(p)
         return response
 

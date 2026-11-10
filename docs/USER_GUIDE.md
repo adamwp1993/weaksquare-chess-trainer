@@ -92,12 +92,32 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
     - **Lesson pointers** (v0.11) open Lichess Practice or Lichess Learn pages, or a search on YouTube, chess.com or your own site, in your default browser. A search sends the topic's words (for example *chess rook endgames*) to the site you click, and nothing else. The app never visits those sites itself.
 
+## First run
+*Added in v1.0.*
+
+The first time the app opens on a new install, a short wizard gets you set up. It shows the step you're on, and if you close the app partway, it carries on from the same step next time.
+
+![The first-run wizard](img/wizard-welcome.png)
+
+1. **Welcome:** choose **Start fresh**, or **Restore from a backup…** to carry your data over from another PC (a file you made with **Back up now**; see [Backing up and restoring your data](#backing-up-and-restoring-your-data)). A restore shows what's in the backup, then **Restore and restart** replaces this install's data with it, restarts the app, and carries on with the next step.
+2. **Puzzles:** the Lichess puzzle database ([Getting started](#getting-started-the-puzzle-database)). If `setup.py` already imported it, this step is already done.
+3. **Stockfish:** **Install Stockfish**, or **Skip for now** and install it later from any screen that needs it. Done already if `setup.py` installed it.
+4. **Lichess:** sign in to sync your solves and fetch your games, or **Continue without signing in**.
+
+![The Stockfish step](img/wizard-engine.png)
+
+Then **Start training** opens the app. The wizard never shows again on this PC; from then on, the app opens on the usual [startup page](#signing-in-with-lichess-syncing-solves-offline-mode). An install that already has your data never sees the wizard, even if its puzzle database is missing: it just offers the download.
+
+**Gotchas**
+- A backup holds your data only: after a restore, the puzzle database and Stockfish still come next, and you sign in to Lichess again and re-enter any AI key in Settings.
+- A restore waits while anything is running in the background. On a first start that's usually only a few seconds.
+
 ## Getting started: the puzzle database
-*Added in v0.1. Changed in v0.2: the wording says what you download.*
+*Added in v0.1. Changed in v0.2: the wording says what you download. Changed in v1.0: it's a step of the first-run wizard.*
 
 WeakSquare trains on the Lichess open puzzle database, which is public domain. **Download from Lichess** fetches the **entire** database, every puzzle and not a sample: about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It's stored on your PC, so after the first download everything works offline. With every filter cleared, including the quality filter under **More filters**, the match count equals the number of puzzles imported. With the default quality filter on, it's lower (see *Choosing your puzzles*).
 
-If setup already imported it, the app opens straight to your puzzles. Otherwise the first screen is **Get the puzzle database**:
+If setup already imported it, there's nothing to do. Otherwise the [first-run wizard](#first-run)'s **Puzzles** step (or, on an install whose database went missing, the first screen) is **Get the puzzle database**:
 
 ![The first-run screen](img/first-run.png)
 
@@ -1419,7 +1439,7 @@ Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change 
 - The sounds are Lichess's sets by Enigmahack, licensed AGPL-3.0 like this app. They're bundled with the app, so nothing is downloaded when they play.
 
 ## Installing from source
-*Added in v0.1. Changed in v0.2: a desktop shortcut and the app icon.*
+*Added in v0.1. Changed in v0.2: a desktop shortcut and the app icon. Changed in v1.0: the first-run wizard, updating, troubleshooting.*
 
 WeakSquare runs from its source code; there's no installer to download. You need Windows 10 or 11 with **Git**, **Python 3.12 or newer** and **Node.js LTS** installed.
 
@@ -1430,17 +1450,59 @@ WeakSquare runs from its source code; there's no installer to download. You need
    python scripts/setup.py
    ```
 2. Setup takes a few minutes. It installs everything into the project folder, builds the app, downloads and imports the puzzle database (see *Getting started*), installs Stockfish (*Added in v0.4*; add `--skip-engine` to install it from the app later), and adds **WeakSquare Chess Trainer** to your Start menu and your desktop. To skip the puzzle download, add `--skip-puzzle-db`; the app then offers it on first run.
-3. Start the app from the Start menu or the desktop.
+3. Start the app from the Start menu or the desktop. The [first-run wizard](#first-run) opens: start fresh, or restore a backup from your old PC.
 
 Both shortcuts, the window and its taskbar button show the WeakSquare icon: four board squares with a black queen. `--no-desktop-shortcut` skips the desktop one, and `--no-shortcut` skips both. If your Desktop is in OneDrive, the shortcut goes there, where Windows shows it.
 
-**Updating:** in the same folder, run `git pull`, then `python scripts/setup.py` again. Setup skips anything that's already up to date, and your data isn't touched.
+### Updating
+1. Close the app.
+2. In the folder you cloned it into, run:
+   ```powershell
+   git pull
+   python scripts/setup.py
+   ```
+3. Start the app as usual.
+
+Setup skips anything that's already up to date (the puzzle database, Stockfish, your shortcuts). Your data in `%LOCALAPPDATA%\WeakSquare` isn't touched by the update itself; the first start of a new version upgrades `user.db` and saves a copy of the old one in its `backups` folder first. Each version's changes are in [CHANGELOG.md](../CHANGELOG.md), and releases are listed on the project's GitHub page. Making a backup before you update (**Settings → Your data → Back up now**) is a good habit: once a newer version has upgraded your data, an older version can't open it.
 
 **Gotchas**
 - If setup says uv isn't on your PATH, that's fine: setup carries on without it.
 - Only one copy of the app runs at a time. Starting it again brings the open window to the front.
 - Running setup again replaces the two shortcuts rather than adding more. If you deleted the desktop shortcut on purpose, use `--no-desktop-shortcut` next time.
 - A shortcut you pinned to the taskbar yourself, before v0.2, keeps its old icon. Unpin it and pin the app again.
+- In PowerShell, run `python scripts/setup.py` (or `uv run …`), never a `.ps1` script or a virtual environment's `Activate.ps1`: Windows' script policy often blocks those, and nothing here needs them.
+
+## Troubleshooting
+*Added in v1.0.*
+
+**The app doesn't start, or shows an error before its window**
+- *"The front end isn't built"*: run `python scripts/setup.py` again in the app's folder.
+- *A newer version's data*: you opened an older version on data a newer one has upgraded. Update with `git pull` and setup (see [Updating](#updating)), or restore a backup made by this version.
+- Starting it again only brings a window forward: another copy is already running, maybe minimized or on another desktop.
+- The app's log is in `%LOCALAPPDATA%\WeakSquare\logs` (☰ → About shows the folder). It never holds your sign-in or keys, and it's the first thing to look at, or attach to an issue.
+
+**The puzzle database**
+- *The download fails or stops*: check your connection and that about 2 GB is free, then press **Download from Lichess** again. A cancelled or failed import leaves the old database working.
+- *Behind a firewall or proxy*: download `lichess_db_puzzle.csv.zst` from database.lichess.org yourself and use **Use a file I already have…**.
+
+**Stockfish**
+- *"Stockfish isn't installed"*: press **Install Stockfish** on any screen that shows it, or run `python scripts/setup.py` again.
+- *"Your custom engine can't be found"*: the file you chose in Settings → Engine moved. Choose it again, or press **Use the managed Stockfish**.
+- *The PC gets loud or slow during analysis*: lower **Threads** in Settings → Engine.
+
+**Lichess sign-in**
+- *Your sign-in expired*: press **Sign in again** on the banner. Solves made meanwhile are kept and sync afterwards.
+- *Signing in never finishes*: the browser tab must stay open until it says you can close it. Try again; a firewall that blocks programs listening on your own PC (127.0.0.1) stops it.
+- *Lichess can't be reached*: keep training; your solves sync when it's back.
+
+**Backups and restoring**
+- *"This backup was made by a newer version"*: update this install first (see [Updating](#updating)).
+- *A restore is refused because something is running*: wait for the analysis or download to finish, or cancel it, then restore.
+- *Automatic backups say the folder isn't available*: plug the drive back in, or choose another folder. It tries again by itself.
+
+**Progress and checkpoints**
+- *No checkpoints yet*: they need rated rapid or classical games from your linked accounts (or whatever you set in **Checkpoint settings**). Press **Run checkpoint now** to make one.
+- *A weakness says "not enough data yet"*: it happened too rarely to tell. It changes once more games are in the window.
 
 ## The About screen
 *Added in v0.1. Changed in v0.4: the Stockfish row.*
