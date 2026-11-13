@@ -7,6 +7,7 @@ import random
 import shutil
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from weaksquare.adapters.desktop import Desktop
 from weaksquare.adapters.http import DownloadResult
@@ -84,6 +85,11 @@ def build_api(
     runner = JobRunner()
     services = build_services(paths, clock, runner, random.Random(1234), http=http,  # type: ignore[arg-type]
                               **fake_service_kwargs(lichess))  # fmt: skip
+    return api_for(services, paths, clock, runner, desktop)
+
+
+def api_for(services: Any, paths: Paths, clock: FixedClock, runner: JobRunner, desktop: Desktop | None = None) -> Api:
+    """The bridge over services a test already has (v1.0)."""
     return Api(
         paths=paths,
         desktop=desktop or FakeDesktop(),
@@ -122,6 +128,8 @@ def build_api(
         studies=services.studies,
         lichess_window=services.lichess_window,
         backup=services.backup,
+        checkpoints=services.checkpoints,
+        setup=services.setup,
     )
 
 

@@ -150,7 +150,7 @@ class Wired:
                        history=s.history, engine=s.engine, reasons=s.reasons,
                        llm_settings=s.llm_settings, llm_usage=s.llm_usage, explain=s.explain, games=s.games,
                        analysis=s.analysis, review=s.review, puzzle_import=s.puzzle_import,
-                       game_explain=s.game_explain, game_puzzles=s.game_puzzles, coach=s.coach, plan=s.plan, journal=s.journal, openings=s.openings, opening_sources=s.opening_sources, opening_notes=s.opening_notes, opening_practice=s.opening_practice, repertoire=s.repertoire, studies=s.studies, lichess_window=s.lichess_window, backup=s.backup)  # fmt: skip
+                       game_explain=s.game_explain, game_puzzles=s.game_puzzles, coach=s.coach, plan=s.plan, journal=s.journal, openings=s.openings, opening_sources=s.opening_sources, opening_notes=s.opening_notes, opening_practice=s.opening_practice, repertoire=s.repertoire, studies=s.studies, lichess_window=s.lichess_window, backup=s.backup, checkpoints=s.checkpoints, setup=s.setup)  # fmt: skip
 
     def settle(self) -> None:
         for _ in range(10):

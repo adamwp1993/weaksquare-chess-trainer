@@ -892,6 +892,7 @@ export interface CoachReport {
   whole_game: CoachWeakness[];
   measures: CoachMeasures | null;
   comparison: CoachComparison | null;
+  checkpoint: number | null;
 }
 
 export interface CoachReportSummary {
@@ -902,6 +903,7 @@ export interface CoachReportSummary {
   source: "puzzles" | "games" | "both";
   games: number;
   top: string[];
+  checkpoint: number | null;
 }
 
 export interface PlayerSubject {
@@ -1709,4 +1711,109 @@ export interface RestoreNotice {
   created_at: string | null;
   app_version: string | null;
   error: string | null;
+}
+
+export interface CheckpointSchedule {
+  kind: "off" | "days" | "weekday";
+  days: number;
+  weekday: number;
+}
+
+export interface CheckpointThresholds {
+  improving: number;
+  fixed: number;
+  regressed: number;
+  fixed_streak: number;
+  puzzle_accuracy: number;
+  puzzle_attempts: number;
+  guard_count: number;
+}
+
+export interface CheckpointSettings {
+  every_games: number;
+  window: number;
+  schedule: CheckpointSchedule;
+  rated_only: boolean;
+  time_classes: string[];
+  color: "both" | "white" | "black";
+  thresholds: CheckpointThresholds;
+  auto_ai: boolean;
+  notices: boolean;
+}
+
+export interface StatusChange {
+  key: string;
+  label: string;
+  old: "new" | "training" | "improving" | "fixed" | "regressed" | null;
+  new: "new" | "training" | "improving" | "fixed" | "regressed";
+}
+
+export interface StatusNotice {
+  checkpoint: number;
+  change: StatusChange;
+}
+
+export interface ProgressPoint {
+  checkpoint: number;
+  created_at: string;
+  per10: number;
+  puzzle_accuracy: number | null;
+  guarded: boolean;
+  reconstructed: boolean;
+}
+
+export interface ProgressExample {
+  game_id: number;
+  ply: number;
+}
+
+export interface WeaknessCard {
+  key: string;
+  kind: string;
+  label: string;
+  status: "new" | "training" | "improving" | "fixed" | "regressed";
+  status_since: number;
+  baseline_per10: number;
+  baseline_games: number;
+  current_per10: number | null;
+  current_guarded: boolean;
+  puzzle_accuracy: number | null;
+  puzzle_attempts: number;
+  reasons: Record<string, number>;
+  points: ProgressPoint[];
+  examples: ProgressExample[];
+  puzzle_themes: boolean;
+}
+
+export interface CheckpointRow {
+  number: number;
+  created_at: string;
+  trigger: "count" | "schedule" | "manual" | "backfill";
+  report_id: number | null;
+  reconstructed: boolean;
+  games: number;
+  health: Record<string, unknown>;
+  changes: StatusChange[];
+  ai_run_id: number | null;
+}
+
+export interface ProgressView {
+  settings: CheckpointSettings;
+  new_games: number;
+  running_job: string | null;
+  weaknesses: WeaknessCard[];
+  checkpoints: CheckpointRow[];
+}
+
+export interface SetupState {
+  show: boolean;
+  step: "welcome" | "puzzles" | "engine" | "lichess" | "done";
+  choice: "fresh" | "restore" | null;
+  has_data: boolean;
+  puzzles_installed: boolean;
+  engine_ready: boolean;
+  signed_in: boolean;
+  puzzle_job: string | null;
+  engine_job: string | null;
+  puzzles_need_upgrade: boolean;
 }

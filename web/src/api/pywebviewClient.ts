@@ -62,7 +62,8 @@ import type {
   OpeningBookStatus,
   OpeningLines,
   OpeningNote,
-  OpeningNoteQuote, OpeningNotesDeletion,
+  OpeningNoteQuote,
+  OpeningNotesDeletion,
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
@@ -119,6 +120,10 @@ import type {
   StudySummary,
   StudyUpdate,
   StudyRepertoirePreview,
+  CheckpointSettings,
+  ProgressView,
+  StatusNotice,
+  SetupState,
 } from "./types";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -1048,6 +1053,42 @@ export class PywebviewClient implements ApiClient {
 
   takeRestoreNotice() {
     return this.call<RestoreNotice | null>("take_restore_notice");
+  }
+
+  getProgress() {
+    return this.call<ProgressView>("get_progress");
+  }
+
+  getCheckpointSettings() {
+    return this.call<CheckpointSettings>("get_checkpoint_settings");
+  }
+
+  setCheckpointSettings(settings: CheckpointSettings) {
+    return this.call<CheckpointSettings>("set_checkpoint_settings", settings);
+  }
+
+  runCheckpointNow() {
+    return this.call<string>("run_checkpoint_now");
+  }
+
+  takeStatusNotices() {
+    return this.call<StatusNotice[]>("take_status_notices");
+  }
+
+  getSetupState() {
+    return this.call<SetupState>("get_setup_state");
+  }
+
+  chooseSetup(choice: "fresh" | "restore") {
+    return this.call<SetupState>("choose_setup", choice);
+  }
+
+  skipSetupStep(step: "engine" | "lichess") {
+    return this.call<SetupState>("skip_setup_step", step);
+  }
+
+  finishSetup() {
+    return this.call<SetupState>("finish_setup");
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

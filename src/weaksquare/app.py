@@ -23,6 +23,7 @@ from weaksquare.adapters.backup_files import BackupFiles, make_backup, prune, re
 from weaksquare.adapters.chesscom import ChesscomGames, classify_game_error
 from weaksquare.adapters.db.connection import Database
 from weaksquare.adapters.db.migrate import NewerSchemaError, load_migrations, migrate, read_version
+from weaksquare.adapters.db.repos.checkpoints import CheckpointsRepo
 from weaksquare.adapters.db.repos.coach import (
     AiRunsRepo,
     CoachRepo,
@@ -60,6 +61,7 @@ from weaksquare.adapters.db.repos.user_data import (
     SessionsRepo,
     SettingsRepo,
     SyncFields,
+    has_user_data,
 )
 from weaksquare.adapters.desktop import (
     Desktop,
@@ -103,6 +105,7 @@ from weaksquare.jobs.runner import JobRunner
 from weaksquare.services.account import AccountDeps, AccountService, AccountStatus, ListenerErrors
 from weaksquare.services.analysis import AnalysisService
 from weaksquare.services.backup import BackupService, RestoreNotice
+from weaksquare.services.checkpoints import CheckpointService
 from weaksquare.services.coach import CoachService
 from weaksquare.services.db_update import UpdateCheckService, Urls
 from weaksquare.services.engine import EngineService
@@ -128,6 +131,7 @@ from weaksquare.services.reasons import ReasonsService
 from weaksquare.services.repertoire import RepertoireService
 from weaksquare.services.review import ReviewService
 from weaksquare.services.session import SessionService
+from weaksquare.services.setup_state import SetupService
 from weaksquare.services.stats import StatsService
 from weaksquare.services.studies import StudiesClient, StudiesService, StudyErrors, load_starter
 from weaksquare.services.sync import SyncDeps, SyncService, SyncUpdate
@@ -296,6 +300,8 @@ class Services:
     studies: StudiesService
     lichess_window: Any
     backup: BackupService
+    checkpoints: CheckpointService
+    setup: SetupService
 
     def close(self) -> None:
         self.lichess_window.close()  # v0.14: the Lichess window closes with the app
@@ -450,9 +456,16 @@ def build_services(
     llm_usage = LlmUsageService(llm_settings, LlmUsageRepo(db), clock)
     llm_cache = LlmCacheRepo(db)
     explain = ExplainService(sessions, llm_settings, llm_usage, llm_cache, runner, clock)
+    new_games_hooks: list[Callable[[int], None]] = []  # v1.0: the checkpoint count trigger, attached below
+
+    def new_games(n: int) -> None:
+        for hook in new_games_hooks:
+            hook(n)
+
     games = GameLibraryService(
         games_repo, AccountSyncRepo(db), SettingsRepo(db), runner, clock, account,
         lichess_games or LichessGames(http), chesscom or ChesscomGames(http), classify_game_error,
+        on_new_games=new_games,
     )  # fmt: skip
     custom_puzzles = CustomPuzzlesRepo(db)
     puzzle_import = PuzzleImportService(custom_puzzles, runner, clock)
@@ -477,6 +490,9 @@ def build_services(
     )  # fmt: skip
     journal = JournalService(JournalRepo(db), DailyLogRepo(db), games_repo, StatsRepo(db), clock)
     coach.attach_plan(plan, journal)
+    checkpoints = CheckpointService(CheckpointsRepo(db), coach, games, runner, clock, SettingsRepo(db), scheduler)
+    new_games_hooks.append(checkpoints.after_new_games)  # FR-10.32: a sync with new games may make one due
+    coach.attach_checkpoints(checkpoints.ai_context)  # FR-10.37: a checkpoint report's AI prompt gets its statuses
     opening_sources = OpeningSources(
         LichessExplorer(http), WikibooksClient(http), ExplorerCacheRepo(db), WikibooksPagesRepo(db),
         SettingsRepo(db), account, clock,
@@ -526,7 +542,12 @@ def build_services(
         SettingsRepo(db), runner, clock, scheduler,
         load_migrations(config.MIGRATIONS_DIR / "user")[-1].version, restart, restore_notice,
     )  # fmt: skip
+    setup = SetupService(SettingsRepo(db), puzzle_db, engine, account, lambda: has_user_data(db))  # v1.0 wizard
+    if restore_notice is not None and restore_notice.error is None:
+        setup.note_restored()  # only a restore that swapped in counts as the wizard's choice (v1.0-B1)
     return Services(
+        setup=setup,
+        checkpoints=checkpoints,
         backup=backup,
         studies=studies,
         lichess_window=lichess_window,
@@ -677,6 +698,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         studies=services.studies,
         lichess_window=services.lichess_window,
         backup=services.backup,
+        checkpoints=services.checkpoints,
+        setup=services.setup,
     )
     if isinstance(clock, OffsetClock):
         clock.set_offset_days(services.ui_settings.time_offset_days())
@@ -688,6 +711,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     services.games.sync_on_open()  # FR-11.27: new games from your linked accounts, in the background (v0.8)
     services.game_puzzles.start_backfill()  # v0.10, once: tags and puzzles for games analyzed before v0.10
     services.backup.start()  # FR-15.3: an automatic backup that came due while the app was closed
+    services.checkpoints.start()  # FR-10.32: a schedule that came due while closed, or enough new games
 
     scheme = services.ui_settings.get().color_scheme
     set_app_user_model_id()  # NFR-8a: its own taskbar button and icon, not python.exe's

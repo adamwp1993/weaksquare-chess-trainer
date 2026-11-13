@@ -1,6 +1,8 @@
 // Mock client with fixed data, for UI development (`npm.cmd --prefix web run dev -- --mode mock`)
 // and for Playwright. Deterministic: no clock-dependent data and no randomness, so screenshots are stable.
 //
+// v1.0: `?scenario=fresh` is a brand-new install (no puzzle database, no Stockfish, signed out): the first-run
+// wizard. `?scenario=empty` is an install whose puzzle database is missing, which never shows the wizard.
 // Scenarios via the page URL: `?scenario=empty` starts with no puzzle database imported, and
 // `?scenario=upgrade` with a v0.1 database that needs the local upgrade, and `?scenario=update`
 // with a newer puzzle export to offer (FR-2.5).
@@ -21,6 +23,7 @@
 // `?file=none`, `?mine=1` starts with one imported puzzle of your own).
 // v0.10: the Coach lives in mockCoach.ts (`?coach=report` starts with one report, `?coach=banner` also with a
 // suggestion waiting behind the banner); `?showbest=1` starts with Show best moves on.
+// v1.0: checkpoints live in mockProgress.ts (`?progress=history` starts with six checkpoints, four of them rebuilt).
 import { Chess } from "chess.js";
 import type {
   AnalysisPurpose,
@@ -44,6 +47,7 @@ import { ApiCallError, type CoachAiOptions, type CoachParams } from "./ApiClient
 import { mockAnalysis } from "./mockEngine";
 import { mockCheckPosition, mockImportPgn, mockPgnGame, mockPopular } from "./mockAnalysisTab";
 import { MockCoach } from "./mockCoach";
+import { MockProgress } from "./mockProgress";
 import { MockOpenings } from "./mockOpenings";
 import { MockStudies } from "./mockStudies";
 import { MockPlan } from "./mockPlan";
@@ -99,6 +103,8 @@ import type {
   BackupInfo,
   BackupStatus,
   RestoreNotice,
+  CheckpointSettings,
+  SetupState,
 } from "./types";
 
 const INSTALLED: PuzzleDbStatus = {
@@ -361,6 +367,14 @@ export class MockClient implements ApiClient {
   private readonly studies = new MockStudies();
   private studyResults = new Map<string, StudyAddResult>();
   private lichessWindowOpen = false;
+  private progress!: MockProgress;
+  // v1.0 the first-run wizard: only `?scenario=fresh` starts unfinished.
+  private setup: { finished: boolean; choice: "fresh" | "restore" | null; skipped: Set<string>; hasData: boolean } = {
+    finished: true,
+    choice: null,
+    skipped: new Set(),
+    hasData: true,
+  };
 
   constructor(search: string = typeof window !== "undefined" ? window.location.search : "") {
     const params = new URLSearchParams(search);
@@ -378,6 +392,12 @@ export class MockClient implements ApiClient {
       quote: (kind, what) => this.llm.gameQuote(kind, what),
       startAi: (kind, what, make) => this.llm.startGame(kind, what, make),
       aiPlan: () => this.plan.aiPlan(),
+    });
+    this.progress = new MockProgress(params, {
+      emit: (job) => this.emit(job),
+      jobId: () => `job-${this.nextJob++}`,
+      calls: this.calls,
+      report: (n, created) => this.coach.checkpointReport(n, created),
     });
     this.plan = new MockPlan(params, {
       calls: this.calls,
@@ -427,7 +447,17 @@ export class MockClient implements ApiClient {
       (window as unknown as { __mockSyncNow: () => void }).__mockSyncNow = () => this.drain();
     }
     this.status =
-      scenario === "empty" ? { ...EMPTY } : scenario === "upgrade" ? { ...INSTALLED, needs_upgrade: true } : { ...INSTALLED };
+      scenario === "empty" || scenario === "fresh"
+        ? { ...EMPTY }
+        : scenario === "upgrade" || scenario === "fresh-upgrade"
+          ? { ...INSTALLED, needs_upgrade: true }
+          : { ...INSTALLED };
+    // fresh-upgrade: a new install whose puzzles.db is an older version (the wizard's puzzle step upgrades it)
+    if (scenario === "fresh" || scenario === "fresh-upgrade") {
+      this.setup = { finished: false, choice: null, skipped: new Set(), hasData: false };
+      this.account = { state: "signed_out", username: null, rating: null, provisional: false };
+      this.engine = { ...this.engine, state: "not_installed", path: null, name: null, source: null, message: "Stockfish isn't installed." };
+    }
     if (scenario === "update") {
       this.offer = {
         export_date: "2026-11-01",
@@ -2464,6 +2494,71 @@ export class MockClient implements ApiClient {
     const n = this.restoreNotice;
     this.restoreNotice = null;
     return n;
+  }
+
+  // ---- v1.0: the first-run wizard -----------------------------------------------------------------------
+  async getSetupState(): Promise<SetupState> {
+    const s = this.setup;
+    const puzzles = this.status.installed && !this.status.needs_upgrade;
+    const engineReady = this.engine.state === "ready";
+    const signedIn = this.account.state === "signed_in" || this.account.state === "offline";
+    const show = !s.finished && (!s.hasData || !puzzles || s.choice !== null);
+    let step: SetupState["step"] = "done";
+    if (s.finished) step = "done";
+    else if (s.choice === null && !s.hasData) step = "welcome";
+    else if (!puzzles) step = "puzzles";
+    else if (!engineReady && !s.skipped.has("engine")) step = "engine";
+    else if (!signedIn && !s.skipped.has("lichess")) step = "lichess";
+    return {
+      show, step, choice: s.choice, has_data: s.hasData, puzzles_installed: puzzles, engine_ready: engineReady,
+      signed_in: signedIn, puzzle_job: this.status.import_job_id, engine_job: this.engine.install_job_id,
+      puzzles_need_upgrade: this.status.installed && this.status.needs_upgrade,
+    }; // prettier-ignore
+  }
+
+  async chooseSetup(choice: "fresh" | "restore") {
+    if (choice === "fresh") this.setup.choice = choice; // "restore" is only pending until the swap (v1.0-B1)
+    this.calls.push(`setupChoice:${choice}`);
+    return this.getSetupState();
+  }
+
+  async skipSetupStep(step: "engine" | "lichess") {
+    if (step !== "engine" && step !== "lichess") {
+      throw new ApiCallError({ code: "invalid_argument", message: "Only the Stockfish and Lichess steps can be skipped.", retryable: false });
+    }
+    this.setup.skipped.add(step);
+    this.calls.push(`setupSkip:${step}`);
+    return this.getSetupState();
+  }
+
+  async finishSetup() {
+    if ((await this.getSetupState()).step !== "done") {
+      throw new ApiCallError({ code: "invalid_argument", message: "Finish the remaining steps first, or skip them.", retryable: false });
+    }
+    this.setup.finished = true;
+    this.calls.push("setupFinish");
+    return this.getSetupState();
+  }
+
+  // ---- v1.0: checkpoints and the Progress tab (mockProgress.ts) ----------------------------------------
+  async getProgress() {
+    return this.progress.view();
+  }
+
+  async getCheckpointSettings() {
+    return this.progress.getSettings();
+  }
+
+  async setCheckpointSettings(settings: CheckpointSettings) {
+    return this.progress.setSettings(settings);
+  }
+
+  async runCheckpointNow() {
+    return this.progress.runNow();
+  }
+
+  async takeStatusNotices() {
+    return this.progress.takeNotices();
   }
 
   onEvent(listener: (event: BackendEvent) => void) {

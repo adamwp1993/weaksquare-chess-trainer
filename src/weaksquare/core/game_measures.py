@@ -7,8 +7,8 @@ held +2 in, …) needs at least `MIN_GAMES` games. Below that the measure is sho
 
 **Weaknesses** use the v0.10 shape (`core/coach.Weakness`): a count of occurrences, a rate per 10 games
 over all the report's games, a severity (the average eval lost in the related moments, capped at
-1000 cp; `DEFAULT_SEVERITY` when a game has no such moment) and the score, rate × severity. Statuses
-come with checkpoints (v1.0).
+1000 cp; `DEFAULT_SEVERITY` when a game has no such moment) and the score, rate × severity. Their statuses
+over time come from checkpoints (v1.0, `core/fix_tracking.py`).
 
 Occurrences per kind (REQUIREMENTS FR-10.57, v0.11 planning):
 - ``opening:<family>``: you leave the opening (ply 30) at −100 or worse, or make a mistake or blunder in

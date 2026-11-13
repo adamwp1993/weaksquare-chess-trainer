@@ -752,3 +752,48 @@ def test_settings_your_data(page) -> None:  # type: ignore[no-untyped-def]
     page.get_by_test_id("settings-your-data").scroll_into_view_if_needed()
     page.mouse.move(1270, 890)
     shot(page, "settings-your-data")
+
+
+def test_coach_progress(page) -> None:  # type: ignore[no-untyped-def]
+    """v1.0 (FR-10.38): the Progress tab with rebuilt and live checkpoints, one weakness of each status."""
+    page.goto(page.base_url + "/?progress=history")
+    page.get_by_test_id("status-notices").wait_for()
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-progress").click()
+    page.get_by_test_id("progress-cards").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "coach-progress", full_page=True)
+
+
+def test_coach_progress_empty(page) -> None:  # type: ignore[no-untyped-def]
+    """v1.0: the Progress tab before any checkpoint, with the settings open."""
+    page.goto(page.base_url + "/")
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-progress").click()
+    page.get_by_test_id("progress-empty").wait_for()
+    page.get_by_test_id("checkpoint-settings-toggle").click()
+    page.get_by_test_id("checkpoint-settings").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "coach-progress-empty", full_page=True)
+
+
+def test_status_notice(page) -> None:  # type: ignore[no-untyped-def]
+    """v1.0 (FR-10.38): a status change, once, on the main page."""
+    page.goto(page.base_url + "/?progress=history")
+    page.get_by_test_id("match-count").filter(has_text="puzzles match").wait_for()
+    page.get_by_test_id("status-notices").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "status-notice")
+
+
+def test_first_run_wizard(page) -> None:  # type: ignore[no-untyped-def]
+    """v1.0 (NFR-8, FR-15.4): the wizard's first step, and its Stockfish step."""
+    page.goto(page.base_url + "/?scenario=fresh")
+    page.get_by_test_id("wizard-welcome").wait_for()
+    page.mouse.move(1270, 890)
+    shot(page, "wizard-welcome")
+    page.get_by_test_id("wizard-fresh").click()
+    page.get_by_role("button", name="Download from Lichess").click()
+    page.get_by_test_id("wizard-engine").wait_for(timeout=10_000)
+    page.mouse.move(1270, 890)
+    shot(page, "wizard-engine")

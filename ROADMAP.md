@@ -429,5 +429,61 @@ Scope:
 
 ---
 
-## After v1.0 (parked ideas from review, not committed)
-Threat-scan habit trainer, "Is there a tactic?" mode, visualization mode, think-first lock and timers, conversion practice vs. Stockfish, Play from here, self-review-before-engine, "What if?" questions, adaptive difficulty, pattern-based SRS, daily session builder, confirm-move toggle, notes and pattern journal, CSV export, in-app Help panel that renders the User Guide, a packaged and code-signed installer if other people ask for one.
+## v1.2 – v1.6: Training beyond tactics (Adam, 2026-11-10)
+Added by Adam after the v1.0 build started, from a review of what a club player still can't train in the app: endgames, converting won positions, judging your own play, using your openings in real games, positional understanding and playing at game speed. Each version follows the same 9-step process. Its requirement IDs and *Done when* details are written at its planning step, so what's below is the scope, not a spec. The order can change at any planning step.
+
+---
+
+## v1.2: Endgame trainer
+**Goal:** learn the endgames that decide club games, by playing them out against perfect defense.
+- **Theory lessons:** a built-in, curated set of positions (king and pawn with opposition and key squares, Lucena, Philidor, rook against pawn, queen against pawn, the basic mates) to win or hold. Each has a short explanation written for the app, never copied text.
+- **Perfect defense:** up to 7 pieces, replies come from the Lichess tablebase API, through `adapters/http.py` with caching. Offline or with more pieces, Stockfish replies, and the screen says so.
+- **Your own endgames:** the endgame types the Coach flags in your games (FR-10.53) become drills from your actual positions.
+- **Spaced repetition** per position, like Practice mode (FR-12.9), with its own stats that never touch puzzle stats or Lichess ratings.
+
+**Adam's manual test (draft):** win K+P against K from a key-square position, hold a Philidor as the defender, win a Lucena; replay one of your own endgame mistakes; then go offline and check the Stockfish fallback says so.
+
+---
+
+## v1.3: Play out your positions
+**Goal:** practice the moments that matter by playing them, not just solving them. These are the parked *Play from here* and *conversion practice* ideas.
+- **Play from here:** from any position in Game Review, the Analysis tab or a puzzle, play on against Stockfish at a chosen strength (UCI_LimitStrength / UCI_Elo), with an optional clock. Validated through python-chess like every engine request (§9.1).
+- **Convert your wins:** the Coach's *Winning positions not won* (FR-10.53) and your blown wins become a queue of positions to win from. It's a success if you win, or reach a tablebase-won or clearly winning position.
+- **Hold your losses:** the same for positions where you collapsed from equal.
+- Results feed the Progress page as a secondary signal only. They never decide a weakness's status, which stays with the game rate (§10.8).
+
+**Adam's manual test (draft):** convert 5 of your own +2 positions against Stockfish at about your rating; play on from a Game Review position with a clock; check nothing changed in puzzle stats or ratings.
+
+---
+
+## v1.4: Judge your own play
+**Goal:** train the thinking habits engines can't give you: knowing when a moment is critical, and judging your own moves before seeing the engine. These are the parked *self-review-before-engine* idea plus a critical-moment drill.
+- **Annotate first:** an optional Game Review mode where you mark the moments you think were critical and write your candidate moves and evaluation before any engine output shows. Then the review compares them: moments you found, moments you missed, and whether your candidates were good. It builds on Show best moves (FR-11.35).
+- **"Is this a critical moment?" drill:** positions from your games, some critical (a big eval swing was available) and some quiet. You say which is which, and, when clock data exists, the app shows how long you actually spent there ("4 seconds on the move that lost").
+- The Coach gets a measure for it: the share of critical moments you spotted, tracked like a weakness once there's enough data.
+
+**Adam's manual test (draft):** annotate a recent game before the engine and compare; do 20 critical-moment positions; check the time-spent figures against the game's clocks.
+
+---
+
+## v1.5: Openings in practice
+**Goal:** connect your repertoire to the games you actually play, and prepare for a specific opponent.
+- **Repertoire vs. your games:** after a sync, each game shows where you or your opponent left your repertoire (FR-12.4). You can add the reply you were missing, or mark the line as checked. A list shows your most common unprepared positions.
+- **Opponent prep:** enter a Lichess or chess.com username and get their opening tree as White and Black from their public games (stored apart, as for the Coach's *another player*, FR-10.3), where they score worst, and how it meets your repertoire. Optional AI summary under the usual guardrails (§9.3), with no usernames in the prompt.
+
+**Adam's manual test (draft):** sync, then check the deviation point in 5 games against your repertoire; add one missing reply and drill it; prep against a known opponent and sanity-check their tree on Lichess.
+
+---
+
+## v1.6: Positional play and game speed
+**Goal:** train the parts of chess that tactics puzzles don't: plans and positional judgment, and playing well under the clock. These are the parked *think-first lock and timers*, plus guess-the-move.
+- **Guess the move:** step through a master game (from the Lichess masters explorer when signed in, or a PGN you import) as one side. Guess each move and score it against Stockfish and the game move, with a short explanation of the plan available afterwards (optional AI, §9.3).
+- **Timed sessions:** an optional clock per puzzle or per session in the Mixer, with results by time taken. Faster or slower than your usual pace is shown, never used to change ratings (§8.3).
+- **Think-first lock:** an optional few-second lock before your first move in a puzzle, to break the impulse-move habit. It counts toward the `rushed` mistake reason (§7.3).
+
+**Adam's manual test (draft):** guess through one master game in an opening you play; do a timed session and compare accuracy with your untimed rate; play 20 puzzles with the think-first lock and check the reasons breakdown.
+
+---
+
+## After v1.6 (parked ideas from review, not committed)
+Threat-scan habit trainer, "Is there a tactic?" mode, visualization mode, "What if?" questions, adaptive difficulty, pattern-based SRS, daily session builder, confirm-move toggle, notes and pattern journal, CSV export, in-app Help panel that renders the User Guide, a packaged and code-signed installer if other people ask for one.

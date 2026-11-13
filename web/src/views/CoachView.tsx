@@ -34,8 +34,10 @@ import { PlanTab } from "../components/PlanTab";
 import { SinceLastReport } from "../components/SinceLastReport";
 import { WholeGameMeasures } from "../components/WholeGameMeasures";
 import { useJob } from "../state/useJob";
+import { reasonMix } from "../text/reasons";
+import { ProgressTab } from "../components/ProgressTab";
 
-export type CoachTab = "report" | "plan" | "journal";
+export type CoachTab = "report" | "plan" | "journal" | "progress";
 
 const SOURCES = [
   { value: "puzzles", label: "Puzzle history", note: "No engine time, the fewest AI tokens: the themes you fail when you know it's a puzzle." },
@@ -43,24 +45,6 @@ const SOURCES = [
   { value: "both", label: "Both", note: "Minutes of engine time: the gaps between puzzles and games, like forks you solve as puzzles but walk into in games." },
 ] as const;
 const TIME_CLASSES = ["bullet", "blitz", "rapid", "classical", "daily"];
-const REASON_LABEL: Record<string, string> = {
-  didntLook: "didn't look",
-  missedResource: "missed a resource",
-  miscalculated: "miscalculated",
-  unknownPattern: "unknown pattern",
-  rushed: "rushed",
-  misclick: "misclick",
-};
-
-function reasons(r: Record<string, number>): string {
-  const total = Object.values(r).reduce((a, b) => a + b, 0);
-  if (!total) return "—";
-  return Object.entries(r)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, n]) => `${Math.round((100 * n) / total)}% ${REASON_LABEL[k] ?? k}`)
-    .join(", ");
-}
-
 /** FR-10.73: better or worse only where the guards allow it. */
 function trendText(w: CoachWeakness): string {
   const t = w.trend;
@@ -123,7 +107,7 @@ function WeaknessTable({
                 <Text size="xs">{trendText(w)}</Text>
               </Table.Td>
               <Table.Td>
-                <Text size="xs">{reasons(w.reasons)}</Text>
+                <Text size="xs">{reasonMix(w.reasons)}</Text>
               </Table.Td>
               <Table.Td>
                 <Group gap={2}>
@@ -165,7 +149,7 @@ function ReportView({
   return (
     <Stack gap="md" data-testid="coach-report">
       <Stack gap={2}>
-        <Title order={4}>{r.subject_label}</Title>
+        <Title order={4}>{r.checkpoint !== null ? `Checkpoint #${r.checkpoint}` : r.subject_label}</Title>
         <Text size="sm" c="dimmed">
           {r.source === "puzzles" ? "Puzzle history" : `${r.games} game${r.games === 1 ? "" : "s"}`}
           {period ? ` · ${period}` : ""} · {r.created_at.slice(0, 16).replace("T", " ")}
@@ -188,7 +172,7 @@ function ReportView({
             <b>{r.per10.inaccuracies ?? 0}</b> inaccuracies
           </Text>
           {r.low_clock_errors > 0 && <Text size="sm">{r.low_clock_errors} on a low clock</Text>}
-          {Object.keys(r.reasons).length > 0 && <Text size="sm">Why: {reasons(r.reasons)}</Text>}
+          {Object.keys(r.reasons).length > 0 && <Text size="sm">Why: {reasonMix(r.reasons)}</Text>}
         </Group>
       )}
       {r.comparison && <SinceLastReport c={r.comparison} />}
@@ -345,6 +329,9 @@ export function CoachView({
         </Tabs.Tab>
         <Tabs.Tab value="journal" data-testid="coach-tab-journal">
           Journal
+        </Tabs.Tab>
+        <Tabs.Tab value="progress" data-testid="coach-tab-progress">
+          Progress
         </Tabs.Tab>
       </Tabs.List>
       {/* The Report tab stays mounted so a Coach run or an AI answer carries on while you look at the others. */}
@@ -524,7 +511,7 @@ export function CoachView({
                     onClick={() => api.getCoachReport(s.id).then(setReport, (e: Error) => setError(e.message))}
                     data-testid={`coach-history-${s.id}`}
                   >
-                    {s.created_at.slice(0, 10)} · {s.subject_label} ·{" "}
+                    {s.created_at.slice(0, 10)} · {s.checkpoint !== null ? `Checkpoint #${s.checkpoint}` : s.subject_label} ·{" "}
                     {s.source === "puzzles" ? "puzzles" : `${s.games} game${s.games === 1 ? "" : "s"}`}
                   </Button>
                 ))}
@@ -545,6 +532,19 @@ export function CoachView({
     </Grid>
       </Tabs.Panel>
       <Tabs.Panel value="plan">{tab === "plan" && <PlanTab version={planVersion} onChanged={onPlanChanged} onStart={onStartTask} />}</Tabs.Panel>
+      <Tabs.Panel value="progress">
+        {tab === "progress" && (
+          <ProgressTab
+            onOpenReport={(id) =>
+              api.getCoachReport(id).then((r) => {
+                setReport(r);
+                onTab("report");
+              }, (e: Error) => setError(e.message)) // prettier-ignore
+            }
+            onReview={onReview}
+          />
+        )}
+      </Tabs.Panel>
       <Tabs.Panel value="journal">
         {tab === "journal" && (
           <JournalTab

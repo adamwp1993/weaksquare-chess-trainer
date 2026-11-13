@@ -131,6 +131,21 @@ def test_the_plan_and_journal_tabs(page: Page) -> None:
     _assert_all_have_tips(page, "Journal tab")
 
 
+def test_the_progress_tab_and_checkpoint_settings(page: Page) -> None:
+    """v1.0 (FR-10.32, 10.35, 10.37, 10.38): every checkpoint setting has its tooltip, whichever schedule is shown."""
+    page.goto(page.base_url + "/?progress=history")  # type: ignore[attr-defined]
+    page.get_by_test_id("nav-coach").click()
+    page.get_by_test_id("coach-tab-progress").click()
+    page.get_by_test_id("checkpoint-settings-toggle").click()
+    page.get_by_test_id("checkpoint-settings").wait_for()
+    _assert_all_have_tips(page, "Progress tab")
+    for kind in ("Every N days", "On a weekday"):
+        page.get_by_test_id("checkpoint-schedule").get_by_text(kind).click()
+        _assert_all_have_tips(page, f"Progress tab, {kind}")
+    assert {"checkpoints.everyGames", "checkpoints.window", "checkpoints.schedule", "checkpoints.weekday",
+            "checkpoints.autoAi", "checkpoints.notices", "checkpoints.fixed"} <= set(_tips(page))  # fmt: skip
+
+
 def test_my_games_and_game_review(page: Page) -> None:
     page.goto(page.base_url + "/?ai=on")  # type: ignore[attr-defined]
     page.get_by_test_id("nav-games").click()

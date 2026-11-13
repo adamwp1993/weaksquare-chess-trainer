@@ -79,6 +79,15 @@ class ReasonRow:
     note: str | None
 
 
+def has_user_data(db: Database) -> bool:
+    """v1.0 first-run wizard: does user.db already hold games, puzzle attempts or Coach reports?"""
+    with db.session() as conn:
+        return any(
+            conn.execute(f"SELECT EXISTS (SELECT 1 FROM {t})").fetchone()[0]
+            for t in ("games", "attempts", "coach_reports")
+        )
+
+
 class SettingsRepo:
     def __init__(self, db: Database) -> None:
         self._db = db

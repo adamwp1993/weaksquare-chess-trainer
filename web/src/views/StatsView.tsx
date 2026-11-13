@@ -1,4 +1,4 @@
-import { Alert, Group, Loader, Modal, Paper, SimpleGrid, Stack, Table, Tabs, Text } from "@mantine/core";
+import { Alert, Button, Group, Loader, Modal, Paper, SimpleGrid, Stack, Table, Tabs, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { RatingHistory, StatRow, StatsReport } from "../api/types";
@@ -64,7 +64,7 @@ function StatTable({ rows, first, testId }: { rows: StatRow[]; first: string; te
 
 // FR-9.1, FR-9.2: accuracy per theme, length and rating band, and the "first move right, line
 // wrong" rate, from every attempt you've made in this app; FR-9.4: the Lichess rating trend.
-export function StatsView({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+export function StatsView({ opened, onClose, onOpenProgress }: { opened: boolean; onClose: () => void; onOpenProgress?: () => void }) {
   const [report, setReport] = useState<StatsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<RatingHistory | null>(null);
@@ -92,6 +92,17 @@ export function StatsView({ opened, onClose }: { opened: boolean; onClose: () =>
       )}
       {report && o && (
         <Stack gap="md" data-testid="stats-view">
+          {onOpenProgress && (
+            // FR-9.6: weakness tracking and checkpoint history live on the Coach's Progress tab.
+            <Group justify="space-between" data-testid="stats-progress-link">
+              <Text size="sm" c="dimmed">
+                How your weaknesses are changing over time is on the Coach's Progress tab.
+              </Text>
+              <Button size="xs" variant="light" onClick={onOpenProgress} data-testid="stats-open-progress">
+                Open Progress
+              </Button>
+            </Group>
+          )}
           <SimpleGrid cols={3}>
             <Summary label="Puzzles played" value={o.attempts.toLocaleString("en-US")} hint={`${o.solved.toLocaleString("en-US")} solved`} testId="stats-played" />
             <Summary label="Accuracy" value={pct(o.accuracy)} hint="Solved with no wrong move and no help" testId="stats-accuracy" />

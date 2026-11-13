@@ -54,9 +54,9 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Test key**, and the silent check of a saved key at start-up, only ask the provider whether the model exists. That's free and sends no puzzle.
     - **Explain this move** (v0.9) sends one move of one of your games: the position before it (FEN), the move you played and its grade, Stockfish's evals before and after it, its best line and top lines from that position, its reply to your move, the game phase and move number, and the attack and defence facts. Nothing else about the game.
     - **Explain my game** (v0.9) sends one game: which color you played, the result from your side (won, lost or drawn), the game's moves in SAN (for example `1. e4 e5 2. Nf3`), how many inaccuracies, mistakes and blunders Stockfish found for you, and for each key moment the same facts as Explain this move. *From v0.14* it also sends the game's **What you did well** list, as the sentences shown on the Review screen. The app rebuilds the move list from the moves themselves, so **no player names, ratings, dates, links, clocks, comments or other PGN headers are sent**, and no game ID. The players are "you" and "your opponent". It also sends the list of puzzle themes the model may recommend from.
-    - **Get AI coaching** (v0.10, the Coach) sends one report: its numbers (how often each weakness happened per 10 games, how much it cost, your mistake-reason counts, the puzzles-vs-games table, your puzzle accuracy per theme) and 12 example positions (20 at **Detailed**), each as a position (FEN), the move played, Stockfish's best line and its themes, labelled E1, E2 and so on. **No player names or usernames, no dates, links, clocks, game IDs or PGNs** are sent, whoever the report is about. It also sends the list of puzzle themes the model may recommend from.
-      - *From v0.11*, a **standard run** on a report with games also sends the whole-game measures and one summary per game, labelled G1, G2…: which color you played, the result, the opening's name and ECO code, the number of moves, when each side castled, your development by move 10, the pawn structure at move 15, trades made while ahead or behind, the eval at move 15, mistakes per phase, the endgame type, whether you held +2 or −2, your mistakes under 10% of your clock, and 3 key moments (5 at **Detailed**), each as a position (FEN), the move with its number and the best move in SAN, the evals, the grade, Missed or Allowed, its Lichess themes, the reason you picked for it (for example *didn't look*), and your clock as a **percentage** of your starting time, never the clock itself. The report's numbers still include the puzzles-vs-games table. Example positions carry their game label and move number. It also sends the list of lesson topics the AI may pick from. Still no names, usernames, ratings, dates, links, raw clocks, comments, game IDs or PGNs.
-      - *From v0.12*, on your own reports, it also sends **how your plan is going**, as numbers only: tasks done and skipped per type and weakness, minutes, and puzzle accuracy per theme. It sends your plan's shape (weeks, days a week, minutes a day). On any report with an earlier one, it also sends **Since last report**, as numbers only: weakness keys and their rates per report, labelled *this report*, *1 report ago* and so on, with the days between them. No games, positions or text from earlier reports. The AI's plan is checked task by task on your PC.
+    - **Get AI coaching** (v0.10, the Coach) sends one report: its numbers (how often each weakness happened per 10 games, how much it cost, your mistake-reason counts, the puzzles-vs-games table, your puzzle accuracy per theme) and 12 example positions (20 at **Detailed**), each as a position (FEN), the move played, Stockfish's best line and its themes, labeled E1, E2 and so on. **No player names or usernames, no dates, links, clocks, game IDs or PGNs** are sent, whoever the report is about. It also sends the list of puzzle themes the model may recommend from.
+      - *From v0.11*, a **standard run** on a report with games also sends the whole-game measures and one summary per game, labeled G1, G2…: which color you played, the result, the opening's name and ECO code, the number of moves, when each side castled, your development by move 10, the pawn structure at move 15, trades made while ahead or behind, the eval at move 15, mistakes per phase, the endgame type, whether you held +2 or −2, your mistakes under 10% of your clock, and 3 key moments (5 at **Detailed**), each as a position (FEN), the move with its number and the best move in SAN, the evals, the grade, Missed or Allowed, its Lichess themes, the reason you picked for it (for example *didn't look*), and your clock as a **percentage** of your starting time, never the clock itself. The report's numbers still include the puzzles-vs-games table. Example positions carry their game label and move number. It also sends the list of lesson topics the AI may pick from. Still no names, usernames, ratings, dates, links, raw clocks, comments, game IDs or PGNs.
+      - *From v0.12*, on your own reports, it also sends **how your plan is going**, as numbers only: tasks done and skipped per type and weakness, minutes, and puzzle accuracy per theme. It sends your plan's shape (weeks, days a week, minutes a day). On any report with an earlier one, it also sends **Since last report**, as numbers only: weakness keys and their rates per report, labeled *this report*, *1 report ago* and so on, with the days between them. No games, positions or text from earlier reports. The AI's plan is checked task by task on your PC.
       - **Include my journal** (v0.12, off unless you tick it) also sends your journal entries on the report's games and from its period on, **as written**, with web addresses removed: the newest 30, up to 1,000 characters each, shown to you first. A game goes as its G label or not at all, never as a game ID or link, and no entry date is sent. A name you typed yourself goes too, so edit the entry first if you'd rather it didn't. Your journal otherwise stays on this PC.
       - **Advanced analysis** (v0.11, off unless you tick it) also sends the moves of up to your chosen number of games (10–50) in SAN only, rebuilt by the app from the moves, so no PGN headers, clocks or comments.
       - **Include my notes** (v0.11, off unless you tick it) also sends your mistake-reason notes, exactly as listed in its preview, with web addresses removed.
@@ -73,6 +73,8 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
     - **Your Lichess puzzle dashboard:** with the **Puzzle history** or **Both** source and while you're signed in, the app reads your per-theme puzzle results for the last 30 days from lichess.org (`/api/puzzle/dashboard/30`). Nothing is sent but the request.
     - The report, the Suggested mix and the puzzles made from your games stay in `user.db`. Only **Get AI coaching** sends anything about them, as described under AI explanations above.
     - **Your training plan and journal** (v0.12) stay in `user.db`. Building a plan sends nothing. The journal goes to the AI only with **Include my journal**, for that one run.
+    - **Checkpoints** (v1.0): a checkpoint run on a schedule or with **Run checkpoint now** first syncs your linked accounts, exactly like **Refresh** in My games. The analysis, the statuses and the charts stay on your PC. Rebuilding your past checkpoints sends nothing.
+    - **The AI checkpoint summary** (v1.0, on by default, but only with an AI key) sends what **Get AI coaching** sends for the checkpoint's report, at the Summary level, plus the checkpoint's numbers: each weakness's label, status, starting rate and rate now (per 10 games), the status changes, and the **Why this mix** lines. Never Advanced analysis, your notes or your journal. It runs without asking only if its estimate is under your per-run cap and within your monthly budget.
   - **The opening trainer** (v0.13). The book ships with the app, and your repertoire stays in `user.db`:
     - **Popular moves**, only while you're signed in: when you ask for lines to be continued, run **Build my repertoire**, or save notes with **Extend past the book** on, the app sends positions (FEN) and your chosen sources and rating bands to explorer.lichess.org, with your Lichess sign-in. No games or anything else about you are sent. Answers are saved on your PC.
     - **AI notes** go to your AI provider, as described under AI explanations below. They hold only opening data: the opening's name and ECO code, the line's moves in SAN, positions (FEN), Stockfish's evals and lines, and Wikibooks text. Nothing about you or your games.
@@ -90,12 +92,32 @@ Planned chapters, added only when their version ships (see CLAUDE.md "Documentat
   - **Links that open your browser** (v0.1): **Open this puzzle on Lichess** (after a puzzle) and the **Source code** link on the About screen open the page in your default browser, like any link you click. The app itself sends nothing.
     - **Lesson pointers** (v0.11) open Lichess Practice or Lichess Learn pages, or a search on YouTube, chess.com or your own site, in your default browser. A search sends the topic's words (for example *chess rook endgames*) to the site you click, and nothing else. The app never visits those sites itself.
 
+## First run
+*Added in v1.0.*
+
+The first time the app opens on a new install, a short wizard gets you set up. It shows the step you're on, and if you close the app partway, it carries on from the same step next time.
+
+![The first-run wizard](img/wizard-welcome.png)
+
+1. **Welcome:** choose **Start fresh**, or **Restore from a backup…** to carry your data over from another PC (a file you made with **Back up now**; see [Backing up and restoring your data](#backing-up-and-restoring-your-data)). A restore shows what's in the backup, then **Restore and restart** replaces this install's data with it, restarts the app, and carries on with the next step.
+2. **Puzzles:** the Lichess puzzle database ([Getting started](#getting-started-the-puzzle-database)). If `setup.py` already imported it, this step is already done.
+3. **Stockfish:** **Install Stockfish**, or **Skip for now** and install it later from any screen that needs it. Done already if `setup.py` installed it.
+4. **Lichess:** sign in to sync your solves and fetch your games, or **Continue without signing in**.
+
+![The Stockfish step](img/wizard-engine.png)
+
+Then **Start training** opens the app. The wizard never shows again on this PC; from then on, the app opens on the usual [startup page](#signing-in-with-lichess-syncing-solves-offline-mode). An install that already has your data never sees the wizard, even if its puzzle database is missing: it just offers the download.
+
+**Gotchas**
+- A backup holds your data only: after a restore, the puzzle database and Stockfish still come next, and you sign in to Lichess again and re-enter any AI key in Settings.
+- A restore waits while anything is running in the background. On a first start that's usually only a few seconds.
+
 ## Getting started: the puzzle database
-*Added in v0.1. Changed in v0.2: the wording says what you download.*
+*Added in v0.1. Changed in v0.2: the wording says what you download. Changed in v1.0: it's a step of the first-run wizard.*
 
 WeakSquare trains on the Lichess open puzzle database, which is public domain. **Download from Lichess** fetches the **entire** database, every puzzle and not a sample: about 300 MB compressed, about 6 million puzzles, and roughly 1.5 GB on disk once imported. It's stored on your PC, so after the first download everything works offline. With every filter cleared, including the quality filter under **More filters**, the match count equals the number of puzzles imported. With the default quality filter on, it's lower (see *Choosing your puzzles*).
 
-If setup already imported it, the app opens straight to your puzzles. Otherwise the first screen is **Get the puzzle database**:
+If setup already imported it, there's nothing to do. Otherwise the [first-run wizard](#first-run)'s **Puzzles** step (or, on an install whose database went missing, the first screen) is **Get the puzzle database**:
 
 ![The first-run screen](img/first-run.png)
 
@@ -281,7 +303,7 @@ The **⋯** button next to it:
 ## Stats
 *Added in v0.2. Changed in v0.3: the Lichess rating trend. Changed in v0.5: By mode. Changed in v0.6: mode details, Why you missed, misclicks. Changed in v0.8: Why you missed in your games, Retry and My puzzles.*
 
-Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app.
+Choose **☰ → Stats** to see how you're doing across every puzzle you've played in this app. *From v1.0*, **Open Progress** at the top takes you to the Coach's [Progress tab](#tracking-your-progress), where your game weaknesses are tracked over time.
 
 ![Your stats](img/stats.png)
 
@@ -813,7 +835,7 @@ Every time one of your games is analyzed (from the Coach, **Analyze selected** o
 ## The Coach
 *Added in v0.10.*
 
-The Coach has three tabs: **Report** (this chapter), [**Plan**](#your-training-plan) and [**Journal**](#your-training-journal). It looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
+The Coach has four tabs: **Report** (this chapter), [**Plan**](#your-training-plan), [**Journal**](#your-training-journal) and, *from v1.0*, [**Progress**](#tracking-your-progress). It looks across many of your games and finds what costs you most: the tactics you miss, the ones you walk into, and the club-player habits behind them. From v0.11 it also reads your games the way a tutor would: openings, conversion, endgames, king safety and time use. It runs on your PC and is free. The AI part is optional.
 
 ### Running the Coach
 ![The Coach](img/coach-report.png)
@@ -873,7 +895,7 @@ For a report on games, the app also writes a short summary of each game from its
 **Whole-game weaknesses** join the report's tables when a measure shows a problem: an opening you come out of badly, an endgame type where you make mistakes, winning positions you don't win, mistakes on a low clock (only when they're more frequent than the rest of the time) and castling late (only when it costs you points). They're ranked per 10 games, like the tactics. The Suggested mix stays made of tactics; a time weakness shows up in **Why this mix** instead.
 
 ### Another player
-Choose **Another player**, type their username or paste their profile link (`lichess.org/@/…` or `chess.com/member/…`), and pick the site if the link doesn't say. The Coach fetches their latest public games, analyzes them and writes a report labelled with their name. Their games are kept apart from yours:
+Choose **Another player**, type their username or paste their profile link (`lichess.org/@/…` or `chess.com/member/…`), and pick the site if the link doesn't say. The Coach fetches their latest public games, analyzes them and writes a report labeled with their name. Their games are kept apart from yours:
 - They're **not in My games**, unless you choose them in the **Player** filter there.
 - They make **no puzzles**, and they **never change your Suggested mix**, your stats or your report trends.
 - **Load preset** and AI coaching work on their report too.
@@ -881,11 +903,12 @@ Choose **Another player**, type their username or paste their profile link (`lic
 ### The Suggested mix
 ![The Suggested mix banner](img/suggested-mix-banner.png)
 
-After each Coach run on your games, the app builds a **Suggested mix** and, if you haven't changed your filters by hand, makes it your puzzle selection. The main page then says *Suggested — from Coach run #N, <date>*. **Why this mix** explains it in plain words, for example *Allowed: Fork: 13.3 per 10 games, your #1 leak (46% of the mix)*.
+After each Coach run on your games, and *from v1.0* after each [checkpoint](#tracking-your-progress), the app builds a **Suggested mix** and, if you haven't changed your filters by hand, makes it your puzzle selection. The main page then says *Suggested — from Coach run #N, <date>* (or *from checkpoint #N*). **Why this mix** explains it in plain words, for example *Allowed: Fork: 13.3 per 10 games, your #1 leak (46% of the mix)*.
 - **Built from your weaknesses:** a share of puzzles for each of your top weaknesses, the bigger the leak the bigger the share, plus a share of **long combinations** (more when your missed tactics are long) that never drops below 10%.
 - **The mode** follows your mistake reasons once a weakness has at least 5: mostly *didn't look* → **Danger spotting**, mostly *miscalculated* → **Commit the line**, mostly *unknown pattern* → the same themes at a lower rating. Mostly *rushed* is pointed out as a time issue.
 - **Your own mistakes:** with Standard or Commit the line, 20% of the puzzles come from [your games](#puzzles-from-your-games).
 - **Rating:** around your Lichess puzzle rating (1500 if unknown), adjusted so you solve about 75% at the first try.
+- **After a checkpoint** (*v1.0*), weaknesses go in order of their status: **Regressed** first, then **New** and **Training**, then **Improving**. **Fixed** weaknesses share a 10% maintenance group so they stay fixed, and **Why this mix** names them.
 - **It never overwrites your choices.** If you've changed your filters since the last suggestion, a banner appears instead: **Apply** uses the new mix, **Compare** shows your filters next to it, and **Dismiss** keeps yours.
 
 ### AI coaching (optional)
@@ -901,7 +924,7 @@ Under a report, **Get AI coaching** sends its numbers, the game summaries and a 
 
 **Each weakness:**
 - a category (Tactics, Strategy, Opening, Endgame, Time, Other), what goes wrong and **What to do**;
-- **In your games:** the moves that show it, such as **G3 · 23... Nf6**. Click one to open that game in Game Review at that move; **← Coach** brings you back. Games are labelled G1, G2… in the order of the report. Every move the AI cites is checked against the games that were sent, and a weakness with no real move behind it is left out (the footer says how many claims were left out).
+- **In your games:** the moves that show it, such as **G3 · 23... Nf6**. Click one to open that game in Game Review at that move; **← Coach** brings you back. Games are labeled G1, G2… in the order of the report. Every move the AI cites is checked against the games that were sent, and a weakness with no real move behind it is left out (the footer says how many claims were left out).
 - **Tracked: <weakness>** when it's one of the report's measured weaknesses, or **Observation** when the app can't measure it. An observation found again in a later report says **Seen in N reports**.
 - **Tentative** when it rests on fewer than 3 games.
 - **Learn it:** see [Lesson pointers](#lesson-pointers).
@@ -958,7 +981,7 @@ The links open in your default browser. The AI only picks the topic; every link 
 ### Gotchas
 - **The first run on your games takes a while:** Stockfish analyzes every move at 0.3 s (Settings → Games), so 50 new games take about 20 minutes. Games already analyzed are reused, and every game the Coach analyzed opens in Game Review at once.
 - **Games without a known side** (an imported game where you didn't say which side you played) aren't counted.
-- **Checkpoints and tracking whether a weakness is fixed** come in a later version. Until then, read [Since last report](#since-last-report).
+- **Whether a weakness is getting better** is tracked automatically from v1.0: see [Tracking your progress](#tracking-your-progress). [Since last report](#since-last-report) still compares any report with the one before.
 - **Whole-game measures need enough games:** with 25 games, few openings or endgame types reach 5 games. Run the Coach on 50 or more for them to count.
 - **The game summaries come from the analysis.** If you change the analysis settings (think time or grading thresholds), the summaries are rebuilt from the new analysis the next time you run the Coach.
 
@@ -1032,7 +1055,7 @@ The Coach's **Journal** tab keeps a record of what you did and what you learned,
 
 Learn an opening line by line, and keep the lines you want in your own repertoire. **Openings** in the top bar opens it. The first time you open it, the app reads its opening book, which takes a few seconds and needs no internet.
 
-The moves always come from the opening book, from Stockfish, or from what's popular in real games on Lichess, and each one is labelled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
+The moves always come from the opening book, from Stockfish, or from what's popular in real games on Lichess, and each one is labeled if it isn't from the book. Nothing here affects your puzzle rating or your stats.
 
 ![The opening trainer: an opening's lines, its overview and the board](img/opening-trainer.png)
 
@@ -1066,7 +1089,7 @@ With an AI provider set up (see [AI explanations and what they cost](#ai-explana
 - **Get an overview** covers the opening's key ideas, plans for both sides, pawn structures, common traps and what to aim for.
 - **Explain this move** says why the next move is played, what it prepares and what happens if it isn't.
 - Each button shows about what it costs. A saved note is free from then on, works offline, and is reused wherever the same position and move come up, including through another move order.
-- **Regenerate** replaces a note, after showing the cost. A note saved under a model you've since changed from still shows, labelled, for free.
+- **Regenerate** replaces a note, after showing the cost. A note saved under a model you've since changed from still shows, labeled, for free.
 
 The AI only explains moves that already exist. Nothing it writes can add a move to a line or to your repertoire. It's given the moves, Stockfish's figures and, when available, Wikibooks text, and it's told to go with Stockfish where they disagree.
 
@@ -1083,7 +1106,7 @@ When a note used a Wikibooks page, it says so under the note, with links to the 
 Openings has its own model in **Settings → AI**.
 
 ### What if they play…?
-On the other side's turn in **Step through**, play their move on the board or type it (`a6` or `a7a6`). The app checks it, and Stockfish gives your best replies with their evals, the best one selected. **Add to my repertoire** stores their move and your reply, along with the moves leading to them, and Practice drills it like any other line. Their move is labelled **You** and Stockfish's choice **Stockfish**. **Explain this reply** says why a reply works, with its cost shown first, and a saved explanation is free.
+On the other side's turn in **Step through**, play their move on the board or type it (`a6` or `a7a6`). The app checks it, and Stockfish gives your best replies with their evals, the best one selected. **Add to my repertoire** stores their move and your reply, along with the moves leading to them, and Practice drills it like any other line. Their move is labeled **You** and Stockfish's choice **Stockfish**. **Explain this reply** says why a reply works, with its cost shown first, and a saved explanation is free.
 
 ### Your repertoire
 **Add to my repertoire** on a line, or **Add all these lines**, stores its moves for the side you chose. White and Black are kept separately. A move you already have stays exactly as it was.
@@ -1297,6 +1320,75 @@ Restoring **replaces all your data** on this PC with the backup's. Nothing is me
 - When there are more backups in the folder than you keep, the **oldest are deleted**. WeakSquare only ever deletes its own backups there (files named `weaksquare-backup-<date>.zip` that really are backups), never anything else in the folder.
 - **If the folder is missing**, for example an unplugged drive, a warning appears under **Your data** and the app tries again later. It never fails silently.
 
+## Tracking your progress
+*Added in v1.0.*
+
+The Coach's **Progress** tab shows whether your weaknesses are actually going away: in your games, not just in puzzles. It's built from **checkpoints**, which run on their own, on your PC, for free.
+
+![The Progress tab](img/coach-progress.png)
+
+### Checkpoints
+A checkpoint looks at your last 30 rated rapid and classical games from your linked Lichess and chess.com accounts. It analyzes any that aren't analyzed yet, saves a normal Coach report on them, measures each weakness, and rebuilds your [Suggested mix](#the-suggested-mix). It runs:
+- **after every 10 new games** that count (games you paste or import, and other players' games, never count);
+- **on a schedule**, if you set one: every few days, or on a weekday. It runs while the app is open, or the next time you open it. If you haven't played since the last checkpoint, it does nothing;
+- when you press **Run checkpoint now**.
+
+A checkpoint's report appears among your saved reports as **Checkpoint #N**, so you can read it and compare it under [Since last report](#since-last-report). **A checkpoint never creates or changes your training plan.**
+
+**Your past games count too.** The first time v1.0 starts, it rebuilds checkpoints from the games you've already analyzed, using their stored analysis (no engine time, no AI cost): your first 50 set where each weakness started, then there's one for every 10 games after that. A job in the background says how far it's got; if you close the app, it carries on next time. Rebuilt checkpoints are shaded on the charts, save no reports and show no notices. With fewer than 50 analyzed games, your first checkpoint sets the starting point instead.
+
+### How a weakness is judged
+Each weakness (a tactic you miss or allow, a habit like hanging pieces, or a whole-game one like mistakes under time pressure) is counted **per 10 games** over the last 30 games, and compared with **where it started**: its rate when it was first found. That starting rate never changes, and the charts show it as a flat dashed line marked *Start*.
+
+| Status | Means |
+|---|---|
+| **New** | just found, not in your Suggested mix yet |
+| **Training** | in your current Suggested mix |
+| **Improving** | at 75% or less of where it started |
+| **Fixed** | at half or less of where it started, **two checkpoints in a row**, *and* 75% first-try accuracy on its puzzle themes over at least 20 tries |
+| **Regressed** | was Improving or Fixed, and climbed back to 90% or more. It goes to the top of your Suggested mix |
+
+- **Your games decide, not your puzzles.** Puzzle accuracy is a second check for Fixed, never enough on its own. A weakness no puzzle trains (an opening, time use) is decided by your games alone.
+- **Not enough data yet:** when a weakness happened fewer than 5 times in the window *and* was too rare at the start to expect 5, there's too little to tell. The point is drawn **hollow**, the card says *not enough data yet*, and its status doesn't change.
+- **Stockfish and the tagger decide, never the AI.** A mistake is a drop of a pawn or more in Stockfish's eval; it's named (*fork*, *pin*…) by the same tagger Lichess uses for its puzzles.
+
+### Reading the Progress tab
+- **Game health** at the top: your blunders, mistakes and inaccuracies per 10 games on one chart, and your average centipawn loss (how much you lose per move, on average) on another. **Lower is better** on both.
+- **A card per weakness**, worst first: its status, where it started and where it is now, its rate over time (lower is better), your puzzle accuracy on its themes (higher is better), why you missed it (your mistake reasons), and **Latest examples** that open the moves in Game Review.
+- **Checkpoints** at the bottom: each one's date, how it ran, the same numbers as the charts, and any status changes. **Report** opens its Coach report.
+- **A status change** is shown once on the main page, for example *Checkpoint #6: Missed: Pin: Improving → Regressed*. **See progress** opens this tab.
+
+![A status change on the main page](img/status-notice.png)
+
+### The AI checkpoint summary
+*On by default; needs an AI key.* After each checkpoint the AI writes a short commentary on what improved, what didn't and why your mix changed, using the Coach's model. It appears as the AI coaching on that checkpoint's report (**AI summary** in the Checkpoints table).
+- It runs **without asking only if** its estimate is under your per-run cap and within your monthly budget (Settings → AI). Otherwise the row says **Get AI take**: it opens the report, where **Get AI coaching** shows the estimate and asks you to confirm.
+- It never decides a status, and it never sends Advanced analysis, your notes or your journal. What it sends is listed in [Your data and privacy](#your-data-and-privacy).
+- Rebuilt past checkpoints never get one. Without an AI key, nothing is sent and checkpoints work the same.
+
+### Checkpoint settings
+Press **Checkpoint settings** on the Progress tab. Each option has an ⓘ.
+
+![Checkpoint settings](img/coach-progress-empty.png)
+
+| Option | Default | What it does |
+|---|---|---|
+| **Every N new games** | 10 | how many new games make a checkpoint (5–200) |
+| **Rolling window** | 30 | how many of your latest games each checkpoint measures (10–100) |
+| **Schedule** | Off | also run every N days, or on a weekday |
+| **Rated games only**, **Time controls**, **Color** | rated, rapid + classical, both | which games count |
+| **Improving at**, **Fixed at**, **Regressed at** | 75%, 50%, 90% | the shares of the starting rate for each status |
+| **Checkpoints in a row**, **Puzzle accuracy**, **Over at least** | 2, 75%, 20 tries | what Fixed also needs |
+| **Auto AI checkpoint summary** | On | the AI summary above |
+| **Tell me when a status changes** | On | the notice on the main page |
+
+Press **Save checkpoint settings**. Changing them affects checkpoints from now on; starting rates already set don't change.
+
+### Gotchas
+- **Checkpoints wait for the rebuild.** On the first start of v1.0, **Run checkpoint now** says your past checkpoints haven't been rebuilt yet until that's finished.
+- **A checkpoint while the Coach is running** waits a minute and tries again: they share the same analysis.
+- **Changing the analysis settings** (think time, thresholds) changes what counts as a mistake from then on, so rates before and after aren't quite comparable.
+
 ## Keyboard shortcuts
 *Added in v0.2.*
 
@@ -1347,7 +1439,7 @@ Click the gear (**⚙**, top right) or choose **☰ → Settings…** to change 
 - The sounds are Lichess's sets by Enigmahack, licensed AGPL-3.0 like this app. They're bundled with the app, so nothing is downloaded when they play.
 
 ## Installing from source
-*Added in v0.1. Changed in v0.2: a desktop shortcut and the app icon.*
+*Added in v0.1. Changed in v0.2: a desktop shortcut and the app icon. Changed in v1.0: the first-run wizard, updating, troubleshooting.*
 
 WeakSquare runs from its source code; there's no installer to download. You need Windows 10 or 11 with **Git**, **Python 3.12 or newer** and **Node.js LTS** installed.
 
@@ -1358,17 +1450,59 @@ WeakSquare runs from its source code; there's no installer to download. You need
    python scripts/setup.py
    ```
 2. Setup takes a few minutes. It installs everything into the project folder, builds the app, downloads and imports the puzzle database (see *Getting started*), installs Stockfish (*Added in v0.4*; add `--skip-engine` to install it from the app later), and adds **WeakSquare Chess Trainer** to your Start menu and your desktop. To skip the puzzle download, add `--skip-puzzle-db`; the app then offers it on first run.
-3. Start the app from the Start menu or the desktop.
+3. Start the app from the Start menu or the desktop. The [first-run wizard](#first-run) opens: start fresh, or restore a backup from your old PC.
 
 Both shortcuts, the window and its taskbar button show the WeakSquare icon: four board squares with a black queen. `--no-desktop-shortcut` skips the desktop one, and `--no-shortcut` skips both. If your Desktop is in OneDrive, the shortcut goes there, where Windows shows it.
 
-**Updating:** in the same folder, run `git pull`, then `python scripts/setup.py` again. Setup skips anything that's already up to date, and your data isn't touched.
+### Updating
+1. Close the app.
+2. In the folder you cloned it into, run:
+   ```powershell
+   git pull
+   python scripts/setup.py
+   ```
+3. Start the app as usual.
+
+Setup skips anything that's already up to date (the puzzle database, Stockfish, your shortcuts). Your data in `%LOCALAPPDATA%\WeakSquare` isn't touched by the update itself; the first start of a new version upgrades `user.db` and saves a copy of the old one in its `backups` folder first. Each version's changes are in [CHANGELOG.md](../CHANGELOG.md), and releases are listed on the project's GitHub page. Making a backup before you update (**Settings → Your data → Back up now**) is a good habit: once a newer version has upgraded your data, an older version can't open it.
 
 **Gotchas**
 - If setup says uv isn't on your PATH, that's fine: setup carries on without it.
 - Only one copy of the app runs at a time. Starting it again brings the open window to the front.
 - Running setup again replaces the two shortcuts rather than adding more. If you deleted the desktop shortcut on purpose, use `--no-desktop-shortcut` next time.
 - A shortcut you pinned to the taskbar yourself, before v0.2, keeps its old icon. Unpin it and pin the app again.
+- In PowerShell, run `python scripts/setup.py` (or `uv run …`), never a `.ps1` script or a virtual environment's `Activate.ps1`: Windows' script policy often blocks those, and nothing here needs them.
+
+## Troubleshooting
+*Added in v1.0.*
+
+**The app doesn't start, or shows an error before its window**
+- *"The front end isn't built"*: run `python scripts/setup.py` again in the app's folder.
+- *A newer version's data*: you opened an older version on data a newer one has upgraded. Update with `git pull` and setup (see [Updating](#updating)), or restore a backup made by this version.
+- Starting it again only brings a window forward: another copy is already running, maybe minimized or on another desktop.
+- The app's log is in `%LOCALAPPDATA%\WeakSquare\logs` (☰ → About shows the folder). It never holds your sign-in or keys, and it's the first thing to look at, or attach to an issue.
+
+**The puzzle database**
+- *The download fails or stops*: check your connection and that about 2 GB is free, then press **Download from Lichess** again. A canceled or failed import leaves the old database working.
+- *Behind a firewall or proxy*: download `lichess_db_puzzle.csv.zst` from database.lichess.org yourself and use **Use a file I already have…**.
+
+**Stockfish**
+- *"Stockfish isn't installed"*: press **Install Stockfish** on any screen that shows it, or run `python scripts/setup.py` again.
+- *"Your custom engine can't be found"*: the file you chose in Settings → Engine moved. Choose it again, or press **Use the managed Stockfish**.
+- *The PC gets loud or slow during analysis*: lower **Threads** in Settings → Engine.
+
+**Lichess sign-in**
+- *Your sign-in expired*: press **Sign in again** on the banner. Solves made meanwhile are kept and sync afterwards.
+- *Signing in never finishes*: the browser tab must stay open until it says you can close it. Try again; a firewall that blocks programs listening on your own PC (127.0.0.1) stops it.
+- *Lichess can't be reached*: keep training; your solves sync when it's back.
+
+**Backups and restoring**
+- *"This backup was made by a newer version"*: update this install first (see [Updating](#updating)).
+- *A restore is refused because something is running*: wait for the analysis or download to finish, or cancel it, then restore.
+- *Automatic backups say the folder isn't available*: plug the drive back in, or choose another folder. It tries again by itself.
+
+**Progress and checkpoints**
+- *No checkpoints yet*: they need rated rapid or classical games from your linked accounts (or whatever you set in **Checkpoint settings**). Press **Run checkpoint now** to make one.
+- *A weakness says "not enough data yet"*: it happened too rarely to tell. It changes once more games are in the window.
 
 ## The About screen
 *Added in v0.1. Changed in v0.4: the Stockfish row.*

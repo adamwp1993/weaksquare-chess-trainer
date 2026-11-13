@@ -42,7 +42,8 @@ import type {
   OpeningBookStatus,
   OpeningLines,
   OpeningNote,
-  OpeningNoteQuote, OpeningNotesDeletion,
+  OpeningNoteQuote,
+  OpeningNotesDeletion,
   OpeningDeviation,
   OpeningPrefetchPlan,
   OpeningStat,
@@ -102,6 +103,10 @@ import type {
   StudyUpdate,
   StudyWindowEvent,
   StudyRepertoirePreview,
+  CheckpointSettings,
+  ProgressView,
+  StatusNotice,
+  SetupState,
 } from "./types";
 
 /** v0.10: one Coach run's settings (FR-10.2–10.5). `player` null means you. */
@@ -597,6 +602,24 @@ export interface ApiClient {
   restoreBackup(token: string): Promise<string>;
   /** After a restart: what the restore did, once. */
   takeRestoreNotice(): Promise<RestoreNotice | null>;
+  // ---- v1.0: checkpoints and fix tracking (REQUIREMENTS §10.8) ----
+  /** FR-10.38: the Coach's Progress tab. */
+  getProgress(): Promise<ProgressView>;
+  getCheckpointSettings(): Promise<CheckpointSettings>;
+  /** FR-10.32/10.35/10.37/10.38. Refused (invalid_argument) when a value is out of range. */
+  setCheckpointSettings(settings: CheckpointSettings): Promise<CheckpointSettings>;
+  /** FR-10.32 Run checkpoint now: a `checkpoint` job. */
+  runCheckpointNow(): Promise<string>;
+  /** FR-10.38: status changes not seen yet, once. */
+  takeStatusNotices(): Promise<StatusNotice[]>;
+  // ---- v1.0: the first-run wizard (NFR-8, FR-15.4) ----
+  /** Whether to show the wizard and which step, decided from what's installed. */
+  getSetupState(): Promise<SetupState>;
+  /** The welcome step: "fresh", or "restore" just before Restore and restart. "restore" only marks it pending: the app
+   * records it as your choice once the restore has swapped in (v1.0-B1, B7). */
+  chooseSetup(choice: "fresh" | "restore"): Promise<SetupState>;
+  skipSetupStep(step: "engine" | "lichess"): Promise<SetupState>;
+  finishSetup(): Promise<SetupState>;
   /** Subscribe to pushed events (job progress, account, sync). Returns an unsubscribe function. */
   onEvent(listener: (event: BackendEvent) => void): () => void;
 }
